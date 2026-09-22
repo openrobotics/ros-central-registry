@@ -27,6 +27,7 @@ import argparse
 import os
 import shutil
 import sys
+from collections import deque
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -101,101 +102,216 @@ def propagate_transitive_patches(
 ) -> Dict[str, Tuple[str, str]]:
     """
     Propagates patch updates through transitive dependencies in the distribution.
-    If a dependency D was updated to a newer patch version, any intermediate
-    package M that depends on D (and is referenced in the release) receives a
-    dep-only version bump to reference D's newer version. This repeats until all
-    intermediate dependencies are up to date.
+
+    1. Discovers all packages and their active versions in the distribution release.
+    2. Builds the dependency graph of reachable packages.
+    3. Finds unpinned packages in the closure of active variants with newer patches.
+    4. Finds the tree of module paths connecting those unpinned packages to the
+       direct dependencies of active variants.
+    5. Resolves the target versions (at most one version bump per module).
+    6. Materializes the updated packages with their bazel_dep references updated.
+
     Returns a dict of package name -> (old_version, new_version) for all packages
     that received dep-only version bumps.
     """
-    # Start with all packages directly referenced by active variants
-    distro_packages: Dict[str, str] = {}
+    # 1. Discover all packages and their currently referenced versions by traversing from active variants
+    current_graph_versions: Dict[str, str] = {}
+    queue: list[str] = []
     for variant in active_variants:
         v_module_file = modules_dir / variant / current_ros_version / "MODULE.bazel"
-        if v_module_file.exists():
-            distro_packages.update(bzlmod_lib.scan_module_for_dependencies(v_module_file, modules_dir))
-
-    # Initialize current_active_versions for all known packages
-    current_active_versions: Dict[str, str] = {}
-    for pkg, pinned_ver in distro_packages.items():
-        if pkg in VARIANT_MODULES:
+        if not v_module_file.exists():
             continue
-        meta_path = modules_dir / pkg / "metadata.json"
-        if meta_path.exists():
-            meta = bzlmod_lib.read_metadata_json(meta_path)
-            current_active_versions[pkg] = bzlmod_lib.get_latest_matching_patch_version(pinned_ver, meta)
-        else:
-            current_active_versions[pkg] = pinned_ver
+        deps = bzlmod_lib.scan_module_for_dependencies(v_module_file, modules_dir)
+        for dep_name, pinned_ver in deps.items():
+            if dep_name not in VARIANT_MODULES and dep_name != "rosdistro":
+                if dep_name not in current_graph_versions or bzlmod_lib.version_sort_key(pinned_ver) > bzlmod_lib.version_sort_key(current_graph_versions[dep_name]):
+                    current_graph_versions[dep_name] = pinned_ver
+                    queue.append(dep_name)
 
-    # Transitively expand current_active_versions to include all reachable non-variant packages
-    queue = list(current_active_versions.keys())
     while queue:
         pkg = queue.pop(0)
-        ver = current_active_versions[pkg]
+        ver = current_graph_versions[pkg]
         module_file = modules_dir / pkg / ver / "MODULE.bazel"
         if not module_file.exists():
             continue
         deps = bzlmod_lib.scan_module_for_dependencies(module_file, modules_dir)
-        for dep_name, pinned_dep_ver in deps.items():
-            if dep_name in VARIANT_MODULES:
-                continue
-            if dep_name not in current_active_versions:
-                meta_path = modules_dir / dep_name / "metadata.json"
-                if meta_path.exists():
-                    meta = bzlmod_lib.read_metadata_json(meta_path)
-                    latest_dep_ver = bzlmod_lib.get_latest_matching_patch_version(pinned_dep_ver, meta)
-                else:
-                    latest_dep_ver = pinned_dep_ver
-                current_active_versions[dep_name] = latest_dep_ver
-                queue.append(dep_name)
+        for dep_name, pinned_ver in deps.items():
+            if dep_name not in VARIANT_MODULES and dep_name != "rosdistro":
+                if dep_name not in current_graph_versions:
+                    current_graph_versions[dep_name] = pinned_ver
+                    queue.append(dep_name)
 
-    all_dep_bumps: Dict[str, Tuple[str, str]] = {}
-    while True:
-        iteration_bumps: Dict[str, Tuple[str, str, Dict[str, str]]] = {}
-        for pkg, current_ver in sorted(current_active_versions.items()):
-            module_file = modules_dir / pkg / current_ver / "MODULE.bazel"
-            if not module_file.exists():
-                continue
-            deps = bzlmod_lib.scan_module_for_dependencies(module_file, modules_dir)
-            outdated_deps = {}
-            for dep_name, pinned_dep_ver in sorted(deps.items()):
-                if dep_name in VARIANT_MODULES:
-                    continue
-                if dep_name in current_active_versions:
-                    latest_dep_ver = current_active_versions[dep_name]
-                    if bzlmod_lib.get_base_version(latest_dep_ver) == bzlmod_lib.get_base_version(pinned_dep_ver):
-                        if bzlmod_lib.version_sort_key(latest_dep_ver) > bzlmod_lib.version_sort_key(pinned_dep_ver):
-                            outdated_deps[dep_name] = latest_dep_ver
+    if not current_graph_versions:
+        return {}
 
-            if outdated_deps:
-                new_ver = bzlmod_lib.increment_version(current_ver)
-                iteration_bumps[pkg] = (current_ver, new_ver, outdated_deps)
+    # 2. Determine latest matching patch on disk for every reachable package
+    latest_on_disk: Dict[str, str] = {}
+    for pkg, pinned_ver in current_graph_versions.items():
+        meta_path = modules_dir / pkg / "metadata.json"
+        if meta_path.exists():
+            meta = bzlmod_lib.read_metadata_json(meta_path)
+            latest_on_disk[pkg] = bzlmod_lib.get_latest_matching_patch_version(pinned_ver, meta)
+        else:
+            latest_on_disk[pkg] = pinned_ver
 
-        if not iteration_bumps:
-            break
+    # 3. Collect packages directly pinned across sub-variants (excluding VARIANT_MODULES and rosdistro)
+    union_direct: set[str] = set()
+    for variant in active_variants:
+        if variant == "ros":
+            continue
+        v_module_file = modules_dir / variant / current_ros_version / "MODULE.bazel"
+        if not v_module_file.exists():
+            continue
+        deps = bzlmod_lib.scan_module_for_dependencies(v_module_file, modules_dir)
+        for dep_name in deps:
+            if dep_name not in VARIANT_MODULES and dep_name != "rosdistro":
+                union_direct.add(dep_name)
 
-        for pkg, (old_v, new_v, outdated_deps) in sorted(iteration_bumps.items()):
-            old_dir = modules_dir / pkg / old_v
-            new_dir = modules_dir / pkg / new_v
-            content = (old_dir / "MODULE.bazel").read_text()
-            content = bzlmod_lib.rewrite_module_version(content, pkg, new_v)
-            for d_name, d_ver in outdated_deps.items():
-                content = bzlmod_lib.rewrite_bazel_dep_version(content, d_name, d_ver)
+    # If no sub-variants exist (e.g. in test fixtures where only "ros" exists),
+    # use the direct dependencies of the "ros" module
+    if not union_direct:
+        ros_module_file = modules_dir / "ros" / current_ros_version / "MODULE.bazel"
+        if ros_module_file.exists():
+            deps = bzlmod_lib.scan_module_for_dependencies(ros_module_file, modules_dir)
+            union_direct = {d for d in deps if d not in VARIANT_MODULES and d != "rosdistro"}
+        else:
+            union_direct = set(current_graph_versions.keys())
 
-            if not dry_run:
-                shutil.copytree(old_dir, new_dir, dirs_exist_ok=True)
-                (new_dir / "MODULE.bazel").write_text(content)
-                if (new_dir / "source.json").exists():
-                    bzlmod_lib.regenerate_integrity_hashes(new_dir)
-                bzlmod_lib.add_version_to_metadata_json(modules_dir / pkg / "metadata.json", new_v)
+    # 4. Build dependency graph and reverse dependencies across all reachable packages
+    pkg_deps: Dict[str, Dict[str, str]] = {}
+    dependents: Dict[str, set[str]] = {}
+    for pkg, ver in latest_on_disk.items():
+        module_file = modules_dir / pkg / ver / "MODULE.bazel"
+        if not module_file.exists():
+            continue
+        deps = bzlmod_lib.scan_module_for_dependencies(module_file, modules_dir)
+        pkg_deps[pkg] = {
+            k: v for k, v in deps.items()
+            if k not in VARIANT_MODULES and k != "rosdistro"
+        }
+        for dep_name in pkg_deps[pkg]:
+            dependents.setdefault(dep_name, set()).add(pkg)
 
-            current_active_versions[pkg] = new_v
-            if pkg not in all_dep_bumps:
-                all_dep_bumps[pkg] = (old_v, new_v)
-            else:
-                all_dep_bumps[pkg] = (all_dep_bumps[pkg][0], new_v)
+    # 5. Transitive closure of packages reachable from union_direct
+    closure: set[str] = set(union_direct)
+    c_queue = list(union_direct)
+    while c_queue:
+        curr = c_queue.pop(0)
+        for dep in pkg_deps.get(curr, {}):
+            if dep not in closure:
+                closure.add(dep)
+                c_queue.append(dep)
 
-    return all_dep_bumps
+    # 6. Unpinned packages in closure that have newer patches on disk
+    unpinned_patched: set[str] = {
+        pkg for pkg in closure - union_direct
+        if bzlmod_lib.version_sort_key(latest_on_disk[pkg]) > bzlmod_lib.version_sort_key(current_graph_versions[pkg])
+    }
+
+    if not unpinned_patched:
+        return {}
+
+    # 7. Compute minimum distance to union_direct for each unpinned package
+    min_dist: Dict[str, int] = {}
+    for u in unpinned_patched:
+        q_dist = deque([(u, 0)])
+        vis_dist = {u}
+        while q_dist:
+            curr, d = q_dist.popleft()
+            if curr in union_direct:
+                min_dist[u] = d
+                break
+            for p in dependents.get(curr, ()):
+                if p in closure and p not in vis_dist:
+                    vis_dist.add(p)
+                    q_dist.append((p, d + 1))
+
+    # Process nodes closest to union_direct first so that multiple unpinned packages share paths
+    sorted_unpinned = sorted(unpinned_patched, key=lambda p: (min_dist.get(p, 999), p))
+
+    # 8. Build tree of paths connecting unpinned_patched to union_direct
+    tree_edges: set[Tuple[str, str]] = set()  # (child, parent) where parent depends on child
+    tree_nodes: set[str] = set()
+
+    for u in sorted_unpinned:
+        targets = (union_direct | tree_nodes) - {u}
+        q_path = deque([[u]])
+        visited = {u}
+        found_path = None
+        while q_path:
+            path = q_path.popleft()
+            node = path[-1]
+            if node in targets:
+                found_path = path
+                break
+            # Prefer parents already in tree_nodes (sharing paths), then alphabetical
+            def sort_key(p: str):
+                return (0 if p in tree_nodes else 1, p)
+            parents = sorted([p for p in dependents.get(node, ()) if p in closure], key=sort_key)
+            for p in parents:
+                if p not in visited:
+                    visited.add(p)
+                    q_path.append(path + [p])
+        if found_path:
+            tree_nodes.update(found_path)
+            for i in range(len(found_path) - 1):
+                tree_edges.add((found_path[i], found_path[i + 1]))
+
+    # 9. Topological sort of tree_nodes using tree_edges (dependencies before dependents)
+    in_degree = {n: 0 for n in tree_nodes}
+    children_map: Dict[str, set[str]] = {n: set() for n in tree_nodes}
+    for child, parent in tree_edges:
+        in_degree[parent] += 1
+        children_map[child].add(parent)
+
+    topo_order: list[str] = []
+    zero_in = [n for n, deg in in_degree.items() if deg == 0]
+    while zero_in:
+        curr = zero_in.pop(0)
+        topo_order.append(curr)
+        for parent in sorted(children_map[curr]):
+            in_degree[parent] -= 1
+            if in_degree[parent] == 0:
+                zero_in.append(parent)
+
+    # 10. Resolve target versions along tree_nodes (AT MOST ONE bump per module)
+    target_versions: Dict[str, str] = dict(latest_on_disk)
+    dep_bumps: Dict[str, Tuple[str, str]] = {}
+    for p in topo_order:
+        has_outdated = False
+        for dep_name, pinned_ver in pkg_deps.get(p, {}).items():
+            t_v = target_versions.get(dep_name)
+            if t_v and bzlmod_lib.get_base_version(t_v) == bzlmod_lib.get_base_version(pinned_ver):
+                if bzlmod_lib.version_sort_key(t_v) > bzlmod_lib.version_sort_key(pinned_ver):
+                    has_outdated = True
+                    break
+        if has_outdated:
+            old_v = latest_on_disk[p]
+            new_v = bzlmod_lib.increment_version(old_v)
+            target_versions[p] = new_v
+            dep_bumps[p] = (old_v, new_v)
+
+    # 11. Materialize new module versions on disk
+    for pkg, (old_v, new_v) in sorted(dep_bumps.items()):
+        old_dir = modules_dir / pkg / old_v
+        new_dir = modules_dir / pkg / new_v
+
+        content = (old_dir / "MODULE.bazel").read_text()
+        content = bzlmod_lib.rewrite_module_version(content, pkg, new_v)
+        for dep_name, pinned_dep_ver in pkg_deps.get(pkg, {}).items():
+            if dep_name in target_versions:
+                target_dep_v = target_versions[dep_name]
+                if bzlmod_lib.version_sort_key(target_dep_v) > bzlmod_lib.version_sort_key(pinned_dep_ver):
+                    content = bzlmod_lib.rewrite_bazel_dep_version(content, dep_name, target_dep_v)
+
+        if not dry_run:
+            shutil.copytree(old_dir, new_dir, dirs_exist_ok=True)
+            (new_dir / "MODULE.bazel").write_text(content)
+            if (new_dir / "source.json").exists():
+                bzlmod_lib.regenerate_integrity_hashes(new_dir)
+            bzlmod_lib.add_version_to_metadata_json(modules_dir / pkg / "metadata.json", new_v)
+
+    return dep_bumps
 
 
 def rollup_variants(modules_dir: Path, distro: str, date: str, dry_run: bool = False) -> str:
