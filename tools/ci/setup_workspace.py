@@ -289,7 +289,7 @@ def main():
     parser.add_argument(
         "--release",
         required=True,
-        help="Bazel 'ros' module release version, e.g. lyrical.2026-06-08.rcr.1",
+        help="Bazel 'ros' module release version, e.g. lyrical.2026-06-08.rcr.2",
     )
     parser.add_argument(
         "--workspace-dir",

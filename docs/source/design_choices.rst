@@ -27,7 +27,7 @@ During the week, a developer fixes one package at a time:
 
 .. code-block:: shell
 
-    bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-06-08.rcr.1
+    bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-06-08.rcr.2
     bazel run //tools/ci:vendor_modules -- rclcpp
     # ... edit workspace/vendor/rclcpp+/ in place ...
     bazel run //tools/ci:create_patch -- rclcpp
