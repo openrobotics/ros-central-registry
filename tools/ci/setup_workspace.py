@@ -570,7 +570,7 @@ rs_toolchains.toolchain(
 use_repo(rs_toolchains, "default_rust_toolchains")
 
 register_toolchains(
-    "@default_rust_toolchains//:all",
+    "@default_rust_toolchains//...",
 )
 
 # Patch fmt to bypass duplicate linking check
