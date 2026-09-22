@@ -415,7 +415,7 @@ bazel_dep(name = "rules_cc", version = "0.2.22")
 bazel_dep(name = "rules_go", version = "0.60.0")
 bazel_dep(name = "rules_python", version = "1.9.2")
 bazel_dep(name = "rules_qt", version = "0.0.7")
-bazel_dep(name = "rules_rs", version = "0.0.93")
+bazel_dep(name = "rules_rs", version = "0.0.111")
 bazel_dep(name = "rules_shell", version = "0.8.0")
 
 # There is a large design change in rules_python 2.x, and some versions don't
@@ -570,7 +570,7 @@ rs_toolchains.toolchain(
 use_repo(rs_toolchains, "default_rust_toolchains")
 
 register_toolchains(
-    "@default_rust_toolchains//:all",
+    "@default_rust_toolchains//...",
 )
 
 # Patch fmt to bypass duplicate linking check

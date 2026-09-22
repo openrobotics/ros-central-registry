@@ -3,7 +3,7 @@
 <br/>   
 <font size="6">ROS Central Registry</font>
 <br/>
-The <a href="http://intrinsic-opensource.github.io/ros-central-registry">ROS Central Registry</a> provides <a href= "https://bazel.build">Bazel</a> modules for <a href="https://ros.org">Robot Operating System (ROS)</a> core packages. This repo provides tooling that automates the release and patching process in response to upstream changes.
+The <a href="https://bazel.ros.org">ROS Central Registry</a> provides <a href= "https://bazel.build">Bazel</a> modules for <a href="https://ros.org">Robot Operating System (ROS)</a> core packages. This repo provides tooling that automates the release and patching process in response to upstream changes.
 </p>
 
 # Releases
@@ -70,7 +70,7 @@ git --version
 # Quick demo
 
 ```python
-git clone https://github.com/intrinsic-opensource/ros-central-registry.git
+git clone https://github.com/openrobotics/ros-central-registry.git
 ```
 
 Switch to the examples folder, which is a Bazel workspace showing some simple examples:
@@ -124,11 +124,10 @@ Right now we support everything up to perception. Beyond perception, the other v
 
 # Usage instructions
 
-When this line is added to a `.bazelrc` file it instructs Bazel to look for modules first in the RCR, then in the BCR.
+When this line is added to a `.bazelrc` file it instructs Bazel to look for modules first in the RCR, and then in the BCR.
 
 ```bazel
-common --registry=https://intrinsic-opensource.github.io/ros-central-registry \
-       --registry=https://bcr.bazel.build
+common --registry=https://bazel.ros.org --registry=https://bcr.bazel.build
 ```
 
 When the following lines are added to the `MODULE.bazel` file, Bazel will load the `core` ROS variant, which contains a minimum set of ROS packages required to build any ROS project. The `std_msgs` and `rclcpp` packages are among these.
@@ -163,7 +162,7 @@ cc_binary(
 
 Software modules are divided into two categories: 
 - __Third-party modules__: these are upstream, general software packages that are external to ROS and therefore they do not have a `package.xml` file. They live in the [Bazel Central Registry (BCR)](https://registry.bazel.build) and are useful to more than just the ROS ecosystem. Examples include `zlib`, `fastdds`, `ogre`, etc.
-- __ROS modules__ - these correspond to individual ROS packages (not repositories), and they have a distinct `package.xml` file. Examples of these include `rclcpp`, `rclcpp_action`, `launch_ros`, etc. These modules live in the [ROS Central Registry (RCR)](https://github.com/intrinsic-opensource/ros-central-registry) and are maintained by this GitHub project in response to upstream releases.
+- __ROS modules__ - these correspond to individual ROS packages (not repositories), and they have a distinct `package.xml` file. Examples of these include `rclcpp`, `rclcpp_action`, `launch_ros`, etc. These modules live in the [ROS Central Registry (RCR)](https://github.com/openrobotics/ros-central-registry) and are maintained by this GitHub project in response to upstream releases.
 
 This block diagram below shows how RCR releases are organized. A workspace will always have at least two `--registry` entries: one for the BCR (shaded in green) and another for the RCR (shaded in blue). You can think of the RCR as an augmentation to the BCR, and so RCR modules can depend on BCR modules, but not vice versa.
 
