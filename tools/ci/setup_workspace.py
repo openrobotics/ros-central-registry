@@ -289,7 +289,7 @@ def main():
     parser.add_argument(
         "--release",
         required=True,
-        help="Bazel 'ros' module release version, e.g. lyrical.2026-06-08.rcr.2",
+        help="Bazel 'ros' module release version, e.g. lyrical.2026-06-08.rcr.1",
     )
     parser.add_argument(
         "--workspace-dir",
@@ -337,8 +337,8 @@ def main():
         ros_module_dir / "MODULE.bazel", modules_dir
     )
     # Add ros and rosdistro to match the behavior of workspace_setup.py
-    packages["ros"] = args.release
-    packages["rosdistro"] = args.release
+    packages.setdefault("ros", args.release)
+    packages.setdefault("rosdistro", args.release)
     print(f"Found {len(packages)} RCR packages in release.")
 
     # Some packages may already have a newer patch published (e.g. a
