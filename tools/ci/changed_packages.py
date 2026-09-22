@@ -30,15 +30,31 @@ from tools.ci import bzlmod_lib
 from tools.ci import module_diff
 
 
+DISTRIBUTION_VARIANTS = {
+    "ros",
+    "ros_core",
+    "ros_base",
+    "desktop",
+    "desktop_full",
+    "perception",
+    "simulation",
+}
+
+
 def find_changed_packages(diffs: List[Tuple[str, str]], target_dir: str) -> List[str]:
     """
     Deduplicated, sorted package names with at least one newly-added ("A"
     status) version directory under target_dir -- every package this repo's
     own patching model (setup-workspace/vendor-module/create-patch) could
     have touched, since a patch is always a brand-new version directory,
-    never an edit to an existing one.
+    never an edit to an existing one. Excludes distribution umbrella/variant
+    modules which are already exercised by the matrix variant builds.
     """
-    return sorted({package for package, _version in module_diff.find_new_module_versions(diffs, target_dir)})
+    return sorted({
+        package
+        for package, _version in module_diff.find_new_module_versions(diffs, target_dir)
+        if package not in DISTRIBUTION_VARIANTS
+    })
 
 
 def main():

@@ -114,12 +114,17 @@ jobs:
     - name: Build changed packages
       id: build_changed_packages
       if: inputs.changed_packages != ''
-      run: |
         TARGETS=""
         for pkg in ${{ inputs.changed_packages }}; do
-          TARGETS="$TARGETS @${pkg}//..."
+          if bazel query "@${pkg}//..." >/dev/null 2>&1; then
+            TARGETS="$TARGETS @${pkg}//..."
+          else
+            echo "Skipping @${pkg}//... (no targets found)"
+          fi
         done
-        bazel build --config ci $TARGETS 2>&1 | tee build_changed_packages.log
+        if [ -n "$TARGETS" ]; then
+          bazel build --config ci $TARGETS 2>&1 | tee build_changed_packages.log
+        fi
 
     # Build the ros 2 distribution
     - name: Build
