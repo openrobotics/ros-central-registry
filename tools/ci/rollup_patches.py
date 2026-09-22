@@ -28,7 +28,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 from tools.ci import bzlmod_lib
 
@@ -69,32 +69,8 @@ def find_current_ros_version(modules_dir: Path, distro: str, date: str) -> str:
     return max(candidates)[1]
 
 
-def get_base_version(version: str) -> str:
-    """
-    Strips the trailing .rcr.N patch suffix from an RCR version string.
-    e.g. '32.0.0-1.rcr.1' -> '32.0.0-1'
-         'lyrical.2026-06-08.rcr.1' -> 'lyrical.2026-06-08'
-         '1.0.0' -> '1.0.0'
-    """
-    parts = version.split(".")
-    if len(parts) >= 2 and parts[-2] == "rcr" and parts[-1].isdigit():
-        return ".".join(parts[:-2])
-    return version
-
-
-def get_latest_matching_patch_version(pinned_version: str, metadata: Dict) -> str:
-    """
-    Finds the highest non-yanked version in metadata sharing the exact same
-    base upstream version as pinned_version. Never crosses to a different
-    upstream release (e.g. 1.0.0.rcr.1 -> 1.0.0.rcr.2, ignoring 2.0.0.rcr.1).
-    """
-    yanked = metadata.get("yanked_versions", {})
-    available = [v for v in metadata.get("versions", []) if v not in yanked]
-    base = get_base_version(pinned_version)
-    matching = [v for v in available if get_base_version(v) == base]
-    if not matching:
-        return pinned_version
-    return max(matching, key=bzlmod_lib.version_sort_key)
+get_base_version = bzlmod_lib.get_base_version
+get_latest_matching_patch_version = bzlmod_lib.get_latest_matching_patch_version
 
 
 def check_no_yanked_dependencies(packages: Dict[str, str], modules_dir: Path) -> None:
@@ -117,6 +93,111 @@ def check_no_yanked_dependencies(packages: Dict[str, str], modules_dir: Path) ->
             )
 
 
+def propagate_transitive_patches(
+    modules_dir: Path,
+    active_variants: List[str],
+    current_ros_version: str,
+    dry_run: bool = False,
+) -> Dict[str, Tuple[str, str]]:
+    """
+    Propagates patch updates through transitive dependencies in the distribution.
+    If a dependency D was updated to a newer patch version, any intermediate
+    package M that depends on D (and is referenced in the release) receives a
+    dep-only version bump to reference D's newer version. This repeats until all
+    intermediate dependencies are up to date.
+    Returns a dict of package name -> (old_version, new_version) for all packages
+    that received dep-only version bumps.
+    """
+    # Start with all packages directly referenced by active variants
+    distro_packages: Dict[str, str] = {}
+    for variant in active_variants:
+        v_module_file = modules_dir / variant / current_ros_version / "MODULE.bazel"
+        if v_module_file.exists():
+            distro_packages.update(bzlmod_lib.scan_module_for_dependencies(v_module_file, modules_dir))
+
+    # Initialize current_active_versions for all known packages
+    current_active_versions: Dict[str, str] = {}
+    for pkg, pinned_ver in distro_packages.items():
+        if pkg in VARIANT_MODULES:
+            continue
+        meta_path = modules_dir / pkg / "metadata.json"
+        if meta_path.exists():
+            meta = bzlmod_lib.read_metadata_json(meta_path)
+            current_active_versions[pkg] = bzlmod_lib.get_latest_matching_patch_version(pinned_ver, meta)
+        else:
+            current_active_versions[pkg] = pinned_ver
+
+    # Transitively expand current_active_versions to include all reachable non-variant packages
+    queue = list(current_active_versions.keys())
+    while queue:
+        pkg = queue.pop(0)
+        ver = current_active_versions[pkg]
+        module_file = modules_dir / pkg / ver / "MODULE.bazel"
+        if not module_file.exists():
+            continue
+        deps = bzlmod_lib.scan_module_for_dependencies(module_file, modules_dir)
+        for dep_name, pinned_dep_ver in deps.items():
+            if dep_name in VARIANT_MODULES:
+                continue
+            if dep_name not in current_active_versions:
+                meta_path = modules_dir / dep_name / "metadata.json"
+                if meta_path.exists():
+                    meta = bzlmod_lib.read_metadata_json(meta_path)
+                    latest_dep_ver = bzlmod_lib.get_latest_matching_patch_version(pinned_dep_ver, meta)
+                else:
+                    latest_dep_ver = pinned_dep_ver
+                current_active_versions[dep_name] = latest_dep_ver
+                queue.append(dep_name)
+
+    all_dep_bumps: Dict[str, Tuple[str, str]] = {}
+    while True:
+        iteration_bumps: Dict[str, Tuple[str, str, Dict[str, str]]] = {}
+        for pkg, current_ver in sorted(current_active_versions.items()):
+            module_file = modules_dir / pkg / current_ver / "MODULE.bazel"
+            if not module_file.exists():
+                continue
+            deps = bzlmod_lib.scan_module_for_dependencies(module_file, modules_dir)
+            outdated_deps = {}
+            for dep_name, pinned_dep_ver in sorted(deps.items()):
+                if dep_name in VARIANT_MODULES:
+                    continue
+                if dep_name in current_active_versions:
+                    latest_dep_ver = current_active_versions[dep_name]
+                    if bzlmod_lib.get_base_version(latest_dep_ver) == bzlmod_lib.get_base_version(pinned_dep_ver):
+                        if bzlmod_lib.version_sort_key(latest_dep_ver) > bzlmod_lib.version_sort_key(pinned_dep_ver):
+                            outdated_deps[dep_name] = latest_dep_ver
+
+            if outdated_deps:
+                new_ver = bzlmod_lib.increment_version(current_ver)
+                iteration_bumps[pkg] = (current_ver, new_ver, outdated_deps)
+
+        if not iteration_bumps:
+            break
+
+        for pkg, (old_v, new_v, outdated_deps) in sorted(iteration_bumps.items()):
+            old_dir = modules_dir / pkg / old_v
+            new_dir = modules_dir / pkg / new_v
+            content = (old_dir / "MODULE.bazel").read_text()
+            content = bzlmod_lib.rewrite_module_version(content, pkg, new_v)
+            for d_name, d_ver in outdated_deps.items():
+                content = bzlmod_lib.rewrite_bazel_dep_version(content, d_name, d_ver)
+
+            if not dry_run:
+                shutil.copytree(old_dir, new_dir, dirs_exist_ok=True)
+                (new_dir / "MODULE.bazel").write_text(content)
+                if (new_dir / "source.json").exists():
+                    bzlmod_lib.regenerate_integrity_hashes(new_dir)
+                bzlmod_lib.add_version_to_metadata_json(modules_dir / pkg / "metadata.json", new_v)
+
+            current_active_versions[pkg] = new_v
+            if pkg not in all_dep_bumps:
+                all_dep_bumps[pkg] = (old_v, new_v)
+            else:
+                all_dep_bumps[pkg] = (all_dep_bumps[pkg][0], new_v)
+
+    return all_dep_bumps
+
+
 def rollup_variants(modules_dir: Path, distro: str, date: str, dry_run: bool = False) -> str:
     current_ros_version = find_current_ros_version(modules_dir, distro, date)
     new_ros_version = bzlmod_lib.increment_version(current_ros_version)
@@ -129,6 +210,15 @@ def rollup_variants(modules_dir: Path, distro: str, date: str, dry_run: bool = F
     ]
     if not active_variants:
         raise RuntimeError(f"No variant modules found for {current_ros_version} under {modules_dir}")
+
+    # Propagate any transitive dependency patches up through intermediate packages
+    dep_bumps = propagate_transitive_patches(
+        modules_dir, active_variants, current_ros_version, dry_run=dry_run
+    )
+    if dep_bumps:
+        print(f"Propagated {len(dep_bumps)} transitive dependency patch(es):")
+        for name, (old_v, new_v) in sorted(dep_bumps.items()):
+            print(f"  {name}: {old_v} -> {new_v} (dep-only bump)")
 
     # Collect all current dependencies across all active variants
     variant_deps: Dict[str, Dict[str, str]] = {}
@@ -147,12 +237,15 @@ def rollup_variants(modules_dir: Path, distro: str, date: str, dry_run: bool = F
     for name, pinned_version in all_packages.items():
         if name in VARIANT_MODULES:
             continue
-        meta_path = modules_dir / name / "metadata.json"
-        if not meta_path.exists():
-            target_package_versions[name] = pinned_version
-            continue
-        metadata = bzlmod_lib.read_metadata_json(meta_path)
-        latest_patch = get_latest_matching_patch_version(pinned_version, metadata)
+        if name in dep_bumps:
+            latest_patch = dep_bumps[name][1]
+        else:
+            meta_path = modules_dir / name / "metadata.json"
+            if not meta_path.exists():
+                target_package_versions[name] = pinned_version
+                continue
+            metadata = bzlmod_lib.read_metadata_json(meta_path)
+            latest_patch = get_latest_matching_patch_version(pinned_version, metadata)
         target_package_versions[name] = latest_patch
         if latest_patch != pinned_version:
             changed_packages[name] = (pinned_version, latest_patch)

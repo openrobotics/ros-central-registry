@@ -329,6 +329,56 @@ bazel_dep(name = "new_dep", version = "2.0.0")
         violations = check_violations(diffs, self.old_dir, self.work_dir, "modules")
         self.assertIn("Overlay file 'nonexistent.bazel' declared in modules/my_module/1.0.0/source.json does not exist on disk", violations)
 
+    def test_inter_module_dependency_mismatch_fails(self):
+        # Both pkg_a and pkg_b are updated in the PR, but pkg_a references an older version of pkg_b
+        pkg_a_module = (
+            'module(\n'
+            '    name = "pkg_a",\n'
+            '    version = "1.0.0.rcr.2",\n'
+            ')\n'
+            'bazel_dep(name = "pkg_b", version = "2.0.0.rcr.0")\n'
+        )
+        pkg_b_module = (
+            'module(\n'
+            '    name = "pkg_b",\n'
+            '    version = "2.0.0.rcr.1",\n'
+            ')\n'
+        )
+        self.write_text(self.work_dir, "modules/pkg_a/1.0.0.rcr.2/MODULE.bazel", pkg_a_module)
+        self.write_text(self.work_dir, "modules/pkg_b/2.0.0.rcr.1/MODULE.bazel", pkg_b_module)
+
+        diffs = [
+            ("A", "modules/pkg_a/1.0.0.rcr.2/MODULE.bazel"),
+            ("A", "modules/pkg_b/2.0.0.rcr.1/MODULE.bazel"),
+        ]
+        violations = check_violations(diffs, self.old_dir, self.work_dir, "modules")
+        self.assertTrue(any("All inter-module references between modules updated in a PR must be bumped consistently" in v for v in violations))
+
+    def test_inter_module_dependency_consistent_passes(self):
+        # Both pkg_a and pkg_b are updated in the PR, and pkg_a references the updated version of pkg_b
+        pkg_a_module = (
+            'module(\n'
+            '    name = "pkg_a",\n'
+            '    version = "1.0.0.rcr.2",\n'
+            ')\n'
+            'bazel_dep(name = "pkg_b", version = "2.0.0.rcr.1")\n'
+        )
+        pkg_b_module = (
+            'module(\n'
+            '    name = "pkg_b",\n'
+            '    version = "2.0.0.rcr.1",\n'
+            ')\n'
+        )
+        self.write_text(self.work_dir, "modules/pkg_a/1.0.0.rcr.2/MODULE.bazel", pkg_a_module)
+        self.write_text(self.work_dir, "modules/pkg_b/2.0.0.rcr.1/MODULE.bazel", pkg_b_module)
+
+        diffs = [
+            ("A", "modules/pkg_a/1.0.0.rcr.2/MODULE.bazel"),
+            ("A", "modules/pkg_b/2.0.0.rcr.1/MODULE.bazel"),
+        ]
+        violations = check_violations(diffs, self.old_dir, self.work_dir, "modules")
+        self.assertEqual(violations, [])
+
 
 class TestMain(unittest.TestCase):
     """

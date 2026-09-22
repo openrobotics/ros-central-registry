@@ -20,7 +20,13 @@ import re
 import sys
 from pathlib import Path
 
-from tools.ci.bzlmod_lib import calculate_integrity_hash_for_file, increment_version, parse_diff_status_file
+from tools.ci.bzlmod_lib import (
+    calculate_integrity_hash_for_file,
+    increment_version,
+    parse_diff_status_file,
+    scan_module_for_dependencies,
+    version_sort_key,
+)
 
 def check_source_json_integrity(version_dir: Path, rel_version_path: str) -> list[str]:
     violations = []
@@ -297,6 +303,28 @@ def check_violations(diffs: list[tuple[str, str]], old_metadata_dir: Path, worki
         version_dir = working_dir / target_dir.rstrip("/") / pkg / ver
         if version_dir.exists():
             violations.extend(check_source_json_integrity(version_dir, rel_ver_path))
+
+    # Rule 4: Verify inter-module dependencies within the PR are bumped consistently.
+    pr_updated_modules: dict[str, str] = {}
+    for pkg, ver in affected_versions:
+        if pkg not in pr_updated_modules or version_sort_key(ver) > version_sort_key(pr_updated_modules[pkg]):
+            pr_updated_modules[pkg] = ver
+
+    for pkg, ver in sorted(affected_versions):
+        module_bazel = working_dir / target_dir.rstrip("/") / pkg / ver / "MODULE.bazel"
+        if not module_bazel.exists():
+            continue
+        deps = scan_module_for_dependencies(module_bazel, working_dir / target_dir.rstrip("/"))
+        for dep_name, pinned_ver in deps.items():
+            if dep_name in pr_updated_modules:
+                expected_ver = pr_updated_modules[dep_name]
+                if pinned_ver != expected_ver:
+                    rel_module_path = f"{target_dir.rstrip('/')}/{pkg}/{ver}/MODULE.bazel"
+                    violations.append(
+                        f"In {rel_module_path}: bazel_dep '{dep_name}' is pinned to '{pinned_ver}', "
+                        f"but '{dep_name}' is updated to '{expected_ver}' in this PR. "
+                        "All inter-module references between modules updated in a PR must be bumped consistently."
+                    )
 
     return violations
 
