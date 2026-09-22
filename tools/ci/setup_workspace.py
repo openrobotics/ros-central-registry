@@ -417,7 +417,6 @@ bazel_dep(name = "rules_python", version = "1.9.2")
 bazel_dep(name = "rules_qt", version = "0.0.7")
 bazel_dep(name = "rules_rs", version = "0.0.111")
 bazel_dep(name = "rules_shell", version = "0.8.0")
-bazel_dep(name = "zenoh-cpp", version = "1.8.0.bcr.1")
 
 # There is a large design change in rules_python 2.x, and some versions don't
 # support 3.14. So let's stick with the older version for now. This forces
