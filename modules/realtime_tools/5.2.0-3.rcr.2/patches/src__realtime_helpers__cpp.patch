@@ -1,0 +1,41 @@
+--- a/src/realtime_helpers.cpp
++++ b/src/realtime_helpers.cpp
+@@ -32,12 +32,16 @@
+ #include <windows.h>
+ #else
+ #include <sched.h>
+-#if defined(__unix__)
++#if defined(__unix__) && defined(HAS_LIBCAP)
+ #include <sys/capability.h>
+ #endif
+ #include <sys/mman.h>
+ #include <sys/utsname.h>
+ #include <unistd.h>
++#endif
++
++#ifndef CAP_IPC_LOCK
++#define CAP_IPC_LOCK 14
+ #endif
+ 
+ #include <cstring>
+@@ -103,6 +107,7 @@
+ #if defined(_WIN32) || defined(__APPLE__)
+   return {false, "Memory locking is not supported on Windows or macOS."};
+ #else
++#if defined(__unix__) && defined(HAS_LIBCAP)
+   auto is_capable = [](cap_value_t v) -> bool {
+     bool rc = false;
+     cap_t caps;
+@@ -118,6 +123,12 @@
+     cap_free(caps);
+     return rc;
+   };
++#else
++  auto is_capable = [](int v) -> bool {
++    (void)v;
++    return true;
++  };
++#endif
+ 
+   std::string message;
+   if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {

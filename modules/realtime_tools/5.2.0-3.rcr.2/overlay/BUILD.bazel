@@ -1,0 +1,189 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+}
+
+cc_library(
+    name = "realtime_tools_library",
+    srcs = ["src/realtime_helpers.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:boost.lockfree",
+    ],
+)
+
+cc_shared_library(
+    name = "realtime_tools",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":realtime_tools_library"],
+    deps = [":realtime_tools_library"],
+)
+
+cc_library(
+    name = "thread_priority_library",
+    srcs = ["src/realtime_helpers.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "thread_priority",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":thread_priority_library"],
+    deps = [":thread_priority_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        ":realtime_tools",
+        ":thread_priority",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+### TESTS
+
+TEST_DEPENDENCIES = DEPENDENCIES.values() + [
+    "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+]
+
+cc_test(
+    name = "thread_priority_tests",
+    srcs = ["test/thread_priority_tests.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":thread_priority_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "realtime_thread_safe_box_tests",
+    srcs = ["test/realtime_thread_safe_box_tests.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "realtime_buffer_tests",
+    srcs = ["test/realtime_buffer_tests.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "lock_free_queue_tests",
+    srcs = ["test/lock_free_queue_tests.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "realtime_publisher_tests",
+    srcs = ["test/realtime_publisher_tests.cpp"],
+    data = glob(["test/realtime_publisher.test"]),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:googletest",
+        "@test_msgs//:cc",
+    ],
+)
+
+cc_test(
+    name = "realtime_server_goal_handle_tests",
+    srcs = ["test/realtime_server_goal_handle_tests.cpp"],
+    data = glob(["test/realtime_server_goal_handle.test"]),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:googletest",
+        "@test_msgs//:cc",
+    ],
+)
+
+cc_test(
+    name = "test_async_function_handler",
+    srcs = [
+        "test/test_async_function_handler.cpp",
+        "test/test_async_function_handler.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = TEST_DEPENDENCIES + [
+        ":realtime_tools_library",
+        ":thread_priority_library",
+        "@rosdistro//cc:googletest",
+        "@lifecycle_msgs//:cc",
+    ],
+)
+
+cc_test(
+    name = "realtime_mutex_tests",
+    srcs = ["test/realtime_mutex_tests.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    headers = HEADERS,
+    libraries = [
+        ":realtime_tools",
+        ":thread_priority",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+        "@test_msgs//:ament_package",
+    ],
+)

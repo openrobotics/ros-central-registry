@@ -1,0 +1,333 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+### PARAMETER LIBRARIES
+
+generate_parameter_library(
+    name = "low_pass_filter_parameters",
+    yaml_file = "src/control_filters/low_pass_filter_parameters.yaml",
+)
+
+generate_parameter_library(
+    name = "rate_limiter_parameters",
+    yaml_file = "src/control_filters/rate_limiter_parameters.yaml",
+    validate_header = "include/control_filters/custom_validators.hpp",
+)
+
+generate_parameter_library(
+    name = "exponential_filter_parameters",
+    yaml_file = "src/control_filters/exponential_filter_parameters.yaml",
+)
+
+generate_parameter_library(
+    name = "gravity_compensation_filter_parameters",
+    yaml_file = "src/control_filters/gravity_compensation_filter_parameters.yaml",
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
+    "@rsl//:rsl": "@rsl//:rsl_library",
+}
+
+cc_library(
+    name = "control_toolbox_library",
+    srcs = [
+        "src/dither.cpp",
+        "src/limited_proxy.cpp",
+        "src/pid.cpp",
+        "src/pid_ros.cpp",
+        "src/sine_sweep.cpp",
+        "src/sinusoid.cpp",
+        "src/control_filters/low_pass_filter.cpp",
+        "src/control_filters/rate_limiter.cpp",
+        "src/control_filters/exponential_filter.cpp",
+        "src/control_filters/gravity_compensation.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["CONTROL_TOOLBOX_BUILDING_LIBRARY"],
+    deps = DEPENDENCIES.values() + [
+        ":low_pass_filter_parameters",
+        ":rate_limiter_parameters",
+        ":exponential_filter_parameters",
+        ":gravity_compensation_filter_parameters",
+        "@control_msgs//:cc",
+        "@filters//:filter_base",
+        "@geometry_msgs//:cc",
+        "@rcl_interfaces//:cc",
+        "@rosdistro//cc:eigen",
+        "@rosdistro//cc:fmt",
+        "@tf2//:tf2_library",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    ],
+)
+
+cc_shared_library(
+    name = "control_toolbox",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":control_toolbox_library"],
+    deps = [":control_toolbox_library"],
+)
+
+### TRANSITIVE DYNAMIC DEPS FOR TESTS
+
+collect_transitive_dynamic_deps(
+    name = "test_dynamic_deps",
+    dynamic_deps = [":control_toolbox"],
+    visibility = ["//visibility:private"],
+)
+
+### AMENT INDEX
+
+ament_index(
+    name = "ament_index",
+    export_name = "control_toolbox",
+    libraries = [":control_toolbox"],
+    package_xml = "package.xml",
+    plugin_category = "filters",
+    plugins = ["control_filters.xml"],
+)
+
+### TESTS
+
+cc_test(
+    name = "pid_tests",
+    srcs = ["test/pid_tests.cpp"],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "rate_limiter_tests",
+    srcs = ["test/rate_limiter.cpp"],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "pid_ros_parameters_tests",
+    srcs = ["test/pid_ros_parameters_tests.cpp"],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "pid_ros_publisher_tests",
+    srcs = ["test/pid_ros_publisher_tests.cpp"],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_gravity_compensation",
+    srcs = [
+        "test/control_filters/test_gravity_compensation.cpp",
+        "test/control_filters/test_filter_util.hpp",
+    ],
+    data = ["test/control_filters/test_gravity_compensation_parameters.yaml"],
+    args = [
+        "--ros-args",
+        "--params-file",
+        "$(location test/control_filters/test_gravity_compensation_parameters.yaml)",
+    ],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_load_gravity_compensation",
+    srcs = [
+        "test/control_filters/test_load_gravity_compensation.cpp",
+        "test/control_filters/test_filter_util.hpp",
+    ],
+    data = [
+        ":ament_index",
+        "@filters//:ament_package",
+    ],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@filters//:filter_chain",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_exponential_filter",
+    srcs = [
+        "test/control_filters/test_exponential_filter.cpp",
+        "test/control_filters/test_filter_util.hpp",
+    ],
+    data = ["test/control_filters/test_exponential_filter_parameters.yaml"],
+    args = [
+        "--ros-args",
+        "--params-file",
+        "$(location test/control_filters/test_exponential_filter_parameters.yaml)",
+    ],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_load_exponential_filter",
+    srcs = [
+        "test/control_filters/test_load_exponential_filter.cpp",
+        "test/control_filters/test_filter_util.hpp",
+    ],
+    data = [
+        ":ament_index",
+        "@filters//:ament_package",
+    ],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@filters//:filter_chain",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_low_pass_filter",
+    srcs = [
+        "test/control_filters/test_low_pass_filter.cpp",
+        "test/control_filters/test_filter_util.hpp",
+    ],
+    data = ["test/control_filters/test_low_pass_filter_parameters.yaml"],
+    args = [
+        "--ros-args",
+        "--params-file",
+        "$(location test/control_filters/test_low_pass_filter_parameters.yaml)",
+    ],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_load_low_pass_filter",
+    srcs = [
+        "test/control_filters/test_load_low_pass_filter.cpp",
+        "test/control_filters/test_filter_util.hpp",
+    ],
+    data = [
+        ":ament_index",
+        "@filters//:ament_package",
+    ],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@filters//:filter_chain",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_rate_limiter",
+    srcs = [
+        "test/control_filters/test_rate_limiter.cpp",
+        "test/control_filters/test_filter_util.hpp",
+    ],
+    data = ["test/control_filters/test_rate_limiter_parameters.yaml"],
+    args = [
+        "--ros-args",
+        "--params-file",
+        "$(location test/control_filters/test_rate_limiter_parameters.yaml)",
+    ],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_load_rate_limiter",
+    srcs = [
+        "test/control_filters/test_load_rate_limiter.cpp",
+        "test/control_filters/test_filter_util.hpp",
+    ],
+    data = [
+        ":ament_index",
+        "@filters//:ament_package",
+    ],
+    dynamic_deps = [":test_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":control_toolbox_library",
+        "@filters//:filter_chain",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    headers = HEADERS,
+    libraries = [":control_toolbox"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@control_msgs//:ament_package",
+        "@filters//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rcutils//:ament_package",
+        "@realtime_tools//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rsl//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
