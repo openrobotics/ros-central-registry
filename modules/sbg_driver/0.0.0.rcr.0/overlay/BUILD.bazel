@@ -1,0 +1,222 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosidl_default_generators//:defs.bzl", "cc_ros_library", "default_generators")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+default_generators(
+    package_xml = "package.xml",
+    deps = [
+        "//msg:SbgAirData",
+        "//msg:SbgAirDataStatus",
+        "//msg:SbgEkfEuler",
+        "//msg:SbgEkfNav",
+        "//msg:SbgEkfQuat",
+        "//msg:SbgEkfRotAccel",
+        "//msg:SbgEkfStatus",
+        "//msg:SbgEkfVelBody",
+        "//msg:SbgEvent",
+        "//msg:SbgGpsHdt",
+        "//msg:SbgGpsPos",
+        "//msg:SbgGpsPosStatus",
+        "//msg:SbgGpsRaw",
+        "//msg:SbgGpsVel",
+        "//msg:SbgGpsVelStatus",
+        "//msg:SbgImuData",
+        "//msg:SbgImuShort",
+        "//msg:SbgImuStatus",
+        "//msg:SbgMag",
+        "//msg:SbgMagCalib",
+        "//msg:SbgMagStatus",
+        "//msg:SbgOdoVel",
+        "//msg:SbgShipMotion",
+        "//msg:SbgShipMotionStatus",
+        "//msg:SbgStatus",
+        "//msg:SbgStatusAiding",
+        "//msg:SbgStatusCom",
+        "//msg:SbgStatusGeneral",
+        "//msg:SbgUtcTime",
+        "//msg:SbgUtcTimeStatus",
+    ],
+)
+
+### LIBRARIES
+
+cc_library(
+    name = "sbgECom",
+    srcs = glob(
+        [
+            "external/sbgECom/common/**/*.c",
+            "external/sbgECom/src/**/*.c",
+        ],
+        exclude = [
+            "external/sbgECom/common/interfaces/sbgInterfaceSerialWin.c",
+        ],
+    ),
+    hdrs = glob(
+        [
+            "external/sbgECom/common/**/*.h",
+            "external/sbgECom/src/**/*.h",
+        ],
+    ),
+    copts = [
+        "-DSBG_ECOM_USE_DEPRECATED_MACROS",
+        "-DSBG_COMMON_STATIC_USE",
+    ],
+    includes = [
+        "external/sbgECom/common",
+        "external/sbgECom/src",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+HEADERS = glob(["include/sbg_driver/**/*.h"])
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+}
+
+cc_ros_library(
+    name = "nmea_msgs_cc",
+    deps = ["@nmea_msgs//msg:Sentence"],
+)
+
+cc_ros_library(
+    name = "rtcm_msgs_cc",
+    deps = ["@rtcm_msgs//msg:Message"],
+)
+
+cc_library(
+    name = "sbg_driver_library",
+    srcs = [
+        "src/config_applier.cpp",
+        "src/config_store.cpp",
+        "src/message_publisher.cpp",
+        "src/message_wrapper.cpp",
+        "src/sbg_device.cpp",
+        "src/sbg_ros_helpers.cpp",
+        "src/sbg_utm.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = [
+        "external/sbgECom/common",
+        "external/sbgECom/src",
+        "include",
+        "include/sbg_driver",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":cc",
+        ":nmea_msgs_cc",
+        ":rtcm_msgs_cc",
+        ":sbgECom",
+        "@geometry_msgs//:cc",
+        "@nav_msgs//:cc",
+        "@sensor_msgs//:cc",
+        "@std_msgs//:cc",
+        "@std_srvs//:cc",
+        "@tf2_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "sbg_driver",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":sbg_driver_library"],
+    deps = [":sbg_driver_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":sbg_driver"],
+    visibility = ["//visibility:private"],
+)
+
+### EXECUTABLES
+
+cc_binary(
+    name = "sbg_device",
+    srcs = ["src/main.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":sbg_driver_library",
+    ],
+)
+
+cc_binary(
+    name = "sbg_device_mag",
+    srcs = ["src/main_mag.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":sbg_driver_library",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    data = glob(
+        [
+            "config/**",
+            "launch/**",
+            "meshes/**",
+            "urdf/**",
+        ],
+        allow_empty = True,
+    ),
+    executables = [
+        ":sbg_device",
+        ":sbg_device_mag",
+    ],
+    headers = HEADERS,
+    libraries = [":sbg_driver"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@nmea_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@rtcm_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
