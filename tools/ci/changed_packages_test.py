@@ -45,6 +45,18 @@ class TestFindChangedPackages(unittest.TestCase):
     def test_no_changes_returns_empty_list(self):
         self.assertEqual(changed_packages.find_changed_packages([], "modules"), [])
 
+    def test_ignores_distribution_variants_and_ros(self):
+        diffs = [
+            ("A", "modules/ros/lyrical.2026-06-08.rcr.2/MODULE.bazel"),
+            ("A", "modules/perception/lyrical.2026-06-08.rcr.2/MODULE.bazel"),
+            ("A", "modules/desktop/lyrical.2026-06-08.rcr.2/MODULE.bazel"),
+            ("A", "modules/rclcpp/32.0.0-1.rcr.2/MODULE.bazel"),
+        ]
+        self.assertEqual(
+            changed_packages.find_changed_packages(diffs, "modules"),
+            ["rclcpp"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

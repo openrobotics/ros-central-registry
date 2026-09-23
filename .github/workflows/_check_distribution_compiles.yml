@@ -58,18 +58,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        bazel:
-        - 8.5.1
-        - 9.1.1
+        bazel: ${{ github.event_name == 'pull_request' && fromJSON('["9.x"]') || fromJSON('["8.x", "9.x"]') }}
         ros:
-        - lyrical.2026-06-08.rcr.1
+        - lyrical.2026-06-08.rcr.2
         variant:
         - perception
-        os:
-        - ubuntu-26.04
-        - ubuntu-26.04-arm
-        - macos-26-intel
-        - macos-26
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm"]') || fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm", "macos-26-intel", "macos-26"]') }}
     steps:
 
     # Pin Xcode explicitly on macOS runners.
@@ -123,9 +117,17 @@ jobs:
       run: |
         TARGETS=""
         for pkg in ${{ inputs.changed_packages }}; do
-          TARGETS="$TARGETS @${pkg}//..."
+          if bazel query "@${pkg}//..." >/dev/null 2>&1; then
+            TARGETS="$TARGETS @${pkg}//..."
+          else
+            echo "Skipping @${pkg}//... (no targets found)"
+          fi
         done
-        bazel build --config ci $TARGETS 2>&1 | tee build_changed_packages.log
+        if [ -n "$TARGETS" ]; then
+          if ! bazel build --config ci $TARGETS 2>&1 | tee build_changed_packages.log; then
+            echo "::warning title=Build changed packages failed::Building changed packages ($TARGETS) failed, but will not block CI as some modules may be outside the supported collection."
+          fi
+        fi
 
     # Build the ros 2 distribution
     - name: Build

@@ -142,6 +142,34 @@ def get_latest_non_yanked_version(metadata: dict) -> str:
     return max(candidates, key=version_sort_key)
 
 
+def get_base_version(version: str) -> str:
+    """
+    Strips the trailing .rcr.N patch suffix from an RCR version string.
+    e.g. '32.0.0-1.rcr.1' -> '32.0.0-1'
+         'lyrical.2026-06-08.rcr.1' -> 'lyrical.2026-06-08'
+         '1.0.0' -> '1.0.0'
+    """
+    parts = version.split(".")
+    if len(parts) >= 2 and parts[-2] == "rcr" and parts[-1].isdigit():
+        return ".".join(parts[:-2])
+    return version
+
+
+def get_latest_matching_patch_version(pinned_version: str, metadata: dict) -> str:
+    """
+    Finds the highest non-yanked version in metadata sharing the exact same
+    base upstream version as pinned_version. Never crosses to a different
+    upstream release (e.g. 1.0.0.rcr.1 -> 1.0.0.rcr.2, ignoring 2.0.0.rcr.1).
+    """
+    yanked = metadata.get("yanked_versions", {})
+    available = [v for v in metadata.get("versions", []) if v not in yanked]
+    base = get_base_version(pinned_version)
+    matching = [v for v in available if get_base_version(v) == base]
+    if not matching:
+        return pinned_version
+    return max(matching, key=version_sort_key)
+
+
 def add_version_to_metadata_json(metadata_json_path: Path, package_version: str) -> None:
     """
     Append a new version to a package's metadata.json "versions" list (if

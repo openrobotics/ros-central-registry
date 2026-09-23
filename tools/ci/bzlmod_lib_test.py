@@ -304,5 +304,28 @@ class TestFindPackagesWithNewerVersions(unittest.TestCase):
         self.assertEqual(result, {"rclcpp": "32.0.0-1.rcr.2"})
 
 
+class TestBaseAndPatchVersion(unittest.TestCase):
+
+    def test_get_base_version(self):
+        self.assertEqual(bzlmod_lib.get_base_version("32.0.0-1.rcr.1"), "32.0.0-1")
+        self.assertEqual(bzlmod_lib.get_base_version("1.0.0.rcr.2"), "1.0.0")
+        self.assertEqual(bzlmod_lib.get_base_version("lyrical.2026-06-08.rcr.1"), "lyrical.2026-06-08")
+        self.assertEqual(bzlmod_lib.get_base_version("1.0.0"), "1.0.0")
+
+    def test_get_latest_matching_patch_version(self):
+        metadata = {
+            "versions": ["1.0.0-1", "1.0.0-1.rcr.1", "1.0.0-1.rcr.2", "1.0.0-2.rcr.1"],
+            "yanked_versions": {"1.0.0-1.rcr.2": "bad"},
+        }
+        self.assertEqual(
+            bzlmod_lib.get_latest_matching_patch_version("1.0.0-1", metadata),
+            "1.0.0-1.rcr.1",
+        )
+        self.assertEqual(
+            bzlmod_lib.get_latest_matching_patch_version("1.0.0-2", metadata),
+            "1.0.0-2.rcr.1",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

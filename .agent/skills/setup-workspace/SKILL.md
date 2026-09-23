@@ -22,7 +22,7 @@ resolved version.
 ## Command
 
 ```shell
-bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-06-08.rcr.1
+bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-06-08.rcr.2
 ```
 
 Find the current release name at the top of `README.md`, or by looking for

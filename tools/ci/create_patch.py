@@ -364,7 +364,12 @@ def print_rollup_summary(rollup: ModuleRollup) -> None:
     print(f"  overlay: {len(rollup.new_overlays)} (was {len(rollup.old_overlays)})")
 
 
-def apply_rollup(rollup: ModuleRollup, metadata_path: Path) -> None:
+def apply_rollup(
+    rollup: ModuleRollup,
+    metadata_path: Path,
+    updated_versions: Dict[str, str] = None,
+    modules_dir: Path = None,
+) -> None:
     if rollup.new_module_dir != rollup.current_module_dir:
         shutil.copytree(rollup.current_module_dir, rollup.new_module_dir, dirs_exist_ok=True)
     shutil.rmtree(rollup.new_module_dir / "patches", ignore_errors=True)
@@ -382,9 +387,28 @@ def apply_rollup(rollup: ModuleRollup, metadata_path: Path) -> None:
     if rollup.module == "rosdistro":
         shutil.copy2(rollup.vendor_module_dir / "MODULE.bazel", module_file)
 
-    module_file.write_text(
-        bzlmod_lib.rewrite_module_version(module_file.read_text(), rollup.module, rollup.new_version)
-    )
+    content = module_file.read_text()
+    content = bzlmod_lib.rewrite_module_version(content, rollup.module, rollup.new_version)
+
+    modules_path = modules_dir or rollup.new_module_dir.parent.parent
+    if module_file.exists():
+        deps = bzlmod_lib.scan_module_for_dependencies(module_file, modules_path)
+        for dep_name, pinned_ver in deps.items():
+            target_ver = None
+            if updated_versions and dep_name in updated_versions:
+                target_ver = updated_versions[dep_name]
+            elif (modules_path / dep_name / "metadata.json").exists():
+                try:
+                    meta = bzlmod_lib.read_metadata_json(modules_path / dep_name / "metadata.json")
+                    target_ver = bzlmod_lib.get_latest_matching_patch_version(pinned_ver, meta)
+                except Exception:
+                    target_ver = None
+
+            if target_ver and target_ver != pinned_ver:
+                if bzlmod_lib.version_sort_key(target_ver) > bzlmod_lib.version_sort_key(pinned_ver):
+                    content = bzlmod_lib.rewrite_bazel_dep_version(content, dep_name, target_ver)
+
+    module_file.write_text(content)
     bzlmod_lib.regenerate_integrity_hashes(rollup.new_module_dir)
     bzlmod_lib.add_version_to_metadata_json(metadata_path, rollup.new_version)
 
@@ -497,7 +521,12 @@ def main():
             print("Dry run: no files written.")
             return
 
-        apply_rollup(rollup, modules_dir / args.module / "metadata.json")
+        apply_rollup(
+            rollup,
+            modules_dir / args.module / "metadata.json",
+            updated_versions={rollup.module: rollup.new_version},
+            modules_dir=modules_dir,
+        )
         print(f"Done. modules/{args.module}/{rollup.new_version}/ is ready to commit as a PR.")
         return
 
@@ -542,8 +571,14 @@ def main():
         print("Aborted; no files written.")
         return
 
+    updated_versions = {r.module: r.new_version for r in rollups}
     for rollup in rollups:
-        apply_rollup(rollup, modules_dir / rollup.module / "metadata.json")
+        apply_rollup(
+            rollup,
+            modules_dir / rollup.module / "metadata.json",
+            updated_versions=updated_versions,
+            modules_dir=modules_dir,
+        )
         print(f"Done. modules/{rollup.module}/{rollup.new_version}/ is ready to commit as a PR.")
 
 

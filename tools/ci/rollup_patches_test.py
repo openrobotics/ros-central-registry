@@ -79,38 +79,167 @@ class TestCheckNoYankedDependencies(unittest.TestCase):
             rollup_patches.check_no_yanked_dependencies({"rclcpp": "1.0.0"}, self.tmp_dir)
 
 
-class TestBumpCiMatrixFiles(unittest.TestCase):
+class TestGetBaseVersion(unittest.TestCase):
+
+    def test_rcr_versions(self):
+        self.assertEqual(rollup_patches.get_base_version("1.0.0-1.rcr.1"), "1.0.0-1")
+        self.assertEqual(rollup_patches.get_base_version("1.0.0.rcr.2"), "1.0.0")
+        self.assertEqual(rollup_patches.get_base_version("lyrical.2026-06-08.rcr.1"), "lyrical.2026-06-08")
+
+    def test_versions_without_rcr(self):
+        self.assertEqual(rollup_patches.get_base_version("1.0.0"), "1.0.0")
+        self.assertEqual(rollup_patches.get_base_version("lyrical.2026-06-08"), "lyrical.2026-06-08")
+
+
+class TestGetLatestMatchingPatchVersion(unittest.TestCase):
+
+    def test_selects_highest_matching_patch(self):
+        metadata = {
+            "versions": ["1.0.0.rcr.1", "1.0.0.rcr.2", "2.0.0.rcr.1"],
+            "yanked_versions": {},
+        }
+        result = rollup_patches.get_latest_matching_patch_version("1.0.0.rcr.1", metadata)
+        self.assertEqual(result, "1.0.0.rcr.2")
+
+    def test_ignores_yanked_patch(self):
+        metadata = {
+            "versions": ["1.0.0.rcr.1", "1.0.0.rcr.2", "1.0.0.rcr.3"],
+            "yanked_versions": {"1.0.0.rcr.3": "broken build"},
+        }
+        result = rollup_patches.get_latest_matching_patch_version("1.0.0.rcr.1", metadata)
+        self.assertEqual(result, "1.0.0.rcr.2")
+
+    def test_returns_pinned_if_no_newer_patch(self):
+        metadata = {
+            "versions": ["1.0.0.rcr.1"],
+            "yanked_versions": {},
+        }
+        result = rollup_patches.get_latest_matching_patch_version("1.0.0.rcr.1", metadata)
+        self.assertEqual(result, "1.0.0.rcr.1")
+
+
+class TestRollupVariants(unittest.TestCase):
 
     def setUp(self):
         self.tmp_dir = Path(tempfile.mkdtemp())
-        self.workflows_dir = self.tmp_dir / ".github" / "workflows"
-        self.workflows_dir.mkdir(parents=True)
-        for name in rollup_patches.WORKFLOW_FILES_WITH_HARDCODED_ROS_MATRIX:
-            path = self.tmp_dir / name
-            path.write_text("matrix:\n  ros:\n    - lyrical.2026-06-08.rcr.1\n")
+        self.modules_dir = self.tmp_dir / "modules"
+        self.modules_dir.mkdir()
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir)
 
-    def test_bumps_all_three_files(self):
-        rollup_patches.bump_ci_matrix_files(
-            self.tmp_dir, "lyrical.2026-06-08.rcr.1", "lyrical.2026-06-08.rcr.2", dry_run=False)
-        for name in rollup_patches.WORKFLOW_FILES_WITH_HARDCODED_ROS_MATRIX:
-            content = (self.tmp_dir / name).read_text()
-            self.assertIn("- lyrical.2026-06-08.rcr.2", content)
-            self.assertNotIn("- lyrical.2026-06-08.rcr.1", content)
+    def test_rollup_variants_end_to_end(self):
+        # Create a package rclcpp with .rcr.1 and a newly published .rcr.2
+        rclcpp_dir = self.modules_dir / "rclcpp"
+        rclcpp_dir.mkdir()
+        (rclcpp_dir / "32.0.0-1.rcr.1").mkdir()
+        (rclcpp_dir / "32.0.0-1.rcr.2").mkdir()
+        (rclcpp_dir / "metadata.json").write_text(json.dumps({
+            "versions": ["32.0.0-1.rcr.1", "32.0.0-1.rcr.2"],
+            "yanked_versions": {},
+        }))
 
-    def test_dry_run_writes_nothing(self):
-        rollup_patches.bump_ci_matrix_files(
-            self.tmp_dir, "lyrical.2026-06-08.rcr.1", "lyrical.2026-06-08.rcr.2", dry_run=True)
-        for name in rollup_patches.WORKFLOW_FILES_WITH_HARDCODED_ROS_MATRIX:
-            content = (self.tmp_dir / name).read_text()
-            self.assertIn("- lyrical.2026-06-08.rcr.1", content)
+        # Create variant 'perception' and 'ros' at lyrical.2026-06-08.rcr.1
+        for variant in ["ros", "perception"]:
+            v_dir = self.modules_dir / variant
+            v_dir.mkdir()
+            (v_dir / "metadata.json").write_text(json.dumps({
+                "versions": ["lyrical.2026-06-08.rcr.1"],
+                "yanked_versions": {},
+            }))
+            ver_dir = v_dir / "lyrical.2026-06-08.rcr.1"
+            ver_dir.mkdir()
+            ver_dir.joinpath("MODULE.bazel").write_text(f"""module(
+    name = "{variant}",
+    version = "lyrical.2026-06-08.rcr.1",
+)
+bazel_dep(name = "rclcpp", version = "32.0.0-1.rcr.1")
+""")
 
-    def test_raises_if_old_entry_not_found(self):
-        with self.assertRaises(RuntimeError):
-            rollup_patches.bump_ci_matrix_files(
-                self.tmp_dir, "not.the-right.rcr.1", "lyrical.2026-06-08.rcr.2", dry_run=False)
+        new_ver = rollup_patches.rollup_variants(
+            self.modules_dir, "lyrical", "2026-06-08", dry_run=False
+        )
+        self.assertEqual(new_ver, "lyrical.2026-06-08.rcr.2")
+
+        # Verify perception was bumped and pins rclcpp@32.0.0-1.rcr.2
+        p_module = (self.modules_dir / "perception" / "lyrical.2026-06-08.rcr.2" / "MODULE.bazel").read_text()
+        self.assertIn('version = "lyrical.2026-06-08.rcr.2"', p_module)
+        self.assertIn('bazel_dep(name = "rclcpp", version = "32.0.0-1.rcr.2")', p_module)
+
+        # Verify rclcpp itself was NOT modified
+        self.assertFalse((self.modules_dir / "rclcpp" / "32.0.0-1.rcr.3").exists())
+
+    def test_propagate_transitive_patches_chains_dep_bumps(self):
+        # leaf has a new patch .rcr.2
+        leaf_dir = self.modules_dir / "leaf"
+        leaf_dir.mkdir()
+        (leaf_dir / "1.0.0.rcr.1").mkdir()
+        (leaf_dir / "1.0.0.rcr.1" / "MODULE.bazel").write_text('module(name = "leaf", version = "1.0.0.rcr.1")\n')
+        (leaf_dir / "1.0.0.rcr.2").mkdir()
+        (leaf_dir / "1.0.0.rcr.2" / "MODULE.bazel").write_text('module(name = "leaf", version = "1.0.0.rcr.2")\n')
+        (leaf_dir / "metadata.json").write_text(json.dumps({
+            "versions": ["1.0.0.rcr.1", "1.0.0.rcr.2"],
+            "yanked_versions": {},
+        }))
+
+        # mid depends on leaf
+        mid_dir = self.modules_dir / "mid"
+        mid_dir.mkdir()
+        (mid_dir / "1.0.0.rcr.1").mkdir()
+        (mid_dir / "1.0.0.rcr.1" / "MODULE.bazel").write_text(
+            'module(name = "mid", version = "1.0.0.rcr.1")\n'
+            'bazel_dep(name = "leaf", version = "1.0.0.rcr.1")\n'
+        )
+        (mid_dir / "metadata.json").write_text(json.dumps({
+            "versions": ["1.0.0.rcr.1"],
+            "yanked_versions": {},
+        }))
+
+        # top depends on mid
+        top_dir = self.modules_dir / "top"
+        top_dir.mkdir()
+        (top_dir / "1.0.0.rcr.1").mkdir()
+        (top_dir / "1.0.0.rcr.1" / "MODULE.bazel").write_text(
+            'module(name = "top", version = "1.0.0.rcr.1")\n'
+            'bazel_dep(name = "mid", version = "1.0.0.rcr.1")\n'
+        )
+        (top_dir / "metadata.json").write_text(json.dumps({
+            "versions": ["1.0.0.rcr.1"],
+            "yanked_versions": {},
+        }))
+
+        # variant ros depends on top
+        ros_dir = self.modules_dir / "ros"
+        ros_dir.mkdir()
+        (ros_dir / "metadata.json").write_text(json.dumps({
+            "versions": ["lyrical.2026-06-08.rcr.1"],
+            "yanked_versions": {},
+        }))
+        ver_dir = ros_dir / "lyrical.2026-06-08.rcr.1"
+        ver_dir.mkdir()
+        (ver_dir / "MODULE.bazel").write_text(
+            'module(name = "ros", version = "lyrical.2026-06-08.rcr.1")\n'
+            'bazel_dep(name = "top", version = "1.0.0.rcr.1")\n'
+        )
+
+        new_ver = rollup_patches.rollup_variants(
+            self.modules_dir, "lyrical", "2026-06-08", dry_run=False
+        )
+        self.assertEqual(new_ver, "lyrical.2026-06-08.rcr.2")
+
+        # mid was bumped to 1.0.0.rcr.2 and references leaf@1.0.0.rcr.2
+        mid_module = (self.modules_dir / "mid" / "1.0.0.rcr.2" / "MODULE.bazel").read_text()
+        self.assertIn('version = "1.0.0.rcr.2"', mid_module)
+        self.assertIn('bazel_dep(name = "leaf", version = "1.0.0.rcr.2")', mid_module)
+
+        # top was bumped to 1.0.0.rcr.2 and references mid@1.0.0.rcr.2
+        top_module = (self.modules_dir / "top" / "1.0.0.rcr.2" / "MODULE.bazel").read_text()
+        self.assertIn('version = "1.0.0.rcr.2"', top_module)
+        self.assertIn('bazel_dep(name = "mid", version = "1.0.0.rcr.2")', top_module)
+
+        # ros was bumped to lyrical.2026-06-08.rcr.2 and references top@1.0.0.rcr.2
+        ros_module = (self.modules_dir / "ros" / "lyrical.2026-06-08.rcr.2" / "MODULE.bazel").read_text()
+        self.assertIn('bazel_dep(name = "top", version = "1.0.0.rcr.2")', ros_module)
 
 
 if __name__ == "__main__":

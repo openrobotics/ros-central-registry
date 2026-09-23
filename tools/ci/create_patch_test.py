@@ -701,5 +701,51 @@ class TestRosdistroOverwriteInPlace(unittest.TestCase):
         self.assertIn('bazel_dep(name = "new_dep", version = "2.0.0")', new_content)
 
 
+class TestApplyRollupInterModuleBumps(_RollupFixtureTestCase):
+
+    def setUp(self):
+        super().setUp()
+        rcutils_dir = self.modules_dir / "rcutils"
+        (rcutils_dir / "1.0.0").mkdir(parents=True)
+        (rcutils_dir / "1.0.0" / "MODULE.bazel").write_text('module(name = "rcutils", version = "1.0.0")\n')
+        with open(rcutils_dir / "metadata.json", "w") as f:
+            json.dump({"versions": ["1.0.0", "1.0.0.rcr.1"], "yanked_versions": {}}, f)
+
+        module_content = (
+            'module(\n'
+            '    name = "rclcpp",\n'
+            '    version = "1.0.0",\n'
+            ')\n'
+            'bazel_dep(name = "rcutils", version = "1.0.0")\n'
+        )
+        (self.version_dir / "MODULE.bazel").write_text(module_content)
+        (self.vendor_module_dir / "MODULE.bazel").write_text(module_content)
+
+    def test_apply_rollup_bumps_dep_from_batch_versions(self):
+        rollup = create_patch.compute_rollup(
+            "rclcpp", self.modules_dir, self.target_workspace, self.workspace_root
+        )
+        create_patch.apply_rollup(
+            rollup,
+            self.modules_dir / "rclcpp" / "metadata.json",
+            updated_versions={"rcutils": "1.0.0.rcr.2"},
+        )
+        new_dir = self.modules_dir / "rclcpp" / "1.0.0.rcr.0"
+        content = (new_dir / "MODULE.bazel").read_text()
+        self.assertIn('bazel_dep(name = "rcutils", version = "1.0.0.rcr.2")', content)
+
+    def test_apply_rollup_bumps_dep_from_metadata_json(self):
+        rollup = create_patch.compute_rollup(
+            "rclcpp", self.modules_dir, self.target_workspace, self.workspace_root
+        )
+        create_patch.apply_rollup(
+            rollup,
+            self.modules_dir / "rclcpp" / "metadata.json",
+        )
+        new_dir = self.modules_dir / "rclcpp" / "1.0.0.rcr.0"
+        content = (new_dir / "MODULE.bazel").read_text()
+        self.assertIn('bazel_dep(name = "rcutils", version = "1.0.0.rcr.1")', content)
+
+
 if __name__ == "__main__":
     unittest.main()

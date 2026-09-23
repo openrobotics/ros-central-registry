@@ -176,7 +176,7 @@ than hand-editing them — `bazel run //:requirements.update` for
   integrity hash), and optionally `patches/` (unified diffs against raw
   upstream) and `overlay/` (brand-new files, typically `BUILD.bazel`s).
 - `modules/ros/<release>/` — the top-level umbrella module for one dated
-  distro release (e.g. `lyrical.2026-06-08.rcr.1`), pinning every package's
+  distro release (e.g. `lyrical.2026-06-08.rcr.2`), pinning every package's
   resolved version.
 - `tools/ci/` — the Python tooling that drives everything above:
   `bootstrap_release.py`, `rollup_patches.py`, `setup_workspace.py`,

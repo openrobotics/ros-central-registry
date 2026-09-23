@@ -32,7 +32,7 @@ To scan a distro other than the default list (`lyrical`) once, or re-run manuall
 If you need to fix a bug in a single RCR package, use this workflow rather than hand-editing files under `modules/`:
 
 ```shell
-bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-06-08.rcr.1
+bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-06-08.rcr.2
 bazel run //tools/ci:vendor_modules -- rclcpp
 # cd workspace
 # ... edit vendor/rclcpp+/ in place ...

@@ -337,8 +337,8 @@ def main():
         ros_module_dir / "MODULE.bazel", modules_dir
     )
     # Add ros and rosdistro to match the behavior of workspace_setup.py
-    packages["ros"] = args.release
-    packages["rosdistro"] = args.release
+    packages.setdefault("ros", args.release)
+    packages.setdefault("rosdistro", args.release)
     print(f"Found {len(packages)} RCR packages in release.")
 
     # Some packages may already have a newer patch published (e.g. a
