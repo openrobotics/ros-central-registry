@@ -128,6 +128,37 @@ class TestRenderStubModuleDotBazel(unittest.TestCase):
         self.assertNotIn("bazel_dep", content)
 
 
+class TestRenderBoilerplateOverlayBuildBazel(unittest.TestCase):
+
+    def test_ament_package_deps_include_rcr_deps_and_rosdistro_sorted(self):
+        content = bootstrap_release.render_boilerplate_overlay_build_bazel(
+            {"ament_cmake": "2.8.7-3.rcr.1", "ament_lint_auto": "0.20.6-1.rcr.1"}
+        )
+        self.assertIn('load("@rosdistro//ament:defs.bzl", "ament_package")', content)
+        self.assertIn('package(default_visibility = ["//visibility:public"])', content)
+        self.assertIn('name = "ament_package"', content)
+        self.assertIn('package_xml = "package.xml"', content)
+        # Sorted alphabetically, matching every hand-written overlay/BUILD.bazel.
+        self.assertIn(
+            '    deps = [\n'
+            '        "@ament_cmake//:ament_package",\n'
+            '        "@ament_lint_auto//:ament_package",\n'
+            '        "@rosdistro//:ament_package",\n'
+            '    ],\n',
+            content,
+        )
+
+    def test_rosdistro_always_included_even_with_no_rcr_deps(self):
+        content = bootstrap_release.render_boilerplate_overlay_build_bazel({})
+        self.assertIn('"@rosdistro//:ament_package"', content)
+
+    def test_no_duplicate_rosdistro_entry_if_already_a_dep(self):
+        content = bootstrap_release.render_boilerplate_overlay_build_bazel(
+            {"rosdistro": "lyrical.2026-06-08.rcr.1"}
+        )
+        self.assertEqual(content.count('"@rosdistro//:ament_package"'), 1)
+
+
 class TestDeriveHomepage(unittest.TestCase):
 
     def test_truncates_github_url_to_owner_repo(self):

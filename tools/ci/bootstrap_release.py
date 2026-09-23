@@ -216,6 +216,38 @@ def render_module_dot_bazel(
     return "".join(lines)
 
 
+def render_boilerplate_overlay_build_bazel(rcr_deps: Dict[str, str]) -> str:
+    """
+    A minimal overlay/BUILD.bazel for a package that has never had one --
+    see bootstrap_one_tag's migrate step, which normally carries an
+    existing overlay forward from the package's own previous patched
+    version. A genuinely brand-new package has no such version to carry
+    forward from, and without this, its fresh .rcr.0 would have no
+    buildable target at all, which fails CI's check that every newly
+    bootstrapped package builds. This is not a substitute for a real
+    implementation -- a human should still flesh it out via the normal
+    vendor-module/edit/create-patch workflow once the package needs more
+    than an ament_index entry (headers, libraries, executables, etc.) --
+    it only wires up the same RCR deps already declared in the package's
+    own MODULE.bazel (see render_module_dot_bazel) as an ament_package,
+    matching the shape of every hand-written overlay/BUILD.bazel in this
+    registry (e.g. modules/acado_vendor/1.0.0-8.rcr.1/overlay/BUILD.bazel).
+    """
+    lines = [bzlmod_lib.get_copyright_header()]
+    lines.append('load("@rosdistro//ament:defs.bzl", "ament_package")\n')
+    lines.append('\npackage(default_visibility = ["//visibility:public"])\n')
+    lines.append("\n### PACKAGING\n\n")
+    lines.append("ament_package(\n")
+    lines.append('    name = "ament_package",\n')
+    lines.append('    package_xml = "package.xml",\n')
+    lines.append("    deps = [\n")
+    for dep_name in sorted(set(rcr_deps) | {"rosdistro"}):
+        lines.append(f'        "@{dep_name}//:ament_package",\n')
+    lines.append("    ],\n")
+    lines.append(")\n")
+    return "".join(lines)
+
+
 def download_archive(url: str, cache_path: Path) -> Path:
     if not cache_path.exists():
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -469,6 +501,19 @@ def bootstrap_one_tag(modules_dir: Path, cache_dir: Path, distro: str, date: str
                     shutil.copytree(src, new_dir / subdir)
             bzlmod_lib.regenerate_integrity_hashes(new_dir)
             print(f"    migrated patches/overlay from {pkg_name}@{old_patched_version}")
+        elif custom_body is None:
+            # No prior patched version exists to carry an overlay forward
+            # from -- this package has never had one (rosdistro is exempt:
+            # it has no package.xml of its own, so an ament_package target
+            # doesn't apply to it). Without at least this, CI's new-package
+            # check has nothing to build.
+            overlay_dir = new_dir / "overlay"
+            overlay_dir.mkdir(exist_ok=True)
+            (overlay_dir / "BUILD.bazel").write_text(
+                render_boilerplate_overlay_build_bazel(rcr_deps)
+            )
+            bzlmod_lib.regenerate_integrity_hashes(new_dir)
+            print(f"    added boilerplate overlay/BUILD.bazel for {pkg_name}@{new_version}")
         bzlmod_lib.add_version_to_metadata_json(pkg_dir / "metadata.json", new_version)
 
     print(f"Done with {distro}/{date}.")

@@ -21,10 +21,14 @@ distribution.yaml and each package's package.xml straight from the tag
 sidesteps it entirely (see docs/source/design_choices.rst).
 """
 
+import io
 import re
 import subprocess
+import sys
+import tarfile
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple
 from xml.etree import ElementTree
 
 import requests
@@ -80,6 +84,12 @@ class PackageSource:
     repo_name: str = ""
     tag: str = ""
     dependencies: Optional[Set[str]] = None
+    # Subdirectory (relative to the archive root) containing this package's
+    # package.xml, when it's not at the archive root. Only ever set by the
+    # no-official-release fallback (see resolve_unreleased_repo_packages) --
+    # an officially-released package's archive is bloom-filtered so
+    # package.xml always sits at the root already.
+    package_xml_subdir: str = ""
 
 
 # The e-cal/rosidl_typesupport_protobuf project isn't part of any rosdistro
@@ -163,35 +173,249 @@ def resolve_packages(distribution: dict, distro: str, date: str) -> Dict[str, Pa
     PackageSource map (one repo can produce several packages, all sharing
     the same upstream release version), applying the date-versioning
     override for meta-packages, plus the hardcoded extra packages.
+
+    A repo whose 'release:' block is missing or incomplete (no url/version/
+    tag template) falls back to resolve_unreleased_repo_packages instead of
+    being silently dropped -- see that function's docstring for what it can
+    and can't recover.
     """
     packages: Dict[str, PackageSource] = dict(EXTRA_PACKAGES)
     for repo_name, repo_info in (distribution.get("repositories") or {}).items():
         release = repo_info.get("release")
-        if not release:
-            continue
-        repo_url = release.get("url")
-        upstream_version = release.get("version")
-        tag_template = (release.get("tags") or {}).get("release")
-        if not repo_url or not upstream_version or not tag_template:
-            continue
-        owner, bare_repo_name = _parse_github_owner_repo(repo_url)
-        for pkg_name in release.get("packages") or [repo_name]:
-            if pkg_name in IGNORED_PACKAGES:
+        if release:
+            repo_url = release.get("url")
+            upstream_version = release.get("version")
+            tag_template = (release.get("tags") or {}).get("release")
+            if repo_url and upstream_version and tag_template:
+                owner, bare_repo_name = _parse_github_owner_repo(repo_url)
+                for pkg_name in release.get("packages") or [repo_name]:
+                    if pkg_name in IGNORED_PACKAGES:
+                        continue
+                    tag = tag_template.format(package=pkg_name, version=upstream_version)
+                    tarball_url = f"https://github.com/{owner}/{bare_repo_name}/archive/refs/tags/{tag}.tar.gz"
+                    final_version = (
+                        f"{distro}.{date}" if pkg_name in DATE_VERSIONED_PACKAGES else upstream_version
+                    )
+                    packages[pkg_name] = PackageSource(
+                        version=final_version,
+                        url=tarball_url,
+                        default_strip_prefix=compute_default_strip_prefix(bare_repo_name, tag),
+                        repo_owner=owner,
+                        repo_name=bare_repo_name,
+                        tag=tag,
+                    )
                 continue
-            tag = tag_template.format(package=pkg_name, version=upstream_version)
-            tarball_url = f"https://github.com/{owner}/{bare_repo_name}/archive/refs/tags/{tag}.tar.gz"
-            final_version = (
-                f"{distro}.{date}" if pkg_name in DATE_VERSIONED_PACKAGES else upstream_version
-            )
-            packages[pkg_name] = PackageSource(
-                version=final_version,
-                url=tarball_url,
-                default_strip_prefix=compute_default_strip_prefix(bare_repo_name, tag),
-                repo_owner=owner,
-                repo_name=bare_repo_name,
-                tag=tag,
-            )
+        packages.update(resolve_unreleased_repo_packages(repo_name, repo_info))
     return packages
+
+
+_UPSTREAM_TAG_PATTERN = re.compile(r"^upstream/(\d+(?:\.\d+){1,3})$")
+
+
+def _list_repo_tags(owner: str, repo: str) -> List[str]:
+    """
+    Every tag name on {owner}/{repo}, or [] if the repo doesn't exist, has
+    no tags, or the API call otherwise fails -- callers treat "nothing
+    found" as a normal, expected outcome (most repos probed this way won't
+    have a '-release' companion at all), not an error worth surfacing.
+    """
+    result = subprocess.run(
+        ["gh", "api", f"repos/{owner}/{repo}/tags", "--paginate", "-q", ".[].name"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _find_best_upstream_tag(
+    owner: str, repo: str, alt_owner: Optional[str] = None
+) -> Optional[Tuple[str, str, str]]:
+    """
+    Look for the highest-versioned 'upstream/X.Y.Z' tag on {owner}/{repo},
+    then (if not found) on {alt_owner}/{repo}. Bloom writes an 'upstream/*'
+    tag whenever it imports upstream source into a '-release' repo, which
+    happens before (and independently of) an actual per-distro release --
+    unlike a 'release/<distro>/<pkg>/X.Y.Z-N' tag, it carries no debian
+    revision and isn't scoped to any particular distro. Returns
+    (resolved_owner, repo, tag) for whichever owner had a match, or None.
+    """
+    for candidate_owner in [o for o in (owner, alt_owner) if o]:
+        best: Optional[Tuple[Tuple[int, ...], str]] = None
+        for tag in _list_repo_tags(candidate_owner, repo):
+            match = _UPSTREAM_TAG_PATTERN.match(tag)
+            if not match:
+                continue
+            key = tuple(int(p) for p in match.group(1).split("."))
+            if best is None or key > best[0]:
+                best = (key, tag)
+        if best is not None:
+            return candidate_owner, repo, best[1]
+    return None
+
+
+def discover_packages_in_archive(url: str) -> Dict[str, str]:
+    """
+    Download a source archive and return every ROS package it contains, as
+    {package_name: strip_prefix} -- strip_prefix follows the same
+    convention as compute_source_json in bootstrap_release.py: the full
+    parent directory of that package's package.xml *within the downloaded
+    tarball itself* ("" if package.xml sits at the tarball's absolute
+    root). For a GitHub-generated archive this always includes the
+    top-level "{repo}-{tag}" wrapper directory that every member is nested
+    under -- callers that need a git-tree-relative path instead (e.g. to
+    build a raw.githubusercontent.com URL) must strip that wrapper prefix
+    back off; see resolve_unreleased_repo_packages. Used there because,
+    unlike the normal release path, there's no 'packages:' list telling us
+    what's inside a multi-package repo's archive -- the archive itself is
+    the only source of truth.
+
+    Only considers package.xml at the wrapper root or exactly one
+    directory below it -- every real ROS package in this registry lives
+    there. Anything deeper is almost always a vendored/third-party
+    dependency bundled inside the repo's own source tree, which can carry
+    its own unrelated package.xml: eCAL's upstream archive, for instance,
+    has one at thirdparty/protobuf/php/ext/google/protobuf/package.xml
+    declaring <name>protobuf</name>, which has nothing to do with the
+    actual eCAL packages and would otherwise get "discovered" as one.
+    """
+    response = requests.get(url, timeout=120)
+    response.raise_for_status()
+    discovered: Dict[str, str] = {}
+    with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:*") as tar:
+        for member in tar.getmembers():
+            if not member.name.endswith("package.xml"):
+                continue
+            parts = Path(member.name).parts
+            # parts[0] is the wrapper directory, parts[-1] is "package.xml"
+            # itself -- len(parts) 2 means the wrapper root, 3 means one
+            # directory below it.
+            if len(parts) > 3:
+                continue
+            fileobj = tar.extractfile(member)
+            if fileobj is None:
+                continue
+            content = fileobj.read().decode("utf-8", errors="ignore")
+            match = re.search(r"<name>\s*([^<\s]+)\s*</name>", content)
+            if not match:
+                continue
+            parent = Path(member.name).parent.as_posix()
+            discovered[match.group(1)] = "" if parent == "." else parent
+    return discovered
+
+
+def bcr_module_exists(name: str) -> bool:
+    """
+    True if `name` is a published Bazel Central Registry module (queries
+    the live registry Bazel itself resolves against). Used to keep
+    resolve_unreleased_repo_packages's archive scan from minting a package
+    that shadows an unrelated BCR module of the same name -- see
+    discover_packages_in_archive's docstring for the motivating example
+    (a vendored third-party dependency's own package.xml, not a real
+    package belonging to the repo being resolved). A network failure is
+    treated as "not found" rather than raised -- this is a best-effort
+    safety net, not something that should take down a whole bootstrap run
+    over a transient error.
+    """
+    url = f"https://bcr.bazel.build/modules/{name}/metadata.json"
+    try:
+        response = requests.get(url, timeout=30)
+    except requests.RequestException:
+        return False
+    return response.status_code == 200
+
+
+def resolve_unreleased_repo_packages(repo_name: str, repo_info: dict) -> Dict[str, PackageSource]:
+    """
+    Fallback for a repo whose distribution.yaml entry can't produce a real
+    release through the normal path in resolve_packages: either there's no
+    'release:' block at all (never bloom-released into this distro), or
+    there is one but it's missing its 'version' pin (bloom has released it,
+    but the distribution.yaml PR registering that release hasn't landed).
+    Recovers real version + dependency info straight from the package's
+    GitHub '-release' companion repo's 'upstream/X.Y.Z' tag -- see
+    _find_best_upstream_tag's docstring for why that's the right tag to
+    look for here specifically. Every discovered name is checked against
+    bcr_module_exists and silently dropped (with a warning) on a hit --
+    unlike the primary path in resolve_packages, which only ever produces
+    package names an upstream distribution.yaml maintainer chose, this
+    fallback trusts an unreviewed archive scan (see
+    discover_packages_in_archive), so it needs its own guard against
+    minting a package that collides with an unrelated BCR module.
+
+    Deliberately does NOT handle a package that's simply missing from an
+    otherwise-complete 'release.packages' list (e.g. ros2_controllers no
+    longer lists effort_controllers) -- a fully-resolved release with an
+    explicit package list is a maintainer decision to exclude that package,
+    not a data gap, and silently second-guessing it here would be a
+    different, riskier kind of "fix" than recovering genuinely missing
+    data. A repo entirely absent from distribution.yaml (not even a
+    'source:' pointer) is likewise out of scope -- there's nothing here to
+    hang a fallback off of; recovering it needs a cross-distro lookup, a
+    different mechanism than this function provides.
+    """
+    release = repo_info.get("release") or {}
+    source = repo_info.get("source") or {}
+    release_url = release.get("url")
+    source_url = source.get("url")
+
+    if release_url:
+        owner, repo = _parse_github_owner_repo(release_url)
+        found = _find_best_upstream_tag(owner, repo, "ros2-gbp" if owner != "ros2-gbp" else None)
+    elif source_url:
+        owner, bare_repo_name = _parse_github_owner_repo(source_url)
+        found = _find_best_upstream_tag(
+            owner, f"{bare_repo_name}-release", "ros2-gbp" if owner != "ros2-gbp" else None
+        )
+    else:
+        return {}
+
+    if found is None:
+        return {}
+    found_owner, found_repo, tag = found
+    version = tag.split("/", 1)[1]
+    tarball_url = f"https://github.com/{found_owner}/{found_repo}/archive/refs/tags/{tag}.tar.gz"
+
+    discovered = discover_packages_in_archive(tarball_url)
+    # When distribution.yaml already names an explicit package list (true
+    # for most of the missing-version case), trust it as a whitelist rather
+    # than blindly accepting everything the archive scan turns up.
+    allowed = set(release["packages"]) if release.get("packages") else None
+    wrapper_dir = compute_default_strip_prefix(found_repo, tag)
+
+    result: Dict[str, PackageSource] = {}
+    for pkg_name, strip_prefix in discovered.items():
+        if pkg_name in IGNORED_PACKAGES:
+            continue
+        if allowed is not None and pkg_name not in allowed:
+            continue
+        if bcr_module_exists(pkg_name):
+            print(
+                f"Warning: discovered package {pkg_name!r} in {found_owner}/{found_repo}@{tag} "
+                "collides with an existing BCR module name -- skipping it.",
+                file=sys.stderr,
+            )
+            continue
+        # discover_packages_in_archive's strip_prefix is tarball-relative
+        # (includes wrapper_dir); fetch_package_xml_dependencies needs a
+        # git-tree-relative path instead (no wrapper) to build a
+        # raw.githubusercontent.com URL.
+        if strip_prefix == wrapper_dir:
+            package_xml_subdir = ""
+        elif strip_prefix.startswith(wrapper_dir + "/"):
+            package_xml_subdir = strip_prefix[len(wrapper_dir) + 1:]
+        else:
+            package_xml_subdir = strip_prefix
+        result[pkg_name] = PackageSource(
+            version=version,
+            url=tarball_url,
+            default_strip_prefix=strip_prefix or wrapper_dir,
+            repo_owner=found_owner,
+            repo_name=found_repo,
+            tag=tag,
+            package_xml_subdir=package_xml_subdir,
+        )
+    return result
 
 
 def fetch_package_xml_dependencies(pkg_source: PackageSource) -> Set[str]:
@@ -202,8 +426,14 @@ def fetch_package_xml_dependencies(pkg_source: PackageSource) -> Set[str]:
     this down to names that are themselves resolved ROS packages --
     anything else (an apt/system dependency) is meaningless to Bazel and
     should be dropped, matching the legacy pipeline's behavior.
+
+    An officially-released package's archive is bloom-filtered so
+    package.xml always sits at the tag's root; a package resolved via
+    resolve_unreleased_repo_packages instead points at a whole-repo
+    'upstream/*' archive, so package_xml_subdir locates it within that.
     """
-    url = f"https://raw.githubusercontent.com/{pkg_source.repo_owner}/{pkg_source.repo_name}/{pkg_source.tag}/package.xml"
+    subdir = f"{pkg_source.package_xml_subdir}/" if pkg_source.package_xml_subdir else ""
+    url = f"https://raw.githubusercontent.com/{pkg_source.repo_owner}/{pkg_source.repo_name}/{pkg_source.tag}/{subdir}package.xml"
     response = requests.get(url, timeout=60)
     response.raise_for_status()
     root = ElementTree.fromstring(response.text)
