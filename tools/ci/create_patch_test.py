@@ -265,6 +265,16 @@ class TestModuleHasLocalEdits(unittest.TestCase):
         (self.vendor_module_dir / "src.c").write_text("edited\n")
         self.assertTrue(create_patch.module_has_local_edits(self.target_workspace, "rclcpp"))
 
+    def test_edited_module_bazel_is_detected_against_snapshot(self):
+        (self.vendor_module_dir / "MODULE.bazel").write_text('module(name = "rclcpp")\n')
+        self.write_manifest(bzlmod_lib.hash_directory_tree(self.vendor_module_dir))
+        vendor_modules.write_vendor_snapshot(self.target_workspace, "rclcpp")
+        self.assertFalse(create_patch.module_has_local_edits(self.target_workspace, "rclcpp"))
+        (self.vendor_module_dir / "MODULE.bazel").write_text(
+            'module(name = "rclcpp")\nbazel_dep(name = "rcutils", version = "1.0.0.rcr.0")\n'
+        )
+        self.assertTrue(create_patch.module_has_local_edits(self.target_workspace, "rclcpp"))
+
 
 class _RollupFixtureTestCase(unittest.TestCase):
     """
@@ -368,6 +378,22 @@ class TestComputeRollupAndApply(_RollupFixtureTestCase):
         with open(self.modules_dir / "rclcpp" / "metadata.json") as f:
             metadata = json.load(f)
         self.assertEqual(metadata["versions"], ["1.0.0", "1.0.0.rcr.0"])
+
+    def test_module_bazel_edits_applied_for_regular_module(self):
+        (self.vendor_module_dir / "src.c").write_text("original\n")
+        (self.vendor_module_dir / "MODULE.bazel").write_text(
+            'module(\n    name = "rclcpp",\n    version = "1.0.0",\n)\n'
+            'bazel_dep(name = "action_msgs", version = "2.4.5-1.rcr.1")\n'
+        )
+        rollup = create_patch.compute_rollup(
+            "rclcpp", self.modules_dir, self.target_workspace, self.workspace_root)
+        self.assertTrue(rollup.changed)
+        create_patch.apply_rollup(rollup, self.modules_dir / "rclcpp" / "metadata.json")
+
+        new_dir = self.modules_dir / "rclcpp" / "1.0.0.rcr.0"
+        content = (new_dir / "MODULE.bazel").read_text()
+        self.assertIn('version = "1.0.0.rcr.0"', content)
+        self.assertIn('bazel_dep(name = "action_msgs", version = "2.4.5-1.rcr.1")', content)
 
 
 class TestComputeRollupOverwriteInPlace(_RollupFixtureTestCase):
