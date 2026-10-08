@@ -111,7 +111,12 @@ def check_source_json_integrity(version_dir: Path, rel_version_path: str) -> lis
 
     return violations
 
-def check_metadata_json(file_path: str, old_metadata_dir: Path, working_dir: Path) -> list[str]:
+def check_metadata_json(
+    file_path: str,
+    old_metadata_dir: Path,
+    working_dir: Path,
+    permit_module_deletion: bool = False,
+) -> list[str]:
     violations = []
     
     # Read the old metadata.json from old_metadata_dir
@@ -155,11 +160,12 @@ def check_metadata_json(file_path: str, old_metadata_dir: Path, working_dir: Pat
         violations.append(f"New {file_path} 'yanked_versions' field must be a dictionary.")
         return violations
 
-    for version in old_versions:
-        if version not in new_versions and version not in new_yanked:
-            violations.append(
-                f"Version '{version}' was removed from 'versions' in {file_path} but was not added to 'yanked_versions'."
-            )
+    if not permit_module_deletion:
+        for version in old_versions:
+            if version not in new_versions and version not in new_yanked:
+                violations.append(
+                    f"Version '{version}' was removed from 'versions' in {file_path} but was not added to 'yanked_versions'."
+                )
 
     return violations
 
@@ -242,7 +248,13 @@ def check_module_bazel(file_path: str, old_metadata_dir: Path, working_dir: Path
 
     return violations
 
-def check_violations(diffs: list[tuple[str, str]], old_metadata_dir: Path, working_dir: Path, target_dir: str) -> list[str]:
+def check_violations(
+    diffs: list[tuple[str, str]],
+    old_metadata_dir: Path,
+    working_dir: Path,
+    target_dir: str,
+    permit_module_deletion: bool = False,
+) -> list[str]:
     violations = []
     
     # Ensure target_dir has a trailing slash for prefix matching (e.g. "modules/" or "bcr_staging/modules/")
@@ -255,22 +267,23 @@ def check_violations(diffs: list[tuple[str, str]], old_metadata_dir: Path, worki
         if not file_path.startswith(prefix):
             continue
 
-        path_parts = Path(file_path).parts
-        if len(path_parts) >= len(target_parts) + 2:
-            pkg = path_parts[len(target_parts)]
-            ver = path_parts[len(target_parts) + 1]
-            if ver != "metadata.json":
-                affected_versions.add((pkg, ver))
-
-        # Rule 1: A PR cannot delete any files under target_dir
+        # Rule 1: A PR cannot delete any files under target_dir unless explicitly permitted
         if status.startswith("D"):
-            violations.append(f"Deleted file in {prefix}: {file_path}")
+            if not permit_module_deletion:
+                violations.append(f"Deleted file in {prefix}: {file_path}")
             continue
 
         # Rule 2: A PR cannot rename files under target_dir
         if status.startswith("R"):
             violations.append(f"Renamed file in {prefix}: {file_path}")
             continue
+
+        path_parts = Path(file_path).parts
+        if len(path_parts) >= len(target_parts) + 2:
+            pkg = path_parts[len(target_parts)]
+            ver = path_parts[len(target_parts) + 1]
+            if ver != "metadata.json":
+                affected_versions.add((pkg, ver))
 
         # Rule 3: Only metadata.json and MODULE.bazel files can be modified under target_dir
         if status.startswith("M"):
@@ -288,7 +301,12 @@ def check_violations(diffs: list[tuple[str, str]], old_metadata_dir: Path, worki
             )
 
             if is_metadata:
-                meta_violations = check_metadata_json(file_path, old_metadata_dir, working_dir)
+                meta_violations = check_metadata_json(
+                    file_path,
+                    old_metadata_dir,
+                    working_dir,
+                    permit_module_deletion=permit_module_deletion,
+                )
                 violations.extend(meta_violations)
             elif is_module_bazel:
                 package_name = path_parts[len(target_parts)]
@@ -347,6 +365,11 @@ def main():
         default="modules",
         help="Directory to check (e.g. modules or bcr_staging/modules)"
     )
+    parser.add_argument(
+        "--permit-module-deletion",
+        action="store_true",
+        help="Permit deleting module files and removing versions from metadata.json."
+    )
     args = parser.parse_args()
 
     # `bazel run`'s child process cwd is the exec root, not the actual git
@@ -357,7 +380,13 @@ def main():
     workspace_root = Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ".")).resolve()
 
     diffs = parse_diff_status_file(args.diff_status)
-    violations = check_violations(diffs, args.old_metadata_dir, workspace_root, args.directory)
+    violations = check_violations(
+        diffs,
+        args.old_metadata_dir,
+        workspace_root,
+        args.directory,
+        permit_module_deletion=args.permit_module_deletion,
+    )
 
     if violations:
         print(f"PR violations found in '{args.directory}' directory:")
