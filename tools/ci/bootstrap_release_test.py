@@ -94,10 +94,20 @@ class TestRenderModuleDotBazel(unittest.TestCase):
         content = bootstrap_release.render_module_dot_bazel(
             "rclcpp", "32.0.0-1", {"rcutils": "7.1.1-3"}, "lyrical", "2026-06-23")
         self.assertIn('module(\n    name = "rclcpp",\n    version = "32.0.0-1",', content)
-        self.assertIn('bazel_dep(name = "aspect_rules_py", version = "1.11.7")', content)
+        self.assertIn('bazel_dep(name = "rules_python", version = "2.4.1")', content)
         self.assertIn('bazel_dep(name = "rcutils", version = "7.1.1-3")', content)
         self.assertIn('bazel_dep(name = "rosdistro", version = "lyrical.2026-06-23")', content)
         self.assertIn('pip_ros = use_extension("@rosdistro//python:defs.bzl", "pip_ros")', content)
+
+    def test_explicit_rosdistro_pin_overrides_bare_tag_fallback(self):
+        # Bootstrapped .rcr.0 modules must pin rosdistro@<tag>.rcr.0 like
+        # every other RCR dep, not the bare tag -- check_pr_modules rejects
+        # the latter as an inconsistent inter-module reference.
+        content = bootstrap_release.render_module_dot_bazel(
+            "rclcpp", "32.0.0-1", {"rosdistro": "lyrical.2026-06-23.rcr.0"}, "lyrical", "2026-06-23")
+        self.assertIn('bazel_dep(name = "rosdistro", version = "lyrical.2026-06-23.rcr.0")', content)
+        self.assertEqual(content.count('name = "rosdistro"'), 1)
+
 
     def test_custom_body_skips_generic_rcr_section(self):
         content = bootstrap_release.render_module_dot_bazel(
@@ -118,6 +128,20 @@ class TestRenderModuleDotBazel(unittest.TestCase):
                     "rosdistro", "lyrical.2026-06-23", {}, "lyrical", "2026-06-23",
                     custom_body=bootstrap_release.ROSDISTRO_CUSTOM_BODY)):
             self.assertIn('use_repo(qt, "qt_linux_x86_64")\n\nregister_toolchains("@rules_qt//tools:all")', content)
+
+
+class TestSelectTags(unittest.TestCase):
+
+    DATES = ["2026-06-23", "2026-08-07", "2026-10-05"]
+
+    def test_default_keeps_every_tag_in_order(self):
+        self.assertEqual(bootstrap_release.select_tags(self.DATES, only_latest=False), self.DATES)
+
+    def test_only_latest_keeps_newest(self):
+        self.assertEqual(bootstrap_release.select_tags(self.DATES, only_latest=True), ["2026-10-05"])
+
+    def test_only_latest_on_empty_is_empty(self):
+        self.assertEqual(bootstrap_release.select_tags([], only_latest=True), [])
 
 
 class TestRenderStubModuleDotBazel(unittest.TestCase):

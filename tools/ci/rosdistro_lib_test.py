@@ -185,7 +185,67 @@ class TestFetchPackageXmlDependencies(unittest.TestCase):
         finally:
             rosdistro_lib.requests.get = original_get
 
-        self.assertEqual(deps, {"rclcpp", "rcutils", "ament_lint_auto"})
+        # buildtool_depend must be kept: it's how every interface package
+        # declares rosidl_default_generators / ament_cmake.
+        self.assertEqual(deps, {"ament_cmake", "rclcpp", "rcutils", "ament_lint_auto"})
+
+
+class TestParsePackageXmlDependencies(unittest.TestCase):
+
+    def test_every_rep149_depend_tag_is_collected(self):
+        xml = (
+            '<?xml version="1.0"?>'
+            '<package format="3">'
+            "<name>foo</name>"
+            "<buildtool_depend>ament_cmake</buildtool_depend>"
+            "<buildtool_export_depend>ament_cmake_core</buildtool_export_depend>"
+            "<build_depend>rcutils</build_depend>"
+            "<build_export_depend>rcpputils</build_export_depend>"
+            "<depend>rclcpp</depend>"
+            "<exec_depend>rosidl_default_runtime</exec_depend>"
+            "<run_depend>legacy_pkg</run_depend>"
+            "<test_depend>ament_lint_auto</test_depend>"
+            "<doc_depend>rosdoc2</doc_depend>"
+            "</package>"
+        )
+        self.assertEqual(rosdistro_lib.parse_package_xml_dependencies(xml), {
+            "ament_cmake", "ament_cmake_core", "rcutils", "rcpputils", "rclcpp",
+            "rosidl_default_runtime", "legacy_pkg", "ament_lint_auto", "rosdoc2",
+        })
+
+    def test_non_depend_tags_are_ignored(self):
+        xml = (
+            '<package format="3">'
+            "<name>foo</name>"
+            "<version>1.0.0</version>"
+            "<maintainer email=\"a@b.c\">A</maintainer>"
+            "<license>Apache-2.0</license>"
+            "<export><build_type>ament_cmake</build_type></export>"
+            "</package>"
+        )
+        self.assertEqual(rosdistro_lib.parse_package_xml_dependencies(xml), set())
+
+    def test_conditional_deps_are_kept_unevaluated(self):
+        # Conditions aren't evaluated; callers filter against the resolved
+        # package set, which drops ROS 1-only names like catkin anyway.
+        xml = (
+            '<package format="3">'
+            "<name>foo</name>"
+            '<buildtool_depend condition="$ROS_VERSION == 1">catkin</buildtool_depend>'
+            '<buildtool_depend condition="$ROS_VERSION == 2">ament_cmake</buildtool_depend>'
+            "</package>"
+        )
+        self.assertEqual(rosdistro_lib.parse_package_xml_dependencies(xml), {"catkin", "ament_cmake"})
+
+    def test_whitespace_stripped_and_empty_skipped(self):
+        xml = (
+            '<package format="3">'
+            "<name>foo</name>"
+            "<depend>\n  rclcpp\n</depend>"
+            "<depend></depend>"
+            "</package>"
+        )
+        self.assertEqual(rosdistro_lib.parse_package_xml_dependencies(xml), {"rclcpp"})
 
 
 if __name__ == "__main__":

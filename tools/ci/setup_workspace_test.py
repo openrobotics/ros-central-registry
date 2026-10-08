@@ -35,6 +35,67 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertIn("common:ci --google_default_credentials", content)
 
 
+class TestLlvmPatches(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.repo_root = self.tmp / "repo"
+        self.workspace = self.tmp / "workspace"
+        self.src_dir = self.repo_root / setup_workspace.LLVM_PATCHES_SOURCE_DIR
+        self.src_dir.mkdir(parents=True)
+        for name, _ in setup_workspace.LLVM_PATCHES:
+            (self.src_dir / name).write_text(f"--- {name}\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_render_llvm_override_lists_every_patch_with_explanation(self):
+        content = setup_workspace.render_llvm_override("0.8.24")
+        self.assertIn('module_name = "llvm"', content)
+        self.assertIn('version = "0.8.24"', content)
+        self.assertIn("patch_strip = 1", content)
+        for name, explanation in setup_workspace.LLVM_PATCHES:
+            self.assertIn(f'"//{setup_workspace.WORKSPACE_PATCHES_DIR}:{name}",', content)
+            # Every explanation line is emitted as a comment.
+            for line in explanation.splitlines():
+                self.assertIn(f"# {line}", content)
+
+    def test_copy_llvm_patches_copies_all_listed_files(self):
+        written = setup_workspace.copy_llvm_patches(self.repo_root, self.workspace)
+        expected_dir = self.workspace / setup_workspace.WORKSPACE_PATCHES_DIR
+        self.assertEqual(
+            sorted(p.name for p in written),
+            sorted(name for name, _ in setup_workspace.LLVM_PATCHES),
+        )
+        for name, _ in setup_workspace.LLVM_PATCHES:
+            dst = expected_dir / name
+            self.assertTrue(dst.is_file())
+            self.assertEqual(dst.read_text(), f"--- {name}\n")
+
+    def test_copy_llvm_patches_raises_when_a_patch_is_missing(self):
+        missing = setup_workspace.LLVM_PATCHES[0][0]
+        (self.src_dir / missing).unlink()
+        with self.assertRaises(FileNotFoundError) as ctx:
+            setup_workspace.copy_llvm_patches(self.repo_root, self.workspace)
+        self.assertIn(missing, str(ctx.exception))
+
+    def test_render_patches_build_file_exports_each_file(self):
+        content = setup_workspace.render_patches_build_file(["fmt.patch", "a.patch"])
+        self.assertIn("exports_files([", content)
+        self.assertIn('    "fmt.patch",', content)
+        self.assertIn('    "a.patch",', content)
+
+    def test_checked_in_patches_match_manifest(self):
+        # Guard against LLVM_PATCHES drifting from tools/ci/patches/llvm/.
+        real_root = Path(__file__).parents[2]
+        real_dir = real_root / setup_workspace.LLVM_PATCHES_SOURCE_DIR
+        if not real_dir.is_dir():
+            self.skipTest(f"{real_dir} not available in this test environment")
+        on_disk = sorted(p.name for p in real_dir.glob("*.patch"))
+        listed = sorted(name for name, _ in setup_workspace.LLVM_PATCHES)
+        self.assertEqual(on_disk, listed)
+
+
 class TestCalculatePackagesForVariant(unittest.TestCase):
 
     def setUp(self):

@@ -31,7 +31,7 @@ import sys
 import tarfile
 import urllib.parse
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
 import requests
 
@@ -41,22 +41,23 @@ from tools.ci import rosdistro_lib
 # BCR dependencies every module gets, matching the current registry-wide
 # convention (see any real modules/<pkg>/<version>/MODULE.bazel).
 BCR_DEPS = {
-    "aspect_rules_py": "1.11.7",
-    "bazel_skylib": "1.9.0",
-    "cmake_configure_file": "0.1.7",
+    "bazel_skylib": "1.9.2",
+    "cmake_configure_file": "0.2.0",
     "google_benchmark": "1.9.5",
-    "googletest": "1.17.0.bcr.2",
-    "llvm": "0.8.11",
+    "googletest": "1.18.0.bcr.1",
+    "llvm": "0.8.24",
     "platforms": "1.1.0",
-    "protobuf": "35.1",
+    "protobuf": "36.2",
     "rules_build_error": "0.11.0",
-    "rules_cc": "0.2.22",
+    "rules_cc": "0.2.26",
+    "rules_cc_autoconf": "0.24.0",
+    "rules_foreign_cc": "0.16.0",
+    "rules_img": "0.3.22",
     "rules_license": "1.0.0",
-    "rules_pkg": "1.2.0",
-    "rules_python": "2.2.0",
-    "rules_qt": "0.0.6",
-    "rules_rs": "0.0.93",
-    "rules_rust": "0.71.3",
+    "rules_pkg": "1.3.0",
+    "rules_python": "2.4.1",
+    "rules_qt": "0.0.7",
+    "rules_rs": "0.1.0",
     "rules_shell": "0.8.0",
 }
 
@@ -209,7 +210,10 @@ def render_module_dot_bazel(
     else:
         lines.append("\n# RCR Dependencies\n")
         all_rcr = dict(rcr_deps)
-        all_rcr["rosdistro"] = f"{distro}.{date}"
+        # Every module depends on rosdistro, whether or not package.xml says
+        # so. Callers normally supply its resolved pin (the .rcr.0 version,
+        # same as every other RCR dep); fall back to the bare tag otherwise.
+        all_rcr.setdefault("rosdistro", f"{distro}.{date}")
         for dep_name in sorted(all_rcr.keys()):
             lines.append(f'bazel_dep(name = "{dep_name}", version = "{all_rcr[dep_name]}")\n')
         lines.append(BOOTSTRAP_TRAILER)
@@ -428,6 +432,8 @@ def bootstrap_one_tag(modules_dir: Path, cache_dir: Path, distro: str, date: str
         bare_version = pkg_source.version
         bare_dir = pkg_dir / bare_version
         rcr_deps = {dep: final_pin[dep] for dep in filtered_deps[pkg_name]}
+        if pkg_name != "rosdistro":
+            rcr_deps["rosdistro"] = final_pin["rosdistro"]
         custom_body = ROSDISTRO_CUSTOM_BODY if pkg_name == "rosdistro" else None
 
         print(f"  + {pkg_name}@{bare_version} (bare) -> {final_pin[pkg_name]}")
@@ -436,8 +442,14 @@ def bootstrap_one_tag(modules_dir: Path, cache_dir: Path, distro: str, date: str
 
         source_json = compute_source_json(pkg_name, pkg_source, cache_dir)
         bare_dir.mkdir(parents=True, exist_ok=True)
+        # The bare (unpatched) tier pins the bare tier of every dep; the
+        # .rcr.0 tier below pins the resolved .rcr.N tier. Each must declare
+        # its own version -- Bazel rejects a module whose MODULE.bazel
+        # declares a different version than the registry directory it was
+        # fetched from.
+        bare_deps = {dep: bzlmod_lib.get_base_version(v) for dep, v in rcr_deps.items()}
         (bare_dir / "MODULE.bazel").write_text(
-            render_module_dot_bazel(pkg_name, bare_version, rcr_deps, distro, date, custom_body)
+            render_module_dot_bazel(pkg_name, bare_version, bare_deps, distro, date, custom_body)
         )
         with open(bare_dir / "source.json", "w") as f:
             json.dump(source_json, f, indent=4)
@@ -460,7 +472,9 @@ def bootstrap_one_tag(modules_dir: Path, cache_dir: Path, distro: str, date: str
         new_version = final_pin[pkg_name]
         new_dir = pkg_dir / new_version
         new_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy(bare_dir / "MODULE.bazel", new_dir / "MODULE.bazel")
+        (new_dir / "MODULE.bazel").write_text(
+            render_module_dot_bazel(pkg_name, new_version, rcr_deps, distro, date, custom_body)
+        )
         shutil.copy(bare_dir / "source.json", new_dir / "source.json")
         if old_patched_version is not None:
             for subdir in ("patches", "overlay"):
@@ -474,12 +488,30 @@ def bootstrap_one_tag(modules_dir: Path, cache_dir: Path, distro: str, date: str
     print(f"Done with {distro}/{date}.")
 
 
+def select_tags(new_dates: List[str], only_latest: bool) -> List[str]:
+    """
+    Narrows the oldest-first list of not-yet-bootstrapped tag dates to the
+    ones a run should actually process. By default that's all of them (the
+    nightly job's behaviour); with only_latest it's just the newest one, so
+    a manual catch-up run after a gap can skip straight to the current tag
+    instead of materializing every superseded-on-arrival intermediate
+    release.
+    """
+    if only_latest and new_dates:
+        return new_dates[-1:]
+    return list(new_dates)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Bootstrap any new upstream ros/rosdistro tags for a distro."
     )
     parser.add_argument("--distro", required=True, help="ROS distro to scan, e.g. lyrical")
     parser.add_argument("--dry-run", action="store_true", help="Print what would happen, write nothing")
+    parser.add_argument(
+        "--only-latest", action="store_true",
+        help="Bootstrap only the newest new tag, skipping any intermediate tags",
+    )
     args = parser.parse_args()
 
     repo_root = Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ".")).resolve()
@@ -492,8 +524,12 @@ def main():
         print(f"Nothing to bootstrap -- {args.distro} has no new tags beyond {sorted(bootstrapped)}.")
         return
 
-    print(f"Found {len(new_dates)} new tag(s) to bootstrap: {new_dates}")
-    for date in new_dates:
+    selected = select_tags(new_dates, args.only_latest)
+    if selected != new_dates:
+        print(f"Found {len(new_dates)} new tag(s): {new_dates}; --only-latest selects {selected}")
+    else:
+        print(f"Found {len(new_dates)} new tag(s) to bootstrap: {new_dates}")
+    for date in selected:
         bootstrap_one_tag(modules_dir, cache_dir, args.distro, date, args.dry_run)
 
 
