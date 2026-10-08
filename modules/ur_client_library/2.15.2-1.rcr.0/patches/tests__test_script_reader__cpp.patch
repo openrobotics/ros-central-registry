@@ -1,0 +1,48 @@
+--- a/tests/test_script_reader.cpp
++++ b/tests/test_script_reader.cpp
+@@ -651,3 +651,45 @@
+     ofs.close();
+   }
+ }
++
++
++#include <unistd.h>
++#include <iostream>
++#include <filesystem>
++
++// Recursive function to search for a file named "empty.txt"
++std::filesystem::path find_empty_txt_dir(const std::filesystem::path& dir) {
++  for (const auto& entry : std::filesystem::recursive_directory_iterator(dir, std::filesystem::directory_options::skip_permission_denied)) {
++    if (entry.is_regular_file() && entry.path().filename() == "empty.txt") {
++      // We want the parent of the directory containing empty.txt, i.e. if empty.txt is in resources/empty.txt,
++      // we want the directory that contains resources/empty.txt as a relative subdirectory.
++      // So if empty.path() is "foo/bar/resources/empty.txt", then the tests dir should be "foo/bar"
++      // because tests are run from the directory that has resources/empty.txt and ../resources/external_control.urscript.
++      auto parent = entry.path().parent_path(); // This is .../resources
++      auto grand_parent = parent.parent_path(); // This is ...
++      return grand_parent;
++    }
++  }
++  return "";
++}
++
++int main(int argc, char** argv) {
++  ::testing::InitGoogleTest(&argc, argv);
++
++  std::cout << "Original CWD: " << std::filesystem::current_path() << std::endl;
++  
++  // Search starting from parent directory to cover runfiles root
++  auto tests_dir = find_empty_txt_dir("..");
++  if (!tests_dir.empty()) {
++    std::cout << "Found empty.txt in tests directory at: " << tests_dir << std::endl;
++    if (chdir(tests_dir.c_str()) != 0) {
++      std::cerr << "Warning: Failed to chdir to " << tests_dir << std::endl;
++    }
++  } else {
++    std::cerr << "Error: Could not find empty.txt recursively under parent directory!" << std::endl;
++  }
++
++  std::cout << "New CWD: " << std::filesystem::current_path() << std::endl;
++
++  return RUN_ALL_TESTS();
++}

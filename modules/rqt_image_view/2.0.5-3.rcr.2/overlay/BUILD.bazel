@@ -1,0 +1,163 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_qt//:qt.bzl", "qt_cc_library", "qt_ui_library")
+
+package(default_visibility = ["//visibility:public"])
+
+### LIBRARIES
+
+DEPENDENCIES = {
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+}
+
+genrule(
+    name = "image_view_rename",
+    srcs = ["src/rqt_image_view/image_view.ui"],
+    outs = ["image_view.ui"],
+    cmd = "cp $(location :src/rqt_image_view/image_view.ui) $(location :image_view.ui)",
+)
+
+qt_ui_library(
+    name = "image_view",
+    ui = "image_view.ui",
+    deps = ["@rules_qt//:qt_widgets"],
+)
+
+qt_cc_library(
+    name = "rqt_image_view_library",
+    srcs = [
+        "src/rqt_image_view/image_view.cpp",
+        "src/rqt_image_view/ratio_layouted_frame.cpp",
+    ],
+    hdrs = [
+        "include/rqt_image_view/image_view.hpp",
+        "include/rqt_image_view/ratio_layouted_frame.hpp",
+    ],
+    includes = [
+        ".",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":image_view",
+        "@geometry_msgs//:cc",
+        "@qt_gui_cpp",
+        "@rqt_gui_cpp",
+        "@rules_qt//:qt_widgets",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "rqt_image_view",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rqt_image_view_library"],
+    deps = [":rqt_image_view_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rqt_image_view"],
+    visibility = ["//visibility:private"],
+)
+
+### DATA
+
+genrule(
+    name = "qt_gui_resource",
+    outs = ["share/ament_index/resource_index/qt_gui/rqt_image_view"],
+    cmd = "echo 'plugin.xml' > $@",
+)
+
+ament_index(
+    name = "ament_index",
+    data = glob(["resource/**"]),
+    libraries = [":transitive_dynamic_deps"],
+    package_xml = "package.xml",
+    plugins = ["plugin.xml"],
+    deps = ["@rqt_gui_cpp//:ament_index"],
+)
+
+### EXECUTABLES
+
+# THIS HAS AN IMPLICIT DEPENDENCY ON A COUPLE OF DEPS NOT DESCRIBED IN ITS package.xml.
+#
+# genrule(
+#     name = "image_publisher_rename",
+#     srcs = ["scripts/image_publisher"],
+#     outs = ["scripts/image_publisher.py"],
+#     cmd = "cp $(location :scripts/image_publisher) $(location :scripts/image_publisher.py)",
+# )
+#
+# py_binary(
+#     name = "image_publisher",
+#     srcs = ["scripts/image_publisher.py"],
+#     main = "scripts/image_publisher.py",
+#     deps = [
+#         "@rclpy",
+#         "@sensor_msgs//:py",
+#         "@ament_index_python",
+#         "@cv_bridge",
+#     ],
+# )
+
+genrule(
+    name = "gui_rename",
+    srcs = ["scripts/rqt_image_view"],
+    outs = ["scripts/rqt_image_view.py"],
+    cmd = "cp $(location :scripts/rqt_image_view) $(location :scripts/rqt_image_view.py)",
+)
+
+py_binary(
+    name = "gui",
+    srcs = ["scripts/rqt_image_view.py"],
+    args = ["--force-discover"],
+    data = [
+        ":ament_index",
+        ":qt_gui_resource",
+    ],
+    main = "scripts/rqt_image_view.py",
+    deps = ["@rqt_gui"],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@image_transport//:ament_package",
+        "@qt_gui_cpp//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rqt_gui//:ament_package",
+        "@rqt_gui_cpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

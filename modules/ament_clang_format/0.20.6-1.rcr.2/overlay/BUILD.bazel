@@ -1,0 +1,108 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_python//python/entry_points:py_console_script_binary.bzl", "py_console_script_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+### ENTRYPOINTS
+
+py_binary(
+    name = "setup",
+    srcs = ["setup.py"],
+    visibility = ["//visibility:private"],
+    deps = [
+        requirement("setuptools"),
+    ],
+)
+
+genrule(
+    name = "entry_points",
+    srcs = glob(
+        ["**/**"],
+        exclude = [
+            "*.bazel",
+            "*.bzl",
+        ],
+    ),
+    outs = [
+        "ament_clang_format.egg-info/PKG-INFO",
+        "ament_clang_format.egg-info/entry_points.txt",
+        "ament_clang_format.egg-info/top_level.txt",
+    ],
+    cmd = "$(location :setup) egg_info --egg-base=. && mkdir -p $(@D)/ament_clang_format.egg-info && cp -r ament_clang_format.egg-info/* $(@D)/ament_clang_format.egg-info/",
+    tools = [":setup"],
+    visibility = ["//visibility:private"],
+)
+
+### PYTHON MODULE
+
+alias(
+    name = "clang-format",
+    actual = "@rosdistro//cc:clang-format",
+)
+
+py_library(
+    name = "ament_clang_format",
+    srcs = glob(["ament_clang_format/**/*.py"]),
+    data = [
+        ":clang-format",
+        ":entry_points",
+    ],
+    imports = ["."],
+)
+
+### PYTHON EXECUTABLE
+
+py_console_script_binary(
+    name = "cli",
+    entry_points_txt = ":entry_points",
+    pkg = ":ament_clang_format",
+    script = "ament_clang_format",
+)
+
+### TESTS
+
+[
+    py_pytest(
+        name = "test_{0}".format(test_name),
+        srcs = ["test/test_{0}.py".format(test_name)],
+        data = glob(["**/*"]),
+        deps = ["@ament_{0}".format(test_name)],
+    )
+    for test_name in [
+        "copyright",
+        "flake8",
+        "pep257",
+        "xmllint",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    package_xml = "package.xml",
+    deps = [
+        "@ament_copyright//:ament_package",
+        "@ament_flake8//:ament_package",
+        "@ament_pep257//:ament_package",
+        "@ament_xmllint//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

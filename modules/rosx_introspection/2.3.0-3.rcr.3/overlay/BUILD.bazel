@@ -1,0 +1,168 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+### LIBRARIES
+
+HEADERS = glob([
+    "include/**/*.h",
+    "include/**/*.hpp",
+])
+
+# Private header alongside its .cpp in src/ros_utils/, not under include/.
+PRIVATE_HEADERS = ["src/ros_utils/message_definition_cache.hpp"]
+
+# CMakeLists.txt only builds against ROS2 (ament_cmake is always found in this
+# hermetic setup), so EXTRA_SRC's message_definition_cache.cpp/ros2_helpers.cpp
+# are unconditionally included, and USING_ROS2's ament_index_cpp/rclcpp/
+# rosbag2_cpp PUBLIC deps always apply.
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+}
+
+cc_library(
+    name = "rosx_introspection_library",
+    srcs = [
+        "src/deserializer.cpp",
+        "src/msgpack_utils.cpp",
+        "src/ros_field.cpp",
+        "src/ros_message.cpp",
+        "src/ros_parser.cpp",
+        "src/ros_type.cpp",
+        "src/ros_utils/message_definition_cache.cpp",
+        "src/ros_utils/ros2_helpers.cpp",
+        "src/serializer.cpp",
+        "src/stringtree_leaf.cpp",
+    ],
+    hdrs = HEADERS + PRIVATE_HEADERS,
+    # Always use the nonstd span implementation (matches upstream's comment in
+    # CMakeLists.txt) to guarantee ABI compatibility when downstream consumers
+    # compile with C++20 (where std::span exists). PUBLIC in CMake because
+    # contrib/span.hpp -- a public header -- reads this define.
+    defines = ["span_CONFIG_SELECT_SPAN=1"],
+    includes = ["include"],
+    # ROSX_HAS_JSON is PRIVATE in CMake: it only gates rapidjson usage inside
+    # ros_parser.cpp's implementation, never a publicly-exposed header.
+    local_defines = ros_local_defines() + ["ROSX_HAS_JSON"],
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:rapidjson",
+    ],
+)
+
+cc_shared_library(
+    name = "rosx_introspection",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rosx_introspection_library"],
+    deps = [":rosx_introspection_library"],
+)
+
+### TRANSITIVE DYNAMIC DEPS
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":rosx_introspection",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+### TESTS
+
+# Mirrors CMakeLists.txt's `parser_test`: pure library-internal parsing/
+# encoding tests, no ROS message packages involved.
+cc_test(
+    name = "parser_test",
+    srcs = [
+        "test/test_encoding.cpp",
+        "test/test_parser.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":rosx_introspection_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# ros2_helpers.cpp looks up message definitions at runtime via
+# ament_index_cpp's get_package_share_path()/get_resource() -- pull in
+# sensor_msgs'/geometry_msgs' own ament_index data so those lookups resolve
+# inside the test sandbox, same as a real ROS underlay would provide.
+ament_index(
+    name = "ament_index",
+    deps = [
+        "@builtin_interfaces//:ament_index",
+        "@geometry_msgs//:ament_index",
+        "@sensor_msgs//:ament_index",
+        "@std_msgs//:ament_index",
+    ],
+)
+
+# Mirrors CMakeLists.txt's `rosx_introspection_test`: exercises ROS2 message
+# introspection against real generated message types.
+cc_test(
+    name = "rosx_introspection_test",
+    srcs = [
+        "test/test_parser.cpp",
+        "test/test_ros2.cpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":rosx_introspection_library",
+        "@builtin_interfaces//:cc",
+        "@geometry_msgs//:cc",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+        "@sensor_msgs//:cc",
+        "@std_msgs//:cc",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    headers = HEADERS,
+    libraries = [":rosx_introspection"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

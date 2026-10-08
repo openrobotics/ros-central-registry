@@ -1,0 +1,122 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+### LIBRARIES
+
+HEADERS = glob(["urdf_parser/include/**/*.h"])
+
+DEPENDENCIES = {
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@urdfdom_headers//:urdfdom_headers": "@urdfdom_headers//:urdfdom_headers_library",
+}
+
+cc_library(
+    name = "urdfdom_library",
+    srcs = [
+        "urdf_parser/src/joint.cpp",
+        "urdf_parser/src/link.cpp",
+        "urdf_parser/src/model.cpp",
+        "urdf_parser/src/pose.cpp",
+        "urdf_parser/src/pose.hpp",
+        "urdf_parser/src/urdf_sensor.cpp",
+        "urdf_parser/src/urdf_sensor.hpp",
+        "urdf_parser/src/world.cpp",
+    ],
+    hdrs = HEADERS,
+    defines = ["URDFDOM_EXPORTS"],
+    includes = ["urdf_parser/include"],
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "urdfdom",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":urdfdom_library"],
+    deps = [":urdfdom_library"],
+)
+
+### Binaries
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":urdfdom"],
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "check_urdf",
+    srcs = ["urdf_parser/src/check_urdf.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":urdfdom_library"],
+)
+
+cc_binary(
+    name = "urdf_to_graphviz",
+    srcs = ["urdf_parser/src/urdf_to_graphviz.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":urdfdom_library"],
+)
+
+### Tests
+
+cc_binary(
+    name = "memtest",
+    srcs = ["urdf_parser/test/memtest.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":urdfdom_library"],
+)
+
+[
+    cc_test(
+        name = test,
+        srcs = ["urdf_parser/test/{0}.cpp".format(test)],
+        data = glob(["urdf_parser/test/gtest/**"]),
+        dynamic_deps = [":transitive_dynamic_deps"],
+        deps = [
+            ":urdfdom_library",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test in [
+        "urdf_double_convert",
+        "urdf_unit_test",
+        "urdf_version_test",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    executables = [
+        ":check_urdf",
+        ":urdf_to_graphviz",
+        ":memtest",
+    ],
+    headers = HEADERS,
+    libraries = [":urdfdom"],
+    package_xml = "package.xml",
+    deps = [
+        "@console_bridge_vendor//:ament_package",
+        "@rosdistro//:ament_package",
+        "@urdfdom_headers//:ament_package",
+    ],
+)

@@ -1,0 +1,208 @@
+# Copyright 2025 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARY
+
+HEADERS = glob(["include/**/*.h"])
+
+DEPENDENCIES = {
+    "@rcl_logging_interface//:rcl_logging_interface": "@rcl_logging_interface//:rcl_logging_interface_library",
+    "@rcl_logging_spdlog//:rcl_logging_spdlog": "@rcl_logging_spdlog//:rcl_logging_spdlog_library",
+    "@rcl_yaml_param_parser//:rcl_yaml_param_parser": "@rcl_yaml_param_parser//:rcl_yaml_param_parser_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rmw_implementation//:rmw_implementation": "@rmw_implementation//:rmw_implementation_library",
+    "@rosidl_runtime_c//:rosidl_runtime_c": "@rosidl_runtime_c//:rosidl_runtime_c_library",
+    "@tracetools//:tracetools": "@tracetools//:tracetools_library",
+}
+
+cc_library(
+    name = "rcl_library",
+    srcs = glob([
+        "src/**/*.c",
+        "src/**/*.h",
+    ]),
+    hdrs = HEADERS,
+    includes = [
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@rcl_interfaces//:c",
+        "@service_msgs//:c",
+        "@type_description_interfaces//:c",
+    ],
+)
+
+cc_shared_library(
+    name = "rcl",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rcl_library"],
+    deps = [":rcl_library"],
+)
+
+### TRANSITIVELY COLLECT ALL DYNAMIC DEPS TO ENSURE LINKING WORKS
+
+# This is a workaround for the fact that dynamic_deps does not work transitively.
+# So, if you have a (foo -> bar -> baz) dynamic_dep dep chain, the symbols from
+# foo will not be available to baz at compile-time. This resolves that by running
+# an aspect over the dynamic_deps attribute to collect everything in the chain.
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rcl"],
+    visibility = ["//visibility:private"],
+)
+
+### TESTING
+
+cc_library(
+    name = "wait_for_entity_helpers",
+    srcs = ["test/rcl/wait_for_entity_helpers.cpp"],
+    hdrs = ["test/rcl/wait_for_entity_helpers.hpp"],
+    includes = ["test"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":rcl_library",
+        "@osrf_testing_tools_cpp//:memory_tools",
+    ],
+)
+
+[
+    cc_test(
+        name = test,
+        timeout = "moderate",
+        srcs = [
+            "test/rcl/{}.cpp".format(test),
+        ] + glob([
+            "src/rcl/**/*.h",
+            "test/rcl/**/*.h",
+            "test/rcl/**/*.hpp",
+            "test/mocking_utils/*.hpp",
+        ]),
+        data = glob(["test/resources/**"]),
+        dynamic_deps = [":transitive_dynamic_deps"],
+        includes = ["src/rcl"],
+        local_defines = ros_local_defines() + ["RMW_TIMESTAMPS_SUPPORTED=1"],
+        deps = DEPENDENCIES.values() + [
+            ":rcl_library",
+            ":wait_for_entity_helpers",
+            "@osrf_testing_tools_cpp//:memory_tools",
+            "@rosdistro//cc:googletest",
+            "@rosdistro//cc:mimick",
+            "@rules_cc//cc/runfiles",
+            "@test_msgs//:c",
+            "@test_msgs//:cc",
+        ],
+    )
+    for test in [
+        "test_arguments",
+        "test_client",
+        "test_common",
+        "test_context",
+        "test_count_matched",
+        "test_discovery_options",
+        "test_domain_id",
+        "test_events",
+        "test_expand_topic_name",
+        "test_get_actual_qos",
+        "test_get_node_names",
+        "test_get_type_description_service",
+        "test_graph",
+        "test_guard_condition",
+        "test_info_by_topic",
+        "test_init",
+        "test_lexer",
+        "test_lexer_lookahead",
+        "test_log_level",
+        "test_logging",
+        "test_logging_rosout",
+        "test_namespace",
+        "test_network_flow_endpoints",
+        "test_node",
+        "test_node_type_cache",
+        "test_publisher",
+        "test_publisher_wait_all_ack",
+        "test_remap",
+        "test_remap_integration",
+        "test_rmw_impl_id_check_exe",
+        "test_rmw_impl_id_check_func",
+        "test_security",
+        "test_service",
+        "test_service_event_publisher",
+        "test_subscription",
+        "test_subscription_content_filter_options",
+        "test_time",
+        "test_timer",
+        "test_type_description_conversions",
+        "test_type_hash",
+        "test_validate_enclave_name",
+        "test_validate_topic_name",
+        "test_wait",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    headers = HEADERS,
+    libraries = [":rcl"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@libyaml_vendor//:ament_package",
+        "@mimick_vendor//:ament_package",
+        "@osrf_testing_tools_cpp//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rcl_logging_implementation//:ament_package",
+        "@rcl_logging_interface//:ament_package",
+        "@rcl_logging_spdlog//:ament_package",
+        "@rcl_yaml_param_parser//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rmw_implementation//:ament_package",
+        "@rmw_implementation_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_runtime_c//:ament_package",
+        "@rosidl_runtime_cpp//:ament_package",
+        "@service_msgs//:ament_package",
+        "@test_msgs//:ament_package",
+        "@tracetools//:ament_package",
+        "@type_description_interfaces//:ament_package",
+    ],
+)

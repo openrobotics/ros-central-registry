@@ -1,0 +1,39 @@
+--- a/ament_copyright/main.py
++++ b/ament_copyright/main.py
+@@ -38,6 +38,16 @@
+ 
+ 
+ def main(argv: list[str] = sys.argv[1:]) -> Literal[0, 1]:
++    default_path = os.curdir
++    if 'TEST_SRCDIR' in os.environ and 'BAZEL_TARGET' in os.environ:
++        target = os.environ['BAZEL_TARGET']
++        repo_name = target.split('//')[0].lstrip('@')
++        if not repo_name:
++            repo_name = os.environ.get('TEST_WORKSPACE', '_main')
++        default_path = os.path.relpath(
++            os.path.join(os.environ['TEST_SRCDIR'], repo_name)
++        )
++
+     extensions = [
+         'c', 'cc', 'cpp', 'cxx', 'h', 'hh', 'hpp', 'hxx',
+         'cmake',
+@@ -50,7 +60,7 @@
+     parser.add_argument(
+         'paths',
+         nargs='*',
+-        default=[os.curdir],
++        default=[default_path],
+         help='The files or directories to check. For directories files ending '
+              "in %s will be considered (except directories starting with '.' "
+              "or '_' and 'setup.py' files beside 'package.xml' files)." %
+@@ -109,7 +119,9 @@
+     if args.xunit_file:
+         start_time = time.time()
+ 
+-    filenames = get_files(args.paths, extensions, args.excludes)
++    excludes = [os.path.join(default_path, e) for e in args.excludes]
++
++    filenames = get_files(args.paths, extensions, excludes)
+     if not filenames:
+         print('No repository roots and files found')
+ 

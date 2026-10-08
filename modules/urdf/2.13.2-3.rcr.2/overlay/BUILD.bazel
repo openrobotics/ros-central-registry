@@ -1,0 +1,166 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+### PREPROCESSING
+
+cmake_configure_file(
+    name = "urdfdom_compatibility_h",
+    src = "urdfdom_compatibility.h.in",
+    out = "include/urdf/urdfdom_compatibility.h",
+    defines = [
+        "URDFDOM_HEADERS_MAJOR_VERSION=2",
+        "URDFDOM_HEADERS_MINOR_VERSION=0",
+        "URDFDOM_HEADERS_REVISION_VERSION=1",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob([
+    "include/**/*.h",
+    "include/**/*.hpp",
+]) + [":urdfdom_compatibility_h"]
+
+DEPENDENCIES = {
+    # pluginlib is header-only and instantiates class_loader / ament_index_cpp
+    # calls directly into this library's object code, so on Windows -- where a
+    # DLL may not carry undefined symbols -- both must be direct dynamic deps
+    # rather than transitive ones reached through pluginlib.
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@class_loader//:class_loader": "@class_loader//:class_loader_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@urdf_parser_plugin//:urdf_parser_plugin": "@urdf_parser_plugin//:urdf_parser_plugin_library",
+    "@urdfdom_headers//:urdfdom_headers": "@urdfdom_headers//:urdfdom_headers_library",
+    "@urdfdom//:urdfdom": "@urdfdom//:urdfdom_library",
+}
+
+cc_library(
+    name = "urdf_library",
+    srcs = ["src/model.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["URDF_BUILDING_DLL"],
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "urdf",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":urdf_library"],
+    deps = [":urdf_library"],
+)
+
+cc_library(
+    name = "urdf_xml_parser_library",
+    srcs = ["src/urdf_plugin.cpp"],
+    deps = DEPENDENCIES.values() + [
+        ":urdf_library",
+    ],
+)
+
+cc_shared_library(
+    name = "urdf_xml_parser",
+    dynamic_deps = [":urdf"],
+    exports_filter = [":urdf_xml_parser_library"],
+    deps = [":urdf_xml_parser_library"],
+)
+
+### TESTS
+
+ament_index(
+    name = "ament_index",
+    export_name = "urdf_parser_plugin",
+    libraries = [
+        ":urdf",
+        ":urdf_xml_parser",
+    ],
+    package_xml = "package.xml",
+    plugins = ["urdf_parser_description.xml"],
+)
+
+ament_index(
+    name = "ament_index_urdf",
+    export_name = "urdf",
+    package_xml = "package.xml",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        ":urdf",
+        ":urdf_xml_parser",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_robot_model_parser",
+    srcs = ["test/test_robot_model_parser.cpp"],
+    data = glob(["test/**"]) + [
+        ":ament_index",
+        ":ament_index_urdf",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    env = {
+        "AMENT_PREFIX_PATH": ".",
+        "LD_LIBRARY_PATH": "./lib",
+    },
+    local_defines = [
+        '_TEST_RESOURCES_DIR_PATH=\\"../urdf+/test/\\"',
+    ],
+    deps = DEPENDENCIES.values() + [
+        ":urdf_library",
+        ":urdf_xml_parser_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    headers = HEADERS,
+    libraries = [
+        ":urdf",
+        ":urdf_xml_parser",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_google_benchmark//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@class_loader//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosdistro//:ament_package",
+        "@urdf_parser_plugin//:ament_package",
+        "@urdfdom//:ament_package",
+        "@urdfdom_headers//:ament_package",
+    ],
+)

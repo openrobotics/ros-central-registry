@@ -1,0 +1,145 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "plugin_description.xml",
+    "package.xml",
+])
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcutils": "@rcutils//:rcutils_library",
+    "@rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:lz4_frame": "@rosdistro//cc:lz4_frame_library",
+    "@rosdistro//cc:lz4_hc": "@rosdistro//cc:lz4_hc_library",
+    "@rosdistro//cc:mcap": "@rosdistro//cc:mcap_library",
+    "@rosdistro//cc:zstd": "@rosdistro//cc:zstd_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+cc_library(
+    name = "rosbag2_storage_mcap_library",
+    srcs = glob(["src/**/*.cpp"]),
+    hdrs = HEADERS,
+    defines = [
+        "ROSBAG2_STORAGE_MCAP_BUILDING_DLL",
+        "ROSBAG2_STORAGE_MCAP_HAS_STORAGE_OPTIONS",
+        "ROSBAG2_STORAGE_MCAP_WRITER_CREATES_DIRECTORY",
+        "ROSBAG2_STORAGE_MCAP_OVERRIDE_SEEK_METHOD",
+        "ROSBAG2_STORAGE_MCAP_HAS_YAML_HPP",
+        "ROSBAG2_STORAGE_MCAP_HAS_SET_READ_ORDER",
+        "ROSBAG2_STORAGE_MCAP_HAS_UPDATE_METADATA",
+    ],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "rosbag2_storage_mcap",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rosbag2_storage_mcap_library"],
+    deps = [":rosbag2_storage_mcap_library"],
+)
+
+### AMENT INDEX
+
+collect_transitive_dynamic_deps(
+    name = "rosbag2_storage_mcap_with_all_deps",
+    dynamic_deps = [":rosbag2_storage_mcap"],
+    visibility = ["//visibility:private"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":rosbag2_storage_mcap_with_all_deps"],
+    package_xml = "package.xml",
+    plugin_category = "rosbag2_storage",
+    plugins = ["plugin_description.xml"],
+    deps = ["@rosbag2_storage//:ament_index"],
+)
+
+### TESTS
+
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    ":rosbag2_storage_mcap": ":rosbag2_storage_mcap_library",
+    "@rosbag2_test_common": "@rosbag2_test_common//:rosbag2_test_common_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps_test",
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+[
+    cc_test(
+        name = test,
+        srcs = ["test/rosbag2_storage_mcap/{0}.cpp".format(test)],
+        data = [
+            "test/rosbag2_storage_mcap/mcap_writer_options_zstd.yaml",
+            ":ament_index",
+        ],
+        dynamic_deps = [":transitive_dynamic_deps_test"],
+        local_defines = ros_local_defines() + [
+            '_TEST_RESOURCES_DIR_PATH=\\"../rosbag2_storage_mcap+/test/rosbag2_storage_mcap\\"',
+        ],
+        deps = TEST_DEPENDENCIES.values() + [
+            "@rosdistro//cc:googletest",
+            "@std_msgs//:cc",
+        ],
+    )
+    for test in [
+        "test_mcap_storage",
+        "test_mcap_topic_filter",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    headers = HEADERS,
+    libraries = [":rosbag2_storage_mcap"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@mcap_vendor//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosbag2_test_common//:ament_package",
+        "@rosdistro//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

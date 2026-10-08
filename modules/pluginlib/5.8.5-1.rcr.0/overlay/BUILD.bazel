@@ -1,0 +1,171 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@class_loader": "@class_loader//:class_loader_library",
+    "@rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+cc_library(
+    name = "pluginlib_library",
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "pluginlib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":pluginlib_library"],
+    deps = [":pluginlib_library"],
+)
+
+### TRANSITIVELY COLLECT ALL DYNAMIC DEPS TO ENSURE LINKING WORKS
+
+# This is a workaround for the fact that dynamic_deps does not work transitively.
+# So, if you have a (foo -> bar -> baz) dynamic_dep dep chain, the symbols from
+# foo will not be available to baz at compile-time. This resolves that by running
+# an aspect over the dynamic_deps attribute to collect everything in the chain.
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":pluginlib"],
+    visibility = ["//visibility:private"],
+)
+
+### EXECUTABLES
+
+cc_binary(
+    name = "list_plugins",
+    srcs = ["src/list_plugins.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":pluginlib_library",
+    ],
+)
+
+### TESTS
+
+cc_library(
+    name = "test_plugins_headers",
+    hdrs = glob(["test/include/**/*.hpp"]),
+    includes = ["test/include"],
+)
+
+cc_library(
+    name = "test_plugins_library",
+    srcs = ["test/test_plugins.cpp"],
+    copts = ["-DTEST_PLUGINLIB_FIXTURE_BUILDING_LIBRARY"],
+    implementation_deps = [":test_plugins_headers"],
+    deps = DEPENDENCIES.values() + [
+        ":pluginlib_library",
+    ],
+)
+
+cc_shared_library(
+    name = "test_plugins",
+    dynamic_deps = [":transitive_dynamic_deps"],
+    exports_filter = [":test_plugins_library"],
+    deps = [":test_plugins_library"],
+)
+
+# Test environment setup
+
+ament_index(
+    name = "ament_index",
+    export_name = "test_pluginlib",
+    libraries = [":test_plugins"],
+    package_xml = "package.xml",
+    plugins = ["test/test_plugins.xml"],
+)
+
+ament_index(
+    name = "ament_index_real",
+    libraries = [":test_plugins"],
+    package_xml = "package.xml",
+    plugins = ["test/test_plugins.xml"],
+)
+
+[
+    cc_test(
+        name = "pluginlib_{0}".format(test),
+        srcs = ["test/{0}.cpp".format(test)],
+        data = [
+            ":ament_index",
+            ":ament_index_real",
+        ],
+        dynamic_deps = [
+            ":transitive_dynamic_deps",
+            ":test_plugins",
+        ],
+        deps = DEPENDENCIES.values() + [
+            ":pluginlib_library",
+            ":test_plugins_headers",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test in [
+        "utest",
+        "unique_ptr_test",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    executables = [":list_plugins"],
+    headers = HEADERS,
+    libraries = [
+        ":pluginlib",
+        ":test_plugins",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@class_loader//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

@@ -1,0 +1,114 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES
+
+DEPENDENCIES = {
+    "@rcl_logging_interface//:rcl_logging_interface": "@rcl_logging_interface//:rcl_logging_interface_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+}
+
+cc_library(
+    name = "rcl_logging_spdlog_library",
+    srcs = ["src/rcl_logging_spdlog.cpp"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:spdlog",
+    ],
+)
+
+cc_shared_library(
+    name = "rcl_logging_spdlog",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rcl_logging_spdlog_library"],
+    deps = [":rcl_logging_spdlog_library"],
+)
+
+### TRANSITIVELY COLLECT ALL DYNAMIC DEPS TO ENSURE LINKING WORKS
+
+# This is a workaround for the fact that dynamic_deps does not work transitively.
+# So, if you have a (foo -> bar -> baz) dynamic_dep dep chain, the symbols from
+# foo will not be available to baz at compile-time. This resolves that by running
+# an aspect over the dynamic_deps attribute to collect everything in the chain.
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rcl_logging_spdlog"],
+    visibility = ["//visibility:private"],
+)
+
+### TESTING
+
+cc_test(
+    name = "benchmark_logging_interface",
+    timeout = "short",
+    srcs = ["test/benchmark/benchmark_logging_interface.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    tags = ["manual"],
+    deps = DEPENDENCIES.values() + [
+        ":rcl_logging_spdlog_library",
+        "@google_benchmark//:benchmark_main",
+        "@performance_test_fixture",
+    ],
+)
+
+cc_test(
+    name = "test_logging_interface",
+    timeout = "short",
+    srcs = ["test/test_logging_interface.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":rcl_logging_spdlog_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    libraries = [":rcl_logging_spdlog"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@performance_test_fixture//:ament_package",
+        "@rcl_logging_interface//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosdistro//:ament_package",
+        "@spdlog_vendor//:ament_package",
+    ],
+)

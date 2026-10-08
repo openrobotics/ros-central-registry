@@ -1,0 +1,110 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@rosdistro//cc:zstd": "@rosdistro//cc:zstd_library",
+    "@rosbag2_compression//:rosbag2_compression": "@rosbag2_compression//:rosbag2_compression_library",
+}
+
+cc_library(
+    name = "rosbag2_compression_zstd_library",
+    srcs = glob([
+        "src/**/*.cpp",
+        "src/**/*.hpp",
+    ]),
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "rosbag2_compression_zstd",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rosbag2_compression_zstd_library"],
+    deps = [":rosbag2_compression_zstd_library"],
+)
+
+### DATA
+
+ament_index(
+    name = "ament_index_package",
+    package_xml = "package.xml",
+)
+
+ament_index(
+    name = "ament_index_plugin",
+    libraries = [":rosbag2_compression_zstd"],
+    package_xml = "package.xml",
+    plugin_category = "rosbag2_compression",
+    plugins = ["plugin_description.xml"],
+)
+
+### TESTS
+
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    ":rosbag2_compression_zstd": ":rosbag2_compression_zstd_library",
+    "@rosbag2_test_common": "@rosbag2_test_common//:rosbag2_test_common_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_zstd_compressor",
+    srcs = ["test/rosbag2_compression_zstd/test_zstd_compressor.cpp"],
+    data = [
+        ":ament_index_package",
+        ":ament_index_plugin",
+        "@rosbag2_compression//:ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = TEST_DEPENDENCIES.values() + [
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    headers = HEADERS,
+    libraries = [":rosbag2_compression_zstd"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index_package",
+        ":ament_index_plugin",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosbag2_compression//:ament_package",
+        "@rosbag2_test_common//:ament_package",
+        "@rosdistro//:ament_package",
+        "@zstd_cmake_module//:ament_package",
+    ],
+)

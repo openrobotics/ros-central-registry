@@ -1,0 +1,115 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### PREPROCESSING
+
+cmake_configure_file(
+    name = "cdds_version_hpp",
+    src = "src/cdds_version.hpp.in",
+    out = "src/cdds_version.hpp",
+    defines = [
+        "CycloneDDS_VERSION_MAJOR=0",
+        "CycloneDDS_VERSION_MINOR=10",
+    ],
+)
+
+### LIBRARY
+
+DEPENDENCIES = {
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    # This library calls rcutils and rosidl_runtime_c directly, so on Windows
+    # (no undefined symbols in a DLL) they must be direct dynamic deps rather
+    # than transitive ones reached through rcpputils / the typesupports.
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosidl_runtime_c//:rosidl_runtime_c": "@rosidl_runtime_c//:rosidl_runtime_c_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+    "@rmw_dds_common//:rmw_dds_common": "@rmw_dds_common//:rmw_dds_common_library",
+    "@rosidl_typesupport_introspection_c//:rosidl_typesupport_introspection_c": "@rosidl_typesupport_introspection_c//:rosidl_typesupport_introspection_c_library",
+    "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp": "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp_library",
+    "@tracetools//:tracetools": "@tracetools//:tracetools_library",
+    "@rosdistro//cc:cyclonedds": "@rosdistro//cc:cyclonedds_library",
+}
+
+cc_library(
+    name = "rmw_cyclonedds_cpp_library",
+    srcs = glob([
+        "src/*.cpp",
+        "src/*.hpp",
+    ]) + [":cdds_version_hpp"],
+    includes = ["src"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "rmw_cyclonedds_cpp",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rmw_cyclonedds_cpp_library"],
+    deps = [":rmw_cyclonedds_cpp_library"],
+)
+
+### TRANSITIVELY COLLECT ALL DYNAMIC DEPS TO ENSURE LINKING WORKS
+
+# This is a workaround for the fact that dynamic_deps does not work transitively.
+# So, if you have a (foo -> bar -> baz) dynamic_dep dep chain, the symbols from
+# foo will not be available to baz at compile-time. This resolves that by running
+# an aspect over the dynamic_deps attribute to collect everything in the chain.
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rmw_cyclonedds_cpp"],
+    visibility = ["//visibility:private"],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    libraries = [":rmw_cyclonedds_cpp"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros_core//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@iceoryx_binding_c//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rmw_dds_common//:ament_package",
+        "@rmw_security_common//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_runtime_c//:ament_package",
+        "@rosidl_typesupport_introspection_c//:ament_package",
+        "@rosidl_typesupport_introspection_cpp//:ament_package",
+        "@tracetools//:ament_package",
+    ],
+)

@@ -1,0 +1,117 @@
+# Copyright 2025 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+filegroup(
+    name = "interface_templates",
+    srcs = glob(["resource/**/*.em"]),
+)
+
+exports_files(
+    srcs = ["resource/rosidl_typesupport_introspection_c__visibility_control.h.in"],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.h"])
+
+cc_library(
+    name = "rosidl_typesupport_introspection_c_library",
+    srcs = glob(["src/**/*.c"]),
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+)
+
+cc_shared_library(
+    name = "rosidl_typesupport_introspection_c",
+    exports_filter = [":rosidl_typesupport_introspection_c_library"],
+    deps = [":rosidl_typesupport_introspection_c_library"],
+)
+
+py_library(
+    name = "rosidl_typesupport_introspection_c_py",
+    srcs = glob(["rosidl_typesupport_introspection_c/**/*.py"]),
+    deps = [
+        "@ament_index_python",
+        "@rosidl_cli",
+        "@rosidl_generator_c",
+        "@rosidl_pycommon",
+    ],
+)
+
+genrule(
+    name = "cli_rename",
+    srcs = ["bin/rosidl_typesupport_introspection_c"],
+    outs = ["bin/rosidl_typesupport_introspection_c.py"],
+    cmd = "cp $(location :bin/rosidl_typesupport_introspection_c) $(location :bin/rosidl_typesupport_introspection_c.py)",
+)
+
+py_binary(
+    name = "cli",
+    srcs = [":bin/rosidl_typesupport_introspection_c.py"],
+    main = ":bin/rosidl_typesupport_introspection_c.py",
+    deps = [":rosidl_typesupport_introspection_c_py"],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    headers = HEADERS,
+    libraries = [":rosidl_typesupport_introspection_c"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_ros_core//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_buffer//:ament_package",
+        "@rosidl_cli//:ament_package",
+        "@rosidl_cmake//:ament_package",
+        "@rosidl_generator_c//:ament_package",
+        "@rosidl_parser//:ament_package",
+        "@rosidl_pycommon//:ament_package",
+        "@rosidl_runtime_c//:ament_package",
+        "@rosidl_typesupport_interface//:ament_package",
+    ],
+)
+
+# Public so the rosidl generator aspects can link a message fragment against
+# the full transitive DLL closure on Windows (see the aspects' _cc_shared_dep),
+# where a DLL may not contain undefined symbols.
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rosidl_typesupport_introspection_c"],
+    visibility = ["//visibility:public"],
+)

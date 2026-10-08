@@ -1,0 +1,73 @@
+--- a/ament_xmllint/main.py
++++ b/ament_xmllint/main.py
+@@ -33,6 +33,16 @@
+ 
+ 
+ def main(argv: list[str] = sys.argv[1:]) -> Literal[0, 1]:
++    default_path = os.curdir
++    if 'TEST_SRCDIR' in os.environ and 'BAZEL_TARGET' in os.environ:
++        target = os.environ['BAZEL_TARGET']
++        repo_name = target.split('//')[0].lstrip('@')
++        if not repo_name:
++            repo_name = os.environ.get('TEST_WORKSPACE', '_main')
++        default_path = os.path.relpath(
++            os.path.join(os.environ['TEST_SRCDIR'], repo_name)
++        )
++
+     default_extensions = ['xml']
+ 
+     parser = argparse.ArgumentParser(
+@@ -41,7 +51,7 @@
+     parser.add_argument(
+         'paths',
+         nargs='*',
+-        default=[os.curdir],
++        default=[default_path],
+         help='The files or directories to check. For directories, only files ending '
+              'in %s will be considered (unless overruled by the --extensions '
+              'option)' %
+@@ -66,6 +76,9 @@
+     if args.xunit_file:
+         start_time = time.time()
+ 
++    if args.exclude:
++        args.exclude = [os.path.join(default_path, e) for e in args.exclude]
++
+     files = get_files(args.paths, args.extensions, args.exclude)
+     if not files:
+         print('No files found', file=sys.stderr)
+@@ -111,6 +124,34 @@
+                     handler.root_attributes['xsi:noNamespaceSchemaLocation'], temp_dir)
+                 cmd += ['--schema', schema_path]
+ 
++            # Try looking locally for the schema because tests are network-isolated.
++            for i in range(len(cmd)):
++                for url, local_schema in {
++                    'http://download.ros.org/schema/package_format1.xsd':
++                        os.path.join(os.path.dirname(__file__), 'package_format1.xsd'),
++                    'http://download.ros.org/schema/package_format2.xsd':
++                        os.path.join(os.path.dirname(__file__), 'package_format2.xsd'),
++                    'http://download.ros.org/schema/package_format3.xsd':
++                        os.path.join(os.path.dirname(__file__), 'package_format3.xsd'),
++                }.items():
++                    if cmd[i] == url:
++                        if not os.path.exists(local_schema) and 'TEST_SRCDIR' in os.environ:
++                            for root_dir in [
++                                os.environ['TEST_SRCDIR'],
++                                os.environ.get('RUNFILES_DIR', '')
++                            ]:
++                                if root_dir and os.path.exists(root_dir):
++                                    for repo in os.listdir(root_dir):
++                                        cand = os.path.join(
++                                            root_dir,
++                                            repo,
++                                            'ament_xmllint',
++                                            local_schema)
++                                        if os.path.exists(cand):
++                                            local_schema = cand
++                                            break
++                        if os.path.exists(local_schema):
++                            cmd[i] = local_schema
+             try:
+                 subprocess.check_output(
+                     cmd, cwd=os.path.dirname(filename), stderr=subprocess.STDOUT)

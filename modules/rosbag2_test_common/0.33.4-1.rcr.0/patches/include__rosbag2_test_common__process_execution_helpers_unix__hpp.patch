@@ -1,0 +1,59 @@
+--- a/include/rosbag2_test_common/process_execution_helpers_unix.hpp
++++ b/include/rosbag2_test_common/process_execution_helpers_unix.hpp
+@@ -25,6 +25,9 @@
+ #include <cstdlib>
+ #include <vector>
+ #include <string>
++#include <filesystem>
++
++namespace fs = std::filesystem;
+ 
+ using namespace ::testing;  // NOLINT
+ 
+@@ -56,11 +59,32 @@
+     return EXIT_FAILURE;
+   }
+ 
++  const char* test_srcdir = getenv("TEST_SRCDIR");
++  auto abs_mock_ros2_dir = (fs::path(previous_dir) / "../rosbag2_tests+");
++  std::string new_path = abs_mock_ros2_dir.generic_string() + ":" + getenv("PATH");
++  setenv("PATH", new_path.c_str(), 1);
++
++  std::string full_command = command;
++  if (command.substr(0, 5) == "ros2 ") {
++    auto abs_mock_ros2 = (fs::path(previous_dir) / "../rosbag2_tests+/ros2").generic_string();
++    full_command = abs_mock_ros2 + command.substr(4);
++  }
++
+   auto ret_ch_dir = chdir(path.c_str());
+   if (ret_ch_dir != 0) {
+     return EXIT_FAILURE;
+   }
+-  auto status = std::system(command.c_str());
++  FILE* pipe = popen((full_command + " 2>&1").c_str(), "r");
++  if (!pipe) {
++    return EXIT_FAILURE;
++  }
++  char buffer[128];
++  while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
++    std::cout << buffer;
++    std::cerr << buffer;
++  }
++  int status = pclose(pipe);
++
+   ret_ch_dir = chdir(previous_dir);
+   if (ret_ch_dir != 0) {
+     return EXIT_FAILURE;
+@@ -75,6 +99,12 @@
+ 
+ ProcessHandle start_execution(const std::string & command)
+ {
++  const char* test_srcdir = getenv("TEST_SRCDIR");
++  if (test_srcdir != nullptr) {
++    std::string new_path = std::string(test_srcdir) + "/rosbag2_tests+:" + getenv("PATH");
++    setenv("PATH", new_path.c_str(), 1);
++  }
++
+   auto process_id = fork();
+   if (process_id == -1) {
+     throw std::runtime_error("Failed to start process via fork()");

@@ -1,0 +1,114 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+### C++ LIBRARY
+
+DEPENDENCIES = {
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+}
+
+cc_library(
+    name = "image_geometry_library",
+    srcs = [
+        "src/pinhole_camera_model.cpp",
+        "src/stereo_camera_model.cpp",
+    ],
+    hdrs = glob(["include/image_geometry/*.hpp"]),
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "image_geometry",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":image_geometry_library"],
+    deps = [":image_geometry_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":image_geometry"],
+    visibility = ["//visibility:private"],
+)
+
+### PYTHON LIBRARY
+
+py_library(
+    name = "image_geometry_py",
+    srcs = glob(["image_geometry/**/*.py"]),
+    imports = ["."],
+    deps = ["@sensor_msgs//:py"],
+)
+
+### C++ TESTS
+
+cc_test(
+    name = "image_geometry-utest",
+    srcs = ["test/utest.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":image_geometry_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "image_geometry-utest-equi",
+    srcs = ["test/utest_equi.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":image_geometry_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PYTHON TESTS
+
+py_pytest(
+    name = "test_directed",
+    srcs = ["test/directed.py"],
+    deps = [
+        ":image_geometry_py",
+        requirement("deprecated"),
+        requirement("opencv-python"),
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    libraries = [":image_geometry"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

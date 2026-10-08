@@ -1,0 +1,230 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+### VERSION HEADER
+
+# Real CMakeLists.txt fills these via configure_file(@ONLY) + `git describe`.
+# No .git metadata exists in a hermetic archive build, so the hash is left
+# empty rather than fabricated.
+cmake_configure_file(
+    name = "version_hpp",
+    src = "include/foxglove_bridge/version.hpp.in",
+    out = "include/foxglove_bridge/version.hpp",
+    defines = [
+        "FOXGLOVE_BRIDGE_VERSION=3.4.1",
+        "FOXGLOVE_BRIDGE_GIT_HASH=",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"]) + [":version_hpp"]
+
+# CMakeLists.txt only builds the FOXGLOVE_BRIDGE_REMOTE_ACCESS=OFF path here
+# (see the rosdistro cc:foxglove_sdk target, which wraps the dist's SHARED,
+# non-remote-access wrapper).
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@resource_retriever//:resource_retriever": "@resource_retriever//:resource_retriever_library",
+    "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp": "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp_library",
+    "@rosx_introspection//:rosx_introspection": "@rosx_introspection//:rosx_introspection_library",
+    "@rosdistro//cc:foxglove_sdk": "@rosdistro//cc:foxglove_sdk_library",
+}
+
+cc_library(
+    name = "foxglove_bridge_component_library",
+    srcs = [
+        "src/generic_client.cpp",
+        "src/message_definition_cache.cpp",
+        "src/param_utils.cpp",
+        "src/parameter_interface.cpp",
+        "src/ros2_foxglove_bridge.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + [
+        # resource_retriever's own project(... VERSION 3.9.3); CMake reads
+        # these off its exported package version, not a hardcoded constant.
+        "RESOURCE_RETRIEVER_VERSION_MAJOR=3",
+        "RESOURCE_RETRIEVER_VERSION_MINOR=9",
+        "RESOURCE_RETRIEVER_VERSION_PATCH=3",
+    ],
+    deps = DEPENDENCIES.values() + [
+        "@rcl_interfaces//:cc",
+        "@rosgraph_msgs//:cc",
+        "@std_msgs//:cc",
+        # Not directly #included -- every rclcpp node auto-registers a
+        # get_type_description service, which dynamically dlopen()s this
+        # package's typesupport .so at runtime. Needs to be a real dep (not
+        # just an ament_index data reference) so that .so actually lands in
+        # the runfiles tree, same as rcl_interfaces/rosgraph_msgs/std_msgs
+        # above.
+        "@type_description_interfaces//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "foxglove_bridge_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":foxglove_bridge_component_library"],
+    deps = [":foxglove_bridge_component_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "component_nodes",
+    component = ":foxglove_bridge_component",
+    plugins = ["foxglove_bridge::FoxgloveBridge"],
+)
+
+### TRANSITIVE DYNAMIC DEPS
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":foxglove_bridge_component",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+### EXECUTABLE
+
+# message_definition_cache looks up message/service definitions at runtime
+# via ament_index_cpp's get_package_share_path()/get_resource(), to describe
+# topics/services to connected clients -- supply every message package
+# foxglove_bridge touches (mirrors :ament_package's own `deps`, but scoped
+# down to just the message packages: using :ament_package directly here
+# would cycle, since it also declares executables=[":foxglove_bridge"]).
+ament_index(
+    name = "runtime_ament_index",
+    deps = [
+        "@builtin_interfaces//:ament_index",
+        "@rcl_interfaces//:ament_index",
+        "@rosgraph_msgs//:ament_index",
+        "@std_msgs//:ament_index",
+        "@std_srvs//:ament_index",
+        "@type_description_interfaces//:ament_index",
+    ],
+)
+
+cc_binary(
+    name = "foxglove_bridge",
+    srcs = ["src/ros2_foxglove_bridge_node.cpp"],
+    data = [":runtime_ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":foxglove_bridge_component_library",
+        "@rcl_interfaces//:cc",
+        "@rclcpp//:rclcpp_library",
+    ],
+)
+
+### TESTS
+
+cc_test(
+    name = "utils_test",
+    srcs = ["tests/utils_test.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":foxglove_bridge_component_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# ASIO_STANDALONE makes websocketpp's templates dispatch to standalone
+# asio (header-only, supplied transitively via @rosdistro//cc:websocketpp)
+# rather than boost::asio -- matches CMakeLists.txt's scoping of this
+# define to smoke_test only (production sources don't touch websocketpp
+# at all). NOTE: this target currently fails to compile against either
+# asio backend available in this registry (both standalone asio 1.34.2
+# and boost.asio 1.90.0 have removed io_service/expires_from_now(),
+# which websocketpp 0.8.2 -- unmaintained since 2019 -- still requires);
+# see the PR description for details. Left as the faithful translation
+# of upstream's own choice rather than worked around.
+# cc_test(
+#     name = "smoke_test",
+#     timeout = "long",
+#     srcs = [
+#         "tests/client/protocol_types.hpp",
+#         "tests/client/test_client.hpp",
+#         "tests/smoke_test.cpp",
+#     ],
+#     local_defines = ["ASIO_STANDALONE"],
+#     dynamic_deps = [":transitive_dynamic_deps"],
+#     deps = [
+#         ":foxglove_bridge_component_library",
+#         "@rclcpp//:rclcpp_library",
+#         "@rosdistro//cc:bazel_test_helper",
+#         "@rosdistro//cc:googletest",
+#         "@rosdistro//cc:nlohmann_json",
+#         "@rosdistro//cc:websocketpp",
+#         "@std_msgs//:cc",
+#         "@std_srvs//:cc",
+#     ],
+# )
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    components = [":component_nodes"],
+    executables = [":foxglove_bridge"],
+    headers = HEADERS,
+    libraries = [":foxglove_bridge_component"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@resource_retriever//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosgraph_msgs//:ament_package",
+        "@rosidl_typesupport_introspection_cpp//:ament_package",
+        "@rosx_introspection//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@service_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@test_msgs//:ament_package",
+    ],
+)

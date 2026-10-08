@@ -1,0 +1,238 @@
+# Copyright 2025 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rcl_action//:rcl_action": "@rcl_action//:rcl_action_library",
+    "@rcl_lifecycle//:rcl_lifecycle": "@rcl_lifecycle//:rcl_lifecycle_library",
+    "@rcl_logging_interface//:rcl_logging_interface": "@rcl_logging_interface//:rcl_logging_interface_library",
+    "@rcl//:rcl": "@rcl//:rcl_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+}
+
+cc_library(
+    name = "rclpy_bindings_library",
+    srcs = glob([
+        "src/rclpy/**/*.cpp",
+        "src/rclpy/**/*.hpp",
+    ]),
+    includes = ["src/rclpy"],
+    visibility = ["//visibility:private"],
+    deps = DEPENDENCIES.values() + [
+        "@lifecycle_msgs//:c",
+        "@rcl_interfaces//:c",
+        "@rosdistro//cc:pybind11",
+        "@rules_python//python/cc:current_py_cc_headers",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_shared_library(
+    name = "rclpy_bindings",
+    exports_filter = [":rclpy_bindings_library"],
+    shared_lib_name = "rclpy/_rclpy_pybind11.so",
+    user_link_flags = select({
+        "@platforms//os:osx": [
+            "-undefined",
+            "dynamic_lookup",
+        ],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:private"],
+    deps = [":rclpy_bindings_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    deps = [
+        "@rcl//:ament_package",
+        "@rcl_action//:ament_package",
+        "@rcl_lifecycle//:ament_package",
+        "@rcl_logging_interface//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+    ],
+)
+
+py_library(
+    name = "rclpy",
+    srcs = glob(["rclpy/**/*.py"]),
+    data = [
+        ":ament_index",
+        ":rclpy_bindings",
+    ],
+    imports = ["."],
+    deps = [
+        "@action_msgs//:py",
+        "@ament_index_python",
+        "@builtin_interfaces//:py",
+        "@lifecycle_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rosgraph_msgs//:py",
+        "@rpyutils",
+        "@service_msgs//:py",
+        "@type_description_interfaces//:py",
+        "@unique_identifier_msgs//:py",
+        requirement("numpy"),
+        requirement("pyyaml"),
+        requirement("typing-extensions"),
+    ],
+)
+
+# Tests
+
+# TODO(asymingt) - fix this test, which seems not to work when used with the
+# interpreter provided by rules_python.
+#
+# pybind_library_test(
+#     name = "test_python_allocator",
+#     srcs = ["test/test_python_allocator.cpp"],
+#     deps = [
+#         ":rclpy/_rclpy_pybind11",
+#         "@rosdistro//cc:googletest",
+#         "@rosdistro//cc:googletest",
+#     ],
+# )
+
+[
+    py_pytest(
+        name = test,
+        srcs = ["test/{}.py".format(test)],
+        data = glob(["test/resources/**"]),
+        deps = [
+            ":rclpy",
+            "@rules_python//python/runfiles",
+            "@test_msgs//:py",
+            "@test_msgs//:test_msgs_py",
+        ],
+    )
+    for test in [
+        "test_action_client",
+        "test_action_graph",
+        "test_action_server",
+        "test_callback_group",
+        "test_client",
+        "test_clock",
+        "test_context",
+        "test_create_node",
+        "test_create_while_spinning",
+        "test_destruction",
+        "test_events_executor",
+        "test_executor",
+        "test_expand_topic_name",
+        "test_guard_condition",
+        "test_init_shutdown",
+        "test_lifecycle",
+        "test_logging",
+        "test_logging_rosout",
+        "test_logging_service",
+        "test_messages",
+        "test_node",
+        "test_parameter_client",
+        "test_parameter_event_handler",
+        "test_parameter",
+        "test_parameter_service",
+        "test_publisher",
+        "test_qos_event",
+        "test_qos_overriding_options",
+        "test_qos",
+        "test_rate",
+        "test_rosout_subscription",
+        "test_serialization",
+        "test_service_introspection",
+        "test_service",
+        "test_subscription",
+        "test_task",
+        "test_time",
+        "test_timer",
+        "test_time_source",
+        "test_topic_endpoint_info",
+        "test_topic_or_service_is_hidden",
+        "test_type_description_service",
+        "test_type_hash",
+        "test_type_support",
+        "test_utilities",
+        "test_validate_full_topic_name",
+        "test_validate_namespace",
+        "test_validate_node_name",
+        "test_validate_topic_name",
+        "test_waitable",
+        "test_wait_for_message",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    libraries = [":rclpy_bindings"],
+    package_xml = "package.xml",
+    deps = [
+        "@action_msgs//:ament_package",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@rcl//:ament_package",
+        "@rcl_action//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rcl_lifecycle//:ament_package",
+        "@rcl_logging_interface//:ament_package",
+        "@rcl_yaml_param_parser//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rmw_implementation//:ament_package",
+        "@rmw_implementation_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosgraph_msgs//:ament_package",
+        "@rosidl_generator_py//:ament_package",
+        "@rosidl_pycommon//:ament_package",
+        "@rosidl_runtime_c//:ament_package",
+        "@rpyutils//:ament_package",
+        "@service_msgs//:ament_package",
+        "@test_msgs//:ament_package",
+        "@type_description_interfaces//:ament_package",
+        "@unique_identifier_msgs//:ament_package",
+    ],
+)
