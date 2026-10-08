@@ -14,11 +14,10 @@
 
 """
 Nightly bootstrap: discover new upstream ros/rosdistro tags (via
-tools/ci/rosdistro_lib.py) and stage them into the RCR -- a bare
-(unpatched) module version for every package the new tag references, a
-0.0.0 placeholder for any package that's never existed in the registry
-before, and a new .rcr.0 version per package that carries forward
-whatever patch set applied to its previous version.
+tools/ci/rosdistro_lib.py) and stage them into the RCR -- a 0.0.0
+placeholder for any package that's never existed in the registry before,
+and a new .rcr.0 version per package that carries forward whatever patch
+set applied to its previous version.
 """
 
 import argparse
@@ -212,8 +211,8 @@ def render_module_dot_bazel(
         all_rcr = dict(rcr_deps)
         # Every module depends on rosdistro, whether or not package.xml says
         # so. Callers normally supply its resolved pin (the .rcr.0 version,
-        # same as every other RCR dep); fall back to the bare tag otherwise.
-        all_rcr.setdefault("rosdistro", f"{distro}.{date}")
+        # same as every other RCR dep); fall back to the .rcr.0 tag otherwise.
+        all_rcr.setdefault("rosdistro", f"{distro}.{date}.rcr.0")
         for dep_name in sorted(all_rcr.keys()):
             lines.append(f'bazel_dep(name = "{dep_name}", version = "{all_rcr[dep_name]}")\n')
         lines.append(BOOTSTRAP_TRAILER)
@@ -297,22 +296,19 @@ def write_metadata_json_if_missing(pkg_dir: Path, module_url: str, version: str)
 
 def find_existing_release(package_dir: Path, bare_version: str) -> Optional[str]:
     """
-    Mirrors legacy release_bootstrap.py's _find_previous_package_release:
-    if this exact upstream version has already been bootstrapped (bare or
-    patched) in a prior run, reuse its latest existing form instead of
-    creating anything new for it in this run.
+    If this exact upstream version has already been bootstrapped in a
+    prior run, reuse its latest existing .rcr.N form instead of creating
+    anything new for it in this run.
     """
     if not package_dir.exists():
         return None
     best = None
-    best_patch = -2
+    best_patch = -1
     for item in package_dir.iterdir():
         if not item.is_dir():
             continue
         name = item.name
-        if name == bare_version and best_patch < -1:
-            best, best_patch = name, -1
-        elif name.startswith(bare_version + ".rcr."):
+        if name.startswith(bare_version + ".rcr."):
             patch_num = int(name.split(".")[-1])
             if patch_num > best_patch:
                 best, best_patch = name, patch_num
@@ -350,9 +346,10 @@ def already_bootstrapped_dates(modules_dir: Path, distro: str) -> Set[str]:
     for item in ros_dir.iterdir():
         if not item.is_dir():
             continue
-        parts = item.name.split(".")
+        base = bzlmod_lib.get_base_version(item.name)
+        parts = base.split(".")
         if len(parts) == 2 and parts[0] == distro:
-            result.add(item.name)
+            result.add(base)
     return result
 
 
@@ -403,9 +400,9 @@ def bootstrap_one_tag(modules_dir: Path, cache_dir: Path, distro: str, date: str
 
     # Phase 2: decide, per package, whether this exact upstream version was
     # already bootstrapped in a prior run (reuse it) or is genuinely new
-    # (will need a fresh bare version + .rcr.0). Compute final pins for
-    # EVERY package up front so bazel_dep entries can be written correctly
-    # in one pass, without a second dependency-rewriting pass.
+    # (will need a fresh .rcr.0). Compute final pins for EVERY package up
+    # front so bazel_dep entries can be written correctly in one pass,
+    # without a second dependency-rewriting pass.
     final_pin: Dict[str, str] = {}
     needs_bootstrap: Dict[str, bool] = {}
     is_brand_new_package: Dict[str, bool] = {}
@@ -421,39 +418,25 @@ def bootstrap_one_tag(modules_dir: Path, cache_dir: Path, distro: str, date: str
             needs_bootstrap[pkg_name] = True
 
     fresh = [name for name, needed in needs_bootstrap.items() if needed]
-    print(f"  {len(fresh)} package(s) need a fresh bare version + .rcr.0; "
+    print(f"  {len(fresh)} package(s) need a fresh .rcr.0; "
           f"{len(packages) - len(fresh)} unchanged since a prior bootstrap.")
 
-    # Phase 3: create bare versions + 0.0.0 stubs + migrate to .rcr.0, for
-    # every package that actually needs it.
+    # Phase 3: create 0.0.0 stubs + migrate to .rcr.0, for every package
+    # that actually needs it.
     for pkg_name in fresh:
         pkg_source = packages[pkg_name]
         pkg_dir = modules_dir / pkg_name
-        bare_version = pkg_source.version
-        bare_dir = pkg_dir / bare_version
         rcr_deps = {dep: final_pin[dep] for dep in filtered_deps[pkg_name]}
         if pkg_name != "rosdistro":
             rcr_deps["rosdistro"] = final_pin["rosdistro"]
         custom_body = ROSDISTRO_CUSTOM_BODY if pkg_name == "rosdistro" else None
+        new_version = final_pin[pkg_name]
 
-        print(f"  + {pkg_name}@{bare_version} (bare) -> {final_pin[pkg_name]}")
+        print(f"  + {pkg_name}@{new_version}")
         if dry_run:
             continue
 
         source_json = compute_source_json(pkg_name, pkg_source, cache_dir)
-        bare_dir.mkdir(parents=True, exist_ok=True)
-        # The bare (unpatched) tier pins the bare tier of every dep; the
-        # .rcr.0 tier below pins the resolved .rcr.N tier. Each must declare
-        # its own version -- Bazel rejects a module whose MODULE.bazel
-        # declares a different version than the registry directory it was
-        # fetched from.
-        bare_deps = {dep: bzlmod_lib.get_base_version(v) for dep, v in rcr_deps.items()}
-        (bare_dir / "MODULE.bazel").write_text(
-            render_module_dot_bazel(pkg_name, bare_version, bare_deps, distro, date, custom_body)
-        )
-        with open(bare_dir / "source.json", "w") as f:
-            json.dump(source_json, f, indent=4)
-            f.write("\n")
 
         if is_brand_new_package[pkg_name]:
             stub_dir = pkg_dir / "0.0.0"
@@ -464,18 +447,17 @@ def bootstrap_one_tag(modules_dir: Path, cache_dir: Path, distro: str, date: str
                 f.write("\n")
             write_metadata_json_if_missing(pkg_dir, pkg_source.url, "0.0.0")
 
-        write_metadata_json_if_missing(pkg_dir, pkg_source.url, bare_version)
-
         # Migrate: carry forward this package's own most recent patch set
-        # (from any prior upstream version) onto the new bare version.
+        # (from any prior upstream version) onto the new .rcr.0 version.
         old_patched_version = find_candidate_patch_version(pkg_dir)
-        new_version = final_pin[pkg_name]
         new_dir = pkg_dir / new_version
         new_dir.mkdir(parents=True, exist_ok=True)
         (new_dir / "MODULE.bazel").write_text(
             render_module_dot_bazel(pkg_name, new_version, rcr_deps, distro, date, custom_body)
         )
-        shutil.copy(bare_dir / "source.json", new_dir / "source.json")
+        with open(new_dir / "source.json", "w") as f:
+            json.dump(source_json, f, indent=4)
+            f.write("\n")
         if old_patched_version is not None:
             for subdir in ("patches", "overlay"):
                 src = pkg_dir / old_patched_version / subdir
@@ -483,7 +465,7 @@ def bootstrap_one_tag(modules_dir: Path, cache_dir: Path, distro: str, date: str
                     shutil.copytree(src, new_dir / subdir)
             bzlmod_lib.regenerate_integrity_hashes(new_dir)
             print(f"    migrated patches/overlay from {pkg_name}@{old_patched_version}")
-        bzlmod_lib.add_version_to_metadata_json(pkg_dir / "metadata.json", new_version)
+        write_metadata_json_if_missing(pkg_dir, pkg_source.url, new_version)
 
     print(f"Done with {distro}/{date}.")
 

@@ -32,12 +32,11 @@ class TestFindExistingRelease(unittest.TestCase):
     def test_returns_none_for_brand_new_package(self):
         self.assertIsNone(bootstrap_release.find_existing_release(self.package_dir, "1.0.0"))
 
-    def test_finds_exact_bare_match(self):
+    def test_ignores_bare_match_without_rcr_suffix(self):
         (self.package_dir / "1.0.0").mkdir()
-        self.assertEqual(bootstrap_release.find_existing_release(self.package_dir, "1.0.0"), "1.0.0")
+        self.assertIsNone(bootstrap_release.find_existing_release(self.package_dir, "1.0.0"))
 
-    def test_prefers_highest_patch_over_bare(self):
-        (self.package_dir / "1.0.0").mkdir()
+    def test_prefers_highest_patch(self):
         (self.package_dir / "1.0.0.rcr.0").mkdir()
         (self.package_dir / "1.0.0.rcr.2").mkdir()
         (self.package_dir / "1.0.0.rcr.1").mkdir()
@@ -77,11 +76,11 @@ class TestAlreadyBootstrappedDates(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.modules_dir)
 
-    def test_only_bare_two_part_names_match(self):
-        for name in ["lyrical.2026-06-08", "lyrical.2026-06-08.rcr.0", "lyrical.2026-06-08.rcr.1", "rolling.2026-01-21"]:
+    def test_extracts_dates_from_rcr_versions(self):
+        for name in ["0.0.0", "lyrical.2026-06-08.rcr.0", "lyrical.2026-06-08.rcr.1", "lyrical.2026-10-05.rcr.0", "rolling.2026-01-21.rcr.0"]:
             (self.modules_dir / "ros" / name).mkdir()
         result = bootstrap_release.already_bootstrapped_dates(self.modules_dir, "lyrical")
-        self.assertEqual(result, {"lyrical.2026-06-08"})
+        self.assertEqual(result, {"lyrical.2026-06-08", "lyrical.2026-10-05"})
 
     def test_missing_ros_dir_returns_empty(self):
         shutil.rmtree(self.modules_dir / "ros")
@@ -92,20 +91,17 @@ class TestRenderModuleDotBazel(unittest.TestCase):
 
     def test_includes_bcr_and_rcr_deps_plus_forced_rosdistro(self):
         content = bootstrap_release.render_module_dot_bazel(
-            "rclcpp", "32.0.0-1", {"rcutils": "7.1.1-3"}, "lyrical", "2026-06-23")
-        self.assertIn('module(\n    name = "rclcpp",\n    version = "32.0.0-1",', content)
+            "rclcpp", "32.0.0-1.rcr.0", {"rcutils": "7.1.1-3.rcr.0"}, "lyrical", "2026-06-23")
+        self.assertIn('module(\n    name = "rclcpp",\n    version = "32.0.0-1.rcr.0",', content)
         self.assertIn('bazel_dep(name = "rules_python", version = "2.4.1")', content)
-        self.assertIn('bazel_dep(name = "rcutils", version = "7.1.1-3")', content)
-        self.assertIn('bazel_dep(name = "rosdistro", version = "lyrical.2026-06-23")', content)
+        self.assertIn('bazel_dep(name = "rcutils", version = "7.1.1-3.rcr.0")', content)
+        self.assertIn('bazel_dep(name = "rosdistro", version = "lyrical.2026-06-23.rcr.0")', content)
         self.assertIn('pip_ros = use_extension("@rosdistro//python:defs.bzl", "pip_ros")', content)
 
-    def test_explicit_rosdistro_pin_overrides_bare_tag_fallback(self):
-        # Bootstrapped .rcr.0 modules must pin rosdistro@<tag>.rcr.0 like
-        # every other RCR dep, not the bare tag -- check_pr_modules rejects
-        # the latter as an inconsistent inter-module reference.
+    def test_explicit_rosdistro_pin_overrides_default_fallback(self):
         content = bootstrap_release.render_module_dot_bazel(
-            "rclcpp", "32.0.0-1", {"rosdistro": "lyrical.2026-06-23.rcr.0"}, "lyrical", "2026-06-23")
-        self.assertIn('bazel_dep(name = "rosdistro", version = "lyrical.2026-06-23.rcr.0")', content)
+            "rclcpp", "32.0.0-1.rcr.0", {"rosdistro": "lyrical.2026-06-23.rcr.1"}, "lyrical", "2026-06-23")
+        self.assertIn('bazel_dep(name = "rosdistro", version = "lyrical.2026-06-23.rcr.1")', content)
         self.assertEqual(content.count('name = "rosdistro"'), 1)
 
 
