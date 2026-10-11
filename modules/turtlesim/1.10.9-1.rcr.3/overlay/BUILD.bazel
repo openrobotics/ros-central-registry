@@ -1,0 +1,149 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_qt//:qt.bzl", "qt_cc_binary", "qt_cc_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+}
+
+DATA = glob(
+    [
+        "images/*.png",
+        "images/*.svg",
+        "launch/**",
+    ],
+    allow_empty = True,
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = DATA,
+)
+
+qt_cc_library(
+    name = "turtlesim_lib",
+    srcs = [
+        "src/turtle.cpp",
+        "src/turtle_frame.cpp",
+    ],
+    hdrs = glob(["include/turtlesim/*.hpp"]),
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@geometry_msgs//:cc",
+        "@rules_qt//:qt",
+        "@rules_qt//:qt_widgets",
+        "@std_srvs//:cc",
+        "@turtlesim_msgs//:cc",
+    ],
+)
+
+qt_cc_binary(
+    name = "turtlesim_node",
+    srcs = glob(["include/turtlesim/*.hpp"]) + ["src/turtlesim.cpp"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + [
+        ":turtlesim_lib",
+    ],
+)
+
+cc_binary(
+    name = "turtle_teleop_key",
+    srcs = glob(["include/turtlesim/*.hpp"]) + ["tutorials/teleop_turtle_key.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + [
+        "@geometry_msgs//:cc",
+        "@turtlesim_msgs//:cc",
+    ],
+)
+
+cc_binary(
+    name = "draw_square",
+    srcs = glob(["include/turtlesim/*.hpp"]) + ["tutorials/draw_square.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + [
+        "@geometry_msgs//:cc",
+        "@std_srvs//:cc",
+        "@turtlesim_msgs//:cc",
+    ],
+)
+
+cc_binary(
+    name = "mimic",
+    srcs = glob(["include/turtlesim/*.hpp"]) + ["tutorials/mimic.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + [
+        "@geometry_msgs//:cc",
+        "@turtlesim_msgs//:cc",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    data = DATA,
+    executables = [
+        ":turtlesim_node",
+        ":turtle_teleop_key",
+        ":draw_square",
+        ":mimic",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rosdistro//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@turtlesim_msgs//:ament_package",
+    ],
+)

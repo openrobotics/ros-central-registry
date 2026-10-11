@@ -12,15 +12,89 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
+### LIBRARIES
+
+DEPENDENCIES = {
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
+    "@rosdistro//cc:OgreOverlay": "@rosdistro//cc:OgreOverlay_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+qt_cc_library(
+    name = "rviz_imu_plugin_library",
+    srcs = glob(["src/*.cpp"]),
+    hdrs = glob(["src/*.h"]),
+    includes = ["src"],
+    local_defines = ros_local_defines() + [
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "QT_NO_KEYWORDS",
+    ],
+    deps = DEPENDENCIES.values() + [
+        "@rules_qt//:qt_widgets",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "rviz_imu_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":rviz_imu_plugin_library",
+        ":rviz_imu_plugin_library_moc",
+    ],
+    deps = [":rviz_imu_plugin_library"],
+)
+
 ### PACKAGING
+
+write_file(
+    name = "include_dirs_extras",
+    out = "cmake/ament_cmake_export_include_directories-extras.cmake",
+    content = [
+        "# generated from ament_cmake_export_include_directories/cmake/ament_cmake_export_include_directories-extras.cmake.in",
+        "",
+        "set(_exported_include_dirs \"${rviz_imu_plugin_DIR}/../../../include\")",
+        "if(NOT _exported_include_dirs STREQUAL \"\")",
+        "  find_package(ament_cmake_core QUIET REQUIRED)",
+        "  foreach(_exported_include_dir ${_exported_include_dirs})",
+        "    normalize_path(_exported_include_dir \"${_exported_include_dir}\")",
+        "    list(APPEND rviz_imu_plugin_INCLUDE_DIRS \"${_exported_include_dir}\")",
+        "  endforeach()",
+        "endif()",
+        "",
+    ],
+)
 
 ament_package(
     name = "ament_package",
+    cmake = [":include_dirs_extras"],
+    cmake_export_dependencies_list = [
+        "Qt6",
+        "rviz_common",
+        "sensor_msgs",
+        "tf2",
+        "tf2_ros",
+    ],
+    cmake_export_targets = False,
+    cmake_extras = ["ament_cmake_export_include_directories-extras.cmake"],
+    libraries = [":rviz_imu_plugin"],
     package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugin_description.xml"],
     deps = [
         "@ament_cmake//:ament_package",
         "@message_filters//:ament_package",

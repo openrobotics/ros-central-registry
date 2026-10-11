@@ -14,19 +14,34 @@
 
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 load("@rules_qt//:qt.bzl", "qt_cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
 ### DATA
 
 ament_index(
     name = "ament_index",
-    data = ["plugin.xml"],
     package_xml = "package.xml",
+    plugin_category = "qt_gui",
+    plugins = ["plugin.xml"],
 )
 
 ### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
 
 qt_cc_library(
     name = "rqt_gui_cpp",
@@ -36,7 +51,7 @@ qt_cc_library(
         "src/rqt_gui_cpp/roscpp_plugin_provider.cpp",
         "src/rqt_gui_cpp/roscpp_plugin_provider.hpp",
     ],
-    hdrs = glob(["include/**/*.hpp"]),
+    hdrs = HEADERS,
     includes = ["include"],
     local_defines = ros_local_defines(),
     deps = [
@@ -47,12 +62,28 @@ qt_cc_library(
     ],
 )
 
+cc_shared_library(
+    name = "rqt_gui_cpp_shared",
+    dynamic_deps = [
+        "@pluginlib//:pluginlib",
+        "@qt_gui_cpp//:qt_gui_cpp_shared",
+        "@rclcpp//:rclcpp",
+    ],
+    exports_filter = [":rqt_gui_cpp"],
+    shared_lib_name = "librqt_gui_cpp.so",
+    deps = [":rqt_gui_cpp"],
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake_export_name = "export_rqt_gui_cpp",
+    headers = HEADERS,
+    libraries = [":rqt_gui_cpp_shared"],
     package_xml = "package.xml",
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_lint_auto//:ament_package",
         "@ament_lint_common//:ament_package",

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@ament_cmake_gen_version_h//:defs.bzl", "generate_version_h")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
@@ -21,7 +22,12 @@ package(default_visibility = ["//visibility:public"])
 
 ### LIBRARIES
 
-HEADERS = glob(["include/**/*.hpp"])
+generate_version_h(
+    name = "version_h",
+    out = "include/image_transport/version.h",
+)
+
+HEADERS = glob(["include/**/*.hpp"]) + [":version_h"]
 
 DEPENDENCIES = {
     "@message_filters//:message_filters": "@message_filters//:message_filters_library",
@@ -101,6 +107,15 @@ collect_transitive_dynamic_deps(
     visibility = ["//visibility:private"],
 )
 
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps_lifecycle",
+    dynamic_deps = [
+        ":image_transport",
+        "@rclcpp_lifecycle//:rclcpp_lifecycle",
+    ],
+    visibility = ["//visibility:private"],
+)
+
 ### EXECUTABLES
 
 cc_binary(
@@ -116,7 +131,7 @@ cc_binary(
 ### COMPONENTS
 
 rclcpp_components_register_node(
-    name = "node_republish",
+    name = "republish",
     component = ":republish_node",
     node_name = "republish",
     plugin = "image_transport::Republisher",
@@ -167,6 +182,35 @@ ament_index(
     ]
 ]
 
+[
+    cc_test(
+        name = "{0}_lifecycle".format(test),
+        srcs = [
+            "test/{0}_lifecycle.cpp".format(test),
+            "test/utils.hpp",
+        ],
+        data = [
+            ":ament_index_package",
+            ":ament_index_plugin",
+        ],
+        dynamic_deps = [":transitive_dynamic_deps_lifecycle"],
+        deps = DEPENDENCIES.values() + [
+            ":image_transport_library",
+            "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+            "@rosdistro//cc:bazel_test_helper",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test in [
+        "test_message_passing",
+        "test_publisher",
+        "test_qos_override",
+        "test_remapping",
+        "test_single_subscriber_publisher",
+        "test_subscriber",
+    ]
+]
+
 cc_test(
     name = "test_camera_common",
     srcs = [
@@ -195,7 +239,14 @@ cc_test(
 
 ament_package(
     name = "ament_package",
-    executables = [":list_transports"],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_image_transport",
+    components = [":republish_record"],
+    executables = [
+        ":list_transports",
+        ":republish",
+    ],
     headers = HEADERS,
     libraries = [
         ":image_transport",

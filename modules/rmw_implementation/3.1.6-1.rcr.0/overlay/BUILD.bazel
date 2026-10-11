@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
 package(
     default_applicable_licenses = [":license"],
@@ -174,15 +176,59 @@ cc_test(
     ]
 ]
 
+# Mirrors ament_package(CONFIG_EXTRAS "rmw_implementation-extras.cmake.in"): configure_file(@ONLY) of the template.
+genrule(
+    name = "extras_cmake",
+    srcs = ["rmw_implementation-extras.cmake.in"],
+    outs = ["rmw_implementation-extras.cmake"],
+    cmd = "sed -e 's|@RMW_IMPLEMENTATION_DISABLE_RUNTIME_SELECTION@|OFF|g' -e 's|@RMW_IMPLEMENTATION@|rmw_fastrtps_cpp|g' -e 's|@PROJECT_NAME@|rmw_implementation|g' -e 's|@PYTHON_INSTALL_DIR@|lib/python3.14/site-packages|g' $< > $@",
+)
+
+write_file(
+    name = "resource_index_rmw_typesupport",
+    out = "_resource_index/rmw_typesupport",
+    content = ["rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c;rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp"],
+)
+
+write_file(
+    name = "resource_index_rmw_typesupport_c",
+    out = "_resource_index/rmw_typesupport_c",
+    content = ["rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c"],
+)
+
+write_file(
+    name = "resource_index_rmw_typesupport_cpp",
+    out = "_resource_index/rmw_typesupport_cpp",
+    content = ["rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp"],
+)
+
+# ament_index_register_resource() registrations, as ament_cmake installs them.
+pkg_files(
+    name = "resource_index",
+    srcs = [
+        ":resource_index_rmw_typesupport",
+        ":resource_index_rmw_typesupport_c",
+        ":resource_index_rmw_typesupport_cpp",
+    ],
+    renames = {
+        ":resource_index_rmw_typesupport": "share/ament_index/resource_index/rmw_typesupport/rmw_implementation",
+        ":resource_index_rmw_typesupport_c": "share/ament_index/resource_index/rmw_typesupport_c/rmw_implementation",
+        ":resource_index_rmw_typesupport_cpp": "share/ament_index/resource_index/rmw_typesupport_cpp/rmw_implementation",
+    },
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
-    headers = HEADERS,
+    cmake = [":extras_cmake"],
+    cmake_export_libraries = False,
+    cmake_export_name = "export_rmw_implementation",
+    cmake_extras = ["rmw_implementation-extras.cmake"],
+    install = [":resource_index"],
     libraries = [":rmw_implementation"],
     package_xml = "package.xml",
     deps = [
-        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_index_cpp//:ament_package",

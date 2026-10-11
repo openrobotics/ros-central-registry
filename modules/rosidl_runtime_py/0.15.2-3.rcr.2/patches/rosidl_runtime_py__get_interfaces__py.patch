@@ -1,0 +1,49 @@
+--- a/rosidl_runtime_py/get_interfaces.py
++++ b/rosidl_runtime_py/get_interfaces.py
+@@ -39,7 +39,13 @@
+             content, _ = get_resource('rosidl_interfaces', package_name)
+         except LookupError:
+             continue
+-        interfaces[package_name] = content.splitlines()
++        lines = []
++        marker = f'/{package_name}/'
++        for line in content.splitlines():
++            if marker in line:
++                line = line.split(marker)[-1]
++            lines.append(line)
++        interfaces[package_name] = lines
+     return interfaces
+ 
+ 
+@@ -179,15 +185,31 @@
+         raise LookupError(f"Unknown package '{parts[0]}'")
+ 
+     interface_path = os.path.join(prefix_path, 'share', interface_name)
++    rel_name = '/'.join(parts[1:])
++    candidates = []
+     # Check if there is a dot-separated suffix
+     if len(parts[-1].rsplit('.', 1)) == 1:
+         # If there is no suffix, try appending parent namespace (e.g. '.msg', '.srv', '.action')
+         interface_path_with_suffix = interface_path + '.' + parts[-2]
+         if os.path.exists(interface_path_with_suffix):
+             return interface_path_with_suffix
++        candidates.append(rel_name + '.' + parts[-2])
+         # Finally, try appending '.idl'
+         interface_path += '.idl'
++        candidates.append(rel_name + '.idl')
++    else:
++        candidates.append(rel_name)
+ 
+     if not os.path.exists(interface_path):
++        try:
++            content, _ = get_resource('rosidl_interfaces', parts[0])
++            for cand in candidates:
++                for entry in content.splitlines():
++                    if entry == cand or entry.endswith('/' + cand):
++                        alt = os.path.join(prefix_path, 'share', parts[0], entry)
++                        if os.path.exists(alt):
++                            return alt
++        except LookupError:
++            pass
+         raise LookupError(f"Could not find the interface '{interface_path}'")
+     return interface_path

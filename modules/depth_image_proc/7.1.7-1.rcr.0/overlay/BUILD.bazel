@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -75,6 +76,31 @@ cc_shared_library(
     deps = [":depth_image_proc_library"],
 )
 
+### COMPONENTS
+
+COMPONENTS = [
+    ("convert_metric_node", "depth_image_proc::ConvertMetricNode"),
+    ("crop_foremost_node", "depth_image_proc::CropForemostNode"),
+    ("disparity_node", "depth_image_proc::DisparityNode"),
+    ("point_cloud_xyz_node", "depth_image_proc::PointCloudXyzNode"),
+    ("point_cloud_xyzrgb_node", "depth_image_proc::PointCloudXyzrgbNode"),
+    ("point_cloud_xyzi_node", "depth_image_proc::PointCloudXyziNode"),
+    ("point_cloud_xyz_radial_node", "depth_image_proc::PointCloudXyzRadialNode"),
+    ("point_cloud_xyzi_radial_node", "depth_image_proc::PointCloudXyziRadialNode"),
+    ("point_cloud_xyzrgb_radial_node", "depth_image_proc::PointCloudXyzrgbRadialNode"),
+    ("register_node", "depth_image_proc::RegisterNode"),
+]
+
+[
+    rclcpp_components_register_node(
+        name = node_name,
+        component = ":depth_image_proc",
+        node_name = node_name,
+        plugin = plugin,
+    )
+    for node_name, plugin in COMPONENTS
+]
+
 ### TRANSITIVE DYNAMIC DEPS
 
 collect_transitive_dynamic_deps(
@@ -85,10 +111,41 @@ collect_transitive_dynamic_deps(
     visibility = ["//visibility:private"],
 )
 
+### TESTS
+
+[
+    cc_test(
+        name = test_name,
+        srcs = ["test/{}.cpp".format(test_name)],
+        data = [
+            "@image_transport//:ament_index_package",
+            "@image_transport//:ament_index_plugin",
+        ],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        deps = DEPENDENCIES.values() + [
+            ":depth_image_proc_library",
+            "@rosdistro//cc:bazel_test_helper",
+            "@rosdistro//cc:eigen",
+            "@rosdistro//cc:googletest",
+            "@sensor_msgs//:cc",
+            "@stereo_msgs//:cc",
+        ],
+    )
+    for test_name in [
+        "test_convert_metric",
+        "test_point_cloud_xyz",
+        "test_point_cloud_xyzrgb",
+    ]
+]
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake_export_targets = False,
+    components = [":{}_record".format(node_name) for node_name, _ in COMPONENTS],
+    data = glob(["launch/**"]),
+    executables = [":{}".format(node_name) for node_name, _ in COMPONENTS],
     headers = HEADERS,
     libraries = [
         ":depth_image_proc",

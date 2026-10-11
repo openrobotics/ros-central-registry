@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+load(":vendor_install.bzl", "vendor_install_tree")
 
 package(
     default_applicable_licenses = [":license"],
@@ -27,10 +30,114 @@ license(
     ],
 )
 
+# The CMake-built tree ament_vendor() would install under opt/zenoh_cpp_vendor/,
+# mapped from the equivalent @rosdistro//cc target instead.
+vendor_install_tree(
+    name = "opt_files",
+    prefix = "opt/zenoh_cpp_vendor",
+    transitive = True,
+    deps = ["@rosdistro//cc:zenoh-cpp_library"],
+)
+
+# ament_vendor()'s environment hooks / CMAKE_PREFIX_PATH extra, rendered from
+# ament_cmake_vendor_package's own templates (configure_file(@ONLY)).
+[
+    genrule(
+        name = "vendor_package_" + ext,
+        srcs = ["@ament_cmake_vendor_package//:cmake/templates/vendor_package." + ext + ".in"],
+        outs = ["environment/vendor_package." + ext],
+        cmd = "sed -e 's|@PROJECT_NAME@|zenoh_cpp_vendor|g' -e 's|@_LIBDIR_VAR_NAME@|LD_LIBRARY_PATH|g' $< > $@",
+    )
+    for ext in [
+        "bat",
+        "dsv",
+        "sh",
+    ]
+]
+
+genrule(
+    name = "vendor_package_cmake_prefix",
+    srcs = ["@ament_cmake_vendor_package//:cmake/templates/vendor_package_cmake_prefix.cmake.in"],
+    outs = ["vendor_package_cmake_prefix.cmake"],
+    cmd = "sed -e 's|@PROJECT_NAME@|zenoh_cpp_vendor|g' $< > $@",
+)
+
+pkg_files(
+    name = "environment_hooks",
+    srcs = [
+        "environment/vendor_package.bat",
+        "environment/vendor_package.dsv",
+        "environment/vendor_package.sh",
+    ],
+    prefix = "share/zenoh_cpp_vendor",
+    strip_prefix = strip_prefix.from_pkg(),
+)
+
+write_file(
+    name = "resource_index_vendor_packages",
+    out = "_resource_index/vendor_packages",
+    content = ["opt/zenoh_cpp_vendor"],
+)
+
+# ament_index_register_resource() registrations, as ament_cmake installs them.
+pkg_files(
+    name = "resource_index",
+    srcs = [
+        ":resource_index_vendor_packages",
+    ],
+    renames = {
+        ":resource_index_vendor_packages": "share/ament_index/resource_index/vendor_packages/zenoh_cpp_vendor",
+    },
+)
+
+[
+    write_file(
+        name = "meta_" + f.replace("/", "_").replace(".", "_"),
+        out = "_meta/opt/zenoh_cpp_vendor/lib/" + f,
+        content = [""],
+    )
+    for f in [
+        "cmake/zenohc/zenohcConfig.cmake",
+        "cmake/zenohc/zenohcConfigVersion.cmake",
+        "cmake/zenohcxx/zenohcxxConfig.cmake",
+        "cmake/zenohcxx/zenohcxxConfigVersion.cmake",
+        "libzenohc.a",
+        "pkgconfig/zenohc.pc",
+        "pkgconfig/zenohcxx.pc",
+    ]
+]
+
+pkg_files(
+    name = "zenoh_meta_files",
+    srcs = [
+        ":meta_cmake_zenohc_zenohcConfigVersion_cmake",
+        ":meta_cmake_zenohc_zenohcConfig_cmake",
+        ":meta_cmake_zenohcxx_zenohcxxConfigVersion_cmake",
+        ":meta_cmake_zenohcxx_zenohcxxConfig_cmake",
+        ":meta_libzenohc_a",
+        ":meta_pkgconfig_zenohc_pc",
+        ":meta_pkgconfig_zenohcxx_pc",
+    ],
+    strip_prefix = strip_prefix.from_pkg("_meta"),
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake = [":vendor_package_cmake_prefix"],
+    cmake_export_dependencies_list = [
+        "zenohc",
+        "zenohcxx",
+    ],
+    cmake_extras = ["vendor_package_cmake_prefix.cmake"],
+    env_hooks = ["environment/vendor_package.dsv"],
+    install = [
+        ":environment_hooks",
+        ":opt_files",
+        ":zenoh_meta_files",
+        ":resource_index",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",

@@ -61,7 +61,7 @@ collect_transitive_dynamic_deps(
         dynamic_deps = [":transitive_dynamic_deps"],
         local_defines = ros_local_defines() + [
             '_TEST_RESOURCES_DIR_PATH=\\"../rosbag2_tests+/test/rosbag2_tests\\"',
-            '_SRC_RESOURCES_DIR_PATH=\\"../rosbag2_tests+/test/rosbag2_tests\\"',
+            '_SRC_RESOURCES_DIR_PATH=\\"../rosbag2_tests+/resources\\"',
         ],
         deps = TEST_DEPENDENCIES.values() + [
             "@rosbag2_interfaces//:cc",
@@ -75,16 +75,44 @@ collect_transitive_dynamic_deps(
         "test_reindexer",
         "test_rosbag2_cpp_api",
         "test_rosbag2_cpp_get_service_info",
-        # TODO(asymingt) thes three tests below rely on calling 'ros2 bag ...' from within
-        # the test business logic. This is obviously not going to work from within Bazel. I
-        # imagine that we're going to need to substitute them for something like
-        # bazel run @ros2bag//:cli -- ...
-        #
-        # "test_rosbag2_info_end_to_end",
-        # "test_rosbag2_play_end_to_end",
-        # "test_rosbag2_record_end_to_end",
-        #
         "test_rosbag2_storage_api",
+    ]
+]
+
+# End-to-end tests drive the `ros2 bag ...` CLI. rosbag2_test_common's
+# process_execution_helpers (RCR patch) resolve `ros2` as
+# $TEST_SRCDIR/rosbag2_tests+/ros2: the `ros2` shell shim in this directory,
+# which forwards to @ros2bag's console-script stub.
+[
+    cc_test(
+        name = test,
+        size = "large",
+        srcs = ["test/rosbag2_tests/{0}.cpp".format(test)] + glob(["test/rosbag2_tests/*.hpp"]),
+        data = glob(["resources/**"]) + [
+            "ros2",
+            ":ament_index",
+            "@ros2bag//:ros2",
+        ],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        local_defines = ros_local_defines() + [
+            '_TEST_RESOURCES_DIR_PATH=\\"../rosbag2_tests+/test/rosbag2_tests\\"',
+            '_SRC_RESOURCES_DIR_PATH=\\"../rosbag2_tests+/resources\\"',
+        ],
+        # The play test opens WAL-mode sqlite bags straight out of the source
+        # resources; SQLite needs to create -shm files next to them even for
+        # read-only access, which the read-only sandbox forbids.
+        tags = ["no-sandbox"] if test == "test_rosbag2_play_end_to_end" else [],
+        deps = TEST_DEPENDENCIES.values() + [
+            "@rosbag2_interfaces//:cc",
+            "@rosdistro//cc:googletest",
+            "@std_msgs//:cc",
+            "@test_msgs//:cc",
+        ],
+    )
+    for test in [
+        "test_rosbag2_info_end_to_end",
+        "test_rosbag2_play_end_to_end",
+        "test_rosbag2_record_end_to_end",
     ]
 ]
 
@@ -92,6 +120,7 @@ collect_transitive_dynamic_deps(
 
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies = False,
     package_xml = "package.xml",
     deps = [
         ":ament_index",

@@ -17,8 +17,19 @@ load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
 DEPENDENCIES = {
     "@rcl//:rcl": "@rcl//:rcl_library",
@@ -29,15 +40,16 @@ DEPENDENCIES = {
     "@rmw//:rmw": "@rmw//:rmw_library",
 }
 
-cc_library(
-    name = "allocator_tutorial",
-    srcs = ["src/topics/allocator_tutorial_custom.cpp"],
-    includes = ["include"],
-    local_defines = ros_local_defines(),
-    deps = DEPENDENCIES.values() + [
-        "@example_interfaces//:cc",
-    ],
-)
+STANDALONE_EXECUTABLES = {
+    "allocator_tutorial": "topics/allocator_tutorial_pmr",
+    "add_two_ints_client": "services/add_two_ints_client",
+    "list_parameters_async": "parameters/list_parameters_async",
+    "parameter_events": "parameters/parameter_events",
+    "parameter_event_handler": "parameters/parameter_event_handler",
+    "set_and_get_parameters_async": "parameters/set_and_get_parameters_async",
+    "matched_event_detect": "events/matched_event_detect",
+    "use_logger_service": "logging/use_logger_service",
+}
 
 [
     cc_binary(
@@ -50,20 +62,35 @@ cc_library(
             "@rcl_interfaces//:cc",
         ],
     )
-    for executable, src in {
-        "add_two_ints_client": "services/add_two_ints_client",
-        "list_parameters_async": "parameters/list_parameters_async",
-        "parameter_events": "parameters/parameter_events",
-        "parameter_event_handler": "parameters/parameter_event_handler",
-        "set_and_get_parameters_async": "parameters/set_and_get_parameters_async",
-        "matched_event_detect": "events/matched_event_detect",
-        "use_logger_service": "logging/use_logger_service",
-    }.items()
+    for executable, src in STANDALONE_EXECUTABLES.items()
 ]
+
+DEMO_COMPONENTS = {
+    "one_off_timer": ("timers/one_off_timer", "demo_nodes_cpp::OneOffTimerNode"),
+    "reuse_timer": ("timers/reuse_timer", "demo_nodes_cpp::ReuseTimerNode"),
+    "list_parameters": ("parameters/list_parameters", "demo_nodes_cpp::ListParameters"),
+    "parameter_blackboard": ("parameters/parameter_blackboard", "demo_nodes_cpp::ParameterBlackboard"),
+    "set_and_get_parameters": ("parameters/set_and_get_parameters", "demo_nodes_cpp::SetAndGetParameters"),
+    "parameter_events_async": ("parameters/parameter_events_async", "demo_nodes_cpp::ParameterEventsAsyncNode"),
+    "even_parameters_node": ("parameters/even_parameters_node", "demo_nodes_cpp::EvenParameterNode"),
+    "set_parameters_callback": ("parameters/set_parameters_callback", "demo_nodes_cpp::SetParametersCallback"),
+    "add_two_ints_server": ("services/add_two_ints_server", "demo_nodes_cpp::ServerNode"),
+    "add_two_ints_client_async": ("services/add_two_ints_client_async", "demo_nodes_cpp::ClientNode"),
+    "introspection_service": ("services/introspection_service", "demo_nodes_cpp::IntrospectionServiceNode"),
+    "introspection_client": ("services/introspection_client", "demo_nodes_cpp::IntrospectionClientNode"),
+    "content_filtering_publisher": ("topics/content_filtering_publisher", "demo_nodes_cpp::ContentFilteringPublisher"),
+    "content_filtering_subscriber": ("topics/content_filtering_subscriber", "demo_nodes_cpp::ContentFilteringSubscriber"),
+    "talker": ("topics/talker", "demo_nodes_cpp::Talker"),
+    "talker_loaned_message": ("topics/talker_loaned_message", "demo_nodes_cpp::LoanedMessageTalker"),
+    "talker_serialized_message": ("topics/talker_serialized_message", "demo_nodes_cpp::SerializedMessageTalker"),
+    "listener": ("topics/listener", "demo_nodes_cpp::Listener"),
+    "listener_serialized_message": ("topics/listener_serialized_message", "demo_nodes_cpp::SerializedMessageListener"),
+    "listener_best_effort": ("topics/listener_best_effort", "demo_nodes_cpp::ListenerBestEffort"),
+}
 
 [
     cc_library(
-        name = "{0}_library".format(component),
+        name = "{0}_cc_library".format(component),
         srcs = ["src/{0}.cpp".format(src)],
         hdrs = glob(["include/**/*.h"]),
         includes = ["include"],
@@ -73,59 +100,28 @@ cc_library(
             "@rcl_interfaces//:cc",
         ],
     )
-    for component, src in {
-        "one_off_timer": "timers/one_off_timer",
-        "reuse_timer": "timers/reuse_timer",
-        "list_parameters": "parameters/list_parameters",
-        "parameter_blackboard": "parameters/parameter_blackboard",
-        "set_and_get_parameters": "parameters/set_and_get_parameters",
-        "parameter_events_async": "parameters/parameter_events_async",
-        "even_parameters_node": "parameters/even_parameters_node",
-        "set_parameters_callback": "parameters/set_parameters_callback",
-        "add_two_ints_server": "services/add_two_ints_server",
-        "add_two_ints_client_async": "services/add_two_ints_client_async",
-        "introspection_service": "services/introspection_service",
-        "introspection_client": "services/introspection_client",
-        "content_filtering_publisher": "topics/content_filtering_publisher",
-        "content_filtering_subscriber": "topics/content_filtering_subscriber",
-        "talker": "topics/talker",
-        "talker_loaned_message": "topics/talker_loaned_message",
-        "talker_serialized_message": "topics/talker_serialized_message",
-        "listener": "topics/listener",
-        "listener_serialized_message": "topics/listener_serialized_message",
-        "listener_best_effort": "topics/listener_best_effort",
-    }.items()
+    for component, (src, _) in DEMO_COMPONENTS.items()
 ]
 
 [
     cc_shared_library(
-        name = component,
+        name = "{0}_library".format(component),
         dynamic_deps = DEPENDENCIES.keys(),
-        exports_filter = [":{0}_library".format(component)],
-        deps = [":{0}_library".format(component)],
+        exports_filter = [":{0}_cc_library".format(component)],
+        deps = [":{0}_cc_library".format(component)],
     )
-    for component in [
-        "one_off_timer",
-        "reuse_timer",
-        "list_parameters",
-        "parameter_blackboard",
-        "set_and_get_parameters",
-        "parameter_events_async",
-        "even_parameters_node",
-        "set_parameters_callback",
-        "add_two_ints_server",
-        "add_two_ints_client_async",
-        "introspection_service",
-        "introspection_client",
-        "content_filtering_publisher",
-        "content_filtering_subscriber",
-        "talker",
-        "talker_loaned_message",
-        "talker_serialized_message",
-        "listener",
-        "listener_serialized_message",
-        "listener_best_effort",
-    ]
+    for component in DEMO_COMPONENTS.keys()
+]
+
+[
+    rclcpp_components_register_node(
+        name = component,
+        component = ":{0}_library".format(component),
+        executor = "SingleThreadedExecutor",
+        node_name = component,
+        plugin = plugin,
+    )
+    for component, (_, plugin) in DEMO_COMPONENTS.items()
 ]
 
 [
@@ -151,6 +147,14 @@ cc_library(
 
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    components = [":{0}_record".format(c) for c in DEMO_COMPONENTS.keys()],
+    data = glob(["launch/**"]),
+    executables = [":{0}".format(e) for e in STANDALONE_EXECUTABLES.keys()] + [":{0}".format(c) for c in DEMO_COMPONENTS.keys()],
+    libraries = [":{0}_library".format(c) for c in DEMO_COMPONENTS.keys()],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",

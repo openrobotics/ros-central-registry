@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_license//rules:license.bzl", "license")
@@ -33,11 +34,39 @@ license(
 
 ament_index(
     name = "ament_index",
-    data = glob(["resource/**"]),
     package_xml = "package.xml",
 )
 
 ### PYTHON MODULE
+
+write_file(
+    name = "pkg_info",
+    out = "ros2interface-0.40.9.egg-info/PKG-INFO",
+    content = [
+        "Metadata-Version: 2.1",
+        "Name: ros2interface",
+        "Version: 0.40.9",
+    ],
+)
+
+write_file(
+    name = "entry_points_txt",
+    out = "ros2interface-0.40.9.egg-info/entry_points.txt",
+    content = [
+        "[ros2cli.command]",
+        "interface = ros2interface.command.interface:InterfaceCommand",
+        "",
+        "[ros2cli.extension_point]",
+        "ros2interface.verb = ros2interface.verb:VerbExtension",
+        "",
+        "[ros2interface.verb]",
+        "list = ros2interface.verb.list:ListVerb",
+        "package = ros2interface.verb.package:PackageVerb",
+        "proto = ros2interface.verb.proto:ProtoVerb",
+        "packages = ros2interface.verb.packages:PackagesVerb",
+        "show = ros2interface.verb.show:ShowVerb",
+    ],
+)
 
 py_library(
     name = "ros2interface",
@@ -45,10 +74,15 @@ py_library(
     data = glob(
         ["ros2interface/**"],
         exclude = ["ros2interface/**/*.py"],
-    ) + [":ament_index"],
+    ) + [
+        ":ament_index",
+        ":entry_points_txt",
+        ":pkg_info",
+    ],
     imports = ["."],
     deps = [
         "@ros2cli",
+        "@rosidl_adapter",
         "@rosidl_runtime_py",
     ],
 )
@@ -59,10 +93,24 @@ py_library(
     py_pytest(
         name = test,
         srcs = ["test/{0}.py".format(test)],
+        args = [
+            "-p",
+            "launch_testing.pytest.hooks",
+            "-p",
+            "launch_testing_ros_pytest_entrypoint",
+            "--",
+        ],
+        data = [
+            "@ros2cli_test_interfaces//:ament_index",
+            "@test_msgs//:ament_index",
+        ],
         deps = [
             ":ros2interface",
             "@launch",
             "@launch_testing",
+            "@launch_testing_ros",
+            "@ros2cli_test_interfaces//:py",
+            "@test_msgs//:py",
         ],
     )
     for test in [
@@ -90,6 +138,10 @@ py_library(
 ament_package(
     name = "ament_package",
     package_xml = "package.xml",
+    python = [":ros2interface"] + glob(
+        ["ros2interface/py.typed"],
+        allow_empty = True,
+    ),
     deps = [
         ":ament_index",
         "@ament_copyright//:ament_package",

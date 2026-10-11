@@ -12,146 +12,302 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rosdistro//python:defs.bzl", "py_pytest")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
 
-### COMBINED LIBRARIES & COMPONENTS
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### LIBRARIES & COMPONENTS
+
+HEADERS = glob(["include/**/*.hpp"])
+
+COMMON_DEPS = [
+    "@geometry_msgs//:cc",
+    "@pcl_conversions//:pcl_conversions_library",
+    "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components_library",
+    "@rosbag2_transport//:rosbag2_transport_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:pcl_common",
+    "@rosdistro//cc:pcl_filters",
+    "@rosdistro//cc:pcl_io",
+    "@sensor_msgs//:cc",
+    "@tf2//:tf2_library",
+    "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros_library",
+    "@visualization_msgs//:cc",
+]
+
+collect_transitive_dynamic_deps(
+    name = "common_transitive_dynamic_deps",
+    dynamic_deps = [
+        "@rclcpp//:rclcpp",
+        "@rclcpp_components//:rclcpp_components",
+        "@rosbag2_transport//:rosbag2_transport",
+        "@tf2//:tf2",
+        "@tf2_eigen//:tf2_eigen",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs",
+        "@tf2_ros//:tf2_ros",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+COMMON_DYNAMIC_DEPS = [":common_transitive_dynamic_deps"]
 
 cc_library(
-    name = "pcl_ros_library",
+    name = "pcl_ros_tf_library",
+    srcs = ["src/transforms.cpp"],
+    hdrs = HEADERS,
+    cxxopts = ["-std=c++17"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = COMMON_DEPS,
+)
+
+cc_shared_library(
+    name = "pcl_ros_tf",
+    dynamic_deps = COMMON_DYNAMIC_DEPS,
+    exports_filter = [":pcl_ros_tf_library"],
+    deps = [":pcl_ros_tf_library"],
+)
+
+cc_library(
+    name = "pcl_ros_filter_library",
+    srcs = ["src/pcl_ros/filters/filter.cpp"],
+    hdrs = HEADERS,
+    cxxopts = ["-std=c++17"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = COMMON_DEPS + [":pcl_ros_tf_library"],
+)
+
+cc_shared_library(
+    name = "pcl_ros_filter",
+    dynamic_deps = COMMON_DYNAMIC_DEPS,
+    exports_filter = [
+        ":pcl_ros_filter_library",
+        ":pcl_ros_tf_library",
+    ],
+    deps = [":pcl_ros_filter_library"],
+)
+
+cc_library(
+    name = "pcl_ros_filters_library",
     srcs = [
         "src/pcl_ros/filters/crop_box.cpp",
         "src/pcl_ros/filters/extract_indices.cpp",
-        "src/pcl_ros/filters/filter.cpp",
         "src/pcl_ros/filters/passthrough.cpp",
         "src/pcl_ros/filters/project_inliers.cpp",
         "src/pcl_ros/filters/radius_outlier_removal.cpp",
         "src/pcl_ros/filters/statistical_outlier_removal.cpp",
         "src/pcl_ros/filters/voxel_grid.cpp",
-        "src/transforms.cpp",
-        "tools/bag_to_pcd.cpp",
-        "tools/combined_pointcloud_to_pcd.cpp",
-        "tools/pcd_to_pointcloud.cpp",
-        "tools/pointcloud_to_pcd.cpp",
     ],
-    hdrs = glob(["include/**/*.hpp"]),
+    hdrs = HEADERS,
     cxxopts = ["-std=c++17"],
     includes = ["include"],
     local_defines = ros_local_defines(),
-    deps = [
-        "@geometry_msgs//:cc",
-        "@pcl_conversions//:pcl_conversions_library",
-        "@rclcpp//:rclcpp_library",
-        "@rclcpp_components//:rclcpp_components_library",
-        "@rosbag2_transport//:rosbag2_transport_library",
-        "@rosdistro//cc:eigen",
-        "@rosdistro//cc:pcl_common",
-        "@rosdistro//cc:pcl_filters",
-        "@rosdistro//cc:pcl_io",
-        "@sensor_msgs//:cc",
-        "@tf2//:tf2_library",
-        "@tf2_eigen//:tf2_eigen_library",
-        "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
-        "@tf2_ros//:tf2_ros_library",
-        "@visualization_msgs//:cc",
+    deps = COMMON_DEPS + [
+        ":pcl_ros_filter_library",
+        ":pcl_ros_tf_library",
     ],
 )
 
 cc_shared_library(
-    name = "pcl_ros",
-    dynamic_deps = [
-        "@rclcpp//:rclcpp",
-        "@rclcpp_components//:rclcpp_components",
-        "@tf2//:tf2",
-        "@tf2_ros//:tf2_ros",
-        "@tf2_geometry_msgs//:tf2_geometry_msgs",
-        "@tf2_eigen//:tf2_eigen",
-        "@rosbag2_transport//:rosbag2_transport",
+    name = "pcl_ros_filters",
+    dynamic_deps = COMMON_DYNAMIC_DEPS,
+    exports_filter = [
+        ":pcl_ros_filter_library",
+        ":pcl_ros_filters_library",
+        ":pcl_ros_tf_library",
     ],
-    exports_filter = [":pcl_ros_library"],
-    deps = [":pcl_ros_library"],
+    deps = [":pcl_ros_filters_library"],
+)
+
+cc_library(
+    name = "pcd_to_pointcloud_lib_library",
+    srcs = ["tools/pcd_to_pointcloud.cpp"],
+    hdrs = HEADERS,
+    cxxopts = ["-std=c++17"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = COMMON_DEPS,
+)
+
+cc_shared_library(
+    name = "pcd_to_pointcloud_lib",
+    dynamic_deps = COMMON_DYNAMIC_DEPS,
+    exports_filter = [":pcd_to_pointcloud_lib_library"],
+    deps = [":pcd_to_pointcloud_lib_library"],
+)
+
+cc_library(
+    name = "pointcloud_to_pcd_lib_library",
+    srcs = ["tools/pointcloud_to_pcd.cpp"],
+    hdrs = HEADERS,
+    cxxopts = ["-std=c++17"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = COMMON_DEPS + [":pcl_ros_tf_library"],
+)
+
+cc_shared_library(
+    name = "pointcloud_to_pcd_lib",
+    dynamic_deps = COMMON_DYNAMIC_DEPS,
+    exports_filter = [
+        ":pcl_ros_tf_library",
+        ":pointcloud_to_pcd_lib_library",
+    ],
+    deps = [":pointcloud_to_pcd_lib_library"],
+)
+
+cc_library(
+    name = "combined_pointcloud_to_pcd_lib_library",
+    srcs = ["tools/combined_pointcloud_to_pcd.cpp"],
+    hdrs = HEADERS,
+    cxxopts = ["-std=c++17"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = COMMON_DEPS + [":pcl_ros_tf_library"],
+)
+
+cc_shared_library(
+    name = "combined_pointcloud_to_pcd_lib",
+    dynamic_deps = COMMON_DYNAMIC_DEPS,
+    exports_filter = [
+        ":combined_pointcloud_to_pcd_lib_library",
+        ":pcl_ros_tf_library",
+    ],
+    deps = [":combined_pointcloud_to_pcd_lib_library"],
+)
+
+cc_library(
+    name = "bag_to_pcd_lib_library",
+    srcs = ["tools/bag_to_pcd.cpp"],
+    hdrs = HEADERS,
+    cxxopts = ["-std=c++17"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = COMMON_DEPS,
+)
+
+cc_shared_library(
+    name = "bag_to_pcd_lib",
+    dynamic_deps = COMMON_DYNAMIC_DEPS,
+    exports_filter = [":bag_to_pcd_lib_library"],
+    deps = [":bag_to_pcd_lib_library"],
+)
+
+cc_library(
+    name = "pcl_ros_library",
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = COMMON_DEPS + [
+        ":bag_to_pcd_lib_library",
+        ":combined_pointcloud_to_pcd_lib_library",
+        ":pcd_to_pointcloud_lib_library",
+        ":pcl_ros_filter_library",
+        ":pcl_ros_filters_library",
+        ":pcl_ros_tf_library",
+        ":pointcloud_to_pcd_lib_library",
+    ],
+)
+
+alias(
+    name = "pcl_ros",
+    actual = ":pcl_ros_tf",
 )
 
 ### COMPONENT REGISTRATION
 
 rclcpp_components_register_node(
     name = "filter_extract_indices_node",
-    component = ":pcl_ros",
+    component = ":pcl_ros_filters",
     node_name = "filter_extract_indices",
     plugin = "pcl_ros::ExtractIndices",
 )
 
 rclcpp_components_register_node(
     name = "filter_passthrough_node",
-    component = ":pcl_ros",
+    component = ":pcl_ros_filters",
     node_name = "filter_passthrough",
     plugin = "pcl_ros::PassThrough",
 )
 
 rclcpp_components_register_node(
     name = "filter_project_inliers_node",
-    component = ":pcl_ros",
+    component = ":pcl_ros_filters",
     node_name = "filter_project_inliers",
     plugin = "pcl_ros::ProjectInliers",
 )
 
 rclcpp_components_register_node(
     name = "filter_radius_outlier_removal_node",
-    component = ":pcl_ros",
+    component = ":pcl_ros_filters",
     node_name = "filter_radius_outlier_removal",
     plugin = "pcl_ros::RadiusOutlierRemoval",
 )
 
 rclcpp_components_register_node(
     name = "filter_statistical_outlier_removal_node",
-    component = ":pcl_ros",
+    component = ":pcl_ros_filters",
     node_name = "filter_statistical_outlier_removal",
     plugin = "pcl_ros::StatisticalOutlierRemoval",
 )
 
 rclcpp_components_register_node(
     name = "filter_crop_box_node",
-    component = ":pcl_ros",
+    component = ":pcl_ros_filters",
     node_name = "filter_crop_box",
     plugin = "pcl_ros::CropBox",
 )
 
 rclcpp_components_register_node(
     name = "filter_voxel_grid_node",
-    component = ":pcl_ros",
+    component = ":pcl_ros_filters",
     node_name = "filter_voxel_grid",
     plugin = "pcl_ros::VoxelGrid",
 )
 
 rclcpp_components_register_node(
     name = "pcd_to_pointcloud",
-    component = ":pcl_ros",
+    component = ":pcd_to_pointcloud_lib",
     node_name = "pcd_to_pointcloud",
     plugin = "pcl_ros::PCDPublisher",
 )
 
 rclcpp_components_register_node(
     name = "pointcloud_to_pcd",
-    component = ":pcl_ros",
+    component = ":pointcloud_to_pcd_lib",
     node_name = "pointcloud_to_pcd",
     plugin = "pcl_ros::PointCloudToPCD",
 )
 
 rclcpp_components_register_node(
     name = "combined_pointcloud_to_pcd",
-    component = ":pcl_ros",
+    component = ":combined_pointcloud_to_pcd_lib",
     node_name = "combined_pointcloud_to_pcd",
     plugin = "pcl_ros::CombinedPointCloudToPCD",
 )
 
 rclcpp_components_register_node(
     name = "bag_to_pcd",
-    component = ":pcl_ros",
+    component = ":bag_to_pcd_lib",
     node_name = "bag_to_pcd",
     plugin = "pcl_ros::BagToPCD",
 )
@@ -191,145 +347,103 @@ rclcpp_components_register_node(
 
 ### TESTS
 
+TEST_ARGS = [
+    "-p",
+    "launch_testing.pytest.hooks",
+]
+
+TEST_DEPS = [
+    "@launch",
+    "@launch_ros",
+    "@launch_testing",
+    "@launch_testing_ros",
+    "@rules_python//python/runfiles",
+    "@sensor_msgs//:py",
+]
+
 py_pytest(
     name = "test_extractindices_component",
     srcs = ["tests/filters/test_filter_component.py"],
-    data = [
-        ":ament_index",
-    ],
+    args = TEST_ARGS,
+    data = [":ament_index"],
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_PLUGIN": "pcl_ros::ExtractIndices",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_passthrough_component",
     srcs = ["tests/filters/test_filter_component.py"],
-    data = [
-        ":ament_index",
-    ],
+    args = TEST_ARGS,
+    data = [":ament_index"],
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_PLUGIN": "pcl_ros::PassThrough",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_projectinliers_component",
     srcs = ["tests/filters/test_filter_component.py"],
-    data = [
-        ":ament_index",
-    ],
+    args = TEST_ARGS,
+    data = [":ament_index"],
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_PLUGIN": "pcl_ros::ProjectInliers",
         "PARAMETERS": "{'model_type': 0}",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_radiusoutlierremoval_component",
     srcs = ["tests/filters/test_filter_component.py"],
-    data = [
-        ":ament_index",
-    ],
+    args = TEST_ARGS,
+    data = [":ament_index"],
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_PLUGIN": "pcl_ros::RadiusOutlierRemoval",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_statisticaloutlierremoval_component",
     srcs = ["tests/filters/test_filter_component.py"],
-    data = [
-        ":ament_index",
-    ],
+    args = TEST_ARGS,
+    data = [":ament_index"],
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_PLUGIN": "pcl_ros::StatisticalOutlierRemoval",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_cropbox_component",
     srcs = ["tests/filters/test_filter_component.py"],
-    data = [
-        ":ament_index",
-    ],
+    args = TEST_ARGS,
+    data = [":ament_index"],
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_PLUGIN": "pcl_ros::CropBox",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_voxelgrid_component",
     srcs = ["tests/filters/test_filter_component.py"],
-    data = [
-        ":ament_index",
-    ],
+    args = TEST_ARGS,
+    data = [":ament_index"],
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_PLUGIN": "pcl_ros::VoxelGrid",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 ### EXECUTABLE TESTS
@@ -337,6 +451,7 @@ py_pytest(
 py_pytest(
     name = "test_extract_indices_node",
     srcs = ["tests/filters/test_filter_executable.py"],
+    args = TEST_ARGS,
     data = [
         ":ament_index",
         ":filter_extract_indices_node",
@@ -344,20 +459,14 @@ py_pytest(
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_EXECUTABLE": "filter_extract_indices_node",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_passthrough_node",
     srcs = ["tests/filters/test_filter_executable.py"],
+    args = TEST_ARGS,
     data = [
         ":ament_index",
         ":filter_passthrough_node",
@@ -365,20 +474,14 @@ py_pytest(
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_EXECUTABLE": "filter_passthrough_node",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_project_inliers_node",
     srcs = ["tests/filters/test_filter_executable.py"],
+    args = TEST_ARGS,
     data = [
         ":ament_index",
         ":filter_project_inliers_node",
@@ -387,20 +490,14 @@ py_pytest(
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_EXECUTABLE": "filter_project_inliers_node",
         "PARAMETERS": "{'model_type': 0}",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_radius_outlier_removal_node",
     srcs = ["tests/filters/test_filter_executable.py"],
+    args = TEST_ARGS,
     data = [
         ":ament_index",
         ":filter_radius_outlier_removal_node",
@@ -408,20 +505,14 @@ py_pytest(
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_EXECUTABLE": "filter_radius_outlier_removal_node",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_statistical_outlier_removal_node",
     srcs = ["tests/filters/test_filter_executable.py"],
+    args = TEST_ARGS,
     data = [
         ":ament_index",
         ":filter_statistical_outlier_removal_node",
@@ -429,20 +520,14 @@ py_pytest(
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_EXECUTABLE": "filter_statistical_outlier_removal_node",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_crop_box_node",
     srcs = ["tests/filters/test_filter_executable.py"],
+    args = TEST_ARGS,
     data = [
         ":ament_index",
         ":filter_crop_box_node",
@@ -450,20 +535,14 @@ py_pytest(
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_EXECUTABLE": "filter_crop_box_node",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 py_pytest(
     name = "test_voxel_grid_node",
     srcs = ["tests/filters/test_filter_executable.py"],
+    args = TEST_ARGS,
     data = [
         ":ament_index",
         ":filter_voxel_grid_node",
@@ -471,18 +550,44 @@ py_pytest(
     env = {
         "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
         "FILTER_EXECUTABLE": "filter_voxel_grid_node",
-        "AMENT_PREFIX_PATH": ".",
     },
-    deps = [
-        "@launch",
-        "@launch_ros",
-        "@launch_testing",
-        "@launch_testing_ros",
-        "@sensor_msgs//:py",
-    ],
+    deps = TEST_DEPS,
 )
 
 ### PACKAGING
+
+collect_transitive_dynamic_deps(
+    name = "test_transitive_dynamic_deps",
+    dynamic_deps = COMMON_DYNAMIC_DEPS,
+    visibility = ["//visibility:private"],
+)
+
+write_file(
+    name = "test_solib_deps_src",
+    out = "test_solib_deps.cpp",
+    content = ["int main() { return 0; }"],
+)
+
+cc_binary(
+    name = "test_solib_deps",
+    srcs = [":test_solib_deps_src"],
+    dynamic_deps = [":test_transitive_dynamic_deps"],
+    deps = COMMON_DEPS,
+)
+
+ament_index(
+    name = "pcl_ros_tests_filters_index",
+    components = [":dummy_topics_node_record"],
+    export_name = "pcl_ros_tests_filters",
+    libraries = [":dummy_topics"],
+)
+
+ament_index(
+    name = "rclcpp_components_test_index",
+    export_name = "rclcpp_components",
+    lib_data = ["@rclcpp_components//:component_container"],
+    libraries = ["@rclcpp_components//:component_manager"],
+)
 
 ament_index(
     name = "ament_index",
@@ -498,20 +603,100 @@ ament_index(
         ":pointcloud_to_pcd_record",
         ":combined_pointcloud_to_pcd_record",
         ":bag_to_pcd_record",
-        ":dummy_topics_node_record",
+    ],
+    lib_data = [
+        ":filter_extract_indices_node",
+        ":filter_passthrough_node",
+        ":filter_project_inliers_node",
+        ":filter_radius_outlier_removal_node",
+        ":filter_statistical_outlier_removal_node",
+        ":filter_crop_box_node",
+        ":filter_voxel_grid_node",
+        ":pcd_to_pointcloud",
+        ":pointcloud_to_pcd",
+        ":combined_pointcloud_to_pcd",
+        ":bag_to_pcd",
     ],
     libraries = [
-        ":pcl_ros",
-        ":dummy_topics",
+        ":bag_to_pcd_lib",
+        ":combined_pointcloud_to_pcd_lib",
+        ":pcd_to_pointcloud_lib",
+        ":pcl_ros_filter",
+        ":pcl_ros_filters",
+        ":pcl_ros_tf",
+        ":pointcloud_to_pcd_lib",
     ],
     package_xml = "package.xml",
+    deps = [
+        ":dummy_topics_node",
+        ":filter_passthrough_node",
+        ":pcl_ros_tests_filters_index",
+        ":rclcpp_components_test_index",
+        ":test_solib_deps",
+        "@rclcpp_components//:component_container",
+    ],
 )
 
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies_list = [
+        "Eigen3",
+        "geometry_msgs",
+        "PCL",
+        "pcl_conversions",
+        "rclcpp",
+        "rclcpp_components",
+        "sensor_msgs",
+        "tf2",
+        "tf2_eigen",
+        "tf2_geometry_msgs",
+        "tf2_ros",
+        "visualization_msgs",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_name = "export_pcl_ros",
+    components = [
+        ":filter_extract_indices_node_record",
+        ":filter_passthrough_node_record",
+        ":filter_project_inliers_node_record",
+        ":filter_radius_outlier_removal_node_record",
+        ":filter_statistical_outlier_removal_node_record",
+        ":filter_crop_box_node_record",
+        ":filter_voxel_grid_node_record",
+        ":pcd_to_pointcloud_record",
+        ":pointcloud_to_pcd_record",
+        ":combined_pointcloud_to_pcd_record",
+        ":bag_to_pcd_record",
+    ],
+    data = glob([
+        "plugins/**",
+        "samples/**",
+    ]),
+    executables = [
+        ":filter_extract_indices_node",
+        ":filter_passthrough_node",
+        ":filter_project_inliers_node",
+        ":filter_radius_outlier_removal_node",
+        ":filter_statistical_outlier_removal_node",
+        ":filter_crop_box_node",
+        ":filter_voxel_grid_node",
+        ":pcd_to_pointcloud",
+        ":pointcloud_to_pcd",
+        ":combined_pointcloud_to_pcd",
+        ":bag_to_pcd",
+    ],
+    headers = HEADERS,
+    libraries = [
+        ":pcl_ros_tf",
+        ":pcd_to_pointcloud_lib",
+        ":pcl_ros_filter",
+        ":pcl_ros_filters",
+        ":pointcloud_to_pcd_lib",
+        ":combined_pointcloud_to_pcd_lib",
+        ":bag_to_pcd_lib",
+    ],
     package_xml = "package.xml",
     deps = [
-        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_cmake_pytest//:ament_package",

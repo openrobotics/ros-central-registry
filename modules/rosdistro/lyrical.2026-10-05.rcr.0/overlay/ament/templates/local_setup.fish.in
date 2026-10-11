@@ -1,0 +1,64 @@
+# generated from ament_package/template/package_level/local_setup.fish.in
+
+# since this file is sourced use the destination set at configure time
+# and override it with COLCON_CURRENT_PREFIX when provided
+set -l AMENT_CURRENT_PREFIX "@PREFIX@"
+if test -n "$COLCON_CURRENT_PREFIX"
+    set AMENT_CURRENT_PREFIX "$COLCON_CURRENT_PREFIX"
+end
+if not test -d "$AMENT_CURRENT_PREFIX"
+    echo "The compile-time prefix path '$AMENT_CURRENT_PREFIX' doesn't exist. \
+Consider sourcing a different shell extension." 1>&2
+    set -e AMENT_CURRENT_PREFIX
+    return 1
+end
+set -l _package_local_setup_AMENT_CURRENT_PREFIX "$AMENT_CURRENT_PREFIX"
+
+# function to append values to environment variables
+# using colons as separators and avoiding leading separators
+function ament_append_value
+    set -l _name $argv[1]
+    set -l _val $argv[2]
+    if set -q $_name; and test -n "$$_name"
+        set -gx $_name "$$_name:$_val"
+    else
+        set -gx $_name "$_val"
+    end
+end
+
+# unset AMENT_ENVIRONMENT_HOOKS
+# if not appending to them for return
+if not set -q AMENT_RETURN_ENVIRONMENT_HOOKS
+    set -e AMENT_ENVIRONMENT_HOOKS
+end
+
+# restore AMENT_CURRENT_PREFIX before evaluating environment hooks
+set AMENT_CURRENT_PREFIX "$_package_local_setup_AMENT_CURRENT_PREFIX"
+
+# list all environment hooks of this package
+
+
+functions -e ament_append_value
+
+# source all shell-specific environment hooks of this package
+# if not returning them
+if not set -q AMENT_RETURN_ENVIRONMENT_HOOKS
+    for _hook in (string split ":" -- "$AMENT_ENVIRONMENT_HOOKS")
+        if string match -q -- "*.fish" "$_hook"
+            set -gx AMENT_CURRENT_PREFIX \
+                "$_package_local_setup_AMENT_CURRENT_PREFIX"
+            if test -f "$_hook"
+                if test -n "$AMENT_TRACE_SETUP_FILES"
+                    echo "# source \"$_hook\""
+                end
+                source "$_hook"
+            end
+        end
+    end
+    set -e AMENT_ENVIRONMENT_HOOKS
+end
+
+set -e _package_local_setup_AMENT_CURRENT_PREFIX
+# reset AMENT_CURRENT_PREFIX after each package
+# allowing to source multiple package-level setup files
+set -e AMENT_CURRENT_PREFIX

@@ -8,27 +8,55 @@
    this->dummyDisplay = XOpenDisplay(0);
    if (!this->dummyDisplay) {
      std::cerr << "Unable to open display: " << XDisplayName(0) << std::endl;
-@@ -227,11 +228,15 @@
+@@ -222,16 +223,43 @@
+ #endif
+ }
+ 
++namespace
++{
++
++// Resolve an OGRE plugin inside `plugin_dir`. CMake-built OGRE installs its
++// plugins without a `lib` prefix (RenderSystem_GL.so.1.12.10), while a Bazel
++// underlay ships the same libraries as regular shared libraries in lib/
++// (libRenderSystem_GL.so / .dylib). Probe the known spellings and fall back
++// to the plain name so OGRE's own DynLib suffix handling still applies.
++std::string find_ogre_plugin(
++  const std::filesystem::path & plugin_dir, const std::string & plugin_name)
++{
++  const std::string stems[] = {plugin_name, "lib" + plugin_name};
++  const std::string extensions[] = {".so", ".dylib", ".dll"};
++  for (const auto & stem : stems) {
++    for (const auto & extension : extensions) {
++      std::error_code ec;
++      auto candidate = plugin_dir / (stem + extension);
++      if (std::filesystem::exists(candidate, ec)) {
++        return candidate.string();
++      }
++    }
++  }
++  return (plugin_dir / plugin_name).string();
++}
++
++}  // namespace
++
+ void
+ RenderSystem::loadOgrePlugins()
  {
    std::filesystem::path plugin_prefix = get_ogre_plugin_directory();
  #if defined _WIN32 && !NDEBUG
 -  ogre_root_->loadPlugin((plugin_prefix / "RenderSystem_GL_d").string());
-+  ogre_root_->loadPlugin("../ogre+/libRenderSystem_GL_d.so");
++  ogre_root_->loadPlugin(find_ogre_plugin(plugin_prefix, "RenderSystem_GL_d"));
  #else
 -  ogre_root_->loadPlugin((plugin_prefix / "RenderSystem_GL").string());
 -#endif
 -  ogre_root_->loadPlugin((plugin_prefix / "Codec_STBI").string());
-+  ogre_root_->loadPlugin("../ogre+/libRenderSystem_GL.so");
++  ogre_root_->loadPlugin(find_ogre_plugin(plugin_prefix, "RenderSystem_GL"));
 +#endif
-+  try {
-+    ogre_root_->loadPlugin("../ogre+/libCodec_STBI.so");
-+  } catch (...) {
-+    RVIZ_RENDERING_LOG_WARNING("Could not load Codec_STBI plugin, assuming it is built-in or missing");
-+  }
++  ogre_root_->loadPlugin(find_ogre_plugin(plugin_prefix, "Codec_STBI"));
  }
  
  void
-@@ -323,20 +328,34 @@
+@@ -323,20 +351,44 @@
  RenderSystem::setResourceDirectory()
  {
    auto result = ament_index_cpp::get_resource("packages", "rviz_rendering");
@@ -45,26 +73,36 @@
  RenderSystem::setPluginDirectory()
  {
    auto result = ament_index_cpp::get_resource("packages", "rviz_ogre_vendor");
-+  if (result.resourcePath.has_value()) {
++  if (!result.resourcePath.has_value()) {
++    RVIZ_RENDERING_LOG_WARNING(
++      "Could not find resource directory for rviz_ogre_vendor in ament index");
  #ifdef _WIN32
 -  set_ogre_plugin_directory(
 -    (result.resourcePath.value() / "opt" / "rviz_ogre_vendor" / "bin").string());
-+    set_ogre_plugin_directory(
-+      (result.resourcePath.value() / "opt" / "rviz_ogre_vendor" / "bin").string());
++    set_ogre_plugin_directory("bin");
  #else
 -  set_ogre_plugin_directory(
 -    (result.resourcePath.value() / "opt" / "rviz_ogre_vendor" / "lib" / "OGRE").string());
 -#endif
-+    set_ogre_plugin_directory(
-+      (result.resourcePath.value() / "opt" / "rviz_ogre_vendor" / "lib" / "OGRE").string());
++    set_ogre_plugin_directory("lib");
 +#endif
-+  } else {
-+    RVIZ_RENDERING_LOG_WARNING("Could not find resource directory for rviz_ogre_vendor in ament index");
++    return;
++  }
++  const std::filesystem::path prefix = result.resourcePath.value();
 +#ifdef _WIN32
-+    set_ogre_plugin_directory("bin");
++  const std::filesystem::path vendored = prefix / "opt" / "rviz_ogre_vendor" / "bin";
++  const std::filesystem::path flat = prefix / "bin";
 +#else
-+    set_ogre_plugin_directory("ogre+");
++  const std::filesystem::path vendored = prefix / "opt" / "rviz_ogre_vendor" / "lib" / "OGRE";
++  const std::filesystem::path flat = prefix / "lib";
 +#endif
++  // colcon installs the vendored OGRE under opt/rviz_ogre_vendor/; an
++  // underlay that ships OGRE as plain shared libraries keeps them in lib/.
++  std::error_code ec;
++  if (std::filesystem::is_directory(vendored, ec)) {
++    set_ogre_plugin_directory(vendored.string());
++  } else {
++    set_ogre_plugin_directory(flat.string());
 +  }
  }
  

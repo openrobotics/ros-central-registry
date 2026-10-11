@@ -35,6 +35,22 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertIn("common:ci --google_default_credentials", content)
 
 
+class TestRenderUnderlayBuildFile(unittest.TestCase):
+
+    def test_one_underlay_per_variant(self):
+        content = setup_workspace.render_underlay_build_file(["core", "desktop_full"])
+        self.assertIn('load("@rosdistro//ament:defs.bzl", "ament_underlay")', content)
+        self.assertIn('name = "core",', content)
+        self.assertIn('deps = ["@ros_core//:ament_package"],', content)
+        self.assertIn('name = "desktop_full",', content)
+        self.assertIn('deps = ["@desktop_full//:ament_package"],', content)
+        self.assertEqual(content.count("ament_underlay("), 2)
+
+    def test_no_variants_only_loads(self):
+        content = setup_workspace.render_underlay_build_file([])
+        self.assertNotIn("ament_underlay(", content)
+
+
 class TestLlvmPatches(unittest.TestCase):
 
     def setUp(self):

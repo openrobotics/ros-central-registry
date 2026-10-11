@@ -14,9 +14,20 @@
 
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
 ### DATA
 
@@ -35,6 +46,9 @@ py_library(
     ] + glob(["launch/*"]),
     imports = ["."],
     deps = [
+        "@example_interfaces//:py",
+        "@launch",
+        "@launch_ros",
         "@rclpy",
         "@std_msgs//:py",
     ],
@@ -44,7 +58,7 @@ py_library(
 
 [
     py_binary(
-        name = executable,
+        name = "{0}_cli".format(executable),
         srcs = ["topic_monitor/scripts/{0}.py".format(executable)],
         main = "topic_monitor/scripts/{0}.py".format(executable),
         deps = [
@@ -62,10 +76,14 @@ py_library(
         name = "test_{0}".format(linter),
         srcs = ["test/test_{0}.py".format(linter)],
         data = glob(["**/*"]),
-        deps = ["@ament_{0}".format(linter)],
+        deps = [
+            ":topic_monitor_lib",
+            "@ament_{0}".format(linter),
+        ],
     )
     for linter in [
         "flake8",
+        "mypy",
         "pep257",
         "xmllint",
     ]
@@ -75,7 +93,13 @@ py_library(
 
 ament_package(
     name = "ament_package",
+    console_scripts = {
+        "data_publisher": "topic_monitor.scripts.data_publisher:main",
+        "topic_monitor": "topic_monitor.scripts.topic_monitor:main",
+    },
+    data = glob(["launch/*_launch.py"]),
     package_xml = "package.xml",
+    python = [":topic_monitor_lib"],
     deps = [
         ":ament_index",
         "@ament_flake8//:ament_package",

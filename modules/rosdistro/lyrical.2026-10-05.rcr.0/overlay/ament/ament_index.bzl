@@ -58,7 +58,7 @@ like an underlay (getting it to this point requires more work, though).
 
 # Shared library suffixes across the platforms we build for: ELF (.so, .so.1.2.3),
 # Mach-O (.dylib), and PE (.dll).
-def _is_shared_library(basename):
+def is_shared_library(basename):
     return (
         basename.endswith(".so") or
         ".so." in basename or
@@ -66,11 +66,37 @@ def _is_shared_library(basename):
         basename.endswith(".dll")
     )
 
+_is_shared_library = is_shared_library
+
+def _package_relative(ctx, f):
+    """Path of a file relative to the root of the repository that owns this target."""
+    root = ctx.label.workspace_root
+    path = f.short_path
+    if path.startswith("../"):
+        # external repo: ../<repo>/<path>
+        return "/".join(path.split("/")[2:])
+    if root and path.startswith(root + "/"):
+        return path[len(root) + 1:]
+    return path
+
 def _ament_index_impl(ctx):
+    return ament_index_providers(ctx)
+
+def ament_index_package_name(ctx):
+    """The ROS package name an ament_index/ament_package target describes."""
+
     # When we use local path overrides for the module name, Bazel appends
     # a plus sign to the end. We must remove this, or the ament_index
     # paths will not be correct and we won't be able to resolve files.
-    package_name = ctx.attr.export_name if ctx.attr.export_name else ctx.label.workspace_name.removesuffix("+")
+    return ctx.attr.export_name if ctx.attr.export_name else ctx.label.workspace_name.removesuffix("+")
+
+def ament_index_symlinks(ctx):
+    """Compute the runfiles symlink tree (underlay layout) for this package.
+
+    Returns a dict of runfiles-relative path -> File for exactly this
+    package's own contribution (dependencies are merged separately).
+    """
+    package_name = ament_index_package_name(ctx)
 
     # Create a new, empty file for the ament index. This is a shim to help
     # the ament_index_{cpp, python, ...} discover packages. We use the
@@ -90,7 +116,7 @@ def _ament_index_impl(ctx):
     if ctx.attr.data:
         for target in ctx.attr.data:
             for file in target.files.to_list():
-                file_path = file.path.removeprefix(ctx.label.workspace_root + "/")
+                file_path = _package_relative(ctx, file)
                 if ctx.attr.data_strip_prefix:
                     prefix = ctx.attr.data_strip_prefix
                     if not prefix.endswith("/"):
@@ -140,10 +166,12 @@ def _ament_index_impl(ctx):
                 if file.path.endswith(".component"):
                     if file not in component_files:
                         component_files.append(file)
+                elif _is_shared_library(file.basename):
+                    # The component library itself: lib/ only (never under
+                    # share/<pkg>/, where its runfiles solib path would leak).
+                    symlinks["lib/" + file.basename] = file
                 else:
                     symlinks["share/" + package_name + "/" + file.short_path] = file
-                    if _is_shared_library(file.basename):
-                        symlinks["lib/" + file.basename] = file
         if component_files:
             out_comp_file = ctx.actions.declare_file("share/ament_index/resource_index/rclcpp_components/" + package_name)
             ctx.actions.run_shell(
@@ -156,13 +184,10 @@ def _ament_index_impl(ctx):
     # PLUGINS
     if ctx.files.plugins:
         desc_paths = []
-        pkg_path = package_name + "/"
         for f in ctx.files.plugins:
-            rel_path = f.short_path
-            if rel_path.startswith(pkg_path):
-                rel_path = rel_path[len(pkg_path):]
-            else:
-                rel_path = f.basename
+            # pluginlib_export_plugin_description_file() installs the xml at its
+            # path relative to the package root (e.g. share/<pkg>/test/<pkg>/x.xml).
+            rel_path = _package_relative(ctx, f)
             target_path = "share/" + package_name + "/" + rel_path
             symlinks[target_path] = f
             desc_paths.append(target_path)
@@ -176,36 +201,56 @@ def _ament_index_impl(ctx):
         plugin_category = ctx.attr.plugin_category if ctx.attr.plugin_category else package_name
         symlinks["share/ament_index/resource_index/" + plugin_category + "__pluginlib__plugin/" + package_name] = resource_file
 
+    return symlinks
+
+AmentIndexInfo = provider(
+    doc = "The underlay-layout symlink map contributed by one ament_index target (not transitive).",
+    fields = {
+        "package_name": "ROS package name.",
+        "symlinks": "dict: runfiles-relative path -> File.",
+    },
+)
+
+def ament_index_providers(ctx, extra_files = []):
+    """Build the DefaultInfo (and AmentIndexInfo) for an ament_index-like target."""
+    symlinks = ament_index_symlinks(ctx)
+
     # Return a collection of runfiles with manipulated symlinks.
     transitive_runfiles = [dep[DefaultInfo].default_runfiles for dep in ctx.attr.deps]
     return [
         DefaultInfo(
             files = depset(
-                direct = symlinks.values(),
+                direct = symlinks.values() + extra_files,
                 transitive = [dep[DefaultInfo].files for dep in ctx.attr.deps],
             ),
             runfiles = ctx.runfiles(
                 symlinks = symlinks,
             ).merge_all(transitive_runfiles),
         ),
+        AmentIndexInfo(
+            package_name = ament_index_package_name(ctx),
+            symlinks = symlinks,
+        ),
     ]
+
+AMENT_INDEX_ATTRS = {
+    "deps": attr.label_list(providers = [DefaultInfo]),
+    "export_name": attr.string(),
+    "package_xml": attr.label(allow_single_file = True),
+    "executables": attr.label_list(allow_files = True),
+    "headers": attr.label_list(allow_files = True),
+    "libraries": attr.label_list(allow_files = True),
+    "data": attr.label_list(allow_files = True),
+    "data_strip_prefix": attr.string(),
+    "lib_data": attr.label_list(allow_files = True),
+    "components": attr.label_list(allow_files = True),
+    "plugins": attr.label_list(allow_files = True),
+    "plugin_category": attr.string(),
+}
 
 ament_index_rule = rule(
     implementation = _ament_index_impl,
-    attrs = {
-        "deps": attr.label_list(providers = [DefaultInfo]),
-        "export_name": attr.string(),
-        "package_xml": attr.label(allow_single_file = True),
-        "executables": attr.label_list(allow_files = True),
-        "headers": attr.label_list(allow_files = True),
-        "libraries": attr.label_list(allow_files = True),
-        "data": attr.label_list(allow_files = True),
-        "data_strip_prefix": attr.string(),
-        "lib_data": attr.label_list(allow_files = True),
-        "components": attr.label_list(allow_files = True),
-        "plugins": attr.label_list(allow_files = True),
-        "plugin_category": attr.string(),
-    },
+    attrs = AMENT_INDEX_ATTRS,
 )
 
 def ament_index(name = None, **kwargs):

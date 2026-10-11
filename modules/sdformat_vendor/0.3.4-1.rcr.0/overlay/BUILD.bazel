@@ -12,14 +12,75 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+# sdformat_vendor: vendors sdformat (version 16) from the Bazel Central
+# Registry module `sdformat` (shared library wrappers live in
+# @rosdistro//cc/gz) and installs it like colcon's ament_vendor() does
+# (opt/sdformat_vendor/...). The BCR module embeds the SDF spec files into
+# the library (EmbeddedSdf.cc); share/sdformat/<version>/*.sdf and the Python
+# bindings are not part of the BCR module.
 
-package(default_visibility = ["//visibility:public"])
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc/gz:defs.bzl", "gz_install_files", "gz_install_headers", "gz_vendor_hooks")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES (sdformat::sdformat)
+
+alias(
+    name = "sdformat",
+    actual = "@rosdistro//cc/gz:sdformat",
+)
+
+alias(
+    name = "sdformat_library",
+    actual = "@rosdistro//cc/gz:sdformat_library",
+)
+
+### INSTALL LAYOUT (opt/sdformat_vendor/...)
+
+VENDOR = "sdformat_vendor"
+
+PREFIX = "opt/" + VENDOR
+
+gz_install_headers(
+    name = "install_headers",
+    prefix = PREFIX + "/include/gz/sdformat16",
+    deps = [":sdformat_library"],
+)
+
+gz_install_files(
+    name = "install_libraries",
+    srcs = [":sdformat"],
+    flatten = True,
+    prefix = PREFIX + "/lib",
+)
+
+ENV_HOOKS = gz_vendor_hooks(
+    name = "install_hooks",
+    vendor = VENDOR,
+)
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    env_hooks = ENV_HOOKS,
+    install = [
+        ":install_headers",
+        ":install_hooks",
+        ":install_libraries",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake_copyright//:ament_package",

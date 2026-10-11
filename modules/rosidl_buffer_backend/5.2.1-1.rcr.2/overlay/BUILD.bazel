@@ -1,0 +1,130 @@
+# Copyright 2025 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARY
+
+HEADERS = glob([
+    "include/**/*.h",
+    "include/**/*.hpp",
+])
+
+DEPENDENCIES = {
+    "@rmw//:rmw": "@rmw//:rmw_library",
+}
+
+cc_library(
+    name = "rosidl_buffer_backend_library",
+    hdrs = HEADERS,
+    data = [":ament_index"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "rosidl_buffer_backend",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rosidl_buffer_backend_library"],
+    deps = [":rosidl_buffer_backend_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rosidl_buffer_backend"],
+    visibility = ["//visibility:private"],
+)
+
+ament_index(
+    name = "ament_index",
+)
+
+### PACKAGING
+
+write_file(
+    name = "library_path_dsv",
+    out = "environment/library_path.dsv",
+    content = [
+        "prepend-non-duplicate;LD_LIBRARY_PATH;lib",
+        "",
+    ],
+)
+
+write_file(
+    name = "library_path_sh",
+    out = "environment/library_path.sh",
+    content = [
+        "# copied from ament_package/template/environment_hook/library_path.sh",
+        "",
+        "# detect if running on Darwin platform",
+        "_UNAME=`uname -s`",
+        "_IS_DARWIN=0",
+        "if [ \"$_UNAME\" = \"Darwin\" ]; then",
+        "  _IS_DARWIN=1",
+        "fi",
+        "unset _UNAME",
+        "",
+        "if [ $_IS_DARWIN -eq 0 ]; then",
+        "  ament_prepend_unique_value LD_LIBRARY_PATH \"$AMENT_CURRENT_PREFIX/lib\"",
+        "else",
+        "  ament_prepend_unique_value DYLD_LIBRARY_PATH \"$AMENT_CURRENT_PREFIX/lib\"",
+        "fi",
+        "unset _IS_DARWIN",
+        "",
+    ],
+)
+
+pkg_files(
+    name = "env_files",
+    srcs = [
+        ":library_path_dsv",
+        ":library_path_sh",
+    ],
+    prefix = "share/rosidl_buffer_backend/environment",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    headers = HEADERS,
+    install = [":env_files"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rmw//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

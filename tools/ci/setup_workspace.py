@@ -388,6 +388,32 @@ def get_copyright_header() -> str:
 # limitations under the License.
 """
 
+def render_underlay_build_file(variant_names: List[str]) -> str:
+    """BUILD.bazel content declaring one `ament_underlay` tarball per variant.
+
+    `bazel build //:desktop_full` (etc.) produces `<variant>.tar.gz`: an
+    isolated-layout ROS underlay rooted at the `@rosdistro//:install_prefix`
+    (/opt/ros/<distro>) containing every package reachable from the
+    variant's `:ament_package`.
+    """
+    lines = [
+        'load("@rosdistro//ament:defs.bzl", "ament_underlay")',
+        "",
+        'package(default_visibility = ["//visibility:public"])',
+        "",
+    ]
+    for name in variant_names:
+        package = VARIANTS[name]
+        lines += [
+            "ament_underlay(",
+            f'    name = "{name}",',
+            f'    deps = ["@{package}//:ament_package"],',
+            ")",
+            "",
+        ]
+    return "\n".join(lines)
+
+
 def calculate_packages_for_variant(
     module_dir: Path, start_name: str, start_version: str
 ) -> List[str]:
@@ -513,6 +539,7 @@ def main():
     # Write BUILD.bazel
     with open(target_workspace / "BUILD.bazel", "w") as f:
         f.write(get_copyright_header())
+        f.write(render_underlay_build_file(sorted(variants.keys())))
 
     # Write patches/ (fmt + llvm) with an exports_files BUILD.bazel.
     patches_dir = target_workspace / WORKSPACE_PATCHES_DIR

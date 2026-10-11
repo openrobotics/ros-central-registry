@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
@@ -80,6 +81,22 @@ cc_shared_library(
     deps = [":image_flip_library"],
 )
 
+### COMPONENTS
+
+rclcpp_components_register_node(
+    name = "node_image_rotate",
+    component = ":image_rotate",
+    node_name = "image_rotate_node",
+    plugin = "image_rotate::ImageRotateNode",
+)
+
+rclcpp_components_register_node(
+    name = "image_flip_node",
+    component = ":image_flip",
+    node_name = "image_flip_node",
+    plugin = "image_rotate::ImageFlipNode",
+)
+
 ### TRANSITIVE DYNAMIC DEPS
 
 collect_transitive_dynamic_deps(
@@ -102,11 +119,23 @@ cc_binary(
     ],
 )
 
+genrule(
+    name = "image_rotate_exe",
+    srcs = [":image_rotate_bin"],
+    outs = ["bin/image_rotate"],
+    cmd = "cp $< $@ && chmod +x $@",
+    executable = True,
+)
+
 ### AMENT INDEX
 
 # ImageRotateNode and ImageFlipNode components registration
 ament_index(
     name = "ament_index",
+    components = [
+        ":node_image_rotate_record",
+        ":image_flip_node_record",
+    ],
     export_name = "image_rotate",
     libraries = [
         ":image_rotate",
@@ -120,8 +149,11 @@ ament_index(
 
 ament_package(
     name = "ament_package",
+    cmake_export_targets = False,
+    data = glob(["launch/**"]),
     executables = [
-        ":image_rotate_bin",
+        ":image_rotate_exe",
+        ":image_flip_node",
     ],
     headers = HEADERS,
     libraries = [

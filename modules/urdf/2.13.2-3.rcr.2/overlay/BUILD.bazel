@@ -91,19 +91,15 @@ cc_shared_library(
 
 ament_index(
     name = "ament_index",
-    export_name = "urdf_parser_plugin",
     libraries = [
         ":urdf",
         ":urdf_xml_parser",
     ],
     package_xml = "package.xml",
+    # pluginlib_export_plugin_description_file(urdf_parser_plugin ...)
+    plugin_category = "urdf_parser_plugin",
     plugins = ["urdf_parser_description.xml"],
-)
-
-ament_index(
-    name = "ament_index_urdf",
-    export_name = "urdf",
-    package_xml = "package.xml",
+    deps = ["@urdf_parser_plugin//:ament_index"],
 )
 
 collect_transitive_dynamic_deps(
@@ -118,15 +114,8 @@ collect_transitive_dynamic_deps(
 cc_test(
     name = "test_robot_model_parser",
     srcs = ["test/test_robot_model_parser.cpp"],
-    data = glob(["test/**"]) + [
-        ":ament_index",
-        ":ament_index_urdf",
-    ],
+    data = glob(["test/**"]) + [":ament_index"],
     dynamic_deps = [":transitive_dynamic_deps"],
-    env = {
-        "AMENT_PREFIX_PATH": ".",
-        "LD_LIBRARY_PATH": "./lib",
-    },
     local_defines = [
         '_TEST_RESOURCES_DIR_PATH=\\"../urdf+/test/\\"',
     ],
@@ -134,6 +123,23 @@ cc_test(
         ":urdf_library",
         ":urdf_xml_parser_library",
         "@rosdistro//cc:googletest",
+    ],
+)
+
+# Registered upstream via ament_add_google_benchmark, which colcon skips.
+cc_test(
+    name = "plugin_overhead",
+    srcs = ["test/benchmark_plugin_overhead.cpp"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = DEPENDENCIES.values() + [
+        ":urdf_library",
+        "@google_benchmark//:benchmark",
+        "@google_benchmark//:benchmark_main",
     ],
 )
 

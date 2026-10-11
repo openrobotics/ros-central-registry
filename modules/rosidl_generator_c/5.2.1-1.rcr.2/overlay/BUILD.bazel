@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(
@@ -39,6 +41,15 @@ filegroup(
 # Template used for per-package visibility header generation.
 exports_files(
     srcs = ["resource/rosidl_generator_c__visibility_control.h.in"],
+)
+
+# The shared libraries generated C code links against at runtime
+# (rosidl_runtime_c and its closure). Exposed here so rosidl_core_generators'
+# bundled per-package libraries (lib<pkg>__rosidl_generator_c.so) can link
+# against them dynamically without depending on rosidl_runtime_c itself.
+alias(
+    name = "runtime_dynamic_deps",
+    actual = "@rosidl_runtime_c//:transitive_dynamic_deps",
 )
 
 # This is the python library that does the bulk of the work for converting
@@ -74,11 +85,45 @@ py_binary(
     deps = [":rosidl_generator_c"],
 )
 
+# Mirrors ament_package(CONFIG_EXTRAS "rosidl_generator_c-extras.cmake.in"): configure_file(@ONLY) of the template.
+genrule(
+    name = "extras_cmake",
+    srcs = ["rosidl_generator_c-extras.cmake.in"],
+    outs = ["rosidl_generator_c-extras.cmake"],
+    cmd = "sed -e 's|@rosidl_generator_c_LIBRARY_TYPE@|SHARED|g' -e 's|@PYTHON_INSTALL_DIR@|lib/python3.14/site-packages|g' $< > $@",
+)
+
+write_file(
+    name = "resource_index_rosidl_generator_packages",
+    out = "_resource_index/rosidl_generator_packages",
+    content = [""],
+)
+
+# ament_index_register_resource() registrations, as ament_cmake installs them.
+pkg_files(
+    name = "resource_index",
+    srcs = [
+        ":resource_index_rosidl_generator_packages",
+    ],
+    renames = {
+        ":resource_index_rosidl_generator_packages": "share/ament_index/resource_index/rosidl_generator_packages/rosidl_generator_c",
+    },
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake = glob(["cmake/**"]) + [":extras_cmake"],
+    cmake_export_dependencies_list = [
+        "rosidl_typesupport_interface",
+    ],
+    cmake_extras = ["rosidl_generator_c-extras.cmake"],
+    data = glob(["resource/**"]),
+    install = [":resource_index"],
+    lib_data = ["bin/rosidl_generator_c"],
     package_xml = "package.xml",
+    python = glob(["rosidl_generator_c/**"]),
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_core//:ament_package",

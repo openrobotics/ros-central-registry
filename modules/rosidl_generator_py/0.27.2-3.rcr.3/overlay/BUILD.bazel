@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@pip_ros//:requirements.bzl", "requirement", "whl_requirement")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("@rules_python//python:pip.bzl", "whl_filegroup")
 
@@ -91,11 +93,93 @@ py_binary(
     deps = [":rosidl_generator_py"],
 )
 
+# Mirrors ament_package(CONFIG_EXTRAS "rosidl_generator_py-extras.cmake.in"): configure_file(@ONLY) of the template.
+genrule(
+    name = "extras_cmake",
+    srcs = ["rosidl_generator_py-extras.cmake.in"],
+    outs = ["rosidl_generator_py-extras.cmake"],
+    cmd = "sed -e 's|@PYTHON_INSTALL_DIR@|lib/python3.14/site-packages|g' $< > $@",
+)
+
+write_file(
+    name = "rosidl_cmake_extras",
+    out = "cmake/rosidl_cmake-extras.cmake",
+    content = [
+        "# generated from",
+        "# rosidl_cmake/rosidl_cmake-extras.cmake.in",
+        "",
+        "find_package(rosidl_cmake_core QUIET)",
+        "if(NOT rosidl_cmake_core_FOUND)",
+        "  find_package(rosidl_cmake REQUIRED)",
+        "endif()",
+        "",
+        "set(rosidl_generator_py_IDL_FILES \"\")",
+        "set(rosidl_generator_py_ROS_INTERFACE_FILES \"\")",
+        "",
+    ],
+)
+
+write_file(
+    name = "rosidl_cmake_aggregate_target_extras",
+    out = "cmake/rosidl_cmake_aggregate_target-extras.cmake",
+    content = [
+        "# generated from",
+        "# rosidl_cmake/cmake/template/rosidl_cmake_aggregate_target.cmake.in",
+        "",
+        "# Create a convenience aggregate target rosidl_generator_py::rosidl_generator_py",
+        "# that links all generated interface targets, so downstream packages can use",
+        "# a single modern CMake target name instead of ${rosidl_generator_py_TARGETS}.",
+        "if(rosidl_generator_py_TARGETS AND NOT TARGET rosidl_generator_py::rosidl_generator_py)",
+        "  add_library(rosidl_generator_py::rosidl_generator_py INTERFACE IMPORTED)",
+        "  set_target_properties(rosidl_generator_py::rosidl_generator_py PROPERTIES",
+        "    INTERFACE_LINK_LIBRARIES \"${rosidl_generator_py_TARGETS}\")",
+        "endif()",
+        "",
+    ],
+)
+
+write_file(
+    name = "resource_index_rosidl_generator_packages",
+    out = "_resource_index/rosidl_generator_packages",
+    content = [""],
+)
+
+# ament_index_register_resource() registrations, as ament_cmake installs them.
+pkg_files(
+    name = "resource_index",
+    srcs = [
+        ":resource_index_rosidl_generator_packages",
+    ],
+    renames = {
+        ":resource_index_rosidl_generator_packages": "share/ament_index/resource_index/rosidl_generator_packages/rosidl_generator_py",
+    },
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake = glob(["cmake/**"]) + [
+        ":extras_cmake",
+        ":rosidl_cmake_aggregate_target_extras",
+        ":rosidl_cmake_extras",
+    ],
+    cmake_export_dependencies_list = [
+        "ament_cmake",
+        "rmw",
+    ],
+    cmake_extras = [
+        "rosidl_generator_py_get_typesupports.cmake",
+        "register_py.cmake",
+        "rosidl_generator_py-extras.cmake",
+        "rosidl_cmake-extras.cmake",
+        "rosidl_cmake_aggregate_target-extras.cmake",
+    ],
+    data = glob(["resource/**"]),
+    install = [":resource_index"],
+    lib_data = ["bin/rosidl_generator_py"],
     package_xml = "package.xml",
+    python = glob(["rosidl_generator_py/**"]),
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_cppcheck//:ament_package",

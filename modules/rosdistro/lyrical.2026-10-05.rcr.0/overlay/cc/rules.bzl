@@ -71,3 +71,24 @@ collect_transitive_dynamic_deps = rule(
     },
     provides = [CcSharedLibraryInfo],
 )
+
+def _cc_public_headers_impl(ctx):
+    headers = []
+    for dep in ctx.attr.deps:
+        headers.extend(dep[CcInfo].compilation_context.direct_public_headers)
+    if ctx.attr.prefix:
+        # short_path of a file in an external repo is ../<repo>/<path>.
+        headers = [h for h in headers if h.short_path.removeprefix("../").split("/", 1)[-1].startswith(ctx.attr.prefix)]
+    if ctx.attr.extensions:
+        headers = [h for h in headers if any([h.basename.endswith(e) for e in ctx.attr.extensions])]
+    return [DefaultInfo(files = depset(headers))]
+
+cc_public_headers = rule(
+    implementation = _cc_public_headers_impl,
+    doc = "The direct public headers of cc_library targets, as files (e.g. to install a third-party library's headers).",
+    attrs = {
+        "deps": attr.label_list(providers = [CcInfo], mandatory = True),
+        "prefix": attr.string(doc = "Only keep headers whose repository-relative path starts with this prefix."),
+        "extensions": attr.string_list(doc = "Only keep headers with one of these file extensions (e.g. ['.hpp'])."),
+    },
+)

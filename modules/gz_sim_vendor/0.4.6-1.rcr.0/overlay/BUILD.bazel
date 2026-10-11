@@ -12,14 +12,103 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+# gz_sim_vendor: vendors gz-sim (Gazebo Sim, version 10) from the Bazel
+# Central Registry module `gz-sim` (shared library wrappers live in
+# @rosdistro//cc/gz) and installs it like colcon's ament_vendor() does
+# (opt/gz_sim_vendor/...).
+#
+# The BCR module provides the core library and the system plugins
+# (lib/gz-sim-10/plugins/libgz-sim-*-system.so). It does not build the Qt GUI
+# (libgz-sim-gui.so, GUI plugins, gz-sim-gui-client), the `gz sim` command
+# line tool / gz-sim-server executable (gz-tools is not in the BCR), the
+# Python bindings or the example worlds; ROS packages embed the server via
+# gz::sim::Server (see ros_gz_sim's gzserver node).
 
-package(default_visibility = ["//visibility:public"])
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc/gz:defs.bzl", "gz_install_files", "gz_install_headers", "gz_vendor_hooks")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES (gz-sim::core)
+
+alias(
+    name = "gz_sim",
+    actual = "@rosdistro//cc/gz:gz-sim",
+)
+
+alias(
+    name = "gz_sim_library",
+    actual = "@rosdistro//cc/gz:gz-sim_library",
+)
+
+alias(
+    name = "gz_sim_cc_proto",
+    actual = "@rosdistro//cc/gz:gz-sim_cc_proto",
+)
+
+# All system plugins; set GZ_SIM_SYSTEM_PLUGIN_PATH to their directory.
+alias(
+    name = "systems",
+    actual = "@rosdistro//cc/gz:gz-sim_systems",
+)
+
+### INSTALL LAYOUT (opt/gz_sim_vendor/...)
+
+VENDOR = "gz_sim_vendor"
+
+PREFIX = "opt/" + VENDOR
+
+gz_install_headers(
+    name = "install_headers",
+    include_only = "gz/",
+    prefix = PREFIX + "/include/gz/sim10",
+    deps = [
+        ":gz_sim_library",
+    ],
+)
+
+gz_install_files(
+    name = "install_libraries",
+    srcs = [":gz_sim"],
+    flatten = True,
+    prefix = PREFIX + "/lib",
+)
+
+gz_install_files(
+    name = "install_systems",
+    srcs = [":systems"],
+    flatten = True,
+    prefix = PREFIX + "/lib/gz-sim-10/plugins",
+    shared_library_prefix = True,
+)
+
+ENV_HOOKS = gz_vendor_hooks(
+    name = "install_hooks",
+    vendor = VENDOR,
+)
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    env_hooks = ENV_HOOKS,
+    install = [
+        ":install_headers",
+        ":install_hooks",
+        ":install_libraries",
+        ":install_systems",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake_copyright//:ament_package",

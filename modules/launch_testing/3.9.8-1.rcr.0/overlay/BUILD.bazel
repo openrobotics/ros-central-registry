@@ -34,6 +34,11 @@ license(
 
 ament_index(
     name = "ament_index",
+    data = glob(
+        ["test/launch_testing/examples/*"],
+        exclude = ["test/launch_testing/examples/_*"],
+    ),
+    data_strip_prefix = "test/launch_testing",
     lib_data = glob(["example_processes/**"]),
     package_xml = "package.xml",
 )
@@ -78,9 +83,36 @@ py_library(
             "**/test_flake8.py",
             "**/test_pep257.py",
             "**/test_copyright.py",
-            "**/test_print_arguments.py",
-            "**/test_xml_output.py",
         ],
+    )
+]
+
+# Example launch tests: collected through the launch_testing pytest plugin
+# (registered via the pytest11 entry point upstream) with the extra launch
+# arguments from upstream's pytest.ini addopts.
+[
+    py_pytest(
+        name = f.split("/")[-1].removesuffix(".py"),
+        srcs = [f],
+        args = [
+            "-p",
+            "launch_testing.pytest.hooks",
+            "--launch-args",
+            "dut_arg:=test",
+            "--",
+        ],
+        data = glob([
+            "test/launch_testing/examples/**",
+            "example_processes/**",
+        ]),
+        deps = [
+            ":launch_testing",
+            "@rules_python//python/runfiles",
+        ],
+    )
+    for f in glob(
+        ["test/launch_testing/examples/*_test.py"],
+        allow_empty = True,
     )
 ]
 
@@ -126,7 +158,18 @@ py_library(
 
 ament_package(
     name = "ament_package",
+    console_programs = {"launch_test": "launch_testing.launch_test:main"},
+    # setup.py: ('share/launch_testing/examples', glob('test/launch_testing/examples/[!_]**'))
+    data = glob(
+        ["test/launch_testing/examples/*"],
+        exclude = ["test/launch_testing/examples/_*"],
+    ),
+    data_strip_prefix = "test/launch_testing",
     package_xml = "package.xml",
+    python = [":launch_testing"] + glob(
+        ["launch_testing/py.typed"],
+        allow_empty = True,
+    ),
     deps = [
         ":ament_index",
         "@ament_copyright//:ament_package",

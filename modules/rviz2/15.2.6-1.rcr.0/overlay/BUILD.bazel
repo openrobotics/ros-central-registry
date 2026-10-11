@@ -12,11 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_qt//:qt.bzl", "qt_cc_binary")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### EXECUTABLES
 
 DEPENDENCIES = {
     "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
@@ -30,23 +47,76 @@ collect_transitive_dynamic_deps(
     visibility = ["//visibility:private"],
 )
 
-cc_binary(
+qt_cc_binary(
     name = "rviz2",
     srcs = ["src/main.cpp"],
+    data = [
+        "@rviz_common//:ament_index",
+        "@rviz_default_plugins//:ament_index",
+    ],
     dynamic_deps = [":transitive_dynamic_deps"],
+    linkopts = select({
+        "@platforms//os:linux": ["-Wl,--allow-shlib-undefined"],
+        "//conditions:default": [],
+    }),
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + [
-        "@rules_qt//:qt",
         "@rules_qt//:qt_widgets",
     ],
+)
+
+py_binary(
+    name = "rviz1_to_rviz2",
+    srcs = ["scripts/rviz1_to_rviz2.py"],
+    main = "scripts/rviz1_to_rviz2.py",
+    deps = [requirement("pyyaml")],
+)
+
+### TESTS
+
+# test/tools/send_lots_of_points_node is a manual helper tool upstream (not a
+# registered test); it is built here so the sources keep compiling.
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps_rclcpp",
+    dynamic_deps = ["@rclcpp//:rclcpp"],
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "send_lots_of_points_node",
+    testonly = True,
+    srcs = ["test/tools/send_lots_of_points_node.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps_rclcpp"],
+    local_defines = ros_local_defines(),
+    deps = [
+        "@geometry_msgs//:cc",
+        "@rclcpp//:rclcpp_library",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+py_pytest(
+    name = "rviz1_to_2_check",
+    srcs = ["test/tools/rviz1_to_2_check.py"],
+    data = ["scripts/rviz1_to_rviz2.py"] + glob(["test/tools/configs/*.rviz"]),
+    env = {
+        "_CONFIG_PATH": "../rviz2+/test/tools/configs",
+        "_SCRIPT_PATH": "$(rootpath scripts/rviz1_to_rviz2.py)",
+    },
+    deps = [requirement("pyyaml")],
 )
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
-    executables = [":rviz2"],
+    cmake_export_dependencies = False,
+    executables = [
+        ":rviz2",
+        "scripts/rviz1_to_rviz2.py",
+    ],
     package_xml = "package.xml",
+    programs = [":rviz2"],
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_lint_cmake//:ament_package",

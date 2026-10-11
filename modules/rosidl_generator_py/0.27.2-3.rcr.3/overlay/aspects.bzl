@@ -104,6 +104,7 @@ def _rosidl_generator_py_aspect_impl(target, ctx):
                     if RosPyBindingsInfo in dep
                 ],
             ),
+            sources = depset(direct = srcs),
         ),
     ]
 

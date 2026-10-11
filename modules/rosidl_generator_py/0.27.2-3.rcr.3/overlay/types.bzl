@@ -19,5 +19,6 @@ RosPyBindingsInfo = provider(
         "transitive_sources",  # generated .py interface code
         "imports",  # import path for generated code
         "dynamic_libraries",  # shared libraries for c typesupport
+        "sources",  # generated C sources of this interface's bindings (_foo_s.c, entry point)
     ],
 )

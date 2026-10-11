@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
 package(
     default_applicable_licenses = [":license"],
@@ -93,6 +95,33 @@ collect_transitive_dynamic_deps(
     visibility = ["//visibility:private"],
 )
 
+cc_library(
+    name = "rmw_zenoh_cpp_test_fixture_library",
+    srcs = glob(["src/detail/*.hpp"]) + [
+        "src/detail/logging.cpp",
+        "src/detail/zenoh_config.cpp",
+        "src/rmw_test_fixture.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = [
+        "include",
+        "src",
+        "src/detail",
+    ],
+    local_defines = ros_local_defines() + ["RMW_TEST_FIXTURE_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + [
+        "@rmw_test_fixture//:rmw_test_fixture_library",
+        "@rosdistro//cc:nlohmann_json",
+    ],
+)
+
+cc_shared_library(
+    name = "rmw_zenoh_cpp_test_fixture",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rmw_zenoh_cpp_test_fixture_library"],
+    deps = [":rmw_zenoh_cpp_test_fixture_library"],
+)
+
 ### BINARIES
 
 cc_binary(
@@ -111,14 +140,56 @@ cc_binary(
     deps = DEPENDENCIES.values(),
 )
 
+write_file(
+    name = "resource_index_rmw_typesupport",
+    out = "_resource_index/rmw_typesupport",
+    content = ["rosidl_typesupport_introspection_c;rosidl_typesupport_introspection_cpp"],
+)
+
+write_file(
+    name = "resource_index_rmw_typesupport_c",
+    out = "_resource_index/rmw_typesupport_c",
+    content = ["rosidl_typesupport_introspection_c"],
+)
+
+write_file(
+    name = "resource_index_rmw_typesupport_cpp",
+    out = "_resource_index/rmw_typesupport_cpp",
+    content = ["rosidl_typesupport_introspection_cpp"],
+)
+
+# ament_index_register_resource() registrations, as ament_cmake installs them.
+pkg_files(
+    name = "resource_index",
+    srcs = [
+        ":resource_index_rmw_typesupport",
+        ":resource_index_rmw_typesupport_c",
+        ":resource_index_rmw_typesupport_cpp",
+    ],
+    renames = {
+        ":resource_index_rmw_typesupport": "share/ament_index/resource_index/rmw_typesupport/rmw_zenoh_cpp",
+        ":resource_index_rmw_typesupport_c": "share/ament_index/resource_index/rmw_typesupport_c/rmw_zenoh_cpp",
+        ":resource_index_rmw_typesupport_cpp": "share/ament_index/resource_index/rmw_typesupport_cpp/rmw_zenoh_cpp",
+    },
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_rmw_zenoh_cpp",
     data = glob(["config/**"]),
     executables = [":rmw_zenohd"],
     headers = HEADERS,
-    libraries = [":rmw_zenoh_cpp"],
+    include_prefix = "",
+    install = [":resource_index"],
+    libraries = [
+        ":rmw_zenoh_cpp",
+        ":rmw_zenoh_cpp_test_fixture",
+    ],
     package_xml = "package.xml",
     deps = [
         ":ament_index",

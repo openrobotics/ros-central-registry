@@ -12,16 +12,415 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+# Major version of the vendored gz-sim (GZ_SIM_VER in CMake).
+GZ_SIM_VER = "10"
+
+# Shared library -> static library pairs, so binaries link the shared library
+# while compiling against the static one (see rosdistro//cc:defs.bzl).
+DEPENDENCIES = {
+    "@gz_math_vendor//:gz_math": "@gz_math_vendor//:gz_math_library",
+    "@gz_msgs_vendor//:gz_msgs": "@gz_msgs_vendor//:gz_msgs_library",
+    "@gz_transport_vendor//:gz_transport": "@gz_transport_vendor//:gz_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+GZSERVER_DEPENDENCIES = {
+    "@gz_sim_vendor//:gz_sim": "@gz_sim_vendor//:gz_sim_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc/gz:gz-common": "@rosdistro//cc/gz:gz-common_library",
+}
+
+MESSAGE_DEPS = [
+    "@builtin_interfaces//:cc",
+    "@geometry_msgs//:cc",
+    "@ros_gz_interfaces//:cc",
+    "@std_msgs//:cc",
+]
+
+HEADERS = glob(["include/ros_gz_sim/*.hpp"])
+
+# @gz-utils//cli:cli11 ships CLI11 under <gz/utils/cli/CLI.hpp>; forward
+# <CLI/CLI.hpp> to it so upstream's #include <CLI/CLI.hpp> resolves cleanly.
+write_file(
+    name = "cli11_forwarding_header",
+    out = "include_cli/CLI/CLI.hpp",
+    content = [
+        "#pragma once",
+        "#include <gz/utils/cli/CLI.hpp>",
+        "",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "cli11",
+    hdrs = ["include_cli/CLI/CLI.hpp"],
+    includes = ["include_cli"],
+    visibility = ["//visibility:private"],
+    deps = ["@rosdistro//cc/gz:cli11"],
+)
+
+# BCR @gz-msgs generates <gz/msgs/world_stats.pb.h> directly without CMake's
+# details/ indirection; forward <gz/msgs/details/world_stats.pb.h> to it.
+write_file(
+    name = "gz_msgs_details_world_stats_header",
+    out = "include_gz_msgs_details/gz/msgs/details/world_stats.pb.h",
+    content = [
+        "#pragma once",
+        "#include <gz/msgs/world_stats.pb.h>",
+        "",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "gz_msgs_details_shim",
+    hdrs = ["include_gz_msgs_details/gz/msgs/details/world_stats.pb.h"],
+    includes = ["include_gz_msgs_details"],
+    visibility = ["//visibility:private"],
+    deps = ["@gz_msgs_vendor//:gz_msgs_library"],
+)
+
+### PYTHON MODULE (launch actions)
+
+py_library(
+    name = "ros_gz_sim_py",
+    srcs = glob(["ros_gz_sim/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@launch",
+        "@launch_ros",
+        requirement("catkin_pkg"),
+    ],
+)
+
+### LIBRARIES
+
+# ros_gz_sim (Stopwatch)
+cc_library(
+    name = "ros_gz_sim_library",
+    srcs = ["src/Stopwatch.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "ros_gz_sim",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":ros_gz_sim_library"],
+    deps = [":ros_gz_sim_library"],
+)
+
+# ros_gz_sim_delete_entity / ros_gz_sim_spawn_entity / ros_gz_sim_set_entity_pose
+[
+    (
+        cc_library(
+            name = "ros_gz_sim_{0}_library".format(name),
+            srcs = ["src/{0}.cpp".format(name)],
+            hdrs = HEADERS,
+            includes = ["include"],
+            local_defines = ros_local_defines(),
+            deps = DEPENDENCIES.values() + MESSAGE_DEPS + [
+                ":cli11",
+            ],
+        ),
+        cc_shared_library(
+            name = "ros_gz_sim_" + name,
+            dynamic_deps = DEPENDENCIES.keys(),
+            exports_filter = [":ros_gz_sim_{0}_library".format(name)],
+            deps = [":ros_gz_sim_{0}_library".format(name)],
+        ),
+    )
+    for name in [
+        "delete_entity",
+        "spawn_entity",
+        "set_entity_pose",
+    ]
+]
+
+# gzserver_component: the Gazebo server embedded in a ROS node, plus the
+# simulation_interfaces services/actions.
+cc_library(
+    name = "gzserver_component_library",
+    srcs = ["src/gzserver.cpp"] + glob([
+        "src/gz_simulation_interfaces/**/*.cpp",
+        "src/gz_simulation_interfaces/**/*.hpp",
+    ]),
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + GZSERVER_DEPENDENCIES.values() + MESSAGE_DEPS + [
+        ":gz_msgs_details_shim",
+        "@simulation_interfaces//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "gzserver_component",
+    dynamic_deps = DEPENDENCIES.keys() + GZSERVER_DEPENDENCIES.keys(),
+    exports_filter = [":gzserver_component_library"],
+    deps = [":gzserver_component_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":ros_gz_sim",
+        ":ros_gz_sim_delete_entity",
+        ":ros_gz_sim_set_entity_pose",
+        ":ros_gz_sim_spawn_entity",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+### COMPONENTS
+
+rclcpp_components_register_node(
+    name = "gzserver",
+    component = ":gzserver_component",
+    node_name = "gzserver",
+    plugin = "ros_gz_sim::GzServer",
+)
+
+### LAUNCH FILES
+
+expand_template(
+    name = "gz_sim_launch",
+    out = "launch/gz_sim.launch.py",
+    substitutions = {"@GZ_SIM_VER@": GZ_SIM_VER},
+    template = "launch/gz_sim.launch.py.in",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":gzserver_record"],
+    data = glob(
+        ["launch/*"],
+        exclude = [
+            "launch/*.in",
+            "launch/ros_gz_spawn_model.launch",
+        ],
+    ) + [":gz_sim_launch"],
+)
+
+### EXECUTABLES
+
+cc_binary(
+    name = "create",
+    srcs = ["src/create.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + MESSAGE_DEPS + [
+        "@rosdistro//cc:gflags",
+    ],
+)
+
+cc_binary(
+    name = "remove",
+    srcs = ["src/remove.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + MESSAGE_DEPS,
+)
+
+# delete_entity / spawn_entity / set_entity_pose: the CLI entry points are the
+# same sources compiled with a main() (see upstream CMakeLists.txt).
+[
+    cc_binary(
+        name = name,
+        srcs = ["src/{0}.cpp".format(name)],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        local_defines = ros_local_defines(),
+        deps = DEPENDENCIES.values() + MESSAGE_DEPS + [
+            ":cli11",
+            ":ros_gz_sim_{0}_library".format(name),
+        ],
+    )
+    for name in [
+        "delete_entity",
+        "spawn_entity",
+        "set_entity_pose",
+    ]
+]
+
+### TESTING
+
+[
+    (
+        cc_test(
+            name = name,
+            timeout = "moderate",
+            srcs = ["test/{0}.cpp".format(name)],
+            dynamic_deps = [":transitive_dynamic_deps"],
+            local_defines = ros_local_defines(),
+            deps = DEPENDENCIES.values() + MESSAGE_DEPS + extra_deps + [
+                "@rosdistro//cc:googletest",
+            ],
+        ),
+        cc_binary(
+            name = "bin/" + name,
+            srcs = ["test/{0}.cpp".format(name)],
+            dynamic_deps = [":transitive_dynamic_deps"],
+            local_defines = ros_local_defines(),
+            deps = DEPENDENCIES.values() + MESSAGE_DEPS + extra_deps + [
+                "@rosdistro//cc:googletest",
+            ],
+        ),
+    )
+    for name, extra_deps in [
+        (
+            "test_stopwatch",
+            [":ros_gz_sim_library"],
+        ),
+        (
+            "test_spawn_entity",
+            [":ros_gz_sim_spawn_entity_library"],
+        ),
+        (
+            "test_set_entity_pose",
+            [":ros_gz_sim_set_entity_pose_library"],
+        ),
+        (
+            "test_delete_entity",
+            [":ros_gz_sim_delete_entity_library"],
+        ),
+    ]
+]
+
+# Helpers for the launch tests (ament_add_gtest_executable, run via launch).
+[
+    cc_binary(
+        name = name,
+        srcs = ["test/{0}.cpp".format(name)],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        local_defines = ros_local_defines(),
+        deps = DEPENDENCIES.values() + [
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for name in [
+        "test_create",
+        "test_remove",
+    ]
+]
+
+# Integration tests: launch several processes (create/remove + Gazebo
+# transport, or a full gzserver with the ros_gz_bridge) via launch_testing;
+# they need gz-transport discovery (UDP multicast) and a Gazebo server, so
+# they are manual.
+[
+    py_pytest(
+        name = "test_launch_" + f.split("/")[-1].removesuffix(".launch.py"),
+        srcs = [f],
+        args = [
+            "-p",
+            "launch_testing.pytest.hooks",
+        ],
+        data = glob(["test/sdf/*.sdf"]) + [
+            ":ament_index",
+            ":ament_package",
+            ":create",
+            ":gzserver",
+            ":remove",
+            ":test_create",
+            ":test_remove",
+            "@ros_gz_bridge//:ament_package",
+            "@ros_gz_bridge//:parameter_bridge",
+        ],
+        tags = ["manual"],
+        deps = [
+            ":ros_gz_sim_py",
+            "@launch_testing",
+            "@launch_testing_ros",
+            "@rules_python//python/runfiles",
+            "@simulation_interfaces//:py",
+        ],
+    )
+    for f in [
+        "test/test_create_node.launch.py",
+        "test/test_remove_node.launch.py",
+        "test/test_gz_simulation_interfaces.launch.py",
+    ]
+]
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "tf2",
+        "tf2_ros",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_sets = {
+        "export_gzserver_component": ["gzserver_component"],
+        "ros_gz_sim": [
+            "ros_gz_sim",
+            "ros_gz_sim_spawn_entity",
+            "ros_gz_sim_set_entity_pose",
+            "ros_gz_sim_delete_entity",
+        ],
+    },
+    executables = [
+        ":bin/test_delete_entity",
+        ":bin/test_set_entity_pose",
+        ":bin/test_spawn_entity",
+        ":bin/test_stopwatch",
+        ":create",
+        ":delete_entity",
+        ":gzserver",
+        ":remove",
+        ":set_entity_pose",
+        ":spawn_entity",
+        ":test_create",
+        ":test_remove",
+    ],
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [
+        ":gzserver_component",
+        ":ros_gz_sim",
+        ":ros_gz_sim_delete_entity",
+        ":ros_gz_sim_set_entity_pose",
+        ":ros_gz_sim_spawn_entity",
+    ],
     package_xml = "package.xml",
+    python = [":ros_gz_sim_py"],
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_python//:ament_package",
         "@ament_index_python//:ament_package",

@@ -13,16 +13,106 @@
 # limitations under the License.
 
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+load("@rules_qt//:qt.bzl", "qt_cc_library", "qt_cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### DATA
+
+DATA = glob(["icons/**"])
 
 ament_index(
     name = "ament_index",
+    data = DATA,
+    libraries = [":rviz_default_plugins"],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugins_description.xml"],
+    deps = [
+        "@rviz_common//:ament_index",
+        "@rviz_rendering//:ament_index",
+    ],
 )
 
 ### LIBRARIES
+
+HEADERS = glob(
+    [
+        "include/**/*.hpp",
+        "include/**/*.h",
+    ],
+    allow_empty = True,
+)
+
+# Mirrors rviz_default_plugins_headers_to_moc in upstream's CMakeLists.txt.
+MOC_HEADERS = [
+    "include/rviz_default_plugins/displays/accel/accel_display.hpp",
+    "include/rviz_default_plugins/displays/axes/axes_display.hpp",
+    "include/rviz_default_plugins/displays/camera_info/camera_info_display.hpp",
+    "include/rviz_default_plugins/displays/camera/camera_display.hpp",
+    "include/rviz_default_plugins/displays/depth_cloud/depth_cloud_display.hpp",
+    "include/rviz_default_plugins/displays/effort/effort_display.hpp",
+    "include/rviz_default_plugins/displays/fluid_pressure/fluid_pressure_display.hpp",
+    "include/rviz_default_plugins/displays/grid/grid_display.hpp",
+    "include/rviz_default_plugins/displays/grid_cells/grid_cells_display.hpp",
+    "include/rviz_default_plugins/displays/illuminance/illuminance_display.hpp",
+    "include/rviz_default_plugins/displays/image/image_display.hpp",
+    "include/rviz_default_plugins/displays/laser_scan/laser_scan_display.hpp",
+    "include/rviz_default_plugins/displays/map/map_display.hpp",
+    "include/rviz_default_plugins/displays/marker/marker_common.hpp",
+    "include/rviz_default_plugins/displays/odometry/odometry_display.hpp",
+    "include/rviz_default_plugins/transformation/transformer_guard.hpp",
+    "include/rviz_default_plugins/displays/interactive_markers/integer_action.hpp",
+    "include/rviz_default_plugins/displays/interactive_markers/interactive_marker.hpp",
+    "include/rviz_default_plugins/displays/interactive_markers/interactive_marker_display.hpp",
+    "include/rviz_default_plugins/displays/interactive_markers/interactive_marker_namespace_property.hpp",
+    "include/rviz_default_plugins/displays/path/path_display.hpp",
+    "include/rviz_default_plugins/displays/point/point_stamped_display.hpp",
+    "include/rviz_default_plugins/displays/pointcloud/point_cloud_common.hpp",
+    "include/rviz_default_plugins/displays/pointcloud/point_cloud_transformer.hpp",
+    "include/rviz_default_plugins/displays/pointcloud/transformers/axis_color_pc_transformer.hpp",
+    "include/rviz_default_plugins/displays/pointcloud/transformers/flat_color_pc_transformer.hpp",
+    "include/rviz_default_plugins/displays/pointcloud/transformers/intensity_pc_transformer.hpp",
+    "include/rviz_default_plugins/displays/polygon/polygon_display.hpp",
+    "include/rviz_default_plugins/displays/pose/pose_display.hpp",
+    "include/rviz_default_plugins/displays/pose_array/pose_array_display.hpp",
+    "include/rviz_default_plugins/displays/pose_covariance/pose_with_covariance_display.hpp",
+    "include/rviz_default_plugins/displays/range/range_display.hpp",
+    "include/rviz_default_plugins/displays/relative_humidity/relative_humidity_display.hpp",
+    "include/rviz_default_plugins/displays/robot_model/robot_model_display.hpp",
+    "include/rviz_default_plugins/displays/temperature/temperature_display.hpp",
+    "include/rviz_default_plugins/displays/tf/frame_info.hpp",
+    "include/rviz_default_plugins/displays/tf/tf_display.hpp",
+    "include/rviz_default_plugins/displays/twist/twist_display.hpp",
+    "include/rviz_default_plugins/displays/wrench/wrench_display.hpp",
+    "include/rviz_default_plugins/robot/robot.hpp",
+    "include/rviz_default_plugins/robot/robot_joint.hpp",
+    "include/rviz_default_plugins/robot/robot_link.hpp",
+    "include/rviz_default_plugins/robot/robot_element_base_class.hpp",
+    "include/rviz_default_plugins/tools/measure/measure_tool.hpp",
+    "include/rviz_default_plugins/tools/goal_pose/goal_tool.hpp",
+    "include/rviz_default_plugins/tools/interaction/interaction_tool.hpp",
+    "include/rviz_default_plugins/tools/pose_estimate/initial_pose_tool.hpp",
+    "include/rviz_default_plugins/tools/point/point_tool.hpp",
+    "include/rviz_default_plugins/view_controllers/frame/frame_view_controller.hpp",
+    "include/rviz_default_plugins/view_controllers/orbit/orbit_view_controller.hpp",
+    "include/rviz_default_plugins/view_controllers/ortho/fixed_orientation_ortho_view_controller.hpp",
+    "include/rviz_default_plugins/view_controllers/xy_orbit/xy_orbit_view_controller.hpp",
+]
 
 DEPENDENCIES = {
     "@image_transport//:image_transport": "@image_transport//:image_transport_library",
@@ -30,37 +120,28 @@ DEPENDENCIES = {
     "@laser_geometry//:laser_geometry": "@laser_geometry//:laser_geometry_library",
     "@point_cloud_transport//:point_cloud_transport": "@point_cloud_transport//:point_cloud_transport_library",
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
-    "@resource_retriever_service_plugin//:resource_retriever_service_plugin": "@resource_retriever_service_plugin//:resource_retriever_service_plugin_library",
     "@resource_retriever//:resource_retriever": "@resource_retriever//:resource_retriever_library",
+    "@resource_retriever_service_plugin//:resource_retriever_service_plugin": "@resource_retriever_service_plugin//:resource_retriever_service_plugin_library",
     "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
     "@rosdistro//cc:OgreOverlay": "@rosdistro//cc:OgreOverlay_library",
     "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
     "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
     "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
     "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
-    "@tf2//:tf2": "@tf2//:tf2_library",
     "@urdf//:urdf": "@urdf//:urdf_library",
 }
 
-cc_library(
+qt_cc_library(
     name = "rviz_default_plugins_library",
-    srcs = glob(
-        [
-            "src/**/*.cpp",
-            "src/**/*.hpp",
-            "src/**/*.h",
-        ],
-        allow_empty = True,
-    ),
-    hdrs = glob(
-        [
-            "include/**/*.hpp",
-            "include/**/*.h",
-        ],
-        allow_empty = True,
-    ),
+    srcs = glob([
+        "src/**/*.cpp",
+        "src/**/*.hpp",
+    ]),
+    hdrs = MOC_HEADERS,
     includes = ["include"],
     local_defines = ros_local_defines() + ["RVIZ_DEFAULT_PLUGINS_BUILDING_LIBRARY"],
+    normal_hdrs = [h for h in HEADERS if h not in MOC_HEADERS],
     deps = DEPENDENCIES.values() + [
         "@geometry_msgs//:cc",
         "@map_msgs//:cc",
@@ -78,73 +159,269 @@ cc_shared_library(
     deps = [":rviz_default_plugins_library"],
 )
 
-# ### TESTS
+### TESTS
 
-# cc_library(
-#     name = "ogre_testing_environment",
-#     srcs = ["test/rviz_default_plugins/ogre_testing_environment.cpp"],
-#     hdrs = ["test/rviz_default_plugins/ogre_testing_environment.hpp"],
-#     deps = [
-#         "@rosdistro//cc:OgreMain",
-#         "@rviz_rendering",
-#     ],
-# )
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    ":rviz_default_plugins": ":rviz_default_plugins_library",
+}
 
-# cc_library(
-#     name = "rviz_default_plugins_test_fixture",
-#     srcs = [
-#         "test/rviz_default_plugins/displays/display_test_fixture.cpp",
-#         "test/rviz_default_plugins/scene_graph_introspection.cpp",
-#     ],
-#     hdrs = [
-#         "test/rviz_default_plugins/displays/display_test_fixture.hpp",
-#         "test/rviz_default_plugins/scene_graph_introspection.hpp",
-#     ],
-#     deps = [
-#         ":ogre_testing_environment",
-#         ":rviz_default_plugins_library",
-#         "@rosdistro//cc:googletest",
-#     ],
-# )
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps_test",
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
 
-# cc_test(
-#     name = "fps_view_controller_test",
-#     srcs = [
-#         "test/rviz_default_plugins/view_controllers/fps/fps_view_controller_test.cpp",
-#     ],
-#     deps = [
-#         ":rviz_default_plugins_test_fixture",
-#         "@rosdistro//cc:googletest",
-#     ],
-# )
+TEST_HEADERS = glob(["test/**/*.hpp"])
 
-# cc_test(
-#     name = "frame_view_controller_test",
-#     srcs = [
-#         "test/rviz_default_plugins/view_controllers/frame/frame_view_controller_test.cpp",
-#     ],
-#     deps = [
-#         ":rviz_default_plugins_test_fixture",
-#         "@rosdistro//cc:googletest",
-#     ],
-# )
+# ogre_testing_environment + test_fixture_objects from upstream.
+cc_library(
+    name = "test_fixture",
+    testonly = True,
+    srcs = [
+        "test/rviz_default_plugins/displays/display_test_fixture.cpp",
+        "test/rviz_default_plugins/ogre_testing_environment.cpp",
+        "test/rviz_default_plugins/scene_graph_introspection.cpp",
+    ],
+    hdrs = TEST_HEADERS,
+    includes = ["test"],
+    local_defines = ros_local_defines(),
+    deps = TEST_DEPENDENCIES.values() + [
+        "@rosdistro//cc:googletest",
+        "@rules_qt//:qt_widgets",
+    ],
+)
 
-# cc_test(
-#     name = "frame_info_test",
-#     srcs = [
-#         "test/rviz_default_plugins/displays/tf/frame_info_test.cpp",
-#     ],
-#     deps = [
-#         ":rviz_default_plugins_test_fixture",
-#         "@rosdistro//cc:googletest",
-#     ],
-# )
+cc_library(
+    name = "marker_messages",
+    testonly = True,
+    srcs = ["test/rviz_default_plugins/displays/marker/marker_messages.cpp"],
+    hdrs = TEST_HEADERS,
+    includes = ["test"],
+    deps = [
+        "@geometry_msgs//:cc",
+        "@map_msgs//:cc",
+        "@rclcpp//:rclcpp_library",
+        "@rosdistro//cc:OgreMain_library",
+        "@visualization_msgs//:cc",
+    ],
+)
+
+cc_library(
+    name = "pointcloud_messages",
+    testonly = True,
+    srcs = ["test/rviz_default_plugins/pointcloud_messages.cpp"],
+    hdrs = TEST_HEADERS,
+    includes = ["test"],
+    deps = [
+        "@geometry_msgs//:cc",
+        "@laser_geometry//:laser_geometry_library",
+        "@map_msgs//:cc",
+        "@rclcpp//:rclcpp_library",
+    ],
+)
+
+# Page objects shared by the visual tests (upstream builds three of them as
+# static libraries and compiles the rest into each test binary).
+cc_library(
+    name = "page_objects",
+    testonly = True,
+    srcs = glob(["test/rviz_default_plugins/page_objects/*.cpp"]),
+    hdrs = TEST_HEADERS,
+    includes = ["test"],
+    deps = [
+        "@rules_qt//:qt_test",
+        "@rules_qt//:qt_widgets",
+        "@rviz_visual_testing_framework",
+    ],
+)
+
+TEST_DEPS = TEST_DEPENDENCIES.values() + [
+    ":marker_messages",
+    ":pointcloud_messages",
+    ":test_fixture",
+    "@geometry_msgs//:cc",
+    "@map_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@rosdistro//cc:googletest",
+    "@rules_qt//:qt_widgets",
+    "@visualization_msgs//:cc",
+]
+
+TEST_DATA = [
+    ":ament_index",
+    "@image_transport//:ament_index_package",
+    "@image_transport//:ament_index_plugin",
+    "@rviz_rendering_tests//:ament_index",
+] + glob(["test/ogre_media_resources/**"])
+
+TEST_LINKOPTS = select({
+    "@platforms//os:linux": ["-Wl,--allow-shlib-undefined"],
+    "//conditions:default": [],
+})
+
+# Upstream's SKIP_DISPLAY_TESTS set: skipped by colcon without a DISPLAY.
+DISPLAY_TESTS = {
+    "fps_view_controller_test": ["test/rviz_default_plugins/view_controllers/fps/fps_view_controller_test.cpp"],
+    "frame_view_controller_test": ["test/rviz_default_plugins/view_controllers/frame/frame_view_controller_test.cpp"],
+    "frame_info_test": ["test/rviz_default_plugins/displays/tf/frame_info_test.cpp"],
+    "grid_cells_display_test": ["test/rviz_default_plugins/displays/grid_cells/grid_cells_display_test.cpp"],
+    "image_display_test": ["test/rviz_default_plugins/displays/image/image_display_test.cpp"],
+    "marker_test": [
+        "test/rviz_default_plugins/displays/marker/markers/arrow_marker_test.cpp",
+        "test/rviz_default_plugins/displays/marker/markers/line_marker_test.cpp",
+        "test/rviz_default_plugins/displays/marker/markers/mesh_resource_marker_test.cpp",
+        "test/rviz_default_plugins/displays/marker/markers/points_marker_test.cpp",
+        "test/rviz_default_plugins/displays/marker/markers/shape_marker_test.cpp",
+        "test/rviz_default_plugins/displays/marker/markers/text_view_facing_marker_test.cpp",
+        "test/rviz_default_plugins/displays/marker/markers/triangle_list_marker_test.cpp",
+        "test/rviz_default_plugins/displays/marker/markers/markers_test_fixture.cpp",
+    ],
+    "marker_common_test": ["test/rviz_default_plugins/displays/marker/marker_common_test.cpp"],
+    "map_display_test": ["test/rviz_default_plugins/displays/map/map_display_test.cpp"],
+    "measure_tool_test": ["test/rviz_default_plugins/tools/measure/measure_tool_test.cpp"],
+    "odometry_display_test": ["test/rviz_default_plugins/displays/odometry/odometry_display_test.cpp"],
+    "odometry_ogre_helper_test": ["test/rviz_default_plugins/displays/odometry/quaternion_helper_test.cpp"],
+    "orbit_view_controller_test": ["test/rviz_default_plugins/view_controllers/orbit/orbit_view_controller_test.cpp"],
+    "ortho_view_controller_test": ["test/rviz_default_plugins/view_controllers/ortho/ortho_view_controller_test.cpp"],
+    "palette_builder_test": ["test/rviz_default_plugins/displays/map/palette_builder_test.cpp"],
+    "path_display_test": ["test/rviz_default_plugins/displays/path/path_display_test.cpp"],
+    "point_cloud2_display_test": ["test/rviz_default_plugins/displays/pointcloud/point_cloud2_display_test.cpp"],
+    "point_cloud_common_test": ["test/rviz_default_plugins/displays/pointcloud/point_cloud_common_test.cpp"],
+    "point_cloud_scalar_display_test": ["test/rviz_default_plugins/displays/pointcloud/point_cloud_scalar_display_test.cpp"],
+    "point_cloud_transformers_test": [
+        "test/rviz_default_plugins/displays/pointcloud/point_cloud_transformers/axis_color_pc_transformer_test.cpp",
+        "test/rviz_default_plugins/displays/pointcloud/point_cloud_transformers/flat_color_pc_transformer_test.cpp",
+        "test/rviz_default_plugins/displays/pointcloud/point_cloud_transformers/intensity_pc_transformer_test.cpp",
+        "test/rviz_default_plugins/displays/pointcloud/point_cloud_transformers/rgb8_pc_transformer_test.cpp",
+        "test/rviz_default_plugins/displays/pointcloud/point_cloud_transformers/rgbf32_pc_transformer_test.cpp",
+        "test/rviz_default_plugins/displays/pointcloud/point_cloud_transformers/xyz_pc_transformer_test.cpp",
+    ],
+    "point_display_test": ["test/rviz_default_plugins/displays/point/point_stamped_display_test.cpp"],
+    "pose_array_display_test": ["test/rviz_default_plugins/displays/pose_array/pose_array_display_test.cpp"],
+    "pose_tool_test": ["test/rviz_default_plugins/tools/pose/pose_tool_test.cpp"],
+    "range_display_test": ["test/rviz_default_plugins/displays/range/range_display_test.cpp"],
+    "robot_test": ["test/rviz_default_plugins/robot/robot_test.cpp"],
+    "ros_image_texture_test": ["test/rviz_default_plugins/displays/image/ros_image_texture_test.cpp"],
+    "selection_tool_test": ["test/rviz_default_plugins/tools/select/selection_tool_test.cpp"],
+    "xy_orbit_view_controller_test": ["test/rviz_default_plugins/view_controllers/xy_orbit/xy_orbit_view_controller_test.cpp"],
+    "frame_transformer_tf_test": ["test/rviz_default_plugins/transformation/frame_transformer_tf_test.cpp"],
+    "transformer_guard_test": ["test/rviz_default_plugins/transformation/transformer_guard_test.cpp"],
+}
+
+# Upstream's SKIP_VISUAL_TESTS set (EnableVisualTests=True only).
+VISUAL_TESTS = {
+    "accel_display_visual_test": ["test/rviz_default_plugins/displays/accel/accel_display_visual_test.cpp"],
+    "axes_display_visual_test": ["test/rviz_default_plugins/displays/axes/axes_display_visual_test.cpp"],
+    "camera_info_display_visual_test": ["test/rviz_default_plugins/displays/camera_info/camera_info_display_visual_test.cpp"],
+    "camera_display_visual_test": ["test/rviz_default_plugins/displays/camera/camera_display_visual_test.cpp"],
+    "depth_cloud_display_visual_test": ["test/rviz_default_plugins/displays/depth_cloud/depth_cloud_display_visual_test.cpp"],
+    "effort_display_visual_test": ["test/rviz_default_plugins/displays/effort/effort_display_visual_test.cpp"],
+    "fluid_pressure_display_visual_test": ["test/rviz_default_plugins/displays/fluid_pressure/fluid_pressure_display_visual_test.cpp"],
+    "grid_display_visual_test": ["test/rviz_default_plugins/displays/grid/grid_display_visual_test.cpp"],
+    "grid_cells_display_visual_test": ["test/rviz_default_plugins/displays/grid_cells/grid_cells_display_visual_test.cpp"],
+    "illuminance_display_visual_test": ["test/rviz_default_plugins/displays/illuminance/illuminance_display_visual_test.cpp"],
+    "image_display_visual_test": ["test/rviz_default_plugins/displays/image/image_display_visual_test.cpp"],
+    "interactive_marker_namespace_property_test": ["test/rviz_default_plugins/displays/interactive_markers/interactive_marker_namespace_property_test.cpp"],
+    "laser_scan_display_visual_test": ["test/rviz_default_plugins/displays/laser_scan/laser_scan_display_visual_test.cpp"],
+    "map_display_visual_test": ["test/rviz_default_plugins/displays/map/map_display_visual_test.cpp"],
+    "marker_array_display_visual_test": ["test/rviz_default_plugins/displays/marker_array/marker_array_display_visual_test.cpp"],
+    "marker_display_visual_test": ["test/rviz_default_plugins/displays/marker/marker_display_visual_test.cpp"],
+    "odometry_display_visual_test": ["test/rviz_default_plugins/displays/odometry/odometry_display_visual_test.cpp"],
+    "path_display_visual_test": ["test/rviz_default_plugins/displays/path/path_display_visual_test.cpp"],
+    "point_display_visual_test": ["test/rviz_default_plugins/displays/point/point_stamped_display_visual_test.cpp"],
+    "point_cloud_display_visual_test": ["test/rviz_default_plugins/displays/pointcloud/point_cloud_display_visual_test.cpp"],
+    "point_cloud2_display_visual_test": ["test/rviz_default_plugins/displays/pointcloud/point_cloud2_display_visual_test.cpp"],
+    "pose_array_display_visual_test": ["test/rviz_default_plugins/displays/pose_array/pose_array_display_visual_test.cpp"],
+    "pose_display_visual_test": ["test/rviz_default_plugins/displays/pose/pose_display_visual_test.cpp"],
+    "pose_with_covariance_display_visual_test": ["test/rviz_default_plugins/displays/pose_covariance/pose_with_covariance_display_visual_test.cpp"],
+    "range_display_visual_test": ["test/rviz_default_plugins/displays/range/range_display_visual_test.cpp"],
+    "relative_humidity_display_visual_test": ["test/rviz_default_plugins/displays/relative_humidity/relative_humidity_display_visual_test.cpp"],
+    "robot_model_display_visual_test": ["test/rviz_default_plugins/displays/robot_model/robot_model_display_visual_test.cpp"],
+    "temperature_display_visual_test": ["test/rviz_default_plugins/displays/temperature/temperature_display_visual_test.cpp"],
+    "tf_display_visual_test": ["test/rviz_default_plugins/displays/tf/tf_display_visual_test.cpp"],
+    "twist_display_visual_test": ["test/rviz_default_plugins/displays/twist/twist_display_visual_test.cpp"],
+    "wrench_display_visual_test": ["test/rviz_default_plugins/displays/wrench/wrench_stamped_display_visual_test.cpp"],
+}
+
+qt_cc_test(
+    name = "get_transport_from_topic_test",
+    srcs = ["test/rviz_default_plugins/displays/image/get_transport_from_topic_test.cpp"],
+    data = TEST_DATA,
+    dynamic_deps = [":transitive_dynamic_deps_test"],
+    includes = ["test"],
+    linkopts = TEST_LINKOPTS,
+    linkstatic = True,
+    local_defines = ros_local_defines(),
+    deps = TEST_DEPS,
+)
+
+[
+    qt_cc_test(
+        name = test,
+        srcs = srcs,
+        data = TEST_DATA,
+        dynamic_deps = [":transitive_dynamic_deps_test"],
+        includes = ["test"],
+        linkopts = TEST_LINKOPTS,
+        linkstatic = True,
+        local_defines = ros_local_defines(),
+        tags = [
+            "manual",
+            "no-sandbox",
+            "xfail",
+        ],
+        deps = TEST_DEPS,
+    )
+    for test, srcs in DISPLAY_TESTS.items()
+]
+
+[
+    qt_cc_test(
+        name = test,
+        srcs = srcs,
+        data = TEST_DATA,
+        dynamic_deps = [":transitive_dynamic_deps_test"],
+        includes = ["test"],
+        linkopts = TEST_LINKOPTS,
+        linkstatic = True,
+        local_defines = ros_local_defines(),
+        tags = [
+            "manual",
+            "no-sandbox",
+            "xfail",
+        ],
+        deps = TEST_DEPS + [
+            ":page_objects",
+            "@ament_index_cpp//:ament_index_cpp_library",
+            "@rules_qt//:qt_test",
+            "@rviz_visual_testing_framework",
+        ],
+    )
+    for test, srcs in VISUAL_TESTS.items()
+]
 
 ### PACKAGING
 
+pkg_files(
+    name = "test_meshes",
+    srcs = glob(["test/ogre_media_resources/test_meshes/**"]),
+    prefix = "share/rviz_default_plugins",
+    strip_prefix = strip_prefix.from_pkg("test/ogre_media_resources"),
+)
+
 ament_package(
     name = "ament_package",
+    cmake = ["rviz_default_plugins-extras.cmake"],
+    cmake_export_has_library_target = True,
+    cmake_export_libraries = False,
+    cmake_extras = ["rviz_default_plugins-extras.cmake"],
+    data = DATA,
+    headers = HEADERS,
+    install = [":test_meshes"],
+    libraries = [":rviz_default_plugins"],
     package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugins_description.xml"],
     deps = [
         ":ament_index",
         "@ament_cmake_gmock//:ament_package",

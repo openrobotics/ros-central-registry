@@ -12,14 +12,95 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+# gz_math_vendor: vendors gz-math (version 9) from the Bazel Central Registry
+# module `gz-math` (shared library wrappers live in @rosdistro//cc/gz) and
+# installs it like colcon's ament_vendor() does (opt/gz_math_vendor/...).
 
-package(default_visibility = ["//visibility:public"])
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc/gz:defs.bzl", "gz_install_files", "gz_install_headers", "gz_vendor_hooks")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES (gz-math::core, gz-math::eigen3)
+
+alias(
+    name = "gz_math",
+    actual = "@rosdistro//cc/gz:gz-math",
+)
+
+alias(
+    name = "gz_math_library",
+    actual = "@rosdistro//cc/gz:gz-math_library",
+)
+
+alias(
+    name = "gz_math_eigen3_library",
+    actual = "@rosdistro//cc/gz:gz-math-eigen3_library",
+)
+
+# Python bindings (import gz.math).
+alias(
+    name = "gz_math_python",
+    actual = "@rosdistro//cc/gz:gz-math_python",
+)
+
+### INSTALL LAYOUT (opt/gz_math_vendor/...)
+
+VENDOR = "gz_math_vendor"
+
+PREFIX = "opt/" + VENDOR
+
+gz_install_headers(
+    name = "install_headers",
+    include_only = "gz/",
+    prefix = PREFIX + "/include/gz/math9",
+    deps = [
+        ":gz_math_eigen3_library",
+        ":gz_math_library",
+    ],
+)
+
+gz_install_files(
+    name = "install_libraries",
+    srcs = [":gz_math"],
+    flatten = True,
+    prefix = PREFIX + "/lib",
+)
+
+gz_install_files(
+    name = "install_python",
+    srcs = ["@rosdistro//cc/gz:gz-math_python_extension"],
+    flatten = True,
+    prefix = PREFIX + "/lib/python/gz",
+)
+
+ENV_HOOKS = gz_vendor_hooks(
+    name = "install_hooks",
+    vendor = VENDOR,
+)
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    env_hooks = ENV_HOOKS,
+    install = [
+        ":install_headers",
+        ":install_hooks",
+        ":install_libraries",
+        ":install_python",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake_copyright//:ament_package",

@@ -1,0 +1,73 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+ENV_HOOKS = [
+    "0.ros_distro_check.sh",
+    "1.ros_discovery.dsv",
+    "1.ros_discovery.sh",
+    "1.ros_distro.dsv",
+    "1.ros_distro.sh",
+    "1.ros_python_version.dsv",
+    "1.ros_python_version.sh",
+    "1.ros_version.dsv",
+    "1.ros_version.sh",
+]
+
+# ament_environment_hooks(env-hooks/*.in): configure_file(@ONLY) with the values
+# ros_environment's CMakeLists.txt sets for this distribution.
+[
+    genrule(
+        name = hook.replace(".", "_"),
+        srcs = ["env-hooks/" + hook + ".in"],
+        outs = ["environment/" + hook],
+        cmd = "sed -e 's|@ROS_DISTRO@|lyrical|g' -e 's|@ROS_VERSION@|2|g' -e 's|@ROS_PYTHON_VERSION@|3|g' -e 's|@ROS_AUTOMATIC_DISCOVERY_RANGE@|SUBNET|g' $< > $@",
+    )
+    for hook in ENV_HOOKS
+]
+
+pkg_files(
+    name = "environment_hooks",
+    srcs = ["environment/" + hook for hook in ENV_HOOKS],
+    prefix = "share/ros_environment",
+    strip_prefix = strip_prefix.from_pkg(),
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    env_hooks = ["environment/" + hook for hook in ENV_HOOKS if not hook.endswith(".sh") or hook.startswith("0.")],
+    install = [":environment_hooks"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_core//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

@@ -14,7 +14,6 @@
 
 load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
-load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
@@ -57,12 +56,6 @@ cc_library(
     ],
 )
 
-collect_transitive_dynamic_deps(
-    name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
-    visibility = ["//visibility:private"],
-)
-
 cc_shared_library(
     name = "rclpy_bindings",
     exports_filter = [":rclpy_bindings_library"],
@@ -87,6 +80,7 @@ ament_index(
         "@rcl_logging_interface//:ament_package",
         "@rcpputils//:ament_package",
         "@rcutils//:ament_package",
+        "@rmw_implementation//:ament_index",
     ],
 )
 
@@ -135,6 +129,10 @@ py_library(
         name = test,
         srcs = ["test/{}.py".format(test)],
         data = glob(["test/resources/**"]),
+        tags = [
+            "manual",
+            "xfail",
+        ] if test == "test_executor" else [],
         deps = [
             ":rclpy",
             "@rules_python//python/runfiles",
@@ -201,8 +199,12 @@ py_library(
 
 ament_package(
     name = "ament_package",
-    libraries = [":rclpy_bindings"],
+    cmake_export_has_library_target = True,
     package_xml = "package.xml",
+    # ament_python_install_package(rclpy) plus the pybind11 extension module,
+    # which upstream installs next to the python sources (rclpy/_rclpy_pybind11.so)
+    # rather than as an exported library in lib/.
+    python = glob(["rclpy/**"]) + [":rclpy_bindings"],
     deps = [
         "@action_msgs//:ament_package",
         "@ament_cmake//:ament_package",

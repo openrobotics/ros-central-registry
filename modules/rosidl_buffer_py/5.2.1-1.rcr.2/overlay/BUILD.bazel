@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 # Copyright 2025 Open Source Robotics Foundation, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +19,7 @@ load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 load("@rules_python//python:defs.bzl", "py_library")
 
 package(
@@ -79,11 +81,42 @@ py_library(
     imports = ["."],
 )
 
+[
+    write_file(
+        name = "egg_" + f.replace(".", "_").replace("-", "_"),
+        out = "_egg/lib/python3.14/site-packages/rosidl_buffer-5.2.1-py3.14.egg-info/" + f,
+        content = ["rosidl_buffer"],
+    )
+    for f in [
+        "PKG-INFO",
+        "SOURCES.txt",
+        "dependency_links.txt",
+        "top_level.txt",
+    ]
+]
+
+pkg_files(
+    name = "egg_info_files",
+    srcs = [
+        ":egg_PKG_INFO",
+        ":egg_SOURCES_txt",
+        ":egg_dependency_links_txt",
+        ":egg_top_level_txt",
+    ],
+    strip_prefix = strip_prefix.from_pkg("_egg"),
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies = False,
+    egg_info = False,
+    install = [":egg_info_files"],
     package_xml = "package.xml",
+    # ament_python_install_package(rosidl_buffer) plus the extension module
+    # upstream installs next to it (rosidl_buffer/_rosidl_buffer_py.so).
+    python = glob(["rosidl_buffer/**"]) + [":rcl_buffer_py_bindings"],
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_python//:ament_package",

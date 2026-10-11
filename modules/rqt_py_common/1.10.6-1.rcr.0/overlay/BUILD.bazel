@@ -15,9 +15,20 @@
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rosidl_default_generators//:defs.bzl", "py_ros_library")
+load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
 exports_files(["package.xml"])
 
@@ -57,10 +68,22 @@ py_ros_library(
     ],
 )
 
+ament_index(
+    name = "test_msgs_ament_index",
+    data = [
+        "//test/msg:ArrayVal.msg",
+        "//test/msg:Val.msg",
+        "//test/srv:AddTwoInts.srv",
+    ],
+    data_strip_prefix = "test",
+    export_name = "rqt_py_common_test_interfaces",
+)
+
 [
     py_pytest(
         name = test,
         srcs = ["test/{}.py".format(test)],
+        data = [":test_msgs_ament_index"],
         deps = [
             ":rqt_py_common",
             ":test_msgs",
@@ -76,10 +99,29 @@ py_ros_library(
 
 ### PACKAGING
 
+genrule(
+    name = "rosidl_cmake_extras",
+    outs = [
+        "rosidl_cmake-extras.cmake",
+        "rosidl_cmake_aggregate_target-extras.cmake",
+    ],
+    cmd = "touch $(OUTS)",
+)
+
 ament_package(
     name = "ament_package",
+    cmake = [":rosidl_cmake_extras"],
+    cmake_export_dependencies_list = ["rosidl_default_runtime"],
+    cmake_extras = [
+        "rosidl_cmake-extras.cmake",
+        "rosidl_cmake_aggregate_target-extras.cmake",
+    ],
+    cmake_strip_prefix = "",
     package_xml = "package.xml",
+    python = [":rqt_py_common"],
+    python_strip_prefix = "src",
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_pytest//:ament_package",
         "@ament_cmake_python//:ament_package",

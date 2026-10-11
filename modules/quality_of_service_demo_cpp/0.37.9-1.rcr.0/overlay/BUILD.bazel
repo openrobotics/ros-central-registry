@@ -12,12 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
 cc_library(
     name = "common_utils",
@@ -44,6 +56,15 @@ cc_library(
     ],
 )
 
+STANDALONE_EXECUTABLES = [
+    "liveliness",
+    "lifespan",
+    "deadline",
+    "interactive_publisher",
+    "interactive_subscriber",
+    "incompatible_qos",
+]
+
 [
     cc_binary(
         name = b,
@@ -56,14 +77,7 @@ cc_library(
             "@rcutils//:rcutils_library",
         ],
     )
-    for b in [
-        "liveliness",
-        "lifespan",
-        "deadline",
-        "interactive_publisher",
-        "interactive_subscriber",
-        "incompatible_qos",
-    ]
+    for b in STANDALONE_EXECUTABLES
 ]
 
 cc_library(
@@ -100,7 +114,7 @@ cc_shared_library(
 )
 
 rclcpp_components_register_node(
-    name = "node_message_lost_listener",
+    name = "message_lost_listener",
     component = ":message_lost",
     executor = "SingleThreadedExecutor",
     node_name = "message_lost_listener",
@@ -108,7 +122,7 @@ rclcpp_components_register_node(
 )
 
 rclcpp_components_register_node(
-    name = "node_message_lost_talker",
+    name = "message_lost_talker",
     component = ":message_lost",
     executor = "SingleThreadedExecutor",
     node_name = "message_lost_talker",
@@ -149,7 +163,7 @@ cc_shared_library(
 )
 
 rclcpp_components_register_node(
-    name = "node_qos_overrides_listener",
+    name = "qos_overrides_listener",
     component = ":qos_overrides",
     executor = "SingleThreadedExecutor",
     node_name = "qos_overrides_listener",
@@ -157,7 +171,7 @@ rclcpp_components_register_node(
 )
 
 rclcpp_components_register_node(
-    name = "node_qos_overrides_talker",
+    name = "qos_overrides_talker",
     component = ":qos_overrides",
     executor = "SingleThreadedExecutor",
     node_name = "qos_overrides_talker",
@@ -166,8 +180,34 @@ rclcpp_components_register_node(
 
 ### PACKAGING
 
+write_file(
+    name = "export_include_dirs_cmake",
+    out = "ament_cmake_export_include_directories-extras.cmake",
+    content = [""],
+)
+
 ament_package(
     name = "ament_package",
+    cmake = [":export_include_dirs_cmake"],
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    cmake_extras = ["ament_cmake_export_include_directories-extras.cmake"],
+    cmake_strip_prefix = "",
+    components = [
+        ":message_lost_listener_record",
+        ":message_lost_talker_record",
+        ":qos_overrides_listener_record",
+        ":qos_overrides_talker_record",
+    ],
+    data = glob(["params_file/**"]),
+    executables = [":{0}".format(b) for b in STANDALONE_EXECUTABLES] + [
+        ":message_lost_listener",
+        ":message_lost_talker",
+        ":qos_overrides_listener",
+        ":qos_overrides_talker",
+    ],
     libraries = [
         ":message_lost",
         ":qos_overrides",

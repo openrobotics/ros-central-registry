@@ -182,6 +182,33 @@ def ensure_vendor_dir_flag(bazelrc: Path) -> None:
         f.write(f"\n{VENDOR_DIR_RC_LINE}\n")
 
 
+def clear_vendored_module(target_workspace: Path, module: str) -> bool:
+    """
+    Removes a previously vendored copy of `module` (its vendor/<module>+/
+    tree and vendor/@<module>+.marker) so the following `bazel vendor`
+    re-extracts it from the registry's *current* content.
+
+    `bazel vendor` keys its "already vendored, nothing to do" check on the
+    marker file, which can stay stale after modules/<module>/<version>/
+    changed on disk (e.g. create_patch amended a branch-only version in
+    place). Bazel then silently ignores the vendored tree and builds from
+    the registry copy instead, so in-place edits appear to have no effect.
+    Re-vendoring is documented as resetting the module anyway, so always
+    start from a clean slate. Returns True if anything was removed.
+    """
+    vendor_dir = target_workspace / "vendor"
+    removed = False
+    module_dir = vendor_dir / f"{module}+"
+    marker = vendor_dir / f"@{module}+.marker"
+    if module_dir.exists():
+        shutil.rmtree(module_dir)
+        removed = True
+    if marker.exists():
+        marker.unlink()
+        removed = True
+    return removed
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Vendor a set of modules into a Bazel workspace for "
@@ -260,6 +287,10 @@ def main():
         sys.exit(1)
 
     ensure_vendor_dir_flag(bazelrc)
+
+    for module in modules:
+        if clear_vendored_module(target_workspace, module):
+            print(f"Discarding previously vendored {module} (re-vendoring from current modules/).")
 
     cmd = ["bazel", "vendor", "--vendor_dir=vendor"]
     cmd += [f"--repo=@{m}" for m in modules]

@@ -12,18 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
 DEPENDENCIES = {
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
     "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
     "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+}
+
+COMPONENTS = {
+    "talker_component": "composition::Talker",
+    "listener_component": "composition::Listener",
+    "node_like_listener_component": "composition::NodeLikeListener",
+    "server_component": "composition::Server",
+    "client_component": "composition::Client",
 }
 
 [
@@ -40,13 +59,7 @@ DEPENDENCIES = {
             "@example_interfaces//:cc",
         ],
     )
-    for component in [
-        "talker_component",
-        "listener_component",
-        "node_like_listener_component",
-        "server_component",
-        "client_component",
-    ]
+    for component in COMPONENTS.keys()
 ]
 
 [
@@ -56,13 +69,16 @@ DEPENDENCIES = {
         exports_filter = [":{0}_library".format(component)],
         deps = [":{0}_library".format(component)],
     )
-    for component in [
-        "talker_component",
-        "listener_component",
-        "node_like_listener_component",
-        "server_component",
-        "client_component",
-    ]
+    for component in COMPONENTS.keys()
+]
+
+[
+    rclcpp_components_register_nodes(
+        name = "{0}_nodes".format(component),
+        component = ":{0}".format(component),
+        plugins = [plugin],
+    )
+    for component, plugin in COMPONENTS.items()
 ]
 
 collect_transitive_dynamic_deps(
@@ -75,6 +91,12 @@ collect_transitive_dynamic_deps(
     ],
     visibility = ["//visibility:private"],
 )
+
+EXECUTABLES = [
+    "manual_composition",
+    "linktime_composition",
+    "dlopen_composition",
+]
 
 [
     cc_binary(
@@ -89,11 +111,7 @@ collect_transitive_dynamic_deps(
             "@rclcpp//:rclcpp_library",
         ],
     )
-    for executable in [
-        "manual_composition",
-        "linktime_composition",
-        "dlopen_composition",
-    ]
+    for executable in EXECUTABLES
 ]
 
 [
@@ -119,6 +137,15 @@ collect_transitive_dynamic_deps(
 
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    components = [":{0}_nodes".format(c) for c in COMPONENTS.keys()],
+    data = glob(["launch/**"]),
+    executables = [":{0}".format(e) for e in EXECUTABLES],
+    libraries = [":{0}".format(c) for c in COMPONENTS.keys()],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",

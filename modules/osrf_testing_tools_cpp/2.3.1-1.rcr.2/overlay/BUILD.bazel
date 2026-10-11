@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 # Copyright 2026 Open Source Robotics Foundation, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +16,7 @@
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 package(
@@ -172,11 +174,54 @@ sh_test(
 
 ### PACKAGING
 
+# Upstream installs memory_tools both as a regular shared library
+# (libmemory_tools.so) and as the DYLD_INSERT_LIBRARIES-friendly interpose
+# library above; this is the former, built from the same objects.
+cc_shared_library(
+    name = "memory_tools_shared",
+    exports_filter = [":memory_tools"],
+    shared_lib_name = "libmemory_tools.so",
+    deps = [":memory_tools"],
+)
+
+[
+    write_file(
+        name = "cmake_" + f.replace(".", "_").replace("-", "_"),
+        out = "cmake/" + f,
+        content = [""],
+    )
+    for f in [
+        "memory_toolsExport-noconfig.cmake",
+        "memory_toolsExport.cmake",
+        "memory_tools_interposeExport-noconfig.cmake",
+        "memory_tools_interposeExport.cmake",
+        "osrf_testing_tools_cppConfig.cmake",
+        "osrf_testing_tools_cppConfigVersion.cmake",
+        "test_runnerExport-noconfig.cmake",
+        "test_runnerExport.cmake",
+    ]
+]
+
 ament_package(
     name = "ament_package",
-    executables = [
-        ":test_runner",
-        ":assert_env_vars",
+    build_type = "cmake",
+    cmake = glob(["cmake/**"]) + [
+        ":cmake_memory_toolsExport_cmake",
+        ":cmake_memory_toolsExport_noconfig_cmake",
+        ":cmake_memory_tools_interposeExport_cmake",
+        ":cmake_memory_tools_interposeExport_noconfig_cmake",
+        ":cmake_osrf_testing_tools_cppConfigVersion_cmake",
+        ":cmake_osrf_testing_tools_cppConfig_cmake",
+        ":cmake_test_runnerExport_cmake",
+        ":cmake_test_runnerExport_noconfig_cmake",
+    ],
+    data = glob(["vendor/**"]),
+    executables = [":test_runner"],
+    headers = glob(["include/**"]),
+    include_prefix = "",
+    libraries = [
+        ":memory_tools_shared",
+        ":memory_tools_interpose",
     ],
     package_xml = "package.xml",
     deps = [

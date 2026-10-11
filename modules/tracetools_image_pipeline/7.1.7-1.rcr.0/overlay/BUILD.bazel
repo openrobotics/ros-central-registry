@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -67,14 +69,57 @@ cc_binary(
     ],
 )
 
+### TESTS
+
+write_file(
+    name = "test_status_tool_sh",
+    out = "test_status_tool.sh",
+    content = [
+        "#!/usr/bin/env bash",
+        "set -e",
+        "if \"$1\"; then exit 1; else exit 0; fi",
+        "",
+    ],
+    is_executable = True,
+)
+
+sh_test(
+    name = "test_status_tool",
+    srcs = [":test_status_tool_sh"],
+    args = ["$(location :status)"],
+    data = [":status"],
+)
+
 ### PACKAGING
+
+write_file(
+    name = "link_flags_extras",
+    out = "cmake/ament_cmake_export_link_flags-extras.cmake",
+    content = [
+        "# generated from ament_cmake_export_link_flags/cmake/ament_cmake_export_link_flags-extras.cmake.in",
+        "",
+        "set(_exported_link_flags \"-rdynamic\")",
+        "",
+        "# append link_flags to tracetools_image_pipeline_LINK_FLAGS",
+        "if(NOT \"${_exported_link_flags} \" STREQUAL \" \")",
+        "  foreach(_link_flag ${_exported_link_flags})",
+        "    list(APPEND tracetools_image_pipeline_LINK_FLAGS \"${_link_flag}\")",
+        "  endforeach()",
+        "endif()",
+        "",
+    ],
+)
 
 ament_package(
     name = "ament_package",
+    cmake = [":link_flags_extras"],
+    cmake_export_name = "tracetools_image_pipeline_export",
+    cmake_extras = ["ament_cmake_export_link_flags-extras.cmake"],
     executables = [
         ":status",
     ],
     headers = HEADERS,
+    include_prefix = "",
     libraries = [
         ":tracetools_image_pipeline",
     ],

@@ -1,0 +1,133 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+load(":vendor_install.bzl", "vendor_install_tree")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+vendor_install_tree(
+    name = "opt_files",
+    prefix = "opt/mimick_vendor",
+    transitive = False,
+    deps = ["@rosdistro//cc:mimick"],
+)
+
+[
+    genrule(
+        name = "vendor_package_" + ext,
+        srcs = ["@ament_cmake_vendor_package//:cmake/templates/vendor_package." + ext + ".in"],
+        outs = ["environment/vendor_package." + ext],
+        cmd = "sed -e 's|@PROJECT_NAME@|mimick_vendor|g' -e 's|@_LIBDIR_VAR_NAME@|LD_LIBRARY_PATH|g' $< > $@",
+    )
+    for ext in [
+        "bat",
+        "dsv",
+        "sh",
+    ]
+]
+
+genrule(
+    name = "vendor_package_cmake_prefix",
+    srcs = ["@ament_cmake_vendor_package//:cmake/templates/vendor_package_cmake_prefix.cmake.in"],
+    outs = ["vendor_package_cmake_prefix.cmake"],
+    cmd = "sed -e 's|@PROJECT_NAME@|mimick_vendor|g' $< > $@",
+)
+
+pkg_files(
+    name = "environment_hooks",
+    srcs = [
+        "environment/vendor_package.bat",
+        "environment/vendor_package.dsv",
+        "environment/vendor_package.sh",
+    ],
+    prefix = "share/mimick_vendor",
+    strip_prefix = strip_prefix.from_pkg(),
+)
+
+write_file(
+    name = "resource_index_vendor_packages",
+    out = "_resource_index/vendor_packages",
+    content = ["opt/mimick_vendor"],
+)
+
+pkg_files(
+    name = "resource_index",
+    srcs = [
+        ":resource_index_vendor_packages",
+    ],
+    renames = {
+        ":resource_index_vendor_packages": "share/ament_index/resource_index/vendor_packages/mimick_vendor",
+    },
+)
+
+[
+    write_file(
+        name = "meta_" + f.replace("-", "_").replace(".", "_"),
+        out = "_meta/opt/mimick_vendor/lib/cmake/mimick/" + f,
+        content = [""],
+    )
+    for f in [
+        "mimick-targets-noconfig.cmake",
+        "mimick-targets.cmake",
+        "mimickConfig.cmake",
+    ]
+]
+
+pkg_files(
+    name = "mimick_cmake_files",
+    srcs = [
+        ":meta_mimickConfig_cmake",
+        ":meta_mimick_targets_cmake",
+        ":meta_mimick_targets_noconfig_cmake",
+    ],
+    strip_prefix = strip_prefix.from_pkg("_meta"),
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake = [":vendor_package_cmake_prefix"],
+    cmake_export_dependencies_list = ["mimick"],
+    cmake_extras = ["vendor_package_cmake_prefix.cmake"],
+    env_hooks = ["environment/vendor_package.dsv"],
+    install = [
+        ":environment_hooks",
+        ":mimick_cmake_files",
+        ":opt_files",
+        ":resource_index",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_vendor_package//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

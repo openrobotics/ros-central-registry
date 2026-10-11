@@ -16,38 +16,66 @@ load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 load("@rules_qt//:qt.bzl", "qt_cc_library", "qt_cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### DATA
+
+DATA = glob([
+    "icons/**",
+    "images/**",
+    "help/**",
+]) + ["default.rviz"]
+
+ament_index(
+    name = "ament_index",
+    data = DATA,
+    package_xml = "package.xml",
+    deps = ["@rviz_rendering//:ament_index"],
+)
+
+### LIBRARIES
+
+HEADERS = glob(
+    [
+        "include/**/*.hpp",
+        "include/**/*.h",
+    ],
+    allow_empty = True,
+)
 
 DEPENDENCIES = {
     "@message_filters//:message_filters": "@message_filters//:message_filters_library",
     "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
     "@resource_retriever//:resource_retriever": "@resource_retriever//:resource_retriever_library",
+    "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
+    "@rosdistro//cc:OgreOverlay": "@rosdistro//cc:OgreOverlay_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
     "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
     "@tf2//:tf2": "@tf2//:tf2_library",
     "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
-    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
-    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
 }
-
-ament_index(
-    name = "ament_index",
-    data = glob([
-        "icons/**",
-        "images/**",
-        "help/**",
-        "default.rviz",
-    ]),
-)
 
 cmake_configure_file(
     name = "env_config_cpp",
     src = "src/rviz_common/env_config.cpp.in",
     out = "src/rviz_common/env_config.cpp",
     defines = [
-        "RVIZ_VERSION=15.1.15",
+        "RVIZ_VERSION=15.2.6",
         "ROS_DISTRO=ROS 2",
         "OGRE_PLUGIN_PATH=rviz_ogre_vendor",
     ],
@@ -55,21 +83,8 @@ cmake_configure_file(
 
 qt_cc_library(
     name = "rviz_common_library",
-    srcs = glob(
-        [
-            "src/**/*.cpp",
-        ],
-    ) + [
-        ":env_config_cpp",
-    ],
-    hdrs = glob(
-        [
-            "include/**/*.hpp",
-            "include/**/*.h",
-            "src/**/*.hpp",
-        ],
-        allow_empty = True,
-    ),
+    srcs = glob(["src/**/*.cpp"]) + [":env_config_cpp"],
+    hdrs = HEADERS + glob(["src/**/*.hpp"]),
     includes = [
         "include",
         "src",
@@ -78,10 +93,6 @@ qt_cc_library(
     local_defines = ros_local_defines() + ["RVIZ_COMMON_BUILDING_LIBRARY"],
     deps = DEPENDENCIES.values() + [
         "@geometry_msgs//:cc",
-        "@rules_qt//:qt",
-        "@rules_qt//:qt_gui",
-        "@rules_qt//:qt_opengl",
-        "@rules_qt//:qt_svg",
         "@rules_qt//:qt_widgets",
         "@sensor_msgs//:cc",
         "@std_msgs//:cc",
@@ -92,14 +103,7 @@ qt_cc_library(
 cc_shared_library(
     name = "rviz_common",
     dynamic_deps = DEPENDENCIES.keys(),
-    exports_filter = [
-        ":rviz_common_library",
-        "@rules_qt//:qt",
-        "@rules_qt//:qt_gui",
-        "@rules_qt//:qt_opengl",
-        "@rules_qt//:qt_svg",
-        "@rules_qt//:qt_widgets",
-    ],
+    exports_filter = [":rviz_common_library"],
     deps = [":rviz_common_library"],
 )
 
@@ -107,39 +111,62 @@ cc_shared_library(
 
 TEST_DEPENDENCIES = DEPENDENCIES | {
     ":rviz_common": ":rviz_common_library",
-    "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
-    "@rosdistro//cc:OgreOverlay": "@rosdistro//cc:OgreOverlay_library",
 }
-
-qt_cc_library(
-    name = "rviz_common_test_utils_library",
-    srcs = [
-        "test/display_context_fixture.cpp",
-        "test/mock_display.cpp",
-        "test/mock_property_change_receiver.cpp",
-        "test/ogre_testing_environment.cpp",
-    ],
-    hdrs = glob([
-        "test/**/*.hpp",
-    ]),
-    data = [
-        ":ament_index",
-        "@rviz_rendering//:ament_index",
-    ],
-    includes = ["test"],
-    local_defines = ros_local_defines() + ["RVIZ_COMMON_PUBLIC="],
-    deps = TEST_DEPENDENCIES.values() + [
-        "@rosdistro//cc:googletest",
-        "@rules_qt//:qt",
-        "@rules_qt//:qt_widgets",
-    ],
-)
 
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps_test",
     dynamic_deps = TEST_DEPENDENCIES.keys(),
     visibility = ["//visibility:private"],
 )
+
+# Equivalent of upstream's test_support_objects OBJECT library.
+qt_cc_library(
+    name = "rviz_common_test_support",
+    testonly = True,
+    srcs = [
+        "test/display_context_fixture.cpp",
+        "test/mock_display.cpp",
+        "test/mock_property_change_receiver.cpp",
+        "test/ogre_testing_environment.cpp",
+    ],
+    hdrs = [
+        "test/mock_display.hpp",
+        "test/mock_property_change_receiver.hpp",
+    ],
+    includes = [
+        "include",
+        "test",
+    ],
+    normal_hdrs = [
+        "test/display_context_fixture.hpp",
+        "test/mock_display_context.hpp",
+        "test/mock_frame_transformer.hpp",
+        "test/mock_window_manager_interface.hpp",
+        "test/ogre_testing_environment.hpp",
+    ],
+    deps = TEST_DEPENDENCIES.values() + [
+        "@rosdistro//cc:googletest",
+        "@rules_qt//:qt_widgets",
+    ],
+)
+
+TEST_DATA = [
+    ":ament_index",
+    "@rviz_rendering//:ament_index",
+]
+
+# Upstream guards these with SKIP_DISPLAY_TESTS (no DISPLAY -> skipped); the
+# reference colcon run skipped them, so they are opt-in here as well.
+DISPLAY_TEST_TAGS = [
+    "manual",
+    "no-sandbox",
+    "xfail",
+]
+
+TEST_LINKOPTS = select({
+    "@platforms//os:linux": ["-Wl,--allow-shlib-undefined"],
+    "//conditions:default": [],
+})
 
 qt_cc_test(
     name = "rviz_common_core_tests",
@@ -155,33 +182,15 @@ qt_cc_test(
         "test/uniform_string_stream_test.cpp",
         "test/visualizer_app_test.cpp",
     ],
-    data = [
-        ":ament_index",
-        "@rviz_rendering//:ament_index",
-    ],
+    data = TEST_DATA,
     dynamic_deps = [":transitive_dynamic_deps_test"],
-    env_inherit = [
-        "DISPLAY",
-        "QT_QPA_PLATFORM",
-    ],
-    includes = [
-        "include",
-        "src",
-        "src/rviz_common",
-        "test",
-    ],
-    linkopts = [
-        "-Wl,--no-as-needed",
-        "-lQt6Core",
-        "-lQt6Widgets",
-        "-Wl,--as-needed",
-        "-Wl,--allow-shlib-undefined",
-    ],
+    includes = ["test"],
+    linkopts = TEST_LINKOPTS,
     linkstatic = True,
-    local_defines = ros_local_defines() + ["RVIZ_COMMON_PUBLIC="],
-    tags = ["no-sandbox"],
+    local_defines = ros_local_defines(),
+    tags = DISPLAY_TEST_TAGS,
     deps = TEST_DEPENDENCIES.values() + [
-        ":rviz_common_test_utils_library",
+        ":rviz_common_test_support",
         "@rosdistro//cc:googletest",
     ],
 )
@@ -192,33 +201,15 @@ qt_cc_test(
         "test/interaction/selection_handler_test.cpp",
         "test/interaction/selection_manager_test.cpp",
     ],
-    data = [
-        ":ament_index",
-        "@rviz_rendering//:ament_index",
-    ],
+    data = TEST_DATA,
     dynamic_deps = [":transitive_dynamic_deps_test"],
-    env_inherit = [
-        "DISPLAY",
-        "QT_QPA_PLATFORM",
-    ],
-    includes = [
-        "include",
-        "src",
-        "src/rviz_common",
-        "test",
-    ],
-    linkopts = [
-        "-Wl,--no-as-needed",
-        "-lQt6Core",
-        "-lQt6Widgets",
-        "-Wl,--as-needed",
-        "-Wl,--allow-shlib-undefined",
-    ],
+    includes = ["test"],
+    linkopts = TEST_LINKOPTS,
     linkstatic = True,
-    local_defines = ros_local_defines() + ["RVIZ_COMMON_PUBLIC="],
-    tags = ["no-sandbox"],
+    local_defines = ros_local_defines(),
+    tags = DISPLAY_TEST_TAGS,
     deps = TEST_DEPENDENCIES.values() + [
-        ":rviz_common_test_utils_library",
+        ":rviz_common_test_support",
         "@rosdistro//cc:googletest",
     ],
 )
@@ -229,59 +220,41 @@ qt_cc_test(
         "src/rviz_common/display_factory.cpp",
         "test/display_factory_test.cpp",
     ],
-    data = [
-        ":ament_index",
-        "@rviz_rendering//:ament_index",
-    ] + glob(["test/resources/**"]),
+    data = TEST_DATA + glob(["test/resources/**"]),
     dynamic_deps = [":transitive_dynamic_deps_test"],
-    env_inherit = [
-        "DISPLAY",
-        "QT_QPA_PLATFORM",
-    ],
-    includes = [
-        "include",
-        "src",
-        "src/rviz_common",
-        "test",
-    ],
-    linkopts = [
-        "-Wl,--no-as-needed",
-        "-lQt6Core",
-        "-lQt6Widgets",
-        "-Wl,--as-needed",
-        "-Wl,--allow-shlib-undefined",
-    ],
+    includes = ["test"],
+    linkopts = TEST_LINKOPTS,
     linkstatic = True,
     local_defines = ros_local_defines() + [
-        "RVIZ_COMMON_PUBLIC=",
-        '_TEST_PLUGIN_DESCRIPTIONS=\\"ros-desktop/rviz_common\\"',
+        # Tests run from <runfiles>/_main; the package's own files live next
+        # to it under the repository's runfiles directory.
+        '_TEST_PLUGIN_DESCRIPTIONS=\\"../rviz_common+\\"',
     ],
-    tags = ["no-sandbox"],
+    tags = DISPLAY_TEST_TAGS,
     deps = TEST_DEPENDENCIES.values() + [
-        ":rviz_common_test_utils_library",
+        ":rviz_common_test_support",
         "@rosdistro//cc:googletest",
     ],
 )
 
 cc_library(
     name = "frame_manager_test_lib",
+    testonly = True,
     srcs = [
         "src/rviz_common/frame_manager.cpp",
         "test/frame_manager_test.cpp",
         ":moc_src/rviz_common/frame_manager",
     ],
-    hdrs = [
-        "src/rviz_common/frame_manager.hpp",
-    ],
+    hdrs = ["src/rviz_common/frame_manager.hpp"],
     includes = [
         "include",
         "src",
         "src/rviz_common",
         "test",
     ],
-    local_defines = ros_local_defines() + ["RVIZ_COMMON_PUBLIC="],
+    local_defines = ros_local_defines(),
     deps = TEST_DEPENDENCIES.values() + [
-        ":rviz_common_test_utils_library",
+        ":rviz_common_test_support",
         "@rosdistro//cc:googletest",
     ],
 )
@@ -289,12 +262,11 @@ cc_library(
 qt_cc_test(
     name = "frame_manager_test",
     srcs = [],
-    data = [
-        ":ament_index",
-        "@rviz_rendering//:ament_index",
-    ],
+    data = TEST_DATA,
     dynamic_deps = [":transitive_dynamic_deps_test"],
-    local_defines = ros_local_defines() + ["RVIZ_COMMON_PUBLIC="],
+    linkopts = TEST_LINKOPTS,
+    linkstatic = True,
+    local_defines = ros_local_defines(),
     deps = [
         ":frame_manager_test_lib",
         "@rosdistro//cc:googletest",
@@ -305,6 +277,11 @@ qt_cc_test(
 
 ament_package(
     name = "ament_package",
+    cmake = ["rviz_common-extras.cmake"],
+    cmake_extras = ["rviz_common-extras.cmake"],
+    data = DATA,
+    headers = HEADERS,
+    libraries = [":rviz_common"],
     package_xml = "package.xml",
     deps = [
         ":ament_index",

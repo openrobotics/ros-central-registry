@@ -12,14 +12,95 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+# gz_common_vendor: vendors gz-common (version 7) from the Bazel Central
+# Registry module `gz-common` (shared library wrappers live in
+# @rosdistro//cc/gz) and installs it like colcon's ament_vendor() does
+# (opt/gz_common_vendor/...). The `av` component (ffmpeg) is not part of the
+# BCR module and is therefore not available.
 
-package(default_visibility = ["//visibility:public"])
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc/gz:defs.bzl", "gz_install_files", "gz_install_headers", "gz_vendor_hooks")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES (gz-common::core and components)
+
+COMPONENTS = [
+    "events",
+    "geospatial",
+    "graphics",
+    "io",
+    "profiler",
+    "testing",
+]
+
+[
+    (
+        alias(
+            name = name,
+            actual = "@rosdistro//cc/gz:" + target,
+        ),
+        alias(
+            name = name + "_library",
+            actual = "@rosdistro//cc/gz:" + target + "_library",
+        ),
+    )
+    for name, target in [("gz_common", "gz-common")] + [
+        (
+            "gz_common_" + c,
+            "gz-common-" + c,
+        )
+        for c in COMPONENTS
+    ]
+]
+
+### INSTALL LAYOUT (opt/gz_common_vendor/...)
+
+VENDOR = "gz_common_vendor"
+
+PREFIX = "opt/" + VENDOR
+
+gz_install_headers(
+    name = "install_headers",
+    include_only = "gz/",
+    prefix = PREFIX + "/include/gz/common7",
+    strip_prefixes = ["include"] + [c + "/include" for c in COMPONENTS],
+    deps = [":gz_common_library"] + [":gz_common_%s_library" % c for c in COMPONENTS],
+)
+
+gz_install_files(
+    name = "install_libraries",
+    srcs = [":gz_common"] + [":gz_common_" + c for c in COMPONENTS],
+    flatten = True,
+    prefix = PREFIX + "/lib",
+)
+
+ENV_HOOKS = gz_vendor_hooks(
+    name = "install_hooks",
+    vendor = VENDOR,
+)
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    env_hooks = ENV_HOOKS,
+    install = [
+        ":install_headers",
+        ":install_hooks",
+        ":install_libraries",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake_copyright//:ament_package",

@@ -17,6 +17,7 @@ load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 load("@rules_python//python:defs.bzl", "py_library")
 
 package(
@@ -35,7 +36,6 @@ license(
 
 ament_index(
     name = "ament_index",
-    data = glob(["resource/**"]),
     package_xml = "package.xml",
 )
 
@@ -87,7 +87,12 @@ py_library(
         ":pkg_info",
     ],
     imports = ["."],
-    deps = ["@rclpy"],
+    deps = [
+        "@rclpy",
+        requirement("argcomplete"),
+        requirement("packaging"),
+        requirement("psutil"),
+    ],
 )
 
 ### TESTS
@@ -98,7 +103,7 @@ py_library(
         srcs = ["test/{0}.py".format(test)],
         deps = [
             ":ros2cli",
-            "@test_msgs//:test_msgs_py",
+            "@test_msgs//:py",
             requirement("pyyaml"),
         ],
     )
@@ -128,9 +133,32 @@ py_library(
 
 ### PACKAGING
 
+# setup.py installs completion/ros2-argcomplete.* to share/ros2cli/environment/.
+pkg_files(
+    name = "completion",
+    srcs = glob(["completion/*"]),
+    prefix = "share/ros2cli/environment",
+    strip_prefix = "completion",
+    visibility = ["//visibility:private"],
+)
+
 ament_package(
     name = "ament_package",
+    console_programs = {
+        "_ros2_daemon": "ros2cli.daemon:main",
+        "ros2": "ros2cli.cli:main",
+    },
+    env_hooks = [
+        "environment/ros2-argcomplete.bash",
+        "environment/ros2-argcomplete.fish",
+        "environment/ros2-argcomplete.zsh",
+    ],
+    install = [":completion"],
     package_xml = "package.xml",
+    python = [":ros2cli"] + glob(
+        ["ros2cli/py.typed"],
+        allow_empty = True,
+    ),
     deps = [
         ":ament_index",
         ":ros2cli",

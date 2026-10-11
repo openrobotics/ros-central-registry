@@ -12,19 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package", "register_ament_files", "register_ament_resource")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files", "register_ament_resource")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
 
-collect_transitive_dynamic_deps(
-    name = "transitive_dynamic_deps",
-    dynamic_deps = [
-        "@rviz_rendering//:rviz_rendering",
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
     ],
 )
 
+### DATA
+
+# register_rviz_ogre_media_exports(DIRECTORIES ogre_media_resources/scripts
+# ogre_media_resources/meshes) from upstream's CMakeLists.txt.
 register_ament_resource(
     name = "rviz_ogre_media_exports_resource",
     package_name = "rviz_rendering_tests",
@@ -32,6 +41,7 @@ register_ament_resource(
     content = "rviz_rendering_tests/ogre_media_resources/scripts\nrviz_rendering_tests/ogre_media_resources/meshes\n",
 )
 
+# install(DIRECTORY ogre_media_resources/test_meshes DESTINATION share/rviz_rendering_tests)
 register_ament_files(
     name = "test_meshes",
     package_name = "rviz_rendering_tests",
@@ -39,33 +49,67 @@ register_ament_files(
     strip_prefix = "ogre_media_resources",
 )
 
+ament_index(
+    name = "ament_index",
+    data = glob(
+        ["ogre_media_resources/**"],
+        exclude = ["ogre_media_resources/test_meshes/**"],
+    ),
+    package_xml = "package.xml",
+    deps = [
+        ":rviz_ogre_media_exports_resource",
+        ":test_meshes",
+        "@rviz_rendering//:ament_index",
+    ],
+)
+
+### TESTS
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        "@resource_retriever//:resource_retriever",
+        "@rosdistro//cc:OgreMain",
+        "@rviz_rendering//:rviz_rendering",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+# Both tests are guarded by SKIP_DISPLAY_TESTS upstream and were skipped by
+# the reference colcon run (no DISPLAY).
 cc_test(
-    name = "mesh_loader_test",
+    name = "mesh_loader_test_target",
     srcs = [
         "test/mesh_loader_test.cpp",
         "test/ogre_testing_environment.cpp",
         "test/ogre_testing_environment.hpp",
     ],
-    data = [
-        ":ament_package",
-        ":test_meshes",
-        "@rviz_rendering//:ament_index",
-    ],
+    data = [":ament_index"],
     dynamic_deps = [":transitive_dynamic_deps"],
-    tags = ["no-sandbox"],
+    linkopts = select({
+        "@platforms//os:linux": ["-Wl,--allow-shlib-undefined"],
+        "//conditions:default": [],
+    }),
+    linkstatic = True,
+    local_defines = ros_local_defines(),
+    tags = [
+        "manual",
+        "no-sandbox",
+        "xfail",
+    ],
     deps = [
+        "@resource_retriever//:resource_retriever_library",
+        "@rosdistro//cc:OgreMain_library",
         "@rosdistro//cc:googletest",
         "@rviz_rendering//:rviz_rendering_library",
     ],
 )
 
 cc_test(
-    name = "test_rviz_ogre_media_exports",
+    name = "test_rviz_rendering_tests",
     srcs = ["test/test_rviz_ogre_media_exports.cpp"],
-    data = [
-        ":ament_package",
-        ":rviz_ogre_media_exports_resource",
-    ],
+    data = [":ament_index"],
+    local_defines = ros_local_defines(),
     deps = [
         "@ament_index_cpp//:ament_index_cpp_library",
         "@rosdistro//cc:googletest",
@@ -74,14 +118,30 @@ cc_test(
 
 ### PACKAGING
 
+pkg_files(
+    name = "install_test_meshes",
+    srcs = glob(["ogre_media_resources/test_meshes/**"]),
+    prefix = "share/rviz_rendering_tests",
+    strip_prefix = strip_prefix.from_pkg("ogre_media_resources"),
+)
+
+pkg_files(
+    name = "install_rviz_ogre_media_exports",
+    srcs = [":rviz_ogre_media_exports_resource"],
+    prefix = "share/ament_index/resource_index/rviz_ogre_media_exports",
+    renames = {":rviz_ogre_media_exports_resource": "rviz_rendering_tests"},
+)
+
 ament_package(
     name = "ament_package",
-    data = glob(
-        ["ogre_media_resources/**"],
-        exclude = ["ogre_media_resources/test_meshes/**"],
-    ),
+    cmake_export_dependencies = False,
+    install = [
+        ":install_rviz_ogre_media_exports",
+        ":install_test_meshes",
+    ],
     package_xml = "package.xml",
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gmock//:ament_package",
         "@ament_cmake_gtest//:ament_package",

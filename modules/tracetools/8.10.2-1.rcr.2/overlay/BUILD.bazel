@@ -1,0 +1,196 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+# Copyright 2025 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+# TODO(asymingt) We'd like to support tracing eventually, but this does mean we
+# need to be able to build lttng-ust and liburcu reliably in Bazel.
+
+load("@ament_cmake_gen_version_h//:defs.bzl", "generate_ros_version_defines")
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### PREPROCESSING
+
+cmake_configure_file(
+    name = "version_h",
+    src = "@ament_cmake_gen_version_h//cmake:version.h.in",
+    out = "include/tracetools/version.h",
+    defines = generate_ros_version_defines(),
+)
+
+cmake_configure_file(
+    name = "config_h",
+    src = "include/tracetools/config.h.in",
+    out = "include/tracetools/config.h",
+    defines = [
+        "TRACETOOLS_DISABLED=1",
+        "TRACETOOLS_TRACEPOINTS_EXCLUDED=1",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = [
+    ":config_h",
+    ":version_h",
+] + glob(
+    [
+        "include/**/*.h",
+        "include/**/*.hpp",
+    ],
+    exclude = ["include/tracetools/tp_call.h"],
+)
+
+cc_library(
+    name = "tracetools_library",
+    srcs = [
+        # "src/tp_call.c",
+        "src/tracetools.c",
+        "src/utils.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    # deps = ["@lttng-ust//:lttng-ust"],
+)
+
+cc_shared_library(
+    name = "tracetools",
+    exports_filter = [":tracetools_library"],
+    deps = [":tracetools_library"],
+)
+
+cc_library(
+    name = "tracetools_status_library",
+    srcs = ["src/status.c"],
+    deps = [":tracetools_library"],
+)
+
+cc_shared_library(
+    name = "tracetools_status",
+    dynamic_deps = [":tracetools"],
+    exports_filter = [":tracetools_status_library"],
+    deps = [":tracetools_status_library"],
+)
+
+### TRANSITIVELY COLLECT ALL DYNAMIC DEPS TO ENSURE LINKING WORKS
+
+# This is a workaround for the fact that dynamic_deps does not work transitively.
+# So, if you have a (foo -> bar -> baz) dynamic_dep dep chain, the symbols from
+# foo will not be available to baz at compile-time. This resolves that by running
+# an aspect over the dynamic_deps attribute to collect everything in the chain.
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        ":tracetools",
+        ":tracetools_status",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+### EXECUTABLES
+
+cc_binary(
+    name = "status",
+    srcs = ["src/status_tool.c"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = [":tracetools_status_library"],
+)
+
+### TESTING
+
+cc_test(
+    name = "test_status",
+    timeout = "short",
+    srcs = ["test/test_status.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":tracetools_library",
+        ":tracetools_status_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_library(
+    name = "tracetools_provider_library",
+    srcs = ["src/tracetools.c"],
+    hdrs = HEADERS + ["include/tracetools/tp_call.h"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+)
+
+cc_shared_library(
+    name = "tracetools_provider",
+    exports_filter = [":tracetools_provider_library"],
+    deps = [":tracetools_provider_library"],
+)
+
+pkg_files(
+    name = "extra_libs",
+    srcs = [
+        ":tracetools_provider",
+        ":tracetools_status",
+    ],
+    prefix = "lib",
+)
+
+write_file(
+    name = "link_flags_extras",
+    out = "cmake/ament_cmake_export_link_flags-extras.cmake",
+    content = ['list(APPEND tracetools_LINK_FLAGS "-rdynamic")'],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake = [":link_flags_extras"],
+    cmake_export_name = "tracetools_export",
+    executables = [":status"],
+    headers = HEADERS,
+    install = [":extra_libs"],
+    libraries = [
+        ":tracetools",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros_core//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

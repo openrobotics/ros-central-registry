@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@pip_ros//:requirements.bzl", "requirement")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
@@ -53,14 +54,44 @@ py_binary(
     ],
 )
 
+write_file(
+    name = "conftest",
+    out = "test/rosidl_runtime_py/conftest.py",
+    content = [
+        "import os",
+        "import sys",
+        "import test_msgs",
+        "for _p in sys.path:",
+        "    _cand = os.path.join(_p, 'test_msgs')",
+        "    if os.path.isdir(_cand) and _cand not in test_msgs.__path__:",
+        "        test_msgs.__path__.append(_cand)",
+        "",
+    ],
+)
+
+ament_index(
+    name = "rosidl_parser_ament_index",
+    export_name = "rosidl_parser",
+    package_xml = "package.xml",
+)
+
 # All functional tests.
 [
     py_pytest(
         name = test,
         srcs = ["test/rosidl_runtime_py/{}.py".format(test)],
+        data = [
+            ":conftest",
+            ":rosidl_parser_ament_index",
+            "@std_msgs//:ament_index",
+            "@std_srvs//:ament_index",
+            "@test_msgs//:ament_index",
+        ],
         deps = [
             ":rosidl_runtime_py",
             "@std_msgs//:py",
+            "@std_srvs//:py",
+            "@test_msgs//:py",
             "@test_msgs//:test_msgs_py",
         ],
     )
@@ -93,6 +124,10 @@ py_binary(
 ament_package(
     name = "ament_package",
     package_xml = "package.xml",
+    python = [":rosidl_runtime_py"] + glob(
+        ["rosidl_runtime_py/py.typed"],
+        allow_empty = True,
+    ),
     deps = [
         "@ament_copyright//:ament_package",
         "@ament_flake8//:ament_package",

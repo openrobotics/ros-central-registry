@@ -15,8 +15,14 @@
 load(":ament_index.bzl", _ament_index = "ament_index")
 load(":ament_package.bzl", _ament_package = "ament_package")
 load(":ament_resource.bzl", _register_ament_files = "register_ament_files", _register_ament_resource = "register_ament_resource")
+load(":providers.bzl", _AmentCMakeExportsInfo = "AmentCMakeExportsInfo", _AmentPackageInfo = "AmentPackageInfo")
+load(":underlay.bzl", _ament_underlay = "ament_underlay", _ament_underlay_aspect = "ament_underlay_aspect")
 
 ament_index = _ament_index
 ament_package = _ament_package
 register_ament_resource = _register_ament_resource
 register_ament_files = _register_ament_files
+ament_underlay = _ament_underlay
+ament_underlay_aspect = _ament_underlay_aspect
+AmentPackageInfo = _AmentPackageInfo
+AmentCMakeExportsInfo = _AmentCMakeExportsInfo

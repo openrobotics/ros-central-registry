@@ -46,6 +46,31 @@ class TestParseModuleTokens(unittest.TestCase):
         self.assertEqual(result, ["rclcpp"])
 
 
+class TestClearVendoredModule(unittest.TestCase):
+
+    def setUp(self):
+        self.workspace_dir = Path(tempfile.mkdtemp())
+        (self.workspace_dir / "vendor").mkdir()
+
+    def tearDown(self):
+        shutil.rmtree(self.workspace_dir)
+
+    def test_removes_tree_and_marker(self):
+        vendor = self.workspace_dir / "vendor"
+        (vendor / "rclcpp+" / "src").mkdir(parents=True)
+        (vendor / "rclcpp+" / "src" / "a.cpp").write_text("x")
+        (vendor / "@rclcpp+.marker").write_text("hash")
+        (vendor / "other+").mkdir()
+        self.assertTrue(vendor_modules.clear_vendored_module(self.workspace_dir, "rclcpp"))
+        self.assertFalse((vendor / "rclcpp+").exists())
+        self.assertFalse((vendor / "@rclcpp+.marker").exists())
+        # Unrelated modules are untouched.
+        self.assertTrue((vendor / "other+").exists())
+
+    def test_noop_when_not_vendored(self):
+        self.assertFalse(vendor_modules.clear_vendored_module(self.workspace_dir, "rclcpp"))
+
+
 class TestModulesForVariant(unittest.TestCase):
 
     def setUp(self):

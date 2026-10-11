@@ -12,28 +12,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 load("@rules_qt//:qt.bzl", "qt_cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
 
-# DEPENDENCIES
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-DEPENDENCIES = {
-    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
-    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
-    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
-    "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
-    "@tf2//:tf2": "@tf2//:tf2_library",
-    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
-}
+### DATA
 
-# LIBRARIES
+ament_index(
+    name = "ament_index",
+    data = glob(["config/**"]),
+    package_xml = "package.xml",
+)
 
+### LIBRARIES
+
+HEADERS = glob(
+    [
+        "include/**/*.hpp",
+        "include/**/*.h",
+    ],
+    allow_empty = True,
+)
+
+# Upstream builds this as a STATIC library (it carries gtest fixtures), so
+# there is no cc_shared_library counterpart; consumers link it statically.
 qt_cc_library(
-    name = "rviz_visual_testing_framework_impl",
+    name = "rviz_visual_testing_framework",
     srcs = [
         "src/internal/display_handler.cpp",
         "src/internal/executor.cpp",
@@ -46,42 +63,49 @@ qt_cc_library(
         "src/test_helpers.cpp",
         "src/visual_test_fixture.cpp",
     ],
-    hdrs = glob(
-        [
-            "include/**/*.hpp",
-            "include/**/*.h",
-        ],
-        allow_empty = True,
-    ),
-    includes = ["include"],
-    local_defines = ros_local_defines() + [
+    hdrs = HEADERS,
+    # visual_test_fixture.hpp reads these; upstream injects them with
+    # add_definitions() in every package using the framework.
+    defines = [
+        "QT_GUI_LIB",
+        "QT_WIDGETS_LIB",
         '_BUILD_DIR_PATH=\\".\\"',
         '_SRC_DIR_PATH=\\".\\"',
-        "QT_WIDGETS_LIB",
     ],
-    deps = DEPENDENCIES.values() + [
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = [
         "@geometry_msgs//:cc",
+        "@rclcpp//:rclcpp_library",
+        "@rcutils//:rcutils_library",
+        "@rosdistro//cc:OgreMain_library",
         "@rosdistro//cc:googletest",
         "@rules_qt//:qt_test",
         "@rules_qt//:qt_widgets",
+        "@rviz_common//:rviz_common_library",
+        "@rviz_rendering//:rviz_rendering_library",
         "@std_msgs//:cc",
+        "@tf2//:tf2_library",
+        "@tf2_ros//:tf2_ros_library",
     ],
 )
 
-cc_shared_library(
-    name = "rviz_visual_testing_framework",
-    dynamic_deps = DEPENDENCIES.keys(),
-    exports_filter = [":rviz_visual_testing_framework_impl"],
-    deps = [":rviz_visual_testing_framework_impl"],
+filegroup(
+    name = "rviz_visual_testing_framework_archive",
+    srcs = [":rviz_visual_testing_framework"],
+    output_group = "archive",
 )
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
-    data = glob(["config/**"]),
+    cmake_export_libraries = False,
+    headers = HEADERS,
+    libraries = [":rviz_visual_testing_framework_archive"],
     package_xml = "package.xml",
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gmock//:ament_package",
         "@ament_cmake_gtest//:ament_package",

@@ -1,0 +1,40 @@
+--- a/rosbag2_py/__init__.py
++++ b/rosbag2_py/__init__.py
+@@ -12,12 +12,36 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ 
++import contextlib
++import os
++import sys
++
+ from rpyutils import add_dll_directories_from_env
++
++
++@contextlib.contextmanager
++def _rtld_global():
++    # The extension modules below are built with clang/libc++, where
++    # class_loader's dynamic_cast across shared libraries (pluginlib storage,
++    # compression and serialization plugins, the RMW implementation) only
++    # resolves when the extensions' symbols are loaded RTLD_GLOBAL. See
++    # https://whatofhow.wordpress.com/2015/03/17/odr-rtti-dso/ and
++    # ROSBAG2_PY_TEST_WITH_RTLD_GLOBAL in upstream's test/common.py.
++    if sys.platform != 'linux':
++        yield
++        return
++    flags = sys.getdlopenflags()
++    sys.setdlopenflags(flags | os.RTLD_GLOBAL)
++    try:
++        yield
++    finally:
++        sys.setdlopenflags(flags)
++
+ 
+ # Since Python 3.8, on Windows we should ensure DLL directories are explicitly added
+ # to the search path.
+ # See https://docs.python.org/3/whatsnew/3.8.html#bpo-36085-whatsnew
+-with add_dll_directories_from_env('PATH'):
++with add_dll_directories_from_env('PATH'), _rtld_global():
+     from rosbag2_py._compression_options import (
+         CompressionMode,
+         CompressionOptions,

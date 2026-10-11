@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@ament_cmake_gen_version_h//:defs.bzl", "generate_version_h")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
@@ -21,7 +22,12 @@ package(default_visibility = ["//visibility:public"])
 
 ### LIBRARY
 
-HEADERS = glob(["include/**/*.hpp"])
+generate_version_h(
+    name = "version_h",
+    out = "include/point_cloud_transport/version.h",
+)
+
+HEADERS = glob(["include/**/*.hpp"]) + [":version_h"]
 
 DEPENDENCIES = {
     "@message_filters//:message_filters": "@message_filters//:message_filters_library",
@@ -121,10 +127,10 @@ cc_shared_library(
 )
 
 rclcpp_components_register_node(
-    name = "node_republish",
+    name = "republish",
     component = ":pc_republish_node",
     executor = "SingleThreadedExecutor",
-    node_name = "republisher",
+    node_name = "republish",
     plugin = "point_cloud_transport::Republisher",
 )
 
@@ -165,6 +171,7 @@ ament_index(
         ],
         deps = DEPENDENCIES.values() + [
             ":point_cloud_transport_library",
+            "@rosdistro//cc:bazel_test_helper",
             "@rosdistro//cc:googletest",
             "@sensor_msgs//:cc",
         ],
@@ -186,7 +193,21 @@ ament_index(
 
 ament_package(
     name = "ament_package",
-    executables = [":list_transports"],
+    cmake_export_dependencies_list = [
+        "message_filters",
+        "rclcpp",
+        "sensor_msgs",
+        "pluginlib",
+        "rcpputils",
+        "rmw",
+    ],
+    cmake_export_libraries = False,
+    cmake_export_name = "export_point_cloud_transport",
+    components = [":republish_record"],
+    executables = [
+        ":list_transports",
+        ":republish",
+    ],
     headers = HEADERS,
     libraries = [
         ":point_cloud_transport",
@@ -195,6 +216,8 @@ ament_package(
     ],
     package_xml = "package.xml",
     deps = [
+        ":ament_index_package",
+        ":ament_index_plugin",
         "@ament_cmake_gen_version_h//:ament_package",
         "@ament_cmake_ros//:ament_package",
         "@ament_lint_auto//:ament_package",

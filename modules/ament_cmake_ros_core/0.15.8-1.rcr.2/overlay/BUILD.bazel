@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 # Copyright 2026 Open Source Robotics Foundation, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,10 +28,41 @@ license(
     ],
 )
 
+# Mirrors ament_package(CONFIG_EXTRAS "ament_cmake_ros_core-extras.cmake.in"): configure_file(@ONLY) of the template.
+genrule(
+    name = "extras_cmake",
+    srcs = ["ament_cmake_ros_core-extras.cmake.in"],
+    outs = ["ament_cmake_ros_core-extras.cmake"],
+    cmd = "sed -e 's|@PROJECT_NAME@|ament_cmake_ros_core|g' -e 's|@PYTHON_INSTALL_DIR@|lib/python3.14/site-packages|g' $< > $@",
+)
+
+write_file(
+    name = "export_targets_extras",
+    out = "cmake/ament_cmake_export_targets-extras.cmake",
+    content = ['set(_exported_targets "ament_ros_core_targets")'],
+)
+
+write_file(
+    name = "export_targets_cmake",
+    out = "cmake/ament_ros_core_targetsExport.cmake",
+    content = [
+        "add_library(ament_cmake_ros_core::ament_ros_defaults INTERFACE IMPORTED)",
+        "add_library(ament_cmake_ros_core::ament_ros_cxx_standard INTERFACE IMPORTED)",
+        "add_library(ament_cmake_ros_core::ament_ros_c_standard INTERFACE IMPORTED)",
+    ],
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake = glob(["cmake/**"]) + [
+        ":extras_cmake",
+        ":export_targets_extras",
+        ":export_targets_cmake",
+    ],
+    cmake_export_dependencies_list = ["ament_cmake_core"],
+    cmake_extras = ["ament_cmake_ros_core-extras.cmake"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake_core//:ament_package",

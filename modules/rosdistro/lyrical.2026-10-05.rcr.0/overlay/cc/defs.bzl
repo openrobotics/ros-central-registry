@@ -13,8 +13,10 @@
 # limitations under the License.
 
 load(":macros.bzl", _ros_exports_header = "ros_exports_header", _ros_local_defines = "ros_local_defines")
-load(":rules.bzl", _collect_transitive_dynamic_deps = "collect_transitive_dynamic_deps")
+load(":rules.bzl", _cc_public_headers = "cc_public_headers", _collect_transitive_dynamic_deps = "collect_transitive_dynamic_deps")
 
 ros_exports_header = _ros_exports_header
 ros_local_defines = _ros_local_defines
 collect_transitive_dynamic_deps = _collect_transitive_dynamic_deps
+
+cc_public_headers = _cc_public_headers

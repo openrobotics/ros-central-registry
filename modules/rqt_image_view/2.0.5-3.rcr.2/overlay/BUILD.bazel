@@ -12,16 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_shared_library")
-load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("@rules_python//python:defs.bzl", "py_binary")
 load("@rules_qt//:qt.bzl", "qt_cc_library", "qt_ui_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
 ### LIBRARIES
+
+HEADERS = glob([
+    "include/**/*.hpp",
+    "include/**/*.h",
+])
 
 DEPENDENCIES = {
     "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
@@ -49,15 +65,13 @@ qt_cc_library(
         "src/rqt_image_view/image_view.cpp",
         "src/rqt_image_view/ratio_layouted_frame.cpp",
     ],
-    hdrs = [
-        "include/rqt_image_view/image_view.hpp",
-        "include/rqt_image_view/ratio_layouted_frame.hpp",
-    ],
+    hdrs = glob(["include/**/*.hpp"]),
     includes = [
         ".",
         "include",
     ],
     local_defines = ros_local_defines(),
+    normal_hdrs = glob(["include/**/*.h"]),
     deps = DEPENDENCIES.values() + [
         ":image_view",
         "@geometry_msgs//:cc",
@@ -92,34 +106,18 @@ genrule(
 ament_index(
     name = "ament_index",
     data = glob(["resource/**"]),
-    libraries = [":transitive_dynamic_deps"],
+    lib_data = [
+        ":rqt_image_view",
+        "scripts/image_publisher",
+        "scripts/rqt_image_view",
+    ],
     package_xml = "package.xml",
+    plugin_category = "rqt_gui",
     plugins = ["plugin.xml"],
     deps = ["@rqt_gui_cpp//:ament_index"],
 )
 
 ### EXECUTABLES
-
-# THIS HAS AN IMPLICIT DEPENDENCY ON A COUPLE OF DEPS NOT DESCRIBED IN ITS package.xml.
-#
-# genrule(
-#     name = "image_publisher_rename",
-#     srcs = ["scripts/image_publisher"],
-#     outs = ["scripts/image_publisher.py"],
-#     cmd = "cp $(location :scripts/image_publisher) $(location :scripts/image_publisher.py)",
-# )
-#
-# py_binary(
-#     name = "image_publisher",
-#     srcs = ["scripts/image_publisher.py"],
-#     main = "scripts/image_publisher.py",
-#     deps = [
-#         "@rclpy",
-#         "@sensor_msgs//:py",
-#         "@ament_index_python",
-#         "@cv_bridge",
-#     ],
-# )
 
 genrule(
     name = "gui_rename",
@@ -135,6 +133,7 @@ py_binary(
     data = [
         ":ament_index",
         ":qt_gui_resource",
+        ":transitive_dynamic_deps",
     ],
     main = "scripts/rqt_image_view.py",
     deps = ["@rqt_gui"],
@@ -142,8 +141,40 @@ py_binary(
 
 ### PACKAGING
 
+genrule(
+    name = "rqt_image_view_cmake_exports",
+    outs = [
+        "ament_cmake_export_libraries-extras.cmake",
+        "ament_cmake_export_targets-extras.cmake",
+        "rqt_image_viewExport-noconfig.cmake",
+        "rqt_image_viewExport.cmake",
+    ],
+    cmd = "touch $(OUTS)",
+)
+
+genrule(
+    name = "rqt_image_view_env_hooks",
+    outs = [
+        "library_path.dsv",
+        "library_path.sh",
+    ],
+    cmd = "touch $(OUTS)",
+)
+
+pkg_files(
+    name = "install_env_hooks",
+    srcs = [":rqt_image_view_env_hooks"],
+    prefix = "share/rqt_image_view/environment",
+)
+
 ament_package(
     name = "ament_package",
+    cmake = [":rqt_image_view_cmake_exports"],
+    cmake_export_dependencies = False,
+    cmake_export_interface = False,
+    cmake_strip_prefix = "",
+    headers = HEADERS,
+    install = [":install_env_hooks"],
     package_xml = "package.xml",
     deps = [
         ":ament_index",

@@ -14,6 +14,7 @@
 
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load("@pip_ros//:requirements.bzl", "all_requirements")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rules_python//python/uv:lock.bzl", "lock")
 
@@ -35,6 +36,14 @@ config_setting(
     flag_values = {":rmw": "dynamic"},
 )
 
+# Root of the installed underlay produced by ament_underlay / <pkg>:tar,
+# e.g. /opt/ros/lyrical. The distro name is the first component of this
+# module's version (lyrical.2026-10-05.rcr.0 -> lyrical).
+string_flag(
+    name = "install_prefix",
+    build_setting_default = "/opt/ros/" + module_version().split(".")[0],
+)
+
 # Python
 
 lock(
@@ -53,7 +62,51 @@ diff_test(
 
 ### PACKAGING
 
+# Third-party shared libraries built from source by this module (see
+# //cc:BUILD.bazel). Installing them under <prefix>/rosdistro/lib decouples
+# the underlay from whatever the host OS happens to provide.
+THIRD_PARTY_SHARED_LIBRARIES = [
+    "//cc:boringssl",
+    "//cc:bullet-BulletCollision",
+    "//cc:bzip2",
+    "//cc:console_bridge",
+    "//cc:curl",
+    "//cc:cyclonedds",
+    "//cc:fastcdr",
+    "//cc:fastdds",
+    "//cc:foxglove_sdk",
+    "//cc:libyaml",
+    "//cc:libzip",
+    "//cc:lz4",
+    "//cc:lz4_frame",
+    "//cc:lz4_hc",
+    "//cc:mcap",
+    "//cc:ogg",
+    "//cc:opencv",
+    "//cc:orocos-kdl",
+    "//cc:protobuf",
+    "//cc:sdl2",
+    "//cc:sqlite3",
+    "//cc:theora",
+    "//cc:tinyxml2",
+    "//cc:yaml-cpp",
+    "//cc:zenoh-cpp",
+    "//cc:zlib",
+    "//cc:zstd",
+    # Ogre (rviz rendering backend) and its render system plugins.
+    "//cc:Codec_STBI",
+    "//cc:OgreMain",
+    "//cc:OgreOverlay",
+    "//cc:RenderSystem_GL",
+    "//cc:RenderSystem_GL3Plus",
+]
+
 ament_package(
     name = "ament_package",
+    libraries = THIRD_PARTY_SHARED_LIBRARIES,
+    # Every pip dependency of the distribution, so the underlay's
+    # lib/pythonX.Y/site-packages is self-contained.
+    python = all_requirements,
+    python_strip_prefix = "site-packages",
     deps = [],
 )
