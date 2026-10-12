@@ -1,0 +1,142 @@
+# Copyright 2025 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:ament_index.bzl", "ament_index")
+load("@rosdistro//ament:ament_package.bzl", "ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+filegroup(
+    name = "package_xml",
+    srcs = ["package.xml"],
+)
+
+filegroup(
+    name = "headers",
+    srcs = glob([
+        "include/dynamixel_sdk/*.h",
+        "include/dynamixel_easy_sdk/*.hpp",
+    ]),
+)
+
+filegroup(
+    name = "share_files",
+    srcs = glob(["control_table/*.model"]),
+)
+
+cc_library(
+    name = "dynamixel_sdk_library",
+    srcs = glob(
+        [
+            "src/dynamixel_sdk/*.cpp",
+            "src/dynamixel_easy_sdk/*.cpp",
+        ],
+        exclude = [
+            "src/dynamixel_sdk/port_handler_arduino.cpp",
+            "src/dynamixel_sdk/port_handler_mac.cpp",
+            "src/dynamixel_sdk/port_handler_windows.cpp",
+        ],
+    ),
+    hdrs = [":headers"],
+    includes = [
+        "include",
+        "include/dynamixel_easy_sdk",
+        "include/dynamixel_sdk",
+    ],
+    local_defines = [
+        'CONTROL_TABLE_PATH=\\"share/dynamixel_sdk/control_table\\"',
+    ],
+)
+
+cc_shared_library(
+    name = "dynamixel_sdk",
+    shared_lib_name = "libdynamixel_sdk.so",
+    deps = [":dynamixel_sdk_library"],
+)
+
+py_library(
+    name = "dynamixel_sdk_py",
+    srcs = glob([
+        "src/dynamixel_sdk/*.py",
+        "src/dynamixel_easy_sdk/*.py",
+    ]),
+    imports = ["src"],
+)
+
+filegroup(
+    name = "python_install_files",
+    srcs = glob([
+        "src/dynamixel_sdk/*",
+        "src/dynamixel_easy_sdk/*",
+    ]),
+)
+
+genrule(
+    name = "easy_sdk_egg_info_gen",
+    outs = [
+        "easy_egg_info/PKG-INFO",
+        "easy_egg_info/SOURCES.txt",
+        "easy_egg_info/dependency_links.txt",
+        "easy_egg_info/top_level.txt",
+    ],
+    cmd = """
+cat << 'EOF' > $(location easy_egg_info/PKG-INFO)
+Metadata-Version: 2.1
+Name: dynamixel_easy_sdk
+Version: 4.0.3
+EOF
+printf "package.xml\\nsetup.py\\n" > $(location easy_egg_info/SOURCES.txt)
+printf "\\n" > $(location easy_egg_info/dependency_links.txt)
+printf "dynamixel_easy_sdk\\n" > $(location easy_egg_info/top_level.txt)
+""",
+)
+
+pkg_files(
+    name = "easy_sdk_egg_info_files",
+    srcs = [":easy_sdk_egg_info_gen"],
+    prefix = "lib/python3.14/site-packages/dynamixel_easy_sdk-4.0.3-py3.14.egg-info",
+    strip_prefix = "easy_egg_info",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [":share_files"],
+    libraries = [":dynamixel_sdk"],
+    package_xml = ":package_xml",
+)
+
+ament_package(
+    data = [":share_files"],
+    headers = [":headers"],
+    include_prefix = "",
+    install = [":easy_sdk_egg_info_files"],
+    libraries = [":dynamixel_sdk"],
+    package_xml = ":package_xml",
+    python = [":python_install_files"],
+    python_strip_prefix = "src",
+)
