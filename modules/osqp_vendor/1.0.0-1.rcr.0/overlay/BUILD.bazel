@@ -12,14 +12,172 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load(":vendor_install.bzl", "osqp_install_tree")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES
+
+# osqp itself is built by @rosdistro//cc (BCR osqp module); re-exported here so
+# downstream Bazel packages can depend on @osqp_vendor the way they
+# find_package(osqp_vendor) in CMake.
+alias(
+    name = "osqp_library",
+    actual = "@rosdistro//cc:osqp_library",
+)
+
+alias(
+    name = "osqp",
+    actual = "@rosdistro//cc:osqp",
+)
+
+### INSTALL TREE (include/osqp, include/qdldl, lib/libosqpstatic.a)
+
+osqp_install_tree(
+    name = "osqp_files",
+    dep = ":osqp_library",
+)
+
+### CMAKE CONFIG (lib/cmake/osqp/, as installed by osqp's own CMake)
+
+write_file(
+    name = "cmake_config",
+    out = "cmake_out/osqp-config.cmake",
+    content = [
+        'get_filename_component(PACKAGE_PREFIX_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../" ABSOLUTE)',
+        "set(OSQP_HAVE_SHARED_LIB ON)",
+        "set(OSQP_HAVE_STATIC_LIB ON)",
+        'include("${CMAKE_CURRENT_LIST_DIR}/osqp-targets.cmake")',
+        'include("${CMAKE_CURRENT_LIST_DIR}/osqpstatic-targets.cmake")',
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_config_version",
+    out = "cmake_out/osqp-config-version.cmake",
+    content = [
+        'set(PACKAGE_VERSION "1.0.0")',
+        "if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)",
+        "  set(PACKAGE_VERSION_COMPATIBLE FALSE)",
+        "else()",
+        "  set(PACKAGE_VERSION_COMPATIBLE TRUE)",
+        "  if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)",
+        "    set(PACKAGE_VERSION_EXACT TRUE)",
+        "  endif()",
+        "endif()",
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_targets",
+    out = "cmake_out/osqp-targets.cmake",
+    content = [
+        "if(NOT TARGET osqp::osqp)",
+        '  get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        "  add_library(osqp::osqp SHARED IMPORTED)",
+        "  set_target_properties(osqp::osqp PROPERTIES",
+        '    INTERFACE_COMPILE_DEFINITIONS "OSQP_SHARED_LIB"',
+        '    INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include/osqp"',
+        "  )",
+        '  include("${CMAKE_CURRENT_LIST_DIR}/osqp-targets-noconfig.cmake")',
+        "  set(_IMPORT_PREFIX)",
+        "endif()",
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_targets_noconfig",
+    out = "cmake_out/osqp-targets-noconfig.cmake",
+    content = [
+        "set_property(TARGET osqp::osqp APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)",
+        "set_target_properties(osqp::osqp PROPERTIES",
+        '  IMPORTED_LOCATION_NOCONFIG "${_IMPORT_PREFIX}/lib/libosqp.so"',
+        '  IMPORTED_SONAME_NOCONFIG "libosqp.so"',
+        ")",
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_static_targets",
+    out = "cmake_out/osqpstatic-targets.cmake",
+    content = [
+        "if(NOT TARGET osqp::osqpstatic)",
+        '  get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        "  add_library(osqp::osqpstatic STATIC IMPORTED)",
+        "  set_target_properties(osqp::osqpstatic PROPERTIES",
+        '    INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include/osqp"',
+        "  )",
+        '  include("${CMAKE_CURRENT_LIST_DIR}/osqpstatic-targets-noconfig.cmake")',
+        "  set(_IMPORT_PREFIX)",
+        "endif()",
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_static_targets_noconfig",
+    out = "cmake_out/osqpstatic-targets-noconfig.cmake",
+    content = [
+        "set_property(TARGET osqp::osqpstatic APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)",
+        "set_target_properties(osqp::osqpstatic PROPERTIES",
+        '  IMPORTED_LINK_INTERFACE_LANGUAGES_NOCONFIG "C"',
+        '  IMPORTED_LOCATION_NOCONFIG "${_IMPORT_PREFIX}/lib/libosqpstatic.a"',
+        ")",
+        "",
+    ],
+)
+
+pkg_files(
+    name = "cmake_files",
+    srcs = [
+        ":cmake_config",
+        ":cmake_config_version",
+        ":cmake_static_targets",
+        ":cmake_static_targets_noconfig",
+        ":cmake_targets",
+        ":cmake_targets_noconfig",
+    ],
+    prefix = "lib/cmake/osqp",
+)
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake = glob(["cmake/**"]),
+    cmake_export_dependencies_list = ["osqp"],
+    cmake_export_include_directories = False,
+    cmake_export_targets = False,
+    cmake_extras = ["osqp_vendor-extras.cmake"],
+    install = [
+        ":cmake_files",
+        ":osqp_files",
+    ],
+    libraries = [":osqp"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
