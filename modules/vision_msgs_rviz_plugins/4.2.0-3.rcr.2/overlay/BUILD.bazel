@@ -12,16 +12,122 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
+    "@rosdistro//cc:OgreOverlay": "@rosdistro//cc:OgreOverlay_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_default_plugins//:rviz_default_plugins": "@rviz_default_plugins//:rviz_default_plugins_library",
+    "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
+}
+
+qt_cc_library(
+    name = "vision_msgs_rviz_plugins_library",
+    srcs = [
+        "src/bounding_box_3d.cpp",
+        "src/bounding_box_3d_array.cpp",
+        "src/detection_3d.cpp",
+        "src/detection_3d_array.cpp",
+    ],
+    hdrs = HEADERS,
+    copts = ["-std=c++17"],
+    includes = ["include"],
+    local_defines = ros_local_defines() + [
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "QT_NO_KEYWORDS",
+        "RVIZ_DEFAULT_PLUGINS_BUILDING_LIBRARY",
+    ],
+    deps = DEPENDENCIES.values() + [
+        "@rules_qt//:qt_widgets",
+        "@vision_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "vision_msgs_rviz_plugins",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":vision_msgs_rviz_plugins_library",
+        ":vision_msgs_rviz_plugins_library_moc",
+    ],
+    deps = [":vision_msgs_rviz_plugins_library"],
+)
+
+### AMENT INDEX
+
+DATA = glob([
+    "conf/**",
+    "icons/**",
+    "launch/**",
+])
+
+ament_index(
+    name = "ament_index",
+    data = DATA,
+    libraries = [":vision_msgs_rviz_plugins"],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugins_description.xml"],
+)
 
 ### PACKAGING
 
+pkg_files(
+    name = "sample_scripts",
+    srcs = [
+        "samples/BoundingBox3D.py",
+        "samples/BoundingBox3DArray.py",
+        "samples/Detection3D.py",
+        "samples/Detection3DArray.py",
+    ],
+    prefix = "lib/vision_msgs_rviz_plugins",
+    strip_prefix = "samples",
+)
+
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "vision_msgs",
+        "rviz_common",
+        "rviz_rendering",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_libraries = False,
+    data = DATA,
+    headers = HEADERS,
+    install = [":sample_scripts"],
+    libraries = [":vision_msgs_rviz_plugins"],
     package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugins_description.xml"],
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_python//:ament_package",
         "@ament_lint_auto//:ament_package",
