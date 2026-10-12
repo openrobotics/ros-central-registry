@@ -12,15 +12,80 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### CMAKE EXTRAS
+
+# ament_package(CONFIG_EXTRAS cmake/mrt_cmake_modules-extras.cmake.in): the
+# install-space branch of the template is what downstream packages consume.
+expand_template(
+    name = "extras",
+    out = "mrt_cmake_modules-extras.cmake",
+    substitutions = {
+        "@DEVELSPACE@": "FALSE",
+        "@PROJECT_SOURCE_DIR@": "",
+    },
+    template = "cmake/mrt_cmake_modules-extras.cmake.in",
+)
+
+### INSTALLED SCRIPTS / DATA
+
+pkg_files(
+    name = "scripts",
+    srcs = [
+        "scripts/eval_coverage.py",
+        "scripts/generate_cmake_dependency_file.py",
+        "scripts/init_coverage.py",
+        "scripts/run_test.py",
+    ],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "share/mrt_cmake_modules/scripts",
+)
+
+pkg_files(
+    name = "ci_template",
+    srcs = ["ci_templates/CMakeLists.txt"],
+    prefix = "share/mrt_cmake_modules",
+)
+
+pkg_files(
+    name = "yaml",
+    srcs = ["yaml/cmake.yaml"],
+    prefix = "share/mrt_cmake_modules/yaml",
+)
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake = glob(["cmake/**"]) + [":extras"],
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    cmake_extras = ["mrt_cmake_modules-extras.cmake"],
+    install = [
+        ":ci_template",
+        ":scripts",
+        ":yaml",
+    ],
     package_xml = "package.xml",
+    programs = ["scripts/generate_cmakelists.py"],
     deps = [
         "@ament_cmake_core//:ament_package",
         "@gtest_vendor//:ament_package",
