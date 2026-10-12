@@ -35,14 +35,30 @@ license(
 
 DATA = glob(["icons/**"])
 
+# The plugin library is dlopen()ed by rviz2 (via pluginlib), which does not
+# itself link against everything this library needs (image_transport, tf2_ros,
+# ...). Ship the full transitive closure of shared libraries in lib/ so the
+# dynamic loader can resolve the plugin's DT_NEEDED entries at runtime.
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rviz_default_plugins"],
+    visibility = ["//visibility:private"],
+)
+
 ament_index(
     name = "ament_index",
     data = DATA,
-    libraries = [":rviz_default_plugins"],
+    libraries = [":transitive_dynamic_deps"],
     package_xml = "package.xml",
     plugin_category = "rviz_common",
     plugins = ["plugins_description.xml"],
     deps = [
+        # The image/depth-cloud displays instantiate a
+        # pluginlib::ClassLoader<image_transport::SubscriberPlugin>, which
+        # resolves the image_transport package (and its transport plugins)
+        # through the ament resource index at runtime.
+        "@image_transport//:ament_index_package",
+        "@image_transport//:ament_index_plugin",
         "@rviz_common//:ament_index",
         "@rviz_rendering//:ament_index",
     ],
