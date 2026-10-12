@@ -1,0 +1,145 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob([
+    "include/**/*.h",
+    "include/**/*.hpp",
+])
+
+cc_library(
+    name = "sick_safetyscanners_base_library",
+    srcs = glob(["src/**/*.cpp"]),
+    hdrs = HEADERS,
+    copts = ["-Wall"],
+    includes = ["include"],
+    deps = [
+        "@rosdistro//cc:boost.array",
+        "@rosdistro//cc:boost.asio",
+        "@rosdistro//cc:boost.date_time",
+        "@rosdistro//cc:boost.function",
+        "@rosdistro//cc:boost.lambda",
+        "@rosdistro//cc:boost.optional",
+        "@rosdistro//cc:boost.smart_ptr",
+        "@rosdistro//cc:boost.thread",
+    ],
+)
+
+cc_shared_library(
+    name = "sick_safetyscanners_base",
+    exports_filter = [":sick_safetyscanners_base_library"],
+    deps = [":sick_safetyscanners_base_library"],
+)
+
+### CMAKE CONFIG (plain cmake package: lib/cmake/<pkg>/)
+
+write_file(
+    name = "cmake_config_version",
+    out = "cmake_out/sick_safetyscanners_baseConfigVersion.cmake",
+    content = [
+        'set(PACKAGE_VERSION "1.0.0")',
+        "if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)",
+        "  set(PACKAGE_VERSION_COMPATIBLE FALSE)",
+        "else()",
+        '  if(PACKAGE_FIND_VERSION_MAJOR STREQUAL "1")',
+        "    set(PACKAGE_VERSION_COMPATIBLE TRUE)",
+        "  else()",
+        "    set(PACKAGE_VERSION_COMPATIBLE FALSE)",
+        "  endif()",
+        "  if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)",
+        "    set(PACKAGE_VERSION_EXACT TRUE)",
+        "  endif()",
+        "endif()",
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_targets",
+    out = "cmake_out/sick_safetyscanners_baseTargets.cmake",
+    content = [
+        "if(NOT TARGET sick_safetyscanners_base::sick_safetyscanners_base)",
+        '  get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        "  add_library(sick_safetyscanners_base::sick_safetyscanners_base SHARED IMPORTED)",
+        "  set_target_properties(sick_safetyscanners_base::sick_safetyscanners_base PROPERTIES",
+        '    INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"',
+        '    INTERFACE_LINK_LIBRARIES "Boost::thread;Boost::chrono"',
+        "  )",
+        '  include("${CMAKE_CURRENT_LIST_DIR}/sick_safetyscanners_baseTargets-noconfig.cmake")',
+        "  set(_IMPORT_PREFIX)",
+        "endif()",
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_targets_noconfig",
+    out = "cmake_out/sick_safetyscanners_baseTargets-noconfig.cmake",
+    content = [
+        "set_property(TARGET sick_safetyscanners_base::sick_safetyscanners_base APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)",
+        "set_target_properties(sick_safetyscanners_base::sick_safetyscanners_base PROPERTIES",
+        '  IMPORTED_LOCATION_NOCONFIG "${_IMPORT_PREFIX}/lib/libsick_safetyscanners_base.so"',
+        '  IMPORTED_SONAME_NOCONFIG "libsick_safetyscanners_base.so"',
+        ")",
+        "",
+    ],
+)
+
+pkg_files(
+    name = "cmake_files",
+    srcs = [
+        "sick_safetyscanners_baseConfig.cmake",
+        ":cmake_config_version",
+        ":cmake_targets",
+        ":cmake_targets_noconfig",
+    ],
+    prefix = "lib/cmake/sick_safetyscanners_base",
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    headers = HEADERS,
+    include_prefix = "",
+    install = [":cmake_files"],
+    libraries = [":sick_safetyscanners_base"],
+    package_xml = "package.xml",
+    deps = [
+        "@rosdistro//:ament_package",
+    ],
+)
