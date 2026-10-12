@@ -1,0 +1,139 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@laser_geometry//:laser_geometry": "@laser_geometry//:laser_geometry_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@tf2_sensor_msgs//:tf2_sensor_msgs": "@tf2_sensor_msgs//:tf2_sensor_msgs_library",
+}
+
+cc_library(
+    name = "dual_laser_merger_library",
+    srcs = ["src/dual_laser_merger.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@geometry_msgs//:cc",
+        # Header-only; linked statically like pcl_ros does (pcl_conversions.so
+        # already carries pcl common / boost.filesystem statically).
+        "@pcl_conversions//:pcl_conversions_library",
+        "@rosdistro//cc:pcl_common",
+        "@rosdistro//cc:pcl_kdtree",
+    ],
+)
+
+cc_shared_library(
+    name = "dual_laser_merger",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":dual_laser_merger_library"],
+    deps = [":dual_laser_merger_library"],
+)
+
+### COMPONENTS
+
+# rclcpp_components_register_node(... PLUGIN "merger_node::MergerNode" EXECUTABLE dual_laser_merger_node)
+rclcpp_components_register_node(
+    name = "dual_laser_merger_node",
+    component = ":dual_laser_merger",
+    node_name = "dual_laser_merger_node",
+    plugin = "merger_node::MergerNode",
+)
+
+### AMENT INDEX
+
+DATA = glob([
+    "bag/**",
+    "config/**",
+])
+
+# install(DIRECTORY launch/ DESTINATION share/dual_laser_merger): flattened.
+pkg_files(
+    name = "launch_files",
+    srcs = glob(["launch/*"]),
+    prefix = "share/dual_laser_merger",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":dual_laser_merger_node_record"],
+    data = DATA,
+    executables = [":dual_laser_merger_node"],
+    libraries = [":dual_laser_merger"],
+    package_xml = "package.xml",
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_targets = False,
+    components = [":dual_laser_merger_node_record"],
+    data = DATA,
+    executables = [":dual_laser_merger_node"],
+    headers = HEADERS,
+    install = [":launch_files"],
+    libraries = [":dual_laser_merger"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_copyright//:ament_package",
+        "@ament_cpplint//:ament_package",
+        "@ament_flake8//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@ament_pep257//:ament_package",
+        "@ament_xmllint//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@laser_geometry//:ament_package",
+        "@message_filters//:ament_package",
+        "@pcl_conversions//:ament_package",
+        "@pcl_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@tf2_sensor_msgs//:ament_package",
+    ],
+)
