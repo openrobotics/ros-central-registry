@@ -1,0 +1,147 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosbag2_storage//:rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+}
+
+# Header-only C++ API.
+cc_library(
+    name = "classic_bags",
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = DEPENDENCIES.values(),
+)
+
+### PYTHON MODULE
+
+py_library(
+    name = "classic_bags_py",
+    srcs = glob(["classic_bags/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@builtin_interfaces//:py",
+        "@rclpy",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+    ],
+)
+
+### AMENT INDEX
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+)
+
+# Runtime index for the tests: the mcap and sqlite3 storage plugins.
+ament_index(
+    name = "ament_index_test",
+    testonly = True,
+    package_xml = "package.xml",
+    visibility = ["//visibility:private"],
+    deps = [
+        ":ament_index",
+        "@rosbag2_cpp//:ament_index",
+        "@rosbag2_storage_mcap//:ament_index",
+        "@rosbag2_storage_sqlite3//:ament_index",
+        "@std_msgs//:ament_index",
+    ],
+)
+
+### TESTS
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "classic_bags_basic_test",
+    srcs = ["test/test_basic.cpp"],
+    data = [":ament_index_test"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":classic_bags",
+        "@rosdistro//cc:googletest",
+        "@std_msgs//:cc",
+    ],
+)
+
+py_pytest(
+    name = "utest",
+    srcs = ["test/utest.py"],
+    data = [":ament_index_test"],
+    deps = [
+        ":classic_bags_py",
+        "@std_msgs//:py",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_interface = False,
+    cmake_export_targets = False,
+    headers = HEADERS,
+    include_prefix = "",
+    package_xml = "package.xml",
+    python = [":classic_bags_py"],
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosbag2_storage_mcap//:ament_package",
+        "@rosbag2_storage_sqlite3//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_runtime_py//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
