@@ -1,0 +1,149 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["current/include/urg_c/*.h"])
+
+COPTS = [
+    # CMAKE_C_STANDARD 99 with extensions enabled (the CMake default).
+    "-std=gnu99",
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic",
+]
+
+cc_library(
+    name = "urg_c_library",
+    srcs = [
+        "current/src/urg_connection.c",
+        "current/src/urg_debug.c",
+        "current/src/urg_ring_buffer.c",
+        "current/src/urg_sensor.c",
+        "current/src/urg_serial.c",
+        "current/src/urg_serial_utils.c",
+        "current/src/urg_tcpclient.c",
+        "current/src/urg_time.c",
+        "current/src/urg_utils.c",
+    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["current/include"],
+    linkopts = [
+        "-lrt",
+        "-lm",
+    ],
+    # Platform backends are textually #included by urg_serial.c and
+    # urg_serial_utils.c rather than compiled on their own.
+    textual_hdrs = [
+        "current/src/urg_serial_linux.c",
+        "current/src/urg_serial_utils_linux.c",
+        "current/src/urg_serial_utils_windows.c",
+        "current/src/urg_serial_windows.c",
+    ],
+)
+
+cc_shared_library(
+    name = "urg_c",
+    exports_filter = [":urg_c_library"],
+    deps = [":urg_c_library"],
+)
+
+# Upstream builds open_urg_sensor as a static archive (lib/libopen_urg_sensor.a).
+cc_library(
+    name = "open_urg_sensor",
+    srcs = ["current/samples/open_urg_sensor.c"],
+    hdrs = ["current/samples/open_urg_sensor.h"],
+    copts = COPTS,
+    includes = ["current/samples"],
+    deps = [":urg_c_library"],
+)
+
+filegroup(
+    name = "open_urg_sensor_archive",
+    srcs = [":open_urg_sensor"],
+    output_group = "archive",
+)
+
+pkg_files(
+    name = "static_library",
+    srcs = [":open_urg_sensor_archive"],
+    prefix = "lib",
+    renames = {":open_urg_sensor_archive": "libopen_urg_sensor.a"},
+)
+
+### SAMPLE PROGRAMS
+
+SAMPLES = [
+    "angle_convert_test",
+    "calculate_xy",
+    "find_port",
+    "get_distance",
+    "get_distance_intensity",
+    "get_multiecho",
+    "get_multiecho_intensity",
+    "reboot_test",
+    "sensor_parameter",
+    "sync_time_stamp",
+    "timeout_test",
+]
+
+[
+    cc_binary(
+        name = sample,
+        srcs = ["current/samples/{}.c".format(sample)],
+        copts = COPTS,
+        dynamic_deps = [":urg_c"],
+        deps = [
+            ":open_urg_sensor",
+            ":urg_c_library",
+        ],
+    )
+    for sample in SAMPLES
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_targets = False,
+    headers = HEADERS,
+    headers_strip_prefix = "current/include",
+    include_prefix = "",
+    install = [":static_library"],
+    libraries = [":urg_c"],
+    package_xml = "package.xml",
+    programs = [":{}".format(sample) for sample in SAMPLES],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)
