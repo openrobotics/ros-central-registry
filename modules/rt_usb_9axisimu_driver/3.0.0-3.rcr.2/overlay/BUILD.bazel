@@ -15,8 +15,9 @@
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
 package(
     default_applicable_licenses = [":license"],
@@ -105,8 +106,51 @@ ament_index(
 
 ### TESTS
 
-# test/test_driver.cpp depends on FakeIt, which upstream fetches with
-# FetchContent at configure time and which is not available in the registry.
+cc_test(
+    name = "test_driver",
+    size = "small",
+    srcs = [
+        "test/fakeit.hpp",
+        "test/test_driver.cpp",
+    ],
+    includes = ["test"],
+    deps = [
+        ":rt_usb_9axisimu_driver_component_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+_FAKEIT_FILES = [
+    "include/boost/fakeit.hpp",
+    "include/catch/fakeit.hpp",
+    "include/cute/fakeit.hpp",
+    "include/doctest/fakeit.hpp",
+    "include/gtest/fakeit.hpp",
+    "include/mettle/fakeit.hpp",
+    "include/mstest/fakeit.hpp",
+    "include/nunit/fakeit.hpp",
+    "include/qtest/fakeit.hpp",
+    "include/standalone/fakeit.hpp",
+    "include/tpunit/fakeit.hpp",
+    "lib/cmake/FakeIt/FakeItConfig.cmake",
+    "lib/cmake/FakeIt/FakeItConfigVersion.cmake",
+]
+
+genrule(
+    name = "fakeit_install_gen",
+    srcs = ["test/fakeit.hpp"],
+    outs = ["fakeit_install/" + f for f in _FAKEIT_FILES],
+    cmd = " && ".join([
+        "cp $(location test/fakeit.hpp) $(location fakeit_install/" + f + ")"
+        for f in _FAKEIT_FILES
+    ]),
+)
+
+pkg_files(
+    name = "fakeit_install_files",
+    srcs = [":fakeit_install_gen"],
+    strip_prefix = "fakeit_install",
+)
 
 ### PACKAGING
 
@@ -127,6 +171,7 @@ ament_package(
     executables = [":rt_usb_9axisimu_driver"],
     headers = HEADERS,
     include_prefix = "",
+    install = [":fakeit_install_files"],
     libraries = [":rt_usb_9axisimu_driver_component"],
     package_xml = "package.xml",
     deps = [
