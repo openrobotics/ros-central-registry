@@ -1,4 +1,4 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
+# Copyright 2025 Open Source Robotics Foundation, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,22 +12,106 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:ament_index.bzl", "ament_index")
+load("@rosdistro//ament:ament_package.bzl", "ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
 
-### PACKAGING
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+filegroup(
+    name = "package_xml",
+    srcs = ["package.xml"],
+)
+
+filegroup(
+    name = "headers",
+    srcs = glob(["include/*.hpp"]),
+)
+
+cc_library(
+    name = "rt_manipulators_cpp_prefixed_headers",
+    hdrs = [":headers"],
+    include_prefix = "rt_manipulators_cpp",
+    strip_include_prefix = "include",
+)
+
+cc_library(
+    name = "rt_manipulators_cpp_library",
+    srcs = glob(["src/*.cpp"]),
+    hdrs = [":headers"],
+    includes = ["include"],
+    deps = [
+        ":rt_manipulators_cpp_prefixed_headers",
+        "@dynamixel_sdk//:dynamixel_sdk_library",
+        "@rosdistro//cc:eigen",
+        "@rosdistro//cc:yaml-cpp_library",
+    ],
+)
+
+cc_shared_library(
+    name = "rt_manipulators_cpp",
+    shared_lib_name = "librt_manipulators_cpp.so",
+    deps = [":rt_manipulators_cpp_library"],
+)
+
+[
+    cc_test(
+        name = test_name,
+        size = "small",
+        srcs = ["test/" + test_name + ".cpp"],
+        data = [":ament_index"],
+        deps = [
+            ":rt_manipulators_cpp_library",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test_name in [
+        "test_joint",
+        "test_kinematics_utils",
+        "test_kinematics",
+        "test_config_file_parser",
+        "test_dynamixel_x",
+        "test_dynamixel_xh",
+        "test_dynamixel_p",
+    ]
+]
+
+ament_index(
+    name = "ament_index",
+    data = glob(["test/config/*"]),
+    libraries = [":rt_manipulators_cpp"],
+    package_xml = ":package_xml",
+)
 
 ament_package(
-    name = "ament_package",
-    package_xml = "package.xml",
+    cmake_export_dependencies_list = [
+        "dynamixel_sdk",
+        "eigen3_cmake_module",
+        "Eigen3",
+        "yaml-cpp",
+        "yaml_cpp_vendor",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_rt_manipulators_cpp",
+    headers = [":headers"],
+    libraries = [":rt_manipulators_cpp"],
+    package_xml = ":package_xml",
     deps = [
-        "@ament_cmake//:ament_package",
-        "@ament_lint_auto//:ament_package",
-        "@ament_lint_common//:ament_package",
         "@dynamixel_sdk//:ament_package",
         "@eigen3_cmake_module//:ament_package",
-        "@rosdistro//:ament_package",
         "@yaml_cpp_vendor//:ament_package",
     ],
 )
