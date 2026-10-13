@@ -1,0 +1,60 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+write_file(
+    name = "gen_ament_download_dependencies_extras",
+    out = "_meta/share/ament_download/cmake/ament_download_dependencies-extras.cmake",
+    content = [
+        "find_package(ament_cmake_core QUIET REQUIRED)",
+        "find_package(ament_cmake_include_directories QUIET REQUIRED)",
+        "find_package(ament_cmake_libraries QUIET REQUIRED)",
+        "",
+        "include(\"${ament_download_DIR}/ament_download.cmake\")",
+        "",
+    ],
+)
+
+pkg_files(
+    name = "meta_files",
+    srcs = [":gen_ament_download_dependencies_extras"],
+    strip_prefix = strip_prefix.from_pkg("_meta"),
+)
+
+pkg_files(
+    name = "src_cmake",
+    srcs = ["src/download_checkmd5.py"],
+    prefix = "share/ament_download/cmake",
+    strip_prefix = strip_prefix.from_pkg("src"),
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake = ["cmake/ament_download.cmake"],
+    cmake_export_dependencies_list = ["ament_cmake"],
+    cmake_extras = ["ament_download_dependencies-extras.cmake"],
+    install = [
+        ":meta_files",
+        ":src_cmake",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)
