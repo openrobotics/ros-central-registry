@@ -1,6 +1,6 @@
 --- a/test/test_ur_urdf_xacro.py
 +++ b/test/test_ur_urdf_xacro.py
-@@ -33,6 +33,18 @@
+@@ -33,6 +33,25 @@
  import subprocess
  import tempfile
  import pytest
@@ -8,14 +8,32 @@
 +# Ensure Bazel runfiles are on PATH and AMENT_PREFIX_PATH is set
 +runfiles_dir = os.environ.get("RUNFILES_DIR") or os.environ.get("TEST_SRCDIR")
 +if runfiles_dir:
-+    os.environ["AMENT_PREFIX_PATH"] = runfiles_dir
++    ament_dirs = [
++        os.path.join(runfiles_dir, d)
++        for d in os.listdir(runfiles_dir)
++        if os.path.isdir(os.path.join(runfiles_dir, d, "share", "ament_index"))
++    ]
++    if os.environ.get("AMENT_PREFIX_PATH"):
++        ament_dirs.append(os.environ["AMENT_PREFIX_PATH"])
++    os.environ["AMENT_PREFIX_PATH"] = os.pathsep.join(ament_dirs)
 +    extra_paths = set()
-+    for root, dirs, files in os.walk(runfiles_dir):
++    for root, dirs, files in os.walk(runfiles_dir, followlinks=True):
 +        for file in files:
-+            if file in ("xacro", "check_urdf"):
++            if file in ("xacro", "xacro_main", "check_urdf"):
 +                extra_paths.add(root)
 +    if extra_paths:
 +        os.environ["PATH"] = os.pathsep.join(list(extra_paths)) + os.pathsep + os.environ.get("PATH", "")
  
  from ament_index_python.packages import get_package_share_directory
  
+@@ -95,8 +114,9 @@
+     _, tmp_urdf_output_file = tempfile.mkstemp(suffix=".urdf")
+ 
+     # Compose `xacro` and `check_urdf` command
++    xacro_bin = shutil.which("xacro") or shutil.which("xacro_main")
+     xacro_command = (
+-        f"{shutil.which('xacro')}"
++        f"{xacro_bin}"
+         f" {description_file_path}"
+         f" joint_limit_params:={joint_limit_params}"
+         f" kinematics_params:={kinematics_params}"
