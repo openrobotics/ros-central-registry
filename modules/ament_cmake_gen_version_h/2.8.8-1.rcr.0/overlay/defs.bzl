@@ -36,7 +36,7 @@ def generate_version_h(name, out):
 
 def generate_ros_version_defines():
     package_name = native.module_name()
-    package_version = native.module_version()
+    package_version = native.module_version().split("-")[0]
     package_version_parts = package_version.split(".")
     package_version_major = package_version_parts[0] if len(package_version_parts) > 0 else ""
     package_version_minor = package_version_parts[1] if len(package_version_parts) > 1 else ""
