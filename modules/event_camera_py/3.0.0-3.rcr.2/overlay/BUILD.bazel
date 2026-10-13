@@ -12,15 +12,113 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
 
-### PACKAGING
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+cc_library(
+    name = "_event_camera_py_library",
+    srcs = ["src/decoder.cpp"],
+    hdrs = glob(["include/**/*.h"]),
+    includes = ["include"],
+    deps = [
+        "@event_camera_codecs//:codec_library",
+        "@event_camera_msgs//:cc",
+        "@rosdistro//cc:pybind11",
+        "@rules_python//python/cc:current_py_cc_headers",
+    ],
+)
+
+cc_shared_library(
+    name = "_event_camera_py",
+    dynamic_deps = ["@event_camera_codecs//:codec"],
+    exports_filter = [":_event_camera_py_library"],
+    shared_lib_name = "event_camera_py/_event_camera_py.so",
+    deps = [":_event_camera_py_library"],
+)
+
+py_library(
+    name = "event_camera_py",
+    srcs = glob(["event_camera_py/**/*.py"]),
+    data = [":_event_camera_py"],
+    imports = ["."],
+    deps = [
+        "@rpyutils",
+    ],
+)
+
+py_library(
+    name = "test_helpers",
+    testonly = True,
+    srcs = [
+        "tests/bag_reader_ros2.py",
+        "tests/event_counter.py",
+        "tests/test_verify.py",
+    ],
+    imports = ["tests"],
+    deps = [
+        ":event_camera_py",
+        requirement("numpy"),
+        "@event_camera_msgs//:py",
+        "@rclpy",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+    ],
+)
+
+ament_index(
+    name = "ament_index_test",
+    testonly = True,
+    package_xml = "package.xml",
+    deps = [
+        "@event_camera_msgs//:ament_index",
+        "@rosbag2_py//:ament_index",
+        "@rosbag2_storage_default_plugins//:ament_index",
+        "@rosbag2_storage_mcap//:ament_index",
+    ],
+)
+
+[
+    py_pytest(
+        name = test,
+        srcs = ["tests/{0}.py".format(test)],
+        data = glob(["tests/test_events_*/**"]) + [":ament_index_test"],
+        env = {"ROS_VERSION": "2"},
+        deps = [
+            ":event_camera_py",
+            ":test_helpers",
+        ],
+    )
+    for test in [
+        "test_1",
+        "test_2",
+    ]
+]
 
 ament_package(
     name = "ament_package",
+    build_type = "ament_cmake",
+    cmake_export_dependencies = False,
     package_xml = "package.xml",
+    python = [
+        ":event_camera_py",
+        ":_event_camera_py",
+    ],
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_auto//:ament_package",
