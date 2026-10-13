@@ -13,10 +13,12 @@
 # limitations under the License.
 
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
 
 package(
     default_applicable_licenses = [":license"],
@@ -85,6 +87,59 @@ cc_binary(
         "@rclcpp//:rclcpp_library",
     ],
 )
+
+### AMENT INDEX
+
+ament_index(
+    name = "ament_index",
+    components = [":node_teleop_twist_joy_record"],
+    data = glob([
+        "config/**",
+        "launch/**",
+    ]),
+    lib_data = [":teleop_node"],
+    libraries = [":teleop_twist_joy"],
+    package_xml = "package.xml",
+)
+
+### TESTS
+
+py_library(
+    name = "test_joy_twist",
+    srcs = ["test/test_joy_twist.py"],
+    imports = ["test"],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_testing_ros",
+        "@sensor_msgs//:py",
+    ],
+)
+
+[
+    py_pytest(
+        name = "test_" + f.split("/")[-1],
+        srcs = [f],
+        args = [
+            "-p",
+            "launch_testing.pytest.hooks",
+            "-p",
+            "launch_testing_ros_pytest_entrypoint",
+        ],
+        data = [
+            ":ament_index",
+            ":teleop_node",
+        ],
+        deps = [
+            ":test_joy_twist",
+            "@geometry_msgs//:py",
+            "@launch_ros",
+            "@launch_testing_ros",
+            "@rules_python//python/runfiles",
+            "@sensor_msgs//:py",
+        ],
+    )
+    for f in glob(["test/*_launch_test.py"])
+]
 
 ### PACKAGING
 
