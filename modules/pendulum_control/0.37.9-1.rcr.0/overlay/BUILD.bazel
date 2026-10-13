@@ -12,9 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_python//python:defs.bzl", "py_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -64,6 +68,102 @@ cc_binary(
         "@pendulum_msgs//:cc",
         "@rclcpp//:rclcpp_library",
         "@rttest",
+    ],
+)
+
+### TESTS
+
+write_file(
+    name = "rmw_test_fixture_implementation_py",
+    out = "rmw_test_fixture_implementation.py",
+    content = [
+        "def rmw_test_isolation_start(): pass",
+        "def rmw_test_isolation_stop(): pass",
+    ],
+)
+
+py_library(
+    name = "rmw_test_fixture_implementation",
+    srcs = [":rmw_test_fixture_implementation_py"],
+    imports = ["."],
+    visibility = ["//visibility:private"],
+)
+
+cmake_configure_file(
+    name = "test_pendulum_py",
+    src = "test/test_pendulum_demo.py.in",
+    out = "test/test_pendulum.py",
+    defines = [
+        "RCLCPP_DEMO_PENDULUM_LOGGER_EXECUTABLE=../pendulum_control+/pendulum_logger",
+        "RCLCPP_DEMO_PENDULUM_DEMO_EXECUTABLE=../pendulum_control+/pendulum_demo",
+        "RCLCPP_DEMO_PENDULUM_LOGGER_EXPECTED_OUTPUT=../pendulum_control+/test/pendulum_logger",
+        "RCLCPP_DEMO_PENDULUM_DEMO_EXPECTED_OUTPUT=../pendulum_control+/test/pendulum_demo",
+        "rmw_implementation=rmw_cyclonedds_cpp",
+    ],
+)
+
+py_pytest(
+    name = "test_pendulum",
+    srcs = ["test_pendulum_py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        "test/pendulum_demo.regex",
+        "test/pendulum_logger.regex",
+        ":pendulum_demo",
+        ":pendulum_logger",
+    ],
+    env = {
+        "RCL_ASSERT_RMW_ID_MATCHES": "rmw_cyclonedds_cpp",
+        "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
+    },
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@launch",
+        "@launch_testing",
+        "@launch_testing_ros",
+    ],
+)
+
+cmake_configure_file(
+    name = "test_pendulum_teleop_py",
+    src = "test/test_pendulum_teleop.py.in",
+    out = "test/test_pendulum_teleop.py",
+    defines = [
+        "RCLCPP_DEMO_PENDULUM_DEMO_EXECUTABLE=../pendulum_control+/pendulum_demo",
+        "RCLCPP_DEMO_PENDULUM_TELEOP_EXECUTABLE=../pendulum_control+/pendulum_teleop",
+        "RCLCPP_DEMO_PENDULUM_DEMO_TELEOP_EXPECTED_OUTPUT=../pendulum_control+/test/pendulum_demo_teleop",
+        "RCLCPP_DEMO_PENDULUM_TELEOP_EXPECTED_OUTPUT=../pendulum_control+/test/pendulum_teleop",
+        "rmw_implementation=rmw_cyclonedds_cpp",
+    ],
+)
+
+py_pytest(
+    name = "test_pendulum_teleop",
+    srcs = ["test_pendulum_teleop_py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        "test/execute_with_delay.py",
+        "test/pendulum_demo_teleop.regex",
+        "test/pendulum_teleop.txt",
+        ":pendulum_demo",
+        ":pendulum_teleop",
+    ],
+    env = {
+        "RCL_ASSERT_RMW_ID_MATCHES": "rmw_cyclonedds_cpp",
+        "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
+    },
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@launch",
+        "@launch_testing",
+        "@launch_testing_ros",
+        "@ros2run",
     ],
 )
 
