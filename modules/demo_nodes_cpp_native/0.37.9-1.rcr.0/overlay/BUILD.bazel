@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
@@ -69,24 +70,40 @@ rclcpp_components_register_node(
     plugin = "demo_nodes_cpp_native::Talker",
 )
 
-[
-    py_pytest(
-        name = f.split("/")[-1].removesuffix(".py"),
-        srcs = [f],
-        args = [
-            "-p",
-            "launch_testing.pytest.hooks",
-        ],
-        deps = [
-            "@rules_python//python/runfiles",
-        ],
-    )
-    for f in glob(
-        ["test/test_*.py"],
-        allow_empty = True,
-        exclude = ["**/test_flake8.py"],
-    )
-]
+cmake_configure_file(
+    name = "test_tutorial_talker_py",
+    src = "test/test_executables_tutorial.py.in",
+    out = "test_tutorial_talker.py",
+    defines = [
+        "DEMO_NODES_CPP_EXECUTABLE=../demo_nodes_cpp_native+/talker",
+        "DEMO_NODES_CPP_EXPECTED_OUTPUT=../demo_nodes_cpp_native+/test/talker",
+    ],
+)
+
+py_pytest(
+    name = "test_tutorial_talker",
+    srcs = ["test_tutorial_talker_py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+        "-p",
+        "launch_testing_ros_pytest_entrypoint",
+    ],
+    data = [
+        "test/talker.regex",
+        ":talker",
+    ],
+    env = {
+        "RCL_ASSERT_RMW_ID_MATCHES": "rmw_fastrtps_cpp",
+        "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp",
+    },
+    deps = [
+        "@launch",
+        "@launch_testing",
+        "@launch_testing_ros",
+        "@rules_python//python/runfiles",
+    ],
+)
 
 ### PACKAGING
 
