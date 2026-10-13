@@ -13,14 +13,94 @@
 # limitations under the License.
 
 load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
 
-### PACKAGING
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@point_cloud_transport//:point_cloud_transport": "@point_cloud_transport//:point_cloud_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "_point_cloud_transport_library",
+    srcs = ["src/point_cloud_transport_py/pybind_point_cloud_transport.cpp"],
+    hdrs = glob(["src/point_cloud_transport_py/*.hpp"]),
+    includes = ["src/point_cloud_transport_py"],
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:pybind11",
+        "@rules_python//python/cc:current_py_cc_headers",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "_point_cloud_transport",
+    dynamic_deps = [":transitive_dynamic_deps"],
+    exports_filter = [":_point_cloud_transport_library"],
+    shared_lib_name = "point_cloud_transport_py/_point_cloud_transport.so",
+    deps = [":_point_cloud_transport_library"],
+)
+
+cc_library(
+    name = "_codec_library",
+    srcs = ["src/point_cloud_transport_py/pybind_codec.cpp"],
+    hdrs = glob(["src/point_cloud_transport_py/*.hpp"]),
+    includes = ["src/point_cloud_transport_py"],
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:pybind11",
+        "@rules_python//python/cc:current_py_cc_headers",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "_codec",
+    dynamic_deps = [":transitive_dynamic_deps"],
+    exports_filter = [":_codec_library"],
+    shared_lib_name = "point_cloud_transport_py/_codec.so",
+    deps = [":_codec_library"],
+)
+
+py_library(
+    name = "point_cloud_transport_py",
+    srcs = glob(["point_cloud_transport_py/**/*.py"]),
+    data = [
+        ":_codec",
+        ":_point_cloud_transport",
+    ],
+    imports = ["."],
+)
 
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies = False,
     package_xml = "package.xml",
+    python = [
+        ":point_cloud_transport_py",
+        ":_codec",
+        ":_point_cloud_transport",
+    ],
     deps = [
         "@ament_cmake_python//:ament_package",
         "@ament_cmake_ros//:ament_package",
