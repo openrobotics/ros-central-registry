@@ -15,7 +15,7 @@
 """Generates rcutils' test/test_*.{cpp,c} cc_test targets."""
 
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 def rcutils_cc_tests(tests, memory_tools_tests):
@@ -41,8 +41,7 @@ def rcutils_cc_tests(tests, memory_tools_tests):
             "//conditions:default": [],
         }) if name == "test_time" else []
 
-        cc_test(
-            name = name + "_bin" if needs_memory_tools else name,
+        common_kwargs = dict(
             srcs = native.glob([
                 "test/**/*.h",
                 "test/**/*.hpp",
@@ -53,7 +52,6 @@ def rcutils_cc_tests(tests, memory_tools_tests):
                 "test/dummy_shared_library/**",
                 "test/dummy_*.txt",
             ]) + [":file_with_space"],
-            tags = ["manual"] if needs_memory_tools else [],
             dynamic_deps = [":rcutils"] + (
                 ["@osrf_testing_tools_cpp//:memory_tools_interpose"] if needs_memory_tools else []
             ),
@@ -75,6 +73,19 @@ def rcutils_cc_tests(tests, memory_tools_tests):
                 "@rules_cc//cc/runfiles",
             ],
         )
+
+        if needs_memory_tools:
+            cc_binary(
+                name = name + "_bin",
+                testonly = True,
+                tags = ["manual"],
+                **common_kwargs
+            )
+        else:
+            cc_test(
+                name = name,
+                **common_kwargs
+            )
 
         if needs_memory_tools:
             sh_test(

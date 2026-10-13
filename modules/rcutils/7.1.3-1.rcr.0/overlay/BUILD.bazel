@@ -13,7 +13,8 @@
 # limitations under the License.
 
 load("@rosdistro//ament:defs.bzl", "ament_package")
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
 load(":tests.bzl", "rcutils_cc_tests")
@@ -172,7 +173,9 @@ _RCUTILS_TESTS = {
     ("test_logging_console_output_handler", "test_logging_console_output_handler.cpp"): {},
     ("test_macros", "test_macros.cpp"): {},
     ("test_logging_macros_c", "test_logging_macros.c"): {},
-    ("test_atomics_executable", "test_atomics.c"): {},
+    ("test_atomics", "test_atomics.c"): {},
+    ("test_base64", "test_base64.cpp"): {},
+    ("test_strerror", "test_strerror.cpp"): {},
 }
 
 rcutils_cc_tests(
@@ -180,22 +183,90 @@ rcutils_cc_tests(
     tests = _RCUTILS_TESTS,
 )
 
+py_pytest(
+    name = "test_logging_output_format",
+    srcs = ["test/test_logging_output_format.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":test_logging_long_messages",
+    ] + glob([
+        "test/test_logging_output_*.txt",
+        "test/test_logging_output_*.regex",
+    ]),
+    deps = [
+        "@launch",
+        "@launch_testing",
+    ],
+)
+
+[
+    (
+        cc_library(
+            name = "dummy_" + suffix + "_lib",
+            srcs = [
+                "test/dummy_shared_library/dummy_shared_library.c",
+                "test/dummy_shared_library/dummy_shared_library.h",
+            ],
+        ),
+        cc_shared_library(
+            name = "dummy_" + suffix,
+            exports_filter = [":dummy_" + suffix + "_lib"],
+            deps = [":dummy_" + suffix + "_lib"],
+        ),
+        collect_transitive_dynamic_deps(
+            name = "test_" + suffix + "_dynamic_deps",
+            dynamic_deps = [
+                ":dummy_" + suffix,
+                ":rcutils",
+            ],
+            visibility = ["//visibility:private"],
+        ),
+        cc_test(
+            name = "test_" + suffix,
+            srcs = [
+                "test/allocator_testing_utils.h",
+                "test/test_shared_library.cpp",
+            ],
+            data = [":dummy_" + suffix],
+            dynamic_deps = [":test_" + suffix + "_dynamic_deps"],
+            linkopts = ["-Wl,--no-as-needed"],
+            local_defines = ros_local_defines() + [
+                "SHARED_LIBRARY_UNDER_TEST=dummy_" + suffix,
+            ],
+            deps = [
+                ":dummy_" + suffix + "_lib",
+                ":rcutils_library",
+                "@rosdistro//cc:googletest",
+            ],
+        ),
+    )
+    for suffix in [
+        "shared_library_in_load_paths",
+        "shared_library_in_run_paths",
+        "shared_library_preloaded",
+    ]
+]
+
 [
     cc_test(
-        name = test,
+        name = name,
         timeout = "moderate",
-        srcs = glob(["test/**/*.h"]) + ["test/benchmark/" + test + ".cpp"],
+        srcs = glob(["test/**/*.h"]) + ["test/benchmark/" + src + ".cpp"],
+        dynamic_deps = [":rcutils"],
         tags = ["manual"],
         deps = [
-            ":rcutils",
-            "@google_benchmark//:benchmark",
+            ":rcutils_library",
             "@google_benchmark//:benchmark_main",
             "@osrf_testing_tools_cpp//:memory_tools",
+            "@performance_test_fixture",
         ],
     )
-    for test in [
-        "benchmark_error_handling",
-        "benchmark_logging",
+    for name, src in [
+        ("benchmark_err_handle", "benchmark_error_handling"),
+        ("benchmark_logging", "benchmark_logging"),
     ]
 ]
 
