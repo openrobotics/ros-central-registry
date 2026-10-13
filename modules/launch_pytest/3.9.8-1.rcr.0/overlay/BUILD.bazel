@@ -12,10 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+py_library(
+    name = "launch_pytest",
+    srcs = glob(["launch_pytest/**/*.py"]),
+    data = ["launch_pytest/py.typed"],
+    imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@launch",
+        "@launch_testing",
+        requirement("pytest"),
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+)
 
 [
     py_pytest(
@@ -32,12 +64,59 @@ package(default_visibility = ["//visibility:public"])
     ]
 ]
 
+py_pytest(
+    name = "test_plugin",
+    srcs = ["test/launch_pytest/test_plugin.py"],
+    args = [
+        "-p",
+        "launch_pytest.plugin",
+    ],
+    data = [":ament_index"] + glob(["test/**"]),
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [":launch_pytest"],
+)
+
+py_pytest(
+    name = "test_process",
+    srcs = ["test/launch_pytest/tools/test_process.py"],
+    args = [
+        "-p",
+        "launch_pytest.plugin",
+    ],
+    data = [":ament_index"] + glob(["test/**"]),
+    deps = [":launch_pytest"],
+)
+
+pkg_files(
+    name = "examples_files",
+    srcs = glob(["test/launch_pytest/examples/*.py"]),
+    prefix = "share/launch_pytest/examples",
+)
+
+pkg_files(
+    name = "examples_execs",
+    srcs = glob(["test/launch_pytest/examples/executables/*"]),
+    prefix = "share/launch_pytest/examples/executables",
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    install = [
+        ":examples_execs",
+        ":examples_files",
+    ],
     package_xml = "package.xml",
+    python = [
+        ":launch_pytest",
+        "launch_pytest/py.typed",
+    ],
     deps = [
+        ":ament_index",
         "@ament_copyright//:ament_package",
         "@ament_flake8//:ament_package",
         "@ament_index_python//:ament_package",
