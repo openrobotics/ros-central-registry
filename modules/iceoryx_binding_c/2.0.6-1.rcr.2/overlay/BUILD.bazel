@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 
 package(
     default_applicable_licenses = [":license"],
@@ -27,11 +30,86 @@ license(
     ],
 )
 
+### LIBRARIES
+
+HEADERS = glob(
+    ["include/**"],
+    exclude_directories = 1,
+)
+
+cc_library(
+    name = "iceoryx_binding_c_library",
+    srcs = glob(["source/**/*.cpp"]),
+    hdrs = HEADERS,
+    includes = ["include"],
+    linkopts = select({
+        "@platforms//os:linux": ["-lpthread"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "@iceoryx_hoofs//:iceoryx_hoofs_library",
+        "@iceoryx_posh//:iceoryx_posh_library",
+    ],
+)
+
+cc_shared_library(
+    name = "iceoryx_binding_c",
+    dynamic_deps = [
+        "@iceoryx_hoofs//:iceoryx_hoofs",
+        "@iceoryx_hoofs//:iceoryx_platform",
+        "@iceoryx_posh//:iceoryx_posh",
+    ],
+    exports_filter = [":iceoryx_binding_c_library"],
+    deps = [":iceoryx_binding_c_library"],
+)
+
+### INSTALL METADATA
+
+[
+    write_file(
+        name = "gen_" + f.replace("/", "_").replace(".", "_").replace("-", "_"),
+        out = "_gen/" + f,
+        content = [""],
+    )
+    for f in [
+        "lib/cmake/iceoryx_binding_c/iceoryx_binding_cConfig.cmake",
+        "lib/cmake/iceoryx_binding_c/iceoryx_binding_cConfigVersion.cmake",
+        "lib/cmake/iceoryx_binding_c/iceoryx_binding_cTargets-noconfig.cmake",
+        "lib/cmake/iceoryx_binding_c/iceoryx_binding_cTargets.cmake",
+    ]
+]
+
+pkg_files(
+    name = "cmake_gen_files",
+    srcs = [
+        ":gen_lib_cmake_iceoryx_binding_c_iceoryx_binding_cConfigVersion_cmake",
+        ":gen_lib_cmake_iceoryx_binding_c_iceoryx_binding_cConfig_cmake",
+        ":gen_lib_cmake_iceoryx_binding_c_iceoryx_binding_cTargets_cmake",
+        ":gen_lib_cmake_iceoryx_binding_c_iceoryx_binding_cTargets_noconfig_cmake",
+    ],
+    strip_prefix = strip_prefix.from_pkg("_gen"),
+)
+
+pkg_files(
+    name = "doc_license",
+    srcs = ["LICENSE"],
+    prefix = "share/doc/iceoryx_binding_c",
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
     build_type = "cmake",
+    headers = HEADERS,
+    headers_strip_prefix = "include",
+    include_prefix = "iceoryx/v2.0.6",
+    install = [
+        ":cmake_gen_files",
+        ":doc_license",
+    ],
+    install_package_xml = False,
+    libraries = [":iceoryx_binding_c"],
     package_xml = "package.xml",
     deps = [
         "@iceoryx_hoofs//:ament_package",
