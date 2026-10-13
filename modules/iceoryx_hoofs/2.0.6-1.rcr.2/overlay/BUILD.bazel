@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 
 package(
     default_applicable_licenses = [":license"],
@@ -27,11 +30,160 @@ license(
     ],
 )
 
+### LIBRARIES
+
+cc_library(
+    name = "iceoryx_platform_library",
+    srcs = select({
+        "@platforms//os:linux": glob(["platform/linux/source/**/*.cpp"]),
+        "@platforms//os:macos": glob(["platform/mac/source/**/*.cpp"]),
+        "@platforms//os:windows": glob(["platform/win/source/**/*.cpp"]),
+        "//conditions:default": glob(["platform/unix/source/**/*.cpp"]),
+    }),
+    hdrs = select({
+        "@platforms//os:linux": glob(["platform/linux/include/**"]),
+        "@platforms//os:macos": glob(["platform/mac/include/**"]),
+        "@platforms//os:windows": glob(["platform/win/include/**"]),
+        "//conditions:default": glob(["platform/unix/include/**"]),
+    }),
+    includes = select({
+        "@platforms//os:linux": ["platform/linux/include"],
+        "@platforms//os:macos": ["platform/mac/include"],
+        "@platforms//os:windows": ["platform/win/include"],
+        "//conditions:default": ["platform/unix/include"],
+    }),
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lpthread",
+            "-lrt",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_shared_library(
+    name = "iceoryx_platform",
+    exports_filter = [":iceoryx_platform_library"],
+    deps = [":iceoryx_platform_library"],
+)
+
+HEADERS = glob(
+    ["include/**"],
+    exclude_directories = 1,
+)
+
+cc_library(
+    name = "iceoryx_hoofs_library",
+    srcs = glob([
+        "source/**/*.cpp",
+        "source/**/*.hpp",
+    ]),
+    hdrs = HEADERS,
+    includes = ["include"],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lpthread",
+            "-lrt",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [":iceoryx_platform_library"],
+)
+
+cc_shared_library(
+    name = "iceoryx_hoofs",
+    dynamic_deps = [":iceoryx_platform"],
+    exports_filter = [":iceoryx_hoofs_library"],
+    deps = [":iceoryx_hoofs_library"],
+)
+
+### INSTALL METADATA
+
+[
+    write_file(
+        name = "gen_" + f.replace("/", "_").replace(".", "_").replace("-", "_"),
+        out = "_gen/" + f,
+        content = [""],
+    )
+    for f in [
+        "lib/cmake/iceoryx_hoofs/iceoryx_hoofsConfig.cmake",
+        "lib/cmake/iceoryx_hoofs/iceoryx_hoofsConfigVersion.cmake",
+        "lib/cmake/iceoryx_hoofs/iceoryx_hoofsTargets-noconfig.cmake",
+        "lib/cmake/iceoryx_hoofs/iceoryx_hoofsTargets.cmake",
+    ]
+]
+
+pkg_files(
+    name = "cmake_gen_files",
+    srcs = [
+        ":gen_lib_cmake_iceoryx_hoofs_iceoryx_hoofsConfigVersion_cmake",
+        ":gen_lib_cmake_iceoryx_hoofs_iceoryx_hoofsConfig_cmake",
+        ":gen_lib_cmake_iceoryx_hoofs_iceoryx_hoofsTargets_cmake",
+        ":gen_lib_cmake_iceoryx_hoofs_iceoryx_hoofsTargets_noconfig_cmake",
+    ],
+    strip_prefix = strip_prefix.from_pkg("_gen"),
+)
+
+pkg_files(
+    name = "cmake_src_files",
+    srcs = [
+        "cmake/IceoryxPackageHelper.cmake",
+        "cmake/IceoryxPlatform.cmake",
+        "cmake/IceoryxVersion.cmake",
+    ],
+    prefix = "lib/cmake/iceoryx_hoofs",
+    strip_prefix = strip_prefix.from_pkg("cmake"),
+)
+
+pkg_files(
+    name = "platform_headers",
+    srcs = select({
+        "@platforms//os:linux": glob(
+            ["platform/linux/include/**"],
+            exclude_directories = 1,
+        ),
+        "@platforms//os:macos": glob(
+            ["platform/mac/include/**"],
+            exclude_directories = 1,
+        ),
+        "@platforms//os:windows": glob(
+            ["platform/win/include/**"],
+            exclude_directories = 1,
+        ),
+        "//conditions:default": glob(
+            ["platform/unix/include/**"],
+            exclude_directories = 1,
+        ),
+    }),
+    prefix = "include/iceoryx/v2.0.6",
+    strip_prefix = strip_prefix.from_pkg("platform/linux/include"),
+)
+
+pkg_files(
+    name = "doc_license",
+    srcs = ["LICENSE"],
+    prefix = "share/doc/iceoryx_hoofs",
+)
+
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
     build_type = "cmake",
+    headers = HEADERS,
+    headers_strip_prefix = "include",
+    include_prefix = "iceoryx/v2.0.6",
+    install = [
+        ":cmake_gen_files",
+        ":cmake_src_files",
+        ":doc_license",
+        ":platform_headers",
+    ],
+    install_package_xml = False,
+    libraries = [
+        ":iceoryx_hoofs",
+        ":iceoryx_platform",
+    ],
     package_xml = "package.xml",
     deps = [
         "@rosdistro//:ament_package",
