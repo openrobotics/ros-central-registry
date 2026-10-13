@@ -13,10 +13,10 @@
 # limitations under the License.
 
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rosdistro//python:defs.bzl", "py_pytest")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
@@ -125,6 +125,104 @@ pkg_files(
     renames = {
         ":resource_index_rosidl_runtime_packages": "share/ament_index/resource_index/rosidl_runtime_packages/rosidl_typesupport_c",
     },
+)
+
+### TESTS
+
+[
+    (
+        cc_library(
+            name = "rosidl_typesupport_c__test_type_support{}_library".format(i),
+            testonly = True,
+            srcs = ["test/test_type_support.c"],
+            deps = [":rosidl_typesupport_c_library"],
+            alwayslink = True,
+        ),
+        cc_shared_library(
+            name = "rosidl_typesupport_c__test_type_support{}".format(i),
+            testonly = True,
+            dynamic_deps = [":transitive_dynamic_deps"],
+            exports_filter = [":rosidl_typesupport_c__test_type_support{}_library".format(i)],
+            deps = [":rosidl_typesupport_c__test_type_support{}_library".format(i)],
+        ),
+    )
+    for i in [
+        1,
+        2,
+    ]
+]
+
+write_file(
+    name = "test_type_support3",
+    testonly = True,
+    out = "librosidl_typesupport_c__test_type_support3.so",
+    content = ["I'm not a shared library, why would you treat me like one?"],
+)
+
+ament_index(
+    name = "test_ament_index",
+    testonly = True,
+    libraries = [
+        ":rosidl_typesupport_c__test_type_support1",
+        ":rosidl_typesupport_c__test_type_support2",
+        ":test_type_support3",
+    ],
+    package_xml = "package.xml",
+)
+
+cc_test(
+    name = "test_message_type_support",
+    srcs = [
+        "test/mocking_utils/patch.hpp",
+        "test/test_message_type_support_dispatch.cpp",
+    ],
+    data = [":test_ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + ["RCUTILS_ENABLE_FAULT_INJECTION"],
+    deps = DEPENDENCIES.values() + [
+        ":rosidl_typesupport_c_library",
+        "@rosdistro//cc:googletest",
+        "@rosdistro//cc:mimick",
+    ],
+)
+
+cc_test(
+    name = "test_service_type_support",
+    srcs = [
+        "test/mocking_utils/patch.hpp",
+        "test/test_service_type_support_dispatch.cpp",
+    ],
+    data = [":test_ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + ["RCUTILS_ENABLE_FAULT_INJECTION"],
+    deps = DEPENDENCIES.values() + [
+        ":rosidl_typesupport_c_library",
+        "@rosdistro//cc:googletest",
+        "@rosdistro//cc:mimick",
+    ],
+)
+
+cc_test(
+    name = "benchmark_type_support_dispatch",
+    srcs = ["test/benchmark/benchmark_type_support_dispatch.cpp"],
+    data = [":test_ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    tags = ["manual"],
+    deps = DEPENDENCIES.values() + [
+        ":rosidl_typesupport_c_library",
+        "@google_benchmark//:benchmark_main",
+        "@performance_test_fixture",
+    ],
+)
+
+py_pytest(
+    name = "test_cli_extension",
+    srcs = ["test/test_cli_extension.py"],
+    data = ["//test/msg:Test.msg"],
+    deps = [
+        ":rosidl_typesupport_c_py",
+        "@rosidl_cli",
+    ],
 )
 
 ### PACKAGING
