@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
 
 package(
     default_applicable_licenses = [":license"],
@@ -86,6 +90,59 @@ rclcpp_components_register_node(
     executor = "SingleThreadedExecutor",
     node_name = "showimage",
     plugin = "image_tools::ShowImage",
+)
+
+### TESTS
+
+write_file(
+    name = "rmw_test_fixture_implementation_py",
+    out = "rmw_test_fixture_implementation.py",
+    content = [
+        "def rmw_test_isolation_start(): pass",
+        "def rmw_test_isolation_stop(): pass",
+    ],
+)
+
+py_library(
+    name = "rmw_test_fixture_implementation",
+    srcs = [":rmw_test_fixture_implementation_py"],
+    imports = ["."],
+    visibility = ["//visibility:private"],
+)
+
+cmake_configure_file(
+    name = "test_showimage_cam2image_py",
+    src = "test/test_executables_demo.py.in",
+    out = "test/test_showimage_cam2image.py",
+    defines = [
+        "RCLCPP_DEMO_SHOWIMAGE_EXECUTABLE=../image_tools+/showimage",
+        "RCLCPP_DEMO_CAM2IMAGE_EXECUTABLE=../image_tools+/cam2image",
+        "RCLCPP_DEMO_SHOWIMAGE_EXPECTED_OUTPUT=../image_tools+/test/showimage",
+        "RCLCPP_DEMO_CAM2IMAGE_EXPECTED_OUTPUT=../image_tools+/test/cam2image",
+        "rmw_implementation=rmw_fastrtps_cpp",
+    ],
+)
+
+py_pytest(
+    name = "test_showimage_cam2image",
+    srcs = ["test_showimage_cam2image_py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        "test/cam2image.txt",
+        "test/showimage.regex",
+        ":cam2image",
+        ":showimage",
+    ],
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@launch",
+        "@launch_ros",
+        "@launch_testing",
+        "@launch_testing_ros",
+    ],
 )
 
 ### PACKAGING
