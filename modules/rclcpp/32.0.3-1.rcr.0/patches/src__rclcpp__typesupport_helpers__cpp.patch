@@ -1,9 +1,11 @@
 --- a/src/rclcpp/typesupport_helpers.cpp
 +++ b/src/rclcpp/typesupport_helpers.cpp
-@@ -24,6 +24,22 @@
+@@ -23,6 +23,23 @@
+ #include <string>
  #include <tuple>
  #include <utility>
- 
++#include <vector>
++
 +#include <unistd.h>  // For readlink
 +#include <limits.h>  // For PATH_MAX
 +
@@ -19,11 +21,10 @@
 +#include "rules_cc/cc/runfiles/runfiles.h"
 +
 +using rules_cc::cc::runfiles::Runfiles;
-+
+ 
  #include "ament_index_cpp/get_package_prefix.hpp"
  #include "ament_index_cpp/get_resources.hpp"
- #include "rcpputils/shared_library.hpp"
-@@ -35,6 +51,55 @@
+@@ -35,6 +52,55 @@
  
  namespace
  {
@@ -79,7 +80,46 @@
  
  const void * get_typesupport_handle_impl(
    const std::string & type,
-@@ -119,40 +184,116 @@
+@@ -49,7 +115,8 @@
+   std::string type_name;
+   std::tie(package_name, middle_module, type_name) = extract_type_identifier(type);
+ 
+-  if (middle_module.empty()) {
++  const bool was_legacy = middle_module.empty();
++  if (was_legacy) {
+     middle_module = middle_module_additional;
+   }
+ 
+@@ -62,14 +129,26 @@
+       return rcutils_dynamic_loading_error.str();
+     };
+ 
++  std::string symbol_name = typesupport_identifier + symbol_part_name +
++    package_name + "__" + middle_module + "__" + type_name;
+   try {
+-    std::string symbol_name = typesupport_identifier + symbol_part_name +
+-      package_name + "__" + middle_module + "__" + type_name;
+     const void * (* get_ts)() = nullptr;
+     // This will throw runtime_error if the symbol was not found.
+     get_ts = reinterpret_cast<decltype(get_ts)>(library.get_symbol(symbol_name));
+     return get_ts();
+   } catch (std::runtime_error &) {
++    if (was_legacy) {
++      try {
++        static std::vector<std::shared_ptr<rcpputils::SharedLibrary>> fallback_libs;
++        auto fallback_lib = get_typesupport_library(
++          package_name + "/" + middle_module + "/" + type_name, typesupport_identifier);
++        fallback_libs.push_back(fallback_lib);
++        const void * (* get_ts)() = nullptr;
++        get_ts = reinterpret_cast<decltype(get_ts)>(fallback_lib->get_symbol(symbol_name));
++        return get_ts();
++      } catch (std::runtime_error &) {
++      }
++    }
+     throw std::runtime_error{mk_error("Library could not be found.")};
+   }
+ }
+@@ -119,40 +198,127 @@
  }
  
  std::string get_typesupport_library_path(
@@ -177,7 +217,8 @@
 +  std::string interface_type;
 +  std::string interface_name;
 +  std::tie(package_name, interface_type, interface_name) = extract_type_identifier(type);
-+  if (interface_type.empty()) {
++  const bool was_legacy = interface_type.empty();
++  if (was_legacy) {
 +    interface_type = "msg";
 +  }
 +  // Strip service/action suffixes so event/request/response messages resolve to their parent library
@@ -217,6 +258,16 @@
 +    }
 +  }
 +  std::string snake_interface_name = pascal_to_snake_case(base_interface_name);
++  if (was_legacy) {
++    for (const char * candidate_type : {"msg", "srv", "action"}) {
++      try {
++        auto candidate_path = get_typesupport_library_path(
++          package_name, candidate_type, snake_interface_name, typesupport_identifier);
++        return std::make_shared<rcpputils::SharedLibrary>(candidate_path);
++      } catch (const std::runtime_error &) {
++      }
++    }
++  }
 +  auto library_path = get_typesupport_library_path(package_name, interface_type, snake_interface_name, typesupport_identifier);
    return std::make_shared<rcpputils::SharedLibrary>(library_path);
  }
