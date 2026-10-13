@@ -20,7 +20,8 @@ def _rosidl_adapter_aspect_impl(target, ctx):
 
     # Calculate the metadata to package alongside the IDL.
     package_name = target[RosInterfaceInfo].package  # eg. sensor_msgs
-    interface_type = "msg" if src.extension == "idl" else src.extension  # eg. msg
+    pkg_subdir = target.label.package.split("/")[-1] if target.label.package else ""
+    interface_type = (pkg_subdir if pkg_subdir in ["msg", "srv", "action"] else "msg") if src.extension == "idl" else src.extension  # eg. msg
     interface_name = src.basename[:-len(src.extension) - 1]  # eg. CompressedImage
     interface_code = snake_case_from_pascal_case(interface_name)  # eg. compressed_image
 
