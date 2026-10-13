@@ -29,6 +29,7 @@ This works because all message packages depend on rosidl_generator_py, and
 so any code that relies on a message will have this injected into its context.
 """
 
+import os
 import re
 import sys
 import importlib.abc
@@ -100,13 +101,20 @@ class InterceptingFinder(importlib.abc.MetaPathFinder):
         # We only want to intercept module calls that end in specific package
         # names, which are likely to be requests for ROS messages.
         if fullname.endswith((".msg", ".srv", ".action")):
+            pkg_name, _, _ = fullname.rpartition(".")
+            parent_mod = sys.modules.get(pkg_name)
+            if parent_mod is not None and hasattr(parent_mod, "__path__"):
+                for entry in sys.path:
+                    candidate = os.path.join(entry, pkg_name)
+                    if os.path.isdir(candidate) and candidate not in parent_mod.__path__:
+                        parent_mod.__path__.append(candidate)
 
             # Remove self to avoid recursion, and add it back once the correct
             # spec has been found using importlib.util.find_spec.
             meta_path = sys.meta_path[:]
             try:
                 sys.meta_path.remove(self)
-                spec = importlib.util.find_spec(fullname, path)
+                spec = importlib.util.find_spec(fullname)
             finally:
                 sys.meta_path[:] = meta_path
 
@@ -121,3 +129,27 @@ class InterceptingFinder(importlib.abc.MetaPathFinder):
 
 # Register the hook
 sys.meta_path.insert(0, InterceptingFinder())
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "asyncio: mark test as asyncio")
+
+
+try:
+    import asyncio
+    import inspect
+    import pytest
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_pyfunc_call(pyfuncitem):
+        if inspect.iscoroutinefunction(pyfuncitem.obj):
+            testargs = {
+                arg: pyfuncitem.funcargs[arg]
+                for arg in pyfuncitem._fixtureinfo.argnames
+            }
+            asyncio.run(pyfuncitem.obj(**testargs))
+            return True
+        return None
+except ImportError:
+    pass
+
