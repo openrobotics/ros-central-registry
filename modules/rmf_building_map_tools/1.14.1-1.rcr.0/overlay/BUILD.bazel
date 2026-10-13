@@ -12,16 +12,104 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+py_library(
+    name = "rmf_building_map_tools",
+    srcs = glob([
+        "building_crowdsim/**/*.py",
+        "building_map/**/*.py",
+        "building_map_converter/**/*.py",
+        "building_map_generator/**/*.py",
+        "building_map_model_downloader/**/*.py",
+        "building_map_server/**/*.py",
+    ]),
+    imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@rclpy",
+        "@rmf_building_map_msgs//:py",
+        "@rmf_site_map_msgs//:py",
+        "@std_msgs//:py",
+        requirement("pyyaml"),
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+)
+
+py_pytest(
+    name = "test_build_configfile",
+    srcs = ["test/building_crowdsim/test_build_configfile.py"],
+    data = glob(["test/building_crowdsim/**"]),
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [":rmf_building_map_tools"],
+)
+
+py_pytest(
+    name = "test_build_navmesh",
+    srcs = ["test/building_crowdsim/test_build_navmesh.py"],
+    data = glob(["test/building_crowdsim/**"]),
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [":rmf_building_map_tools"],
+)
+
+pkg_files(
+    name = "templates_files",
+    srcs = glob(["building_map/templates/*"]),
+    prefix = "share/rmf_building_map_tools/templates",
+)
+
+pkg_files(
+    name = "textures_files",
+    srcs = glob(["building_map_generator/textures/*.png"]),
+    prefix = "share/rmf_building_map_tools/textures",
+)
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    console_scripts = {
+        "building_crowdsim": "building_crowdsim.building_crowdsim:main",
+        "building_map_converter": "building_map_converter.building_map_converter:main",
+        "building_map_generator": "building_map_generator.building_map_generator:main",
+        "building_map_model_downloader": "building_map_model_downloader.building_map_model_downloader:main",
+        "building_map_server": "building_map_server.building_map_server:main",
+    },
+    install = [
+        ":templates_files",
+        ":textures_files",
+    ],
     package_xml = "package.xml",
+    python = [":rmf_building_map_tools"],
     deps = [
+        ":ament_index",
         "@ament_index_python//:ament_package",
         "@gz_fuel_tools_vendor//:ament_package",
         "@rclpy//:ament_package",
