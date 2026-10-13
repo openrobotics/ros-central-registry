@@ -98,6 +98,8 @@ def _ament_package_impl(ctx):
     if ctx.attr.build_type == "cmake":
         # Plain CMake packages are not ament packages: no resource_index entry.
         symlinks.pop("share/ament_index/resource_index/packages/" + package_name, None)
+    if not ctx.attr.install_package_xml:
+        symlinks.pop("share/" + package_name + "/package.xml", None)
     for path, f in symlinks.items():
         if path.startswith("bin/"):
             # ament installs executables into lib/<pkg>/; only `programs`
@@ -180,7 +182,7 @@ def _ament_package_impl(ctx):
         for p in files.keys()
     ])
     has_bin = any([p.startswith("bin/") for p in files.keys()])
-    has_pkgconfig = any([p.startswith("lib/pkgconfig/") for p in files.keys()])
+    has_pkgconfig = ctx.attr.pkgconfig_hook and any([p.startswith("lib/pkgconfig/") for p in files.keys()])
     has_python = any([p.startswith(site_packages) for p in files.keys()])
 
     # CMake exported targets: one export set (named after
@@ -368,6 +370,8 @@ AMENT_PACKAGE_ATTRS.update({
     "cmake_export_dependencies_list": attr.string_list(doc = "Explicit ament_export_dependencies() list; defaults to the package.xml build-export dependencies present in `deps`."),
     "env_hooks": attr.string_list(doc = "Extra environment hooks (paths relative to share/<pkg>/) listed in package.dsv."),
     "build_type": attr.string(doc = "Override the build type (ament_cmake / ament_python) read from package.xml."),
+    "install_package_xml": attr.bool(default = True, doc = "Whether to install package.xml under share/<pkg>/package.xml."),
+    "pkgconfig_hook": attr.bool(default = True, doc = "Whether to emit hook/pkg_config.{dsv,ps1,sh} for cmake packages with lib/pkgconfig/."),
     "_install_prefix": attr.label(default = "@rosdistro//:install_prefix"),
     "_install_gen": attr.label(default = "@rosdistro//ament:install_gen", executable = True, cfg = "exec"),
 })

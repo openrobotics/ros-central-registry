@@ -235,6 +235,94 @@ _CONFIG_PATH_DSV = "prepend-non-duplicate-if-exists;GZ_CONFIG_PATH;opt/{vendor}/
 
 _PYTHONPATH_DSV = "prepend-non-duplicate-if-exists;PYTHONPATH;opt/{vendor}/lib/python\n"
 
+_VENDOR_BAT = """:: generated from ament_cmake_vendor_package/cmake/templates/vendor_package.bat.in
+@echo off
+
+call:ament_prepend_unique_value PATH "%AMENT_CURRENT_PREFIX%\\opt\\{vendor}\\bin"
+call:ament_prepend_unique_value LD_LIBRARY_PATH "%AMENT_CURRENT_PREFIX%\\opt\\{vendor}\\lib"
+call:ament_prepend_unique_value LD_LIBRARY_PATH "%AMENT_CURRENT_PREFIX%\\opt\\{vendor}\\lib64"
+
+goto:eof
+
+:: Prepend non-duplicate values to environment variables
+:: using semicolons as separators and avoiding trailing separators.
+:: first argument: the name of the result variable
+:: second argument: the value
+:ament_prepend_unique_value
+  setlocal enabledelayedexpansion
+  :: arguments
+  set "listname=%~1"
+  set "value=%~2"
+  :: skip if path doesn't exist
+  if NOT EXIST "%value%" (
+    goto:eof
+  )
+  :: expand the list variable
+  set "list=!%listname%!"
+  :: check if the list contains the value
+  set "is_duplicate="
+  if "%list%" NEQ "" (
+    for %%v in ("%list:;=";"%") do (
+      if "%%~v" == "%value%" set "is_duplicate=1"
+    )
+  )
+  :: if it is not a duplicate prepend it
+  if "%is_duplicate%" == "" (
+    :: if not empty, prepend a semi-colon
+    if "!list!" NEQ "" set "list=;!list!"
+    :: prepend the value
+    set "list=%value%!list!"
+  )
+  endlocal & (
+    :: set result variable in parent scope
+    set "%~1=%list%"
+  )
+goto:eof
+"""
+
+_CMAKE_PREFIX_BAT = """:: generated from ament_cmake_vendor_package/cmake/templates/vendor_package_cmake_prefix.bat.in
+@echo off
+
+call:ament_prepend_unique_value CMAKE_PREFIX_PATH "%AMENT_CURRENT_PREFIX%\\opt\\{vendor}"
+
+goto:eof
+
+:: Prepend non-duplicate values to environment variables
+:: using semicolons as separators and avoiding trailing separators.
+:: first argument: the name of the result variable
+:: second argument: the value
+:ament_prepend_unique_value
+  setlocal enabledelayedexpansion
+  :: arguments
+  set "listname=%~1"
+  set "value=%~2"
+  :: skip if path doesn't exist
+  if NOT EXIST "%value%" (
+    goto:eof
+  )
+  :: expand the list variable
+  set "list=!%listname%!"
+  :: check if the list contains the value
+  set "is_duplicate="
+  if "%list%" NEQ "" (
+    for %%v in ("%list:;=";"%") do (
+      if "%%~v" == "%value%" set "is_duplicate=1"
+    )
+  )
+  :: if it is not a duplicate prepend it
+  if "%is_duplicate%" == "" (
+    :: if not empty, prepend a semi-colon
+    if "!list!" NEQ "" set "list=;!list!"
+    :: prepend the value
+    set "list=%value%!list!"
+  )
+  endlocal & (
+    :: set result variable in parent scope
+    set "%~1=%list%"
+  )
+goto:eof
+"""
+
 def gz_vendor_hooks(name, vendor, gz_config_path = True, pythonpath = True, visibility = None):
     """The environment hooks `ament_vendor()` installs for a vendor package.
 
@@ -256,19 +344,34 @@ def gz_vendor_hooks(name, vendor, gz_config_path = True, pythonpath = True, visi
     files = {
         "hook/cmake_prefix_path.sh": _HOOK_CMAKE_PREFIX_SH,
         "hook/cmake_prefix_path.dsv": _HOOK_CMAKE_PREFIX_DSV,
+        "environment/vendor_package.bat": _VENDOR_BAT.format(vendor = vendor),
         "environment/vendor_package.sh": _VENDOR_SH.format(vendor = vendor),
         "environment/vendor_package.dsv": _VENDOR_DSV.format(vendor = vendor),
+        "environment/vendor_package_cmake_prefix.bat": _CMAKE_PREFIX_BAT.format(vendor = vendor),
         "environment/vendor_package_cmake_prefix.sh": _CMAKE_PREFIX_SH.format(vendor = vendor),
         "environment/vendor_package_cmake_prefix.dsv": _CMAKE_PREFIX_DSV.format(vendor = vendor),
     }
+    env_hooks = [
+        "hook/cmake_prefix_path.sh",
+        "hook/cmake_prefix_path.dsv",
+        "environment/vendor_package.sh",
+        "environment/vendor_package.dsv",
+        "environment/vendor_package_cmake_prefix.sh",
+        "environment/vendor_package_cmake_prefix.dsv",
+    ]
     if gz_config_path:
         files["environment/%s.sh" % vendor] = _DUMMY_SH
         files["environment/%s.dsv" % vendor] = _CONFIG_PATH_DSV.format(vendor = vendor)
+        env_hooks.extend([
+            "environment/%s.sh" % vendor,
+            "environment/%s.dsv" % vendor,
+        ])
     if pythonpath:
         files["environment/%s_pythonpath.dsv" % vendor] = _PYTHONPATH_DSV.format(vendor = vendor)
+        env_hooks.append("environment/%s_pythonpath.dsv" % vendor)
     outs = []
     for rel, content in files.items():
-        out = "_" + name + "/" + rel
+        out = "_" + name + "/" + vendor + "/" + rel
         write_file(
             name = (name + "_" + rel).replace("/", "_").replace(".", "_"),
             out = out,
@@ -276,11 +379,19 @@ def gz_vendor_hooks(name, vendor, gz_config_path = True, pythonpath = True, visi
             visibility = ["//visibility:private"],
         )
         outs.append(out)
+    vp_out = "_" + name + "/ament_index/resource_index/vendor_packages/" + vendor
+    write_file(
+        name = (name + "_vendor_package_index").replace("/", "_").replace(".", "_"),
+        out = vp_out,
+        content = [""],
+        visibility = ["//visibility:private"],
+    )
+    outs.append(vp_out)
     gz_install_files(
         name = name,
         srcs = outs,
-        prefix = "share/" + vendor,
+        prefix = "share",
         strip_prefixes = ["_" + name],
         visibility = visibility,
     )
-    return sorted(files.keys())
+    return sorted(env_hooks)
