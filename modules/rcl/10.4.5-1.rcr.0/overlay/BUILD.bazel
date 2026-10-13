@@ -13,9 +13,11 @@
 # limitations under the License.
 
 load("@ament_cmake_gen_version_h//:defs.bzl", "generate_version_h")
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
@@ -139,6 +141,7 @@ cc_library(
         "test_get_type_description_service",
         "test_graph",
         "test_guard_condition",
+        "test_info_by_service",
         "test_info_by_topic",
         "test_init",
         "test_lexer",
@@ -154,12 +157,12 @@ cc_library(
         "test_publisher_wait_all_ack",
         "test_remap",
         "test_remap_integration",
-        "test_rmw_impl_id_check_exe",
         "test_rmw_impl_id_check_func",
         "test_security",
         "test_service",
         "test_service_event_publisher",
         "test_subscription",
+        "test_subscription_buffer_backend_options",
         "test_subscription_content_filter_options",
         "test_time",
         "test_timer",
@@ -170,6 +173,95 @@ cc_library(
         "test_wait",
     ]
 ]
+
+[
+    cc_binary(
+        name = exe,
+        testonly = True,
+        srcs = [
+            "test/rcl/{}.cpp".format(exe),
+        ] + glob([
+            "src/rcl/**/*.h",
+            "test/rcl/**/*.h",
+            "test/rcl/**/*.hpp",
+        ]),
+        dynamic_deps = [":transitive_dynamic_deps"],
+        includes = ["src/rcl"],
+        local_defines = ros_local_defines(),
+        deps = DEPENDENCIES.values() + [
+            ":rcl_library",
+            ":wait_for_entity_helpers",
+            "@osrf_testing_tools_cpp//:memory_tools",
+            "@rosdistro//cc:googletest",
+            "@test_msgs//:c",
+            "@test_msgs//:cc",
+        ],
+    )
+    for exe in [
+        "client_fixture",
+        "service_fixture",
+        "test_rmw_impl_id_check_exe",
+    ]
+]
+
+expand_template(
+    name = "test_services_py",
+    testonly = True,
+    out = "test_services.py",
+    substitutions = {
+        "'@TEST_EXECUTABLE1@'": "os.path.join(os.path.dirname(__file__), 'service_fixture')",
+        "@TEST_EXECUTABLE1_NAME@": "service_fixture",
+        "'@TEST_EXECUTABLE2@'": "os.path.join(os.path.dirname(__file__), 'client_fixture')",
+        "@TEST_EXECUTABLE2_NAME@": "client_fixture",
+        "@TEST_NAME@": "test_services",
+    },
+    template = "test/rcl/test_two_executables.py.in",
+)
+
+py_pytest(
+    name = "test_services",
+    srcs = ["test_services.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":client_fixture",
+        ":service_fixture",
+    ],
+    deps = [
+        "@launch",
+        "@launch_testing",
+    ],
+)
+
+expand_template(
+    name = "test_rmw_impl_id_check_py",
+    testonly = True,
+    out = "test_rmw_impl_id_check.py",
+    substitutions = {
+        "cmd=['@TEST_RMW_IMPL_ID_CHECK_EXECUTABLE_NAME@']": "cmd=[os.path.join(os.path.dirname(__file__), 'test_rmw_impl_id_check_exe')]",
+        "@TEST_RMW_IMPL_ID_CHECK_EXECUTABLE_NAME@": "test_rmw_impl_id_check_exe",
+        "'@rmw_implementation@'": "os.environ.get('RMW_IMPLEMENTATION', 'rmw_fastrtps_cpp')",
+    },
+    template = "test/rcl/test_rmw_impl_id_check.py.in",
+)
+
+py_pytest(
+    name = "test_rmw_impl_id_check",
+    srcs = ["test_rmw_impl_id_check.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":test_rmw_impl_id_check_exe",
+    ],
+    deps = [
+        "@launch",
+        "@launch_testing",
+    ],
+)
 
 # Real rcl relies on ament_cmake_gen_version_h's CMake macro
 # (ament_generate_version_header()) to generate and install this.
