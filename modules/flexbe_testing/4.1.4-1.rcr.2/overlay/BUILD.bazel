@@ -12,16 +12,75 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+py_library(
+    name = "flexbe_testing",
+    srcs = glob(["flexbe_testing/**/*.py"]),
+    data = glob(["flexbe_testing/test/*.xml"]),
+    imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@flexbe_core",
+        "@flexbe_msgs//:py",
+        "@launch_ros",
+        "@rclpy",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    data = glob([
+        "launch/**",
+        "test/**",
+    ]),
+    executables = [
+        "bin/state_docstring_tester",
+        "bin/testing_node",
+    ],
+    package_xml = "package.xml",
+)
+
+py_pytest(
+    name = "flexbe_colcon_test",
+    srcs = ["test/flexbe_colcon_test.py"],
+    data = [":ament_index"] + glob([
+        "flexbe_testing/test/**",
+        "launch/**",
+        "test/**",
+    ]),
+    deps = [
+        ":flexbe_testing",
+        "@launch_ros",
+        "@launch_testing",
+        "@std_msgs//:py",
+    ],
+)
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies = False,
     package_xml = "package.xml",
+    python = [":flexbe_testing"] + glob(["flexbe_testing/test/*.xml"]),
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_pytest//:ament_package",
         "@ament_cmake_python//:ament_package",
