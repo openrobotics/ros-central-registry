@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
 
 package(
     default_applicable_licenses = [":license"],
@@ -124,23 +127,134 @@ DEMO_COMPONENTS = {
     for component, (_, plugin) in DEMO_COMPONENTS.items()
 ]
 
+### TESTS
+
+write_file(
+    name = "rmw_test_fixture_implementation_py",
+    out = "rmw_test_fixture_implementation.py",
+    content = [
+        "def rmw_test_isolation_start(): pass",
+        "def rmw_test_isolation_stop(): pass",
+    ],
+)
+
+py_library(
+    name = "rmw_test_fixture_implementation",
+    srcs = [":rmw_test_fixture_implementation_py"],
+    imports = ["."],
+    visibility = ["//visibility:private"],
+)
+
+TUTORIAL_TESTS = {
+    "test_tutorial_content_filtering_publisher_content_filtering_subscriber": (
+        "../demo_nodes_cpp+/content_filtering_publisher@publish_ms=100;../demo_nodes_cpp+/content_filtering_subscriber",
+        "../demo_nodes_cpp+/test/content_filtering_publisher;../demo_nodes_cpp+/test/content_filtering_subscriber",
+        [
+            ":content_filtering_publisher",
+            ":content_filtering_subscriber",
+        ],
+    ),
+    "test_tutorial_list_parameters_async": (
+        "../demo_nodes_cpp+/list_parameters_async",
+        "../demo_nodes_cpp+/test/list_parameters_async",
+        [":list_parameters_async"],
+    ),
+    "test_tutorial_list_parameters": (
+        "../demo_nodes_cpp+/list_parameters",
+        "../demo_nodes_cpp+/test/list_parameters",
+        [":list_parameters"],
+    ),
+    "test_tutorial_parameter_events_async": (
+        "../demo_nodes_cpp+/parameter_events_async",
+        "../demo_nodes_cpp+/test/parameter_events_async",
+        [":parameter_events_async"],
+    ),
+    "test_tutorial_parameter_events": (
+        "../demo_nodes_cpp+/parameter_events",
+        "../demo_nodes_cpp+/test/parameter_events",
+        [":parameter_events"],
+    ),
+    "test_tutorial_set_and_get_parameters_async": (
+        "../demo_nodes_cpp+/set_and_get_parameters_async",
+        "../demo_nodes_cpp+/test/set_and_get_parameters_async",
+        [":set_and_get_parameters_async"],
+    ),
+    "test_tutorial_set_and_get_parameters": (
+        "../demo_nodes_cpp+/set_and_get_parameters",
+        "../demo_nodes_cpp+/test/set_and_get_parameters",
+        [":set_and_get_parameters"],
+    ),
+    "test_tutorial_matched_event_detect": (
+        "../demo_nodes_cpp+/matched_event_detect",
+        "../demo_nodes_cpp+/test/matched_event_detect",
+        [":matched_event_detect"],
+    ),
+    "test_tutorial_use_logger_service": (
+        "../demo_nodes_cpp+/use_logger_service",
+        "../demo_nodes_cpp+/test/use_logger_service",
+        [":use_logger_service"],
+    ),
+    "test_tutorial_talker_listener": (
+        "../demo_nodes_cpp+/talker;../demo_nodes_cpp+/listener",
+        "../demo_nodes_cpp+/test/talker;../demo_nodes_cpp+/test/listener",
+        [
+            ":talker",
+            ":listener",
+        ],
+    ),
+    "test_tutorial_add_two_ints_server_add_two_ints_client": (
+        "../demo_nodes_cpp+/add_two_ints_server@one_shot=True;../demo_nodes_cpp+/add_two_ints_client",
+        "../demo_nodes_cpp+/test/add_two_ints_server;../demo_nodes_cpp+/test/add_two_ints_client",
+        [
+            ":add_two_ints_server",
+            ":add_two_ints_client",
+        ],
+    ),
+    "test_tutorial_add_two_ints_server_add_two_ints_client_async": (
+        "../demo_nodes_cpp+/add_two_ints_server@one_shot=True;../demo_nodes_cpp+/add_two_ints_client_async",
+        "../demo_nodes_cpp+/test/add_two_ints_server;../demo_nodes_cpp+/test/add_two_ints_client_async",
+        [
+            ":add_two_ints_server",
+            ":add_two_ints_client_async",
+        ],
+    ),
+}
+
+[
+    cmake_configure_file(
+        name = "{0}_py".format(test_name),
+        src = "test/test_executables_tutorial.py.in",
+        out = "test/{0}.py".format(test_name),
+        defines = [
+            "DEMO_NODES_CPP_EXECUTABLE={0}".format(exe_str),
+            "DEMO_NODES_CPP_EXPECTED_OUTPUT={0}".format(expected_str),
+            "rmw_implementation=rmw_fastrtps_cpp",
+        ],
+    )
+    for test_name, (exe_str, expected_str, _) in TUTORIAL_TESTS.items()
+]
+
 [
     py_pytest(
-        name = f.split("/")[-1].removesuffix(".py"),
-        srcs = [f],
+        name = test_name,
+        srcs = ["{0}_py".format(test_name)],
         args = [
             "-p",
             "launch_testing.pytest.hooks",
         ],
+        data = exes + glob([
+            "test/*.txt",
+            "test/*.regex",
+        ]),
         deps = [
+            ":rmw_test_fixture_implementation",
+            "@launch",
+            "@launch_testing",
+            "@launch_testing_ros",
             "@rules_python//python/runfiles",
         ],
     )
-    for f in glob(
-        ["test/test_*.py"],
-        allow_empty = True,
-        exclude = ["**/test_flake8.py"],
-    )
+    for test_name, (_, _, exes) in TUTORIAL_TESTS.items()
 ]
 
 ### PACKAGING
