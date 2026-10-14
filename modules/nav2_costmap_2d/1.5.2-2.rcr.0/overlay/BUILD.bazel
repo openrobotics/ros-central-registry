@@ -1,0 +1,705 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@laser_geometry//:laser_geometry": "@laser_geometry//:laser_geometry_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@nav2_util//:nav2_util_core": "@nav2_util//:nav2_util_core_library",
+    "@nav2_voxel_grid//:voxel_grid": "@nav2_voxel_grid//:voxel_grid_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@point_cloud_transport//:point_cloud_transport": "@point_cloud_transport//:point_cloud_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@tf2_sensor_msgs//:tf2_sensor_msgs": "@tf2_sensor_msgs//:tf2_sensor_msgs_library",
+}
+
+CC_DEPS = [
+    "@@lifecycle_msgs+//:cc",
+    "@@rcl_interfaces+//:cc",
+    "@angles//:angles",
+    "@geometry_msgs//:cc",
+    "@map_msgs//:cc",
+    "@nav2_msgs//:cc",
+    "@nav2_ros_common//:nav2_ros_common",
+    "@nav_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@std_srvs//:cc",
+    "@visualization_msgs//:cc",
+]
+
+cc_library(
+    name = "nav2_costmap_2d_core_library",
+    srcs = ["plugins/costmap_filters/costmap_filter.cpp", "src/clear_costmap_service.cpp", "src/costmap_2d.cpp", "src/costmap_2d_publisher.cpp", "src/costmap_2d_ros.cpp", "src/costmap_layer.cpp", "src/costmap_math.cpp", "src/footprint.cpp", "src/footprint_collision_checker.cpp", "src/layer.cpp", "src/layered_costmap.cpp", "src/observation_buffer.cpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    hdrs = glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "nav2_costmap_2d_core",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["@@//:__subpackages__"],
+    deps = [":nav2_costmap_2d_core_library"],
+)
+
+cc_library(
+    name = "filters_library",
+    srcs = ["plugins/costmap_filters/binary_filter.cpp", "plugins/costmap_filters/keepout_filter.cpp", "plugins/costmap_filters/speed_filter.cpp", "plugins/costmap_filters/zone_parameter_filter.cpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    hdrs = glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":nav2_costmap_2d_core_library"],
+)
+
+cc_shared_library(
+    name = "filters",
+    dynamic_deps = DEPENDENCIES.keys() + [":nav2_costmap_2d_core"],
+    deps = [":filters_library"],
+)
+
+cc_library(
+    name = "layers_library",
+    srcs = ["plugins/asymmetric_inflation_layer.cpp", "plugins/denoise_layer.cpp", "plugins/inflation_layer.cpp", "plugins/legacy_inflation_layer.cpp", "plugins/obstacle_layer.cpp", "plugins/plugin_container_layer.cpp", "plugins/range_sensor_layer.cpp", "plugins/static_layer.cpp", "plugins/voxel_layer.cpp", "src/observation_buffer.cpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    hdrs = glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":nav2_costmap_2d_core_library"],
+)
+
+cc_shared_library(
+    name = "layers",
+    dynamic_deps = DEPENDENCIES.keys() + [":nav2_costmap_2d_core"],
+    deps = [":layers_library"],
+)
+
+cc_library(
+    name = "nav2_costmap_2d_client_library",
+    srcs = ["src/costmap_subscriber.cpp", "src/costmap_topic_collision_checker.cpp", "src/footprint_subscriber.cpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    hdrs = glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":nav2_costmap_2d_core_library"],
+)
+
+cc_shared_library(
+    name = "nav2_costmap_2d_client",
+    dynamic_deps = DEPENDENCIES.keys() + [":nav2_costmap_2d_core"],
+    deps = [":nav2_costmap_2d_client_library"],
+)
+
+cc_library(
+    name = "order_layer_library",
+    srcs = ["test/regression/order_layer.cpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    hdrs = glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":nav2_costmap_2d_core_library"],
+)
+
+cc_shared_library(
+    name = "order_layer",
+    dynamic_deps = DEPENDENCIES.keys() + [":nav2_costmap_2d_core"],
+    deps = [":order_layer_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "nav2_costmap_2d",
+    srcs = ["src/costmap_2d_node.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":nav2_costmap_2d_core_library"],
+)
+
+cc_binary(
+    name = "nav2_costmap_2d_cloud",
+    srcs = ["src/costmap_2d_cloud.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_binary(
+    name = "nav2_costmap_2d_markers",
+    srcs = ["src/costmap_2d_markers.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+write_file(
+    name = "gen_cmake_0",
+    out = "_gen/share/nav2_costmap_2d/cmake/ament_cmake_export_targets-extras.cmake",
+    content = ["# generated from ament_cmake_export_targets/cmake/ament_cmake_export_targets-extras.cmake.in\n\nset(_exported_targets \"export_nav2_costmap_2d\")\n\n# include all exported targets\nif(NOT _exported_targets STREQUAL \"\")\n  foreach(_target ${_exported_targets})\n    set(_export_file \"${nav2_costmap_2d_DIR}/${_target}Export.cmake\")\n    include(\"${_export_file}\")\n\n    # extract the target names associated with the export\n    set(_regex \"foreach\\\\((_cmake)?_expected_?[Tt]arget (IN ITEMS )?(.+)\\\\)\")\n    file(\n      STRINGS \"${_export_file}\" _foreach_targets\n      REGEX \"${_regex}\")\n    list(LENGTH _foreach_targets _matches)\n    if(NOT _matches EQUAL 1)\n      message(FATAL_ERROR\n        \"Failed to find exported target names in '${_export_file}'\")\n    endif()\n    string(REGEX REPLACE \"${_regex}\" \"\\\\3\" _targets \"${_foreach_targets}\")\n    string(REPLACE \" \" \";\" _targets \"${_targets}\")\n    list(LENGTH _targets _length)\n\n    list(APPEND nav2_costmap_2d_TARGETS ${_targets})\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_cmake_1",
+    out = "_gen/share/nav2_costmap_2d/cmake/export_nav2_costmap_2dExport-release.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"nav2_costmap_2d::layers\" for configuration \"Release\"\nset_property(TARGET nav2_costmap_2d::layers APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(nav2_costmap_2d::layers PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/liblayers.so\"\n  IMPORTED_SONAME_RELEASE \"liblayers.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets nav2_costmap_2d::layers )\nlist(APPEND _cmake_import_check_files_for_nav2_costmap_2d::layers \"${_IMPORT_PREFIX}/lib/liblayers.so\" )\n\n# Import target \"nav2_costmap_2d::filters\" for configuration \"Release\"\nset_property(TARGET nav2_costmap_2d::filters APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(nav2_costmap_2d::filters PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libfilters.so\"\n  IMPORTED_SONAME_RELEASE \"libfilters.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets nav2_costmap_2d::filters )\nlist(APPEND _cmake_import_check_files_for_nav2_costmap_2d::filters \"${_IMPORT_PREFIX}/lib/libfilters.so\" )\n\n# Import target \"nav2_costmap_2d::nav2_costmap_2d_core\" for configuration \"Release\"\nset_property(TARGET nav2_costmap_2d::nav2_costmap_2d_core APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(nav2_costmap_2d::nav2_costmap_2d_core PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libnav2_costmap_2d_core.so\"\n  IMPORTED_SONAME_RELEASE \"libnav2_costmap_2d_core.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets nav2_costmap_2d::nav2_costmap_2d_core )\nlist(APPEND _cmake_import_check_files_for_nav2_costmap_2d::nav2_costmap_2d_core \"${_IMPORT_PREFIX}/lib/libnav2_costmap_2d_core.so\" )\n\n# Import target \"nav2_costmap_2d::nav2_costmap_2d_client\" for configuration \"Release\"\nset_property(TARGET nav2_costmap_2d::nav2_costmap_2d_client APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(nav2_costmap_2d::nav2_costmap_2d_client PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libnav2_costmap_2d_client.so\"\n  IMPORTED_SONAME_RELEASE \"libnav2_costmap_2d_client.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets nav2_costmap_2d::nav2_costmap_2d_client )\nlist(APPEND _cmake_import_check_files_for_nav2_costmap_2d::nav2_costmap_2d_client \"${_IMPORT_PREFIX}/lib/libnav2_costmap_2d_client.so\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_cmake_2",
+    out = "_gen/share/nav2_costmap_2d/cmake/export_nav2_costmap_2dExport.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS nav2_costmap_2d::layers nav2_costmap_2d::filters nav2_costmap_2d::nav2_costmap_2d_core nav2_costmap_2d::nav2_costmap_2d_client)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target nav2_costmap_2d::layers\nadd_library(nav2_costmap_2d::layers SHARED IMPORTED)\n\nset_target_properties(nav2_costmap_2d::layers PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/nav2_costmap_2d\"\n  INTERFACE_LINK_LIBRARIES \"angles::angles;rclcpp::rclcpp;message_filters::message_filters;laser_geometry::laser_geometry;nav2_voxel_grid::voxel_grid;nav2_costmap_2d::nav2_costmap_2d_core;nav2_ros_common::nav2_ros_common;tf2::tf2;nav2_ros_common::nav2_ros_common;point_cloud_transport::point_cloud_transport;Eigen3::Eigen\"\n)\n\n# Create imported target nav2_costmap_2d::filters\nadd_library(nav2_costmap_2d::filters SHARED IMPORTED)\n\nset_target_properties(nav2_costmap_2d::filters PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/nav2_costmap_2d\"\n  INTERFACE_LINK_LIBRARIES \"nav2_costmap_2d::nav2_costmap_2d_core;std_msgs::std_msgs;tf2::tf2;nav2_ros_common::nav2_ros_common\"\n)\n\n# Create imported target nav2_costmap_2d::nav2_costmap_2d_core\nadd_library(nav2_costmap_2d::nav2_costmap_2d_core SHARED IMPORTED)\n\nset_target_properties(nav2_costmap_2d::nav2_costmap_2d_core PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/nav2_costmap_2d\"\n  INTERFACE_LINK_LIBRARIES \"geometry_msgs::geometry_msgs;map_msgs::map_msgs;nav_msgs::nav_msgs;nav2_msgs::nav2_msgs;nav2_ros_common::nav2_ros_common;nav2_util::nav2_util_core;pluginlib::pluginlib;std_srvs::std_srvs;tf2::tf2;tf2_ros::tf2_ros;tf2_sensor_msgs::tf2_sensor_msgs;nav2_ros_common::nav2_ros_common\"\n)\n\n# Create imported target nav2_costmap_2d::nav2_costmap_2d_client\nadd_library(nav2_costmap_2d::nav2_costmap_2d_client SHARED IMPORTED)\n\nset_target_properties(nav2_costmap_2d::nav2_costmap_2d_client PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/nav2_costmap_2d\"\n  INTERFACE_LINK_LIBRARIES \"nav2_costmap_2d::nav2_costmap_2d_core;std_msgs::std_msgs;tf2::tf2;nav2_ros_common::nav2_ros_common\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/export_nav2_costmap_2dExport-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#include <memory>\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+pkg_files(
+    name = "pkg_files_cmake_0",
+    srcs = [":gen_cmake_0"],
+    prefix = "share/nav2_costmap_2d/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_1",
+    srcs = [":gen_cmake_1"],
+    prefix = "share/nav2_costmap_2d/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_2",
+    srcs = [":gen_cmake_2"],
+    prefix = "share/nav2_costmap_2d/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    deps = ["@ament_cmake//:ament_package", "@ament_cmake_google_benchmark//:ament_package", "@ament_cmake_gtest//:ament_package", "@ament_cmake_ros//:ament_package", "@ament_lint_auto//:ament_package", "@ament_lint_common//:ament_package", "@angles//:ament_package", "@backward_ros//:ament_package", "@geometry_msgs//:ament_package", "@laser_geometry//:ament_package", "@launch//:ament_package", "@launch_testing//:ament_package", "@map_msgs//:ament_package", "@message_filters//:ament_package", "@nav2_common//:ament_package", "@nav2_lifecycle_manager//:ament_package", "@nav2_map_server//:ament_package", "@nav2_msgs//:ament_package", "@nav2_ros_common//:ament_package", "@nav2_util//:ament_package", "@nav2_voxel_grid//:ament_package", "@nav_msgs//:ament_package", "@pluginlib//:ament_package", "@point_cloud_transport//:ament_package", "@point_cloud_transport_plugins//:ament_package", "@rclcpp//:ament_package", "@rclcpp_lifecycle//:ament_package", "@rmw//:ament_package", "@sensor_msgs//:ament_package", "@std_msgs//:ament_package", "@std_srvs//:ament_package", "@tf2//:ament_package", "@tf2_geometry_msgs//:ament_package", "@tf2_ros//:ament_package", "@tf2_sensor_msgs//:ament_package", "@visualization_msgs//:ament_package"],
+    lib_data = [":nav2_costmap_2d", ":nav2_costmap_2d_cloud", ":nav2_costmap_2d_markers"],
+    libraries = [":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"],
+    package_xml = "package.xml",
+    plugins = ["costmap_plugins.xml", "test/regression/order_layer.xml"],
+)
+
+cc_test(
+    name = "dyn_params_tests",
+    srcs = ["test/integration/dyn_params_tests.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "footprint_tests",
+    srcs = ["test/integration/footprint_tests.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":layers_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "obstacle_tests",
+    srcs = ["test/integration/obstacle_tests.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":layers_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "range_tests",
+    srcs = ["test/integration/range_tests.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":layers_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "plugin_api_order",
+    srcs = ["test/regression/plugin_api_order.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "asymmetric_inflation_layer_test",
+    srcs = ["test/unit/asymmetric_inflation_layer_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":layers_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "binary_filter_test",
+    srcs = ["test/unit/binary_filter_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":filters_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "clear_costmap_service_test",
+    srcs = ["test/unit/clear_costmap_service_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "collision_footprint_test",
+    srcs = ["test/unit/footprint_collision_checker_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "coordinate_transform_test",
+    srcs = ["test/unit/coordinate_transform_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "copy_window_test",
+    srcs = ["test/unit/copy_window_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "costmap_conversion_test",
+    srcs = ["test/unit/costmap_conversion_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "costmap_cost_service_test",
+    srcs = ["test/unit/costmap_cost_service_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "costmap_filter_service_test",
+    srcs = ["test/unit/costmap_filter_service_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "costmap_filter_test",
+    srcs = ["test/unit/costmap_filter_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "costmap_publisher_test",
+    srcs = ["test/unit/costmap_publisher_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "declare_parameter_test",
+    srcs = ["test/unit/declare_parameter_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "denoise_layer_test",
+    srcs = ["test/unit/denoise_layer_test.cpp", "test/unit/image_processing_test.cpp", "test/unit/image_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":layers_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "keepout_filter_test",
+    srcs = ["test/unit/keepout_filter_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":filters_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "lifecycle_test",
+    srcs = ["test/unit/lifecycle_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "observation_buffer_test",
+    srcs = ["test/unit/observation_buffer_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "obstacle_layer_test",
+    srcs = ["test/unit/obstacle_layer_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":layers_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "speed_filter_test",
+    srcs = ["test/unit/speed_filter_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":filters_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "static_layer_test",
+    srcs = ["test/unit/static_layer_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":layers_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "zone_parameter_filter_test",
+    srcs = ["test/unit/zone_parameter_filter_test.cpp"] + glob(["**/*.h", "**/*.hpp", "**/*.hxx", "**/*.ipp", "**/*.inl", "**/*.txx", "**/*.tcc"], allow_empty = True) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = ["-std=c++20", "-include", "atomic_shared_ptr_shim.hpp"],
+    data = [":ament_index", ":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"] + glob(["test/**", "tests/**"], exclude = ["**/*.cpp", "**/*.cc", "**/*.c", "**/*.h", "**/*.hpp"], allow_empty = True),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include", "include", "include/nav2_costmap_2d", "test/integration", "test/regression", "test/unit"],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":filters_library",
+        ":nav2_costmap_2d_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+py_pytest(
+    name = "test_collision_checker",
+    srcs = ["test/integration/costmap_tests_launch.py"],
+    args = ["-p", "launch_testing.pytest.hooks"],
+    data = [":ament_index", ":nav2_costmap_2d", ":nav2_costmap_2d_cloud", ":nav2_costmap_2d_markers"],
+    deps = ["@angles//:angles_py", "@geometry_msgs//:py", "@laser_geometry//:laser_geometry_py", "@launch//:launch", "@launch//:test_support", "@launch_testing//:launch_testing", "@map_msgs//:py", "@message_filters//:message_filters_py", "@nav2_common//:nav2_common", "@nav2_msgs//:py", "@nav_msgs//:py", "@sensor_msgs//:py", "@std_msgs//:py", "@std_srvs//:py", "@tf2_geometry_msgs//:tf2_geometry_msgs_py", "@tf2_sensor_msgs//:tf2_sensor_msgs_py", "@visualization_msgs//:py"],
+)
+
+py_pytest(
+    name = "inflation_tests",
+    srcs = ["test/integration/costmap_tests_launch.py"],
+    args = ["-p", "launch_testing.pytest.hooks"],
+    data = [":ament_index", ":nav2_costmap_2d", ":nav2_costmap_2d_cloud", ":nav2_costmap_2d_markers"],
+    deps = ["@angles//:angles_py", "@geometry_msgs//:py", "@laser_geometry//:laser_geometry_py", "@launch//:launch", "@launch//:test_support", "@launch_testing//:launch_testing", "@map_msgs//:py", "@message_filters//:message_filters_py", "@nav2_common//:nav2_common", "@nav2_msgs//:py", "@nav_msgs//:py", "@sensor_msgs//:py", "@std_msgs//:py", "@std_srvs//:py", "@tf2_geometry_msgs//:tf2_geometry_msgs_py", "@tf2_sensor_msgs//:tf2_sensor_msgs_py", "@visualization_msgs//:py"],
+)
+
+py_pytest(
+    name = "asymmetric_inflation_tests",
+    srcs = ["test/integration/costmap_tests_launch.py"],
+    args = ["-p", "launch_testing.pytest.hooks"],
+    data = [":ament_index", ":nav2_costmap_2d", ":nav2_costmap_2d_cloud", ":nav2_costmap_2d_markers"],
+    deps = ["@angles//:angles_py", "@geometry_msgs//:py", "@laser_geometry//:laser_geometry_py", "@launch//:launch", "@launch//:test_support", "@launch_testing//:launch_testing", "@map_msgs//:py", "@message_filters//:message_filters_py", "@nav2_common//:nav2_common", "@nav2_msgs//:py", "@nav_msgs//:py", "@sensor_msgs//:py", "@std_msgs//:py", "@std_srvs//:py", "@tf2_geometry_msgs//:tf2_geometry_msgs_py", "@tf2_sensor_msgs//:tf2_sensor_msgs_py", "@visualization_msgs//:py"],
+)
+
+py_pytest(
+    name = "plugin_container_tests",
+    srcs = ["test/integration/costmap_tests_launch.py"],
+    args = ["-p", "launch_testing.pytest.hooks"],
+    data = [":ament_index", ":nav2_costmap_2d", ":nav2_costmap_2d_cloud", ":nav2_costmap_2d_markers"],
+    deps = ["@angles//:angles_py", "@geometry_msgs//:py", "@laser_geometry//:laser_geometry_py", "@launch//:launch", "@launch//:test_support", "@launch_testing//:launch_testing", "@map_msgs//:py", "@message_filters//:message_filters_py", "@nav2_common//:nav2_common", "@nav2_msgs//:py", "@nav_msgs//:py", "@sensor_msgs//:py", "@std_msgs//:py", "@std_srvs//:py", "@tf2_geometry_msgs//:tf2_geometry_msgs_py", "@tf2_sensor_msgs//:tf2_sensor_msgs_py", "@visualization_msgs//:py"],
+)
+
+py_pytest(
+    name = "test_costmap_publisher_exec",
+    srcs = ["test/integration/costmap_tests_launch.py"],
+    args = ["-p", "launch_testing.pytest.hooks"],
+    data = [":ament_index", ":nav2_costmap_2d", ":nav2_costmap_2d_cloud", ":nav2_costmap_2d_markers"],
+    deps = ["@angles//:angles_py", "@geometry_msgs//:py", "@laser_geometry//:laser_geometry_py", "@launch//:launch", "@launch//:test_support", "@launch_testing//:launch_testing", "@map_msgs//:py", "@message_filters//:message_filters_py", "@nav2_common//:nav2_common", "@nav2_msgs//:py", "@nav_msgs//:py", "@sensor_msgs//:py", "@std_msgs//:py", "@std_srvs//:py", "@tf2_geometry_msgs//:tf2_geometry_msgs_py", "@tf2_sensor_msgs//:tf2_sensor_msgs_py", "@visualization_msgs//:py"],
+)
+
+py_pytest(
+    name = "test_costmap_subscriber_exec",
+    srcs = ["test/integration/costmap_tests_launch.py"],
+    args = ["-p", "launch_testing.pytest.hooks"],
+    data = [":ament_index", ":nav2_costmap_2d", ":nav2_costmap_2d_cloud", ":nav2_costmap_2d_markers"],
+    deps = ["@angles//:angles_py", "@geometry_msgs//:py", "@laser_geometry//:laser_geometry_py", "@launch//:launch", "@launch//:test_support", "@launch_testing//:launch_testing", "@map_msgs//:py", "@message_filters//:message_filters_py", "@nav2_common//:nav2_common", "@nav2_msgs//:py", "@nav_msgs//:py", "@sensor_msgs//:py", "@std_msgs//:py", "@std_srvs//:py", "@tf2_geometry_msgs//:tf2_geometry_msgs_py", "@tf2_sensor_msgs//:tf2_sensor_msgs_py", "@visualization_msgs//:py"],
+)
+
+ament_package(
+    cmake_export_dependencies_list = ["angles", "geometry_msgs", "laser_geometry", "map_msgs", "message_filters", "nav_msgs", "nav2_msgs", "nav2_util", "nav2_voxel_grid", "pluginlib", "rclcpp", "rmw", "std_msgs", "std_srvs", "tf2", "tf2_ros", "tf2_sensor_msgs", "nav2_ros_common", "point_cloud_transport", "Eigen3"],
+    cmake_export_targets = False,
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_google_benchmark//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@backward_ros//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@laser_geometry//:ament_package",
+        "@launch//:ament_package",
+        "@launch_testing//:ament_package",
+        "@map_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_lifecycle_manager//:ament_package",
+        "@nav2_map_server//:ament_package",
+        "@nav2_msgs//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@nav2_voxel_grid//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@point_cloud_transport//:ament_package",
+        "@point_cloud_transport_plugins//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rmw//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@tf2_sensor_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+    headers = glob(["include/**/*.h", "include/**/*.hpp", "include/**/*.hxx", "include/**/*.ipp", "include/**/*.inl", "include/**/*.txx", "include/**/*.tcc"], allow_empty = True),
+    install = [":pkg_files_cmake_0", ":pkg_files_cmake_1", ":pkg_files_cmake_2"],
+    libraries = [":nav2_costmap_2d_core", ":filters", ":layers", ":nav2_costmap_2d_client", ":order_layer"],
+    package_xml = "package.xml",
+)
