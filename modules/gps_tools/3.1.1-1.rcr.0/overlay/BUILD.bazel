@@ -1,25 +1,140 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_python//python:defs.bzl", "py_library")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@nav_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "utm_odometry_component_library",
+    srcs = ["src/utm_odometry_component.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/gps_tools",
+    ],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "utm_odometry_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":utm_odometry_component_library"],
+)
+
+cc_library(
+    name = "utm_odometry_to_navsatfix_component_library",
+    srcs = ["src/utm_odometry_to_navsatfix_component.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/gps_tools",
+    ],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "utm_odometry_to_navsatfix_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":utm_odometry_to_navsatfix_component_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "utm_odometry_component_components",
+    component = ":utm_odometry_component",
+    plugins = ["gps_tools::UtmOdometryComponent"],
+)
+
+rclcpp_components_register_nodes(
+    name = "utm_odometry_to_navsatfix_component_components",
+    component = ":utm_odometry_to_navsatfix_component",
+    plugins = ["gps_tools::UtmOdometryToNavSatFixComponent"],
+)
+
+py_library(
+    name = "gps_tools_py",
+    srcs = glob(["gps_tools/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@gps_msgs//:py",
+        "@nav_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+    ],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = ["scripts/bag_converter"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "bin",
+)
+
+pkg_files(
+    name = "pkg_files_extra_1",
+    srcs = ["nodes/fix_translator"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "bin",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":utm_odometry_component_components",
+        ":utm_odometry_to_navsatfix_component_components",
+    ],
+    libraries = [
+        ":utm_odometry_component",
+        ":utm_odometry_to_navsatfix_component",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -29,7 +144,48 @@ ament_package(
         "@rclcpp//:ament_package",
         "@rclcpp_components//:ament_package",
         "@rclpy//:ament_package",
-        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ament_cmake",
+        "ament_cmake_python",
+        "rclcpp",
+        "rclpy",
+    ],
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install = [
+        ":pkg_files_extra_0",
+        ":pkg_files_extra_1",
+    ],
+    libraries = [
+        ":utm_odometry_component",
+        ":utm_odometry_to_navsatfix_component",
+    ],
+    package_xml = "package.xml",
+    python = [":gps_tools_py"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
         "@sensor_msgs//:ament_package",
         "@std_msgs//:ament_package",
     ],
