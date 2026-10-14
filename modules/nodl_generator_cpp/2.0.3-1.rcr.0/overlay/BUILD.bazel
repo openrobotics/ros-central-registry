@@ -1,0 +1,99 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+write_file(
+    name = "_meta_file_0",
+    out = "_gen_meta/share/nodl_generator_cpp/cmake/nodl_generate_cpp-extras.cmake",
+    content = [
+        "# SPDX-FileCopyrightText: 2026 Open Source Robotics Foundation, Inc.",
+        "# SPDX-License-Identifier: Apache-2.0",
+        "#",
+        "# Auto-included when a downstream package calls find_package(nodl_generator_cpp).",
+        "",
+        "# Resolves ${Python3_EXECUTABLE} for the build-time codegen step the macro invokes.",
+        "find_package(Python3 REQUIRED COMPONENTS Interpreter)",
+        "",
+        "include(\"${nodl_generator_cpp_DIR}/nodl_generate_cpp.cmake\")",
+    ],
+    is_executable = False,
+)
+
+pkg_files(
+    name = "meta_files_0",
+    srcs = [":_meta_file_0"],
+    prefix = "share/nodl_generator_cpp/cmake",
+)
+
+py_library(
+    name = "nodl_generator_cpp",
+    srcs = glob(["nodl_generator_cpp/**/*.py"]),
+    data = glob([
+        "nodl_generator_cpp/schemas/**",
+        "nodl_generator_cpp/templates/**",
+    ]),
+    imports = ["."],
+    deps = [
+        requirement("jinja2"),
+        requirement("pyyaml"),
+        "@generate_parameter_library_py",
+        "@nodl_schema",
+    ],
+)
+
+pkg_files(
+    name = "py_data_files",
+    srcs = glob([
+        "nodl_generator_cpp/schemas/**",
+        "nodl_generator_cpp/templates/**",
+    ]),
+    prefix = "lib/python3.12/site-packages",
+    strip_prefix = strip_prefix.from_pkg(""),
+)
+
+ament_package(
+    name = "ament_package",
+    cmake = glob(["cmake/**"]),
+    cmake_export_dependencies = False,
+    cmake_extras = ["nodl_generate_cpp-extras.cmake"],
+    install = [":py_data_files"] + [":meta_files_0"],
+    package_xml = "package.xml",
+    python = [":nodl_generator_cpp"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@generate_parameter_library_py//:ament_package",
+        "@nodl_schema//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)
