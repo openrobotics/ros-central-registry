@@ -1,0 +1,175 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@@rosbag2_cpp+//:rosbag2_cpp": "@@rosbag2_cpp+//:rosbag2_cpp_library",
+    "@@rosbag2_storage+//:rosbag2_storage": "@@rosbag2_storage+//:rosbag2_storage_library",
+    "@@rosidl_typesupport_introspection_c+//:rosidl_typesupport_introspection_c": "@@rosidl_typesupport_introspection_c+//:rosidl_typesupport_introspection_c_library",
+    "@@rosidl_typesupport_introspection_cpp+//:rosidl_typesupport_introspection_cpp": "@@rosidl_typesupport_introspection_cpp+//:rosidl_typesupport_introspection_cpp_library",
+    "@kdl_parser//:kdl_parser": "@kdl_parser//:kdl_parser_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@inverse_dynamics_solver//:inverse_dynamics_solver_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "kdl_inverse_dynamics_solver_library",
+    srcs = ["src/kdl_inverse_dynamics_solver.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/kdl_inverse_dynamics_solver",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "kdl_inverse_dynamics_solver",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":kdl_inverse_dynamics_solver_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":kdl_inverse_dynamics_solver"],
+)
+
+cc_binary(
+    name = "kdl_inverse_dynamics_solver_test",
+    srcs = ["test/test_kdl_inverse_dynamics_solver.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/kdl_inverse_dynamics_solver",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":kdl_inverse_dynamics_solver_library",
+        "@rosdistro//cc:gtest_main",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "bagfiles/panda_exciting_trajectory.db3",
+        "bagfiles/ur10_exciting_trajectory.db3",
+        "launch/evaluate_solver_kdl_ur10.launch.py",
+    ],
+    lib_data = [":kdl_inverse_dynamics_solver_test"],
+    libraries = [":kdl_inverse_dynamics_solver"],
+    package_xml = "package.xml",
+    plugin_category = "inverse_dynamics_solver",
+    plugins = ["kdl_inverse_dynamics_solver.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@inverse_dynamics_solver//:ament_package",
+        "@kdl_parser//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_testing//:ament_package",
+        "@ur_description//:ament_package",
+    ],
+)
+
+py_pytest(
+    name = "test_test_kdl_inverse_dynamics_solver.py",
+    srcs = ["test/test_kdl_inverse_dynamics_solver.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":ament_index",
+        ":kdl_inverse_dynamics_solver_test",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "kdl_parser",
+        "orocos_kdl",
+        "pluginlib",
+        "rclcpp",
+        "inverse_dynamics_solver",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_kdl_inverse_dynamics_solver",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":kdl_inverse_dynamics_solver"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@inverse_dynamics_solver//:ament_package",
+        "@kdl_parser//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_testing//:ament_package",
+        "@ur_description//:ament_package",
+    ],
+)
