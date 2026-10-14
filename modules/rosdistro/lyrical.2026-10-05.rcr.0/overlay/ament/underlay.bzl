@@ -23,9 +23,9 @@ one installable underlay tarball.
     )
 
 `bazel build //:desktop_full` then produces `desktop_full.tar.gz` whose
-content is `<install_prefix>/<pkg>/{bin,lib,include,share}` for every package
-reachable from the given roots -- the same layout `colcon build` produces with
-its default (isolated) install layout, rooted at `/opt/ros/<distro>`.
+content is `<pkg>/{bin,lib,include,share}` for every package reachable from
+the given roots -- the same layout `colcon build` produces with its default
+(isolated) install layout.
 
 An aspect walks the `deps` edges of every ament_package/ament_index target
 collecting each package's own `AmentPackageInfo`; the rule then merges all of
@@ -87,30 +87,30 @@ def _ament_underlay_files_impl(ctx):
         seen[pkg.name] = pkg.label
         dest_src_map = {}
         for dest, f in pkg.files:
-            dest_src_map[install_prefix + "/" + pkg.name + "/" + dest] = f
+            dest_src_map[pkg.name + "/" + dest] = f
             all_files.append(f)
         pkg_files.append((PackageFilesInfo(dest_src_map = dest_src_map, attributes = {}), ctx.label))
         manifest.append(pkg.name)
 
-    # Top-level colcon underlay files at <install_prefix>/ (setup.*, local_setup.*,
+    # Top-level colcon underlay files (setup.*, local_setup.*,
     # _local_setup_util_*.py, .colcon_install_layout, COLCON_IGNORE).
     top_map = {}
     layout_file = ctx.actions.declare_file(ctx.label.name + "_underlay/.colcon_install_layout")
     ctx.actions.write(layout_file, "isolated\n")
-    top_map[install_prefix + "/.colcon_install_layout"] = layout_file
+    top_map[".colcon_install_layout"] = layout_file
 
     ignore_file = ctx.actions.declare_file(ctx.label.name + "_underlay/COLCON_IGNORE")
     ctx.actions.write(ignore_file, "")
-    top_map[install_prefix + "/COLCON_IGNORE"] = ignore_file
+    top_map["COLCON_IGNORE"] = ignore_file
 
-    abs_prefix = "/" + install_prefix
+    abs_prefix = "/" + install_prefix.lstrip("/")
     setup_sh = ctx.actions.declare_file(ctx.label.name + "_underlay/setup.sh")
     ctx.actions.expand_template(
         template = ctx.file._setup_sh_tpl,
         output = setup_sh,
         substitutions = {"@INSTALL_PREFIX@": abs_prefix},
     )
-    top_map[install_prefix + "/setup.sh"] = setup_sh
+    top_map["setup.sh"] = setup_sh
 
     local_setup_sh = ctx.actions.declare_file(ctx.label.name + "_underlay/local_setup.sh")
     ctx.actions.expand_template(
@@ -118,10 +118,10 @@ def _ament_underlay_files_impl(ctx):
         output = local_setup_sh,
         substitutions = {"@INSTALL_PREFIX@": abs_prefix},
     )
-    top_map[install_prefix + "/local_setup.sh"] = local_setup_sh
+    top_map["local_setup.sh"] = local_setup_sh
 
     for f in ctx.files._underlay_static_files:
-        top_map[install_prefix + "/" + f.basename] = f
+        top_map[f.basename] = f
 
     all_files.extend(top_map.values())
     pkg_files.append((PackageFilesInfo(dest_src_map = top_map, attributes = {}), ctx.label))

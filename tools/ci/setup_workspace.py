@@ -393,9 +393,8 @@ def render_underlay_build_file(variant_names: List[str]) -> str:
     """BUILD.bazel content declaring one `ament_underlay` tarball per variant.
 
     `bazel build //:desktop_full` (etc.) produces `<variant>.tar.gz`: an
-    isolated-layout ROS underlay rooted at the `@rosdistro//:install_prefix`
-    (/opt/ros/<distro>) containing every package reachable from the
-    variant's `:ament_package`.
+    isolated-layout ROS underlay containing `<pkg>/{bin,lib,include,share}` for
+    every package reachable from the variant's `:ament_package`.
     """
     lines = [
         'load("@rosdistro//ament:defs.bzl", "ament_underlay")',
