@@ -50,6 +50,12 @@ class TestRenderUnderlayBuildFile(unittest.TestCase):
         content = setup_workspace.render_underlay_build_file([])
         self.assertNotIn("ament_underlay(", content)
 
+    def test_skips_all_variant(self):
+        content = setup_workspace.render_underlay_build_file(["all", "core"])
+        self.assertNotIn('name = "all",', content)
+        self.assertIn('name = "core",', content)
+        self.assertEqual(content.count("ament_underlay("), 1)
+
 
 class TestLlvmPatches(unittest.TestCase):
 
@@ -151,6 +157,17 @@ class TestCalculatePackagesForVariant(unittest.TestCase):
             "pkg_a", "1.0.0", deps=[("rosdistro", "lyrical.2026-06-08")])
         result = setup_workspace.calculate_packages_for_variant(
             self.module_dir, "pkg_a", "1.0.0")
+        self.assertEqual(result, ["pkg_a"])
+
+    def test_ros_is_always_discarded(self):
+        self.write_module_bazel(
+            "ros",
+            "lyrical.2026-06-08",
+            deps=[("pkg_a", "1.0.0"), ("rosdistro", "lyrical.2026-06-08")],
+        )
+        self.write_module_bazel("pkg_a", "1.0.0")
+        result = setup_workspace.calculate_packages_for_variant(
+            self.module_dir, "ros", "lyrical.2026-06-08")
         self.assertEqual(result, ["pkg_a"])
 
     def test_dependency_with_missing_module_file_is_not_traversed_further(self):

@@ -27,6 +27,7 @@ from tools.ci.bzlmod_lib import scan_module_for_dependencies
 from tools.ci.bzlmod_lib import find_packages_with_newer_versions
 
 VARIANTS = {
+    "all": "ros",
     "core": "ros_core",
     "base": "ros_base",
     "desktop": "desktop",
@@ -403,6 +404,8 @@ def render_underlay_build_file(variant_names: List[str]) -> str:
         "",
     ]
     for name in variant_names:
+        if name == "all":
+            continue
         package = VARIANTS[name]
         lines += [
             "ament_underlay(",
@@ -441,6 +444,7 @@ def calculate_packages_for_variant(
                 if next_file.exists():
                     if next_name not in visited:
                         queue.append((next_name, next_file))
+    visited.discard("ros")
     visited.discard("rosdistro")
     return sorted(list(visited))
 
