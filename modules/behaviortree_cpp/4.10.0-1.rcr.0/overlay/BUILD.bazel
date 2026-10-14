@@ -1,25 +1,990 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@rosdistro//cc:sqlite3": "@rosdistro//cc:sqlite3_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:zmq": "@rosdistro//cc:zmq_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+]
+
+cc_library(
+    name = "minitrace_library",
+    srcs = ["3rdparty/minitrace/minitrace.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "MTR_ENABLED=True",
+        "USING_ROS2",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_library(
+    name = "behaviortree_cpp_library",
+    srcs = [
+        "src/action_node.cpp",
+        "src/actions/sleep_node.cpp",
+        "src/actions/test_node.cpp",
+        "src/actions/updated_action.cpp",
+        "src/basic_types.cpp",
+        "src/behavior_tree.cpp",
+        "src/blackboard.cpp",
+        "src/bt_factory.cpp",
+        "src/condition_node.cpp",
+        "src/control_node.cpp",
+        "src/controls/fallback_node.cpp",
+        "src/controls/if_then_else_node.cpp",
+        "src/controls/parallel_all_node.cpp",
+        "src/controls/parallel_node.cpp",
+        "src/controls/reactive_fallback.cpp",
+        "src/controls/reactive_sequence.cpp",
+        "src/controls/sequence_node.cpp",
+        "src/controls/sequence_with_memory_node.cpp",
+        "src/controls/switch_node.cpp",
+        "src/controls/try_catch_node.cpp",
+        "src/controls/while_do_else_node.cpp",
+        "src/decorator_node.cpp",
+        "src/decorators/delay_node.cpp",
+        "src/decorators/inverter_node.cpp",
+        "src/decorators/repeat_node.cpp",
+        "src/decorators/retry_node.cpp",
+        "src/decorators/subtree_node.cpp",
+        "src/decorators/timeout_node.cpp",
+        "src/decorators/updated_decorator.cpp",
+        "src/json_export.cpp",
+        "src/loggers/abstract_logger.cpp",
+        "src/loggers/bt_cout_logger.cpp",
+        "src/loggers/bt_file_logger_v2.cpp",
+        "src/loggers/bt_minitrace_logger.cpp",
+        "src/loggers/bt_observer.cpp",
+        "src/loggers/bt_sqlite_logger.cpp",
+        "src/loggers/groot2_publisher.cpp",
+        "src/script_parser.cpp",
+        "src/script_tokenizer.cpp",
+        "src/shared_library.cpp",
+        "src/shared_library_UNIX.cpp",
+        "src/tree_node.cpp",
+        "src/xml_parsing.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "USING_ROS2",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":minitrace_library"],
+)
+
+cc_shared_library(
+    name = "behaviortree_cpp",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":behaviortree_cpp_library"],
+)
+
+cc_library(
+    name = "bt_sample_nodes_library",
+    srcs = [
+        "sample_nodes/crossdoor_nodes.cpp",
+        "sample_nodes/dummy_nodes.cpp",
+        "sample_nodes/movebase_node.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "USING_ROS2",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_library(
+    name = "crossdoor_nodes_dyn_library",
+    srcs = ["sample_nodes/crossdoor_nodes.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "BT_PLUGIN_EXPORT",
+        "USING_ROS2",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":behaviortree_cpp_library"],
+)
+
+cc_shared_library(
+    name = "crossdoor_nodes_dyn",
+    dynamic_deps = DEPENDENCIES.keys() + [":behaviortree_cpp"],
+    deps = [":crossdoor_nodes_dyn_library"],
+)
+
+cc_library(
+    name = "dummy_nodes_dyn_library",
+    srcs = ["sample_nodes/dummy_nodes.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "BT_PLUGIN_EXPORT",
+        "USING_ROS2",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":behaviortree_cpp_library"],
+)
+
+cc_shared_library(
+    name = "dummy_nodes_dyn",
+    dynamic_deps = DEPENDENCIES.keys() + [":behaviortree_cpp"],
+    deps = [":dummy_nodes_dyn_library"],
+)
+
+cc_library(
+    name = "movebase_node_dyn_library",
+    srcs = ["sample_nodes/movebase_node.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "BT_PLUGIN_EXPORT",
+        "USING_ROS2",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":behaviortree_cpp_library"],
+)
+
+cc_shared_library(
+    name = "movebase_node_dyn",
+    dynamic_deps = DEPENDENCIES.keys() + [":behaviortree_cpp"],
+    deps = [":movebase_node_dyn_library"],
+)
+
+cc_library(
+    name = "plugin_issue953_library",
+    srcs = ["tests/plugin_issue953/plugin_issue953.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "BT_PLUGIN_EXPORT",
+        "USING_ROS2",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":behaviortree_cpp_library"],
+)
+
+cc_shared_library(
+    name = "plugin_issue953",
+    dynamic_deps = DEPENDENCIES.keys() + [":behaviortree_cpp"],
+    deps = [":plugin_issue953_library"],
+)
+
+cc_library(
+    name = "test_plugin_action_library",
+    srcs = ["examples/plugin_example/plugin_action.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "BT_PLUGIN_EXPORT",
+        "USING_ROS2",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":behaviortree_cpp_library"],
+)
+
+cc_shared_library(
+    name = "test_plugin_action",
+    dynamic_deps = DEPENDENCIES.keys() + [":behaviortree_cpp"],
+    deps = [":test_plugin_action_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":behaviortree_cpp"],
+)
+
+cc_binary(
+    name = "bt4_nodes_model",
+    srcs = ["tools/bt_nodes_model.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "USING_ROS2",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":behaviortree_cpp_library"],
+)
+
+cc_binary(
+    name = "bt4_plugin_manifest",
+    srcs = ["tools/bt_plugin_manifest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "USING_ROS2",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":behaviortree_cpp_library"],
+)
+
+write_file(
+    name = "gen_cmake_83",
+    out = "_gen/share/behaviortree_cpp/cmake/ament_cmake_export_include_directories-extras.cmake",
+    content = ["# generated from ament_cmake_export_include_directories/cmake/ament_cmake_export_include_directories-extras.cmake.in\n\nset(_exported_include_dirs \"${behaviortree_cpp_DIR}/../../../include\")\n\n# append include directories to behaviortree_cpp_INCLUDE_DIRS\n# warn about not existing paths\nif(NOT _exported_include_dirs STREQUAL \"\")\n  find_package(ament_cmake_core QUIET REQUIRED)\n  foreach(_exported_include_dir ${_exported_include_dirs})\n    if(NOT IS_DIRECTORY \"${_exported_include_dir}\")\n      message(WARNING \"Package 'behaviortree_cpp' exports the include directory '${_exported_include_dir}' which doesn't exist\")\n    endif()\n    normalize_path(_exported_include_dir \"${_exported_include_dir}\")\n    list(APPEND behaviortree_cpp_INCLUDE_DIRS \"${_exported_include_dir}\")\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_cmake_84",
+    out = "_gen/share/behaviortree_cpp/cmake/ament_cmake_export_targets-extras.cmake",
+    content = ["# generated from ament_cmake_export_targets/cmake/ament_cmake_export_targets-extras.cmake.in\n\nset(_exported_targets \"behaviortree_cppTargets\")\n\n# include all exported targets\nif(NOT _exported_targets STREQUAL \"\")\n  foreach(_target ${_exported_targets})\n    set(_export_file \"${behaviortree_cpp_DIR}/${_target}Export.cmake\")\n    include(\"${_export_file}\")\n\n    # extract the target names associated with the export\n    set(_regex \"foreach\\\\((_cmake)?_expected_?[Tt]arget (IN ITEMS )?(.+)\\\\)\")\n    file(\n      STRINGS \"${_export_file}\" _foreach_targets\n      REGEX \"${_regex}\")\n    list(LENGTH _foreach_targets _matches)\n    if(NOT _matches EQUAL 1)\n      message(FATAL_ERROR\n        \"Failed to find exported target names in '${_export_file}'\")\n    endif()\n    string(REGEX REPLACE \"${_regex}\" \"\\\\3\" _targets \"${_foreach_targets}\")\n    string(REPLACE \" \" \";\" _targets \"${_targets}\")\n    list(LENGTH _targets _length)\n\n    list(APPEND behaviortree_cpp_TARGETS ${_targets})\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_cmake_85",
+    out = "_gen/share/behaviortree_cpp/cmake/behaviortree_cppTargetsExport-release.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"behaviortree_cpp::behaviortree_cpp\" for configuration \"Release\"\nset_property(TARGET behaviortree_cpp::behaviortree_cpp APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(behaviortree_cpp::behaviortree_cpp PROPERTIES\n  IMPORTED_LINK_DEPENDENT_LIBRARIES_RELEASE \"tinyxml2::tinyxml2\"\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libbehaviortree_cpp.so\"\n  IMPORTED_SONAME_RELEASE \"libbehaviortree_cpp.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets behaviortree_cpp::behaviortree_cpp )\nlist(APPEND _cmake_import_check_files_for_behaviortree_cpp::behaviortree_cpp \"${_IMPORT_PREFIX}/lib/libbehaviortree_cpp.so\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_cmake_86",
+    out = "_gen/share/behaviortree_cpp/cmake/behaviortree_cppTargetsExport.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.3 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.3\")\n   message(FATAL_ERROR \"CMake >= 2.8.3 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.3...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS behaviortree_cpp::behaviortree_cpp)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target behaviortree_cpp::behaviortree_cpp\nadd_library(behaviortree_cpp::behaviortree_cpp SHARED IMPORTED)\n\nset_target_properties(behaviortree_cpp::behaviortree_cpp PROPERTIES\n  INTERFACE_COMPILE_DEFINITIONS \"BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"\"\n  INTERFACE_COMPILE_FEATURES \"cxx_std_17\"\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include;${_IMPORT_PREFIX}/include\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/behaviortree_cppTargetsExport-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+pkg_files(
+    name = "pkg_files_inc_0",
+    srcs = ["include/behaviortree_cpp/action_node.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["include/behaviortree_cpp/actions/always_failure_node.h"],
+    prefix = "include/behaviortree_cpp/actions",
+)
+
+pkg_files(
+    name = "pkg_files_inc_2",
+    srcs = ["include/behaviortree_cpp/actions/always_success_node.h"],
+    prefix = "include/behaviortree_cpp/actions",
+)
+
+pkg_files(
+    name = "pkg_files_inc_3",
+    srcs = ["include/behaviortree_cpp/actions/pop_from_queue.hpp"],
+    prefix = "include/behaviortree_cpp/actions",
+)
+
+pkg_files(
+    name = "pkg_files_inc_4",
+    srcs = ["include/behaviortree_cpp/actions/script_condition.h"],
+    prefix = "include/behaviortree_cpp/actions",
+)
+
+pkg_files(
+    name = "pkg_files_inc_5",
+    srcs = ["include/behaviortree_cpp/actions/script_node.h"],
+    prefix = "include/behaviortree_cpp/actions",
+)
+
+pkg_files(
+    name = "pkg_files_inc_6",
+    srcs = ["include/behaviortree_cpp/actions/set_blackboard_node.h"],
+    prefix = "include/behaviortree_cpp/actions",
+)
+
+pkg_files(
+    name = "pkg_files_inc_7",
+    srcs = ["include/behaviortree_cpp/actions/sleep_node.h"],
+    prefix = "include/behaviortree_cpp/actions",
+)
+
+pkg_files(
+    name = "pkg_files_inc_8",
+    srcs = ["include/behaviortree_cpp/actions/test_node.h"],
+    prefix = "include/behaviortree_cpp/actions",
+)
+
+pkg_files(
+    name = "pkg_files_inc_9",
+    srcs = ["include/behaviortree_cpp/actions/unset_blackboard_node.h"],
+    prefix = "include/behaviortree_cpp/actions",
+)
+
+pkg_files(
+    name = "pkg_files_inc_10",
+    srcs = ["include/behaviortree_cpp/actions/updated_action.h"],
+    prefix = "include/behaviortree_cpp/actions",
+)
+
+pkg_files(
+    name = "pkg_files_inc_11",
+    srcs = ["include/behaviortree_cpp/basic_types.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_12",
+    srcs = ["include/behaviortree_cpp/behavior_tree.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_13",
+    srcs = ["include/behaviortree_cpp/blackboard.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_14",
+    srcs = ["include/behaviortree_cpp/bt_factory.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_15",
+    srcs = ["include/behaviortree_cpp/bt_parser.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_16",
+    srcs = ["include/behaviortree_cpp/condition_node.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_17",
+    srcs = ["include/behaviortree_cpp/contrib/any.hpp"],
+    prefix = "include/behaviortree_cpp/contrib",
+)
+
+pkg_files(
+    name = "pkg_files_inc_18",
+    srcs = ["include/behaviortree_cpp/contrib/expected.hpp"],
+    prefix = "include/behaviortree_cpp/contrib",
+)
+
+pkg_files(
+    name = "pkg_files_inc_19",
+    srcs = ["include/behaviortree_cpp/contrib/json.hpp"],
+    prefix = "include/behaviortree_cpp/contrib",
+)
+
+pkg_files(
+    name = "pkg_files_inc_20",
+    srcs = ["include/behaviortree_cpp/contrib/magic_enum.hpp"],
+    prefix = "include/behaviortree_cpp/contrib",
+)
+
+pkg_files(
+    name = "pkg_files_inc_21",
+    srcs = ["include/behaviortree_cpp/control_node.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_22",
+    srcs = ["include/behaviortree_cpp/controls/fallback_node.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_23",
+    srcs = ["include/behaviortree_cpp/controls/if_then_else_node.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_24",
+    srcs = ["include/behaviortree_cpp/controls/manual_node.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_25",
+    srcs = ["include/behaviortree_cpp/controls/parallel_all_node.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_26",
+    srcs = ["include/behaviortree_cpp/controls/parallel_node.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_27",
+    srcs = ["include/behaviortree_cpp/controls/reactive_fallback.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_28",
+    srcs = ["include/behaviortree_cpp/controls/reactive_sequence.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_29",
+    srcs = ["include/behaviortree_cpp/controls/sequence_node.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_30",
+    srcs = ["include/behaviortree_cpp/controls/sequence_with_memory_node.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_31",
+    srcs = ["include/behaviortree_cpp/controls/switch_node.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_32",
+    srcs = ["include/behaviortree_cpp/controls/try_catch_node.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_33",
+    srcs = ["include/behaviortree_cpp/controls/while_do_else_node.h"],
+    prefix = "include/behaviortree_cpp/controls",
+)
+
+pkg_files(
+    name = "pkg_files_inc_34",
+    srcs = ["include/behaviortree_cpp/decorator_node.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_35",
+    srcs = ["include/behaviortree_cpp/decorators/consume_queue.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_36",
+    srcs = ["include/behaviortree_cpp/decorators/delay_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_37",
+    srcs = ["include/behaviortree_cpp/decorators/force_failure_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_38",
+    srcs = ["include/behaviortree_cpp/decorators/force_success_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_39",
+    srcs = ["include/behaviortree_cpp/decorators/inverter_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_40",
+    srcs = ["include/behaviortree_cpp/decorators/keep_running_until_failure_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_41",
+    srcs = ["include/behaviortree_cpp/decorators/loop_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_42",
+    srcs = ["include/behaviortree_cpp/decorators/repeat_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_43",
+    srcs = ["include/behaviortree_cpp/decorators/retry_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_44",
+    srcs = ["include/behaviortree_cpp/decorators/run_once_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_45",
+    srcs = ["include/behaviortree_cpp/decorators/script_precondition.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_46",
+    srcs = ["include/behaviortree_cpp/decorators/subtree_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_47",
+    srcs = ["include/behaviortree_cpp/decorators/timeout_node.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_48",
+    srcs = ["include/behaviortree_cpp/decorators/updated_decorator.h"],
+    prefix = "include/behaviortree_cpp/decorators",
+)
+
+pkg_files(
+    name = "pkg_files_inc_49",
+    srcs = ["include/behaviortree_cpp/exceptions.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_50",
+    srcs = ["include/behaviortree_cpp/flatbuffers/bt_flatbuffer_helper.h"],
+    prefix = "include/behaviortree_cpp/flatbuffers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_51",
+    srcs = ["include/behaviortree_cpp/json_export.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_52",
+    srcs = ["include/behaviortree_cpp/leaf_node.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_53",
+    srcs = ["include/behaviortree_cpp/loggers/abstract_logger.h"],
+    prefix = "include/behaviortree_cpp/loggers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_54",
+    srcs = ["include/behaviortree_cpp/loggers/bt_cout_logger.h"],
+    prefix = "include/behaviortree_cpp/loggers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_55",
+    srcs = ["include/behaviortree_cpp/loggers/bt_file_logger_v2.h"],
+    prefix = "include/behaviortree_cpp/loggers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_56",
+    srcs = ["include/behaviortree_cpp/loggers/bt_minitrace_logger.h"],
+    prefix = "include/behaviortree_cpp/loggers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_57",
+    srcs = ["include/behaviortree_cpp/loggers/bt_observer.h"],
+    prefix = "include/behaviortree_cpp/loggers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_58",
+    srcs = ["include/behaviortree_cpp/loggers/bt_sqlite_logger.h"],
+    prefix = "include/behaviortree_cpp/loggers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_59",
+    srcs = ["include/behaviortree_cpp/loggers/groot2_protocol.h"],
+    prefix = "include/behaviortree_cpp/loggers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_60",
+    srcs = ["include/behaviortree_cpp/loggers/groot2_publisher.h"],
+    prefix = "include/behaviortree_cpp/loggers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_61",
+    srcs = ["include/behaviortree_cpp/scripting/any_types.hpp"],
+    prefix = "include/behaviortree_cpp/scripting",
+)
+
+pkg_files(
+    name = "pkg_files_inc_62",
+    srcs = ["include/behaviortree_cpp/scripting/operators.hpp"],
+    prefix = "include/behaviortree_cpp/scripting",
+)
+
+pkg_files(
+    name = "pkg_files_inc_63",
+    srcs = ["include/behaviortree_cpp/scripting/script_parser.hpp"],
+    prefix = "include/behaviortree_cpp/scripting",
+)
+
+pkg_files(
+    name = "pkg_files_inc_64",
+    srcs = ["include/behaviortree_cpp/tree_node.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_inc_65",
+    srcs = ["include/behaviortree_cpp/utils/callback_gate.h"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_66",
+    srcs = ["include/behaviortree_cpp/utils/convert_impl.hpp"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_67",
+    srcs = ["include/behaviortree_cpp/utils/demangle_util.h"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_68",
+    srcs = ["include/behaviortree_cpp/utils/locked_reference.hpp"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_69",
+    srcs = ["include/behaviortree_cpp/utils/platform.hpp"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_70",
+    srcs = ["include/behaviortree_cpp/utils/polymorphic_cast_registry.hpp"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_71",
+    srcs = ["include/behaviortree_cpp/utils/safe_any.hpp"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_72",
+    srcs = ["include/behaviortree_cpp/utils/shared_library.h"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_73",
+    srcs = ["include/behaviortree_cpp/utils/signal.h"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_74",
+    srcs = ["include/behaviortree_cpp/utils/simple_string.hpp"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_75",
+    srcs = ["include/behaviortree_cpp/utils/strcat.hpp"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_76",
+    srcs = ["include/behaviortree_cpp/utils/timer_queue.h"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_77",
+    srcs = ["include/behaviortree_cpp/utils/wakeup_signal.hpp"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_78",
+    srcs = ["include/behaviortree_cpp/utils/wildcards.hpp"],
+    prefix = "include/behaviortree_cpp/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_79",
+    srcs = ["include/behaviortree_cpp/xml_parsing.h"],
+    prefix = "include/behaviortree_cpp",
+)
+
+pkg_files(
+    name = "pkg_files_shlib_crossdoor_nodes_dyn",
+    srcs = [":crossdoor_nodes_dyn"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "share/behaviortree_cpp/bt_plugins",
+)
+
+pkg_files(
+    name = "pkg_files_shlib_dummy_nodes_dyn",
+    srcs = [":dummy_nodes_dyn"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "share/behaviortree_cpp/bt_plugins",
+)
+
+pkg_files(
+    name = "pkg_files_shlib_movebase_node_dyn",
+    srcs = [":movebase_node_dyn"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "share/behaviortree_cpp/bt_plugins",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_83",
+    srcs = [":gen_cmake_83"],
+    prefix = "share/behaviortree_cpp/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_84",
+    srcs = [":gen_cmake_84"],
+    prefix = "share/behaviortree_cpp/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_85",
+    srcs = [":gen_cmake_85"],
+    prefix = "share/behaviortree_cpp/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_86",
+    srcs = [":gen_cmake_86"],
+    prefix = "share/behaviortree_cpp/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":behaviortree_cpp"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -27,7 +992,217 @@ ament_package(
         "@ament_index_cpp//:ament_package",
         "@rclcpp//:ament_package",
         "@ros_environment//:ament_package",
-        "@rosdistro//:ament_package",
+        "@tinyxml2_vendor//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "behaviortree_cpp_test",
+    srcs = [
+        "tests/gtest_any.cpp",
+        "tests/gtest_basic_types.cpp",
+        "tests/gtest_blackboard.cpp",
+        "tests/gtest_blackboard_thread_safety.cpp",
+        "tests/gtest_coroutines.cpp",
+        "tests/gtest_decorator.cpp",
+        "tests/gtest_enums.cpp",
+        "tests/gtest_exception_tracking.cpp",
+        "tests/gtest_factory.cpp",
+        "tests/gtest_fallback.cpp",
+        "tests/gtest_groot2_publisher_integration.cpp",
+        "tests/gtest_if_then_else.cpp",
+        "tests/gtest_interface.cpp",
+        "tests/gtest_json.cpp",
+        "tests/gtest_loggers.cpp",
+        "tests/gtest_loop.cpp",
+        "tests/gtest_match.cpp",
+        "tests/gtest_name_validation.cpp",
+        "tests/gtest_parallel.cpp",
+        "tests/gtest_plugin_issue953.cpp",
+        "tests/gtest_polymorphic_ports.cpp",
+        "tests/gtest_port_type_rules.cpp",
+        "tests/gtest_ports.cpp",
+        "tests/gtest_postconditions.cpp",
+        "tests/gtest_preconditions.cpp",
+        "tests/gtest_reactive.cpp",
+        "tests/gtest_reactive_backchaining.cpp",
+        "tests/gtest_sequence.cpp",
+        "tests/gtest_simple_string.cpp",
+        "tests/gtest_skipping.cpp",
+        "tests/gtest_substitution.cpp",
+        "tests/gtest_subtree.cpp",
+        "tests/gtest_switch.cpp",
+        "tests/gtest_tree.cpp",
+        "tests/gtest_try_catch.cpp",
+        "tests/gtest_updates.cpp",
+        "tests/gtest_wakeup.cpp",
+        "tests/gtest_while_do_else.cpp",
+        "tests/gtest_xml_null_subtree_id.cpp",
+        "tests/script_parser_test.cpp",
+        "tests/src/action_test_node.cpp",
+        "tests/src/condition_test_node.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [
+        ":ament_index",
+        ":crossdoor_nodes_dyn",
+        ":dummy_nodes_dyn",
+        ":movebase_node_dyn",
+        ":plugin_issue953",
+        ":test_plugin_action",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "3rdparty/cppzmq",
+        "3rdparty/flatbuffers",
+        "3rdparty/minicoro",
+        "3rdparty/minitrace",
+        "include",
+        "include/behaviortree_cpp",
+        "sample_nodes",
+        "tests",
+        "tests/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "BT_PLUGIN_ISSUE953_PATH=\\\"../behaviortree_cpp+/libplugin_issue953.so\\\"",
+        "BT_TEST_FOLDER=\\\"../behaviortree_cpp+/tests\\\"",
+        "USING_ROS2",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":behaviortree_cpp_library",
+        ":bt_sample_nodes_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = ["ament_index_cpp"],
+    cmake_export_include_directories = False,
+    cmake_export_targets = False,
+    install = [
+        ":pkg_files_inc_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_inc_2",
+        ":pkg_files_inc_3",
+        ":pkg_files_inc_4",
+        ":pkg_files_inc_5",
+        ":pkg_files_inc_6",
+        ":pkg_files_inc_7",
+        ":pkg_files_inc_8",
+        ":pkg_files_inc_9",
+        ":pkg_files_inc_10",
+        ":pkg_files_inc_11",
+        ":pkg_files_inc_12",
+        ":pkg_files_inc_13",
+        ":pkg_files_inc_14",
+        ":pkg_files_inc_15",
+        ":pkg_files_inc_16",
+        ":pkg_files_inc_17",
+        ":pkg_files_inc_18",
+        ":pkg_files_inc_19",
+        ":pkg_files_inc_20",
+        ":pkg_files_inc_21",
+        ":pkg_files_inc_22",
+        ":pkg_files_inc_23",
+        ":pkg_files_inc_24",
+        ":pkg_files_inc_25",
+        ":pkg_files_inc_26",
+        ":pkg_files_inc_27",
+        ":pkg_files_inc_28",
+        ":pkg_files_inc_29",
+        ":pkg_files_inc_30",
+        ":pkg_files_inc_31",
+        ":pkg_files_inc_32",
+        ":pkg_files_inc_33",
+        ":pkg_files_inc_34",
+        ":pkg_files_inc_35",
+        ":pkg_files_inc_36",
+        ":pkg_files_inc_37",
+        ":pkg_files_inc_38",
+        ":pkg_files_inc_39",
+        ":pkg_files_inc_40",
+        ":pkg_files_inc_41",
+        ":pkg_files_inc_42",
+        ":pkg_files_inc_43",
+        ":pkg_files_inc_44",
+        ":pkg_files_inc_45",
+        ":pkg_files_inc_46",
+        ":pkg_files_inc_47",
+        ":pkg_files_inc_48",
+        ":pkg_files_inc_49",
+        ":pkg_files_inc_50",
+        ":pkg_files_inc_51",
+        ":pkg_files_inc_52",
+        ":pkg_files_inc_53",
+        ":pkg_files_inc_54",
+        ":pkg_files_inc_55",
+        ":pkg_files_inc_56",
+        ":pkg_files_inc_57",
+        ":pkg_files_inc_58",
+        ":pkg_files_inc_59",
+        ":pkg_files_inc_60",
+        ":pkg_files_inc_61",
+        ":pkg_files_inc_62",
+        ":pkg_files_inc_63",
+        ":pkg_files_inc_64",
+        ":pkg_files_inc_65",
+        ":pkg_files_inc_66",
+        ":pkg_files_inc_67",
+        ":pkg_files_inc_68",
+        ":pkg_files_inc_69",
+        ":pkg_files_inc_70",
+        ":pkg_files_inc_71",
+        ":pkg_files_inc_72",
+        ":pkg_files_inc_73",
+        ":pkg_files_inc_74",
+        ":pkg_files_inc_75",
+        ":pkg_files_inc_76",
+        ":pkg_files_inc_77",
+        ":pkg_files_inc_78",
+        ":pkg_files_inc_79",
+        ":pkg_files_shlib_crossdoor_nodes_dyn",
+        ":pkg_files_shlib_dummy_nodes_dyn",
+        ":pkg_files_shlib_movebase_node_dyn",
+        ":pkg_files_cmake_83",
+        ":pkg_files_cmake_84",
+        ":pkg_files_cmake_85",
+        ":pkg_files_cmake_86",
+    ],
+    libraries = [":behaviortree_cpp"],
+    package_xml = "package.xml",
+    programs = [
+        ":bt4_nodes_model",
+        ":bt4_plugin_manifest",
+    ],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_environment//:ament_package",
         "@tinyxml2_vendor//:ament_package",
     ],
 )
