@@ -1,0 +1,180 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+write_file(
+    name = "_meta_file_0",
+    out = "_gen_meta/share/backward_ros/cmake/backward_rosConfig.cmake",
+    content = [
+        "",
+        "####### Expanded from @PACKAGE_INIT@ by configure_package_config_file() #######",
+        "####### Any changes to this file will be overwritten by the next CMake run ####",
+        "####### The input file was backward_rosConfig.cmake.in                            ########",
+        "",
+        "get_filename_component(PACKAGE_PREFIX_DIR \"${CMAKE_CURRENT_LIST_DIR}/../../../\" ABSOLUTE)",
+        "",
+        "macro(set_and_check _var _file)",
+        "  set(${_var} \"${_file}\")",
+        "  if(NOT EXISTS \"${_file}\")",
+        "    message(FATAL_ERROR \"File or directory ${_file} referenced by variable ${_var} does not exist !\")",
+        "  endif()",
+        "endmacro()",
+        "",
+        "macro(check_required_components _NAME)",
+        "  foreach(comp ${${_NAME}_FIND_COMPONENTS})",
+        "    if(NOT ${_NAME}_${comp}_FOUND)",
+        "      if(${_NAME}_FIND_REQUIRED_${comp})",
+        "        set(${_NAME}_FOUND FALSE)",
+        "      endif()",
+        "    endif()",
+        "  endforeach()",
+        "endmacro()",
+        "",
+        "####################################################################################",
+        "set_and_check(backward_ros_INCLUDE_DIRS \"${PACKAGE_PREFIX_DIR}/include\")",
+        "if(WIN32)",
+        "set_and_check(backward_ros_LIBRARIES \"${PACKAGE_PREFIX_DIR}/lib/backward.lib\")",
+        "elseif(APPLE)",
+        "set_and_check(backward_ros_LIBRARIES \"${PACKAGE_PREFIX_DIR}/lib/libbackward.dylib\")",
+        "else()",
+        "set_and_check(backward_ros_LIBRARIES \"${PACKAGE_PREFIX_DIR}/lib/libbackward.so\")",
+        "endif()",
+        "check_required_components(backward_ros)",
+        "include(${PACKAGE_PREFIX_DIR}/share/backward_ros/cmake/BackwardConfigAment.cmake)",
+    ],
+    is_executable = False,
+)
+
+pkg_files(
+    name = "meta_files_0",
+    srcs = [":_meta_file_0"],
+    prefix = "share/backward_ros/cmake",
+)
+
+### LIBRARIES
+
+HEADERS = glob(
+    [
+        "include/**/*.hpp",
+        "include/**/*.h",
+    ],
+    allow_empty = True,
+)
+
+cc_library(
+    name = "backward_library",
+    srcs = ["src/backward.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    linkopts = select({
+        "@platforms//os:windows": ["-ldbghelp"],
+        "//conditions:default": [],
+    }),
+    local_defines = ros_local_defines(),
+)
+
+cc_shared_library(
+    name = "backward",
+    exports_filter = [":backward_library"],
+    deps = [":backward_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":backward"],
+    visibility = ["//visibility:private"],
+)
+
+### TESTING
+
+cc_library(
+    name = "test_main_library",
+    srcs = ["test/_test_main.cpp"],
+    hdrs = ["test/test.hpp"],
+    local_defines = ros_local_defines(),
+    deps = [":backward_library"],
+)
+
+cc_shared_library(
+    name = "test_main",
+    dynamic_deps = [":backward"],
+    exports_filter = [":test_main_library"],
+    deps = [":test_main_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "test_transitive_dynamic_deps",
+    dynamic_deps = [
+        ":backward",
+        ":test_main",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+[
+    cc_test(
+        name = "test_{}".format(test),
+        srcs = [
+            "test/{}.cpp".format(test),
+            "test/test.hpp",
+        ],
+        dynamic_deps = [":test_transitive_dynamic_deps"],
+        local_defines = ros_local_defines(),
+        deps = [
+            ":backward_library",
+            ":test_main_library",
+        ],
+    )
+    for test in [
+        "test",
+        "stacktrace",
+        "rectrace",
+        "select_signals",
+        "suicide",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    cmake = glob(["cmake/**"]),
+    headers = HEADERS,
+    include_prefix = "",
+    install = [":meta_files_0"],
+    libraries = [":backward"],
+    package_xml = "package.xml",
+    deps = [
+        "@rosdistro//:ament_package",
+    ],
+)
