@@ -1,0 +1,144 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ecl_errors//:ecl_errors": "@ecl_errors//:ecl_errors_library",
+}
+
+CC_DEPS = [
+    "@ecl_config//:ecl_config",
+    "@ecl_config//:ecl_config_library",
+]
+
+cc_library(
+    name = "ecl_exceptions_library",
+    srcs = ["src/lib/standard_exception.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ecl_exceptions",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":ecl_exceptions_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ecl_exceptions"],
+)
+
+cc_binary(
+    name = "demo_exception_tracer",
+    srcs = ["src/examples/exception_tracer.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ecl_exceptions_library"],
+)
+
+cc_binary(
+    name = "demo_exceptions",
+    srcs = ["src/examples/exceptions.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ecl_exceptions_library"],
+)
+
+pkg_files(
+    name = "pkg_files_soname_0",
+    srcs = [":ecl_exceptions"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":ecl_exceptions": "libecl_exceptions.so.1.2.1"},
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":demo_exception_tracer",
+        ":demo_exceptions",
+    ],
+    libraries = [":ecl_exceptions"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@ecl_build//:ament_package",
+        "@ecl_config//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_license//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ecl_config",
+        "ecl_errors",
+    ],
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install = [":pkg_files_soname_0"],
+    libraries = [":ecl_exceptions"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@ecl_build//:ament_package",
+        "@ecl_config//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_license//:ament_package",
+    ],
+)
