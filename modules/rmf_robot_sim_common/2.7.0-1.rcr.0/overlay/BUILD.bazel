@@ -1,25 +1,126 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rmf_building_map_msgs//:cc",
+    "@rmf_fleet_msgs//:cc",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "rmf_robot_sim_utils_library",
+    srcs = ["src/utils.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        "include",
+        "include/rmf_robot_sim_common",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rmf_robot_sim_utils",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rmf_robot_sim_utils_library"],
+)
+
+cc_library(
+    name = "readonly_common_library",
+    srcs = ["src/readonly_common.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        "include",
+        "include/rmf_robot_sim_common",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":rmf_robot_sim_utils_library"],
+)
+
+cc_shared_library(
+    name = "readonly_common",
+    dynamic_deps = DEPENDENCIES.keys() + [":rmf_robot_sim_utils"],
+    deps = [":readonly_common_library"],
+)
+
+cc_library(
+    name = "slotcar_common_library",
+    srcs = ["src/slotcar_common.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        "include",
+        "include/rmf_robot_sim_common",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "slotcar_common",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":slotcar_common_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":rmf_robot_sim_utils",
+        ":readonly_common",
+        ":slotcar_common",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -28,7 +129,50 @@ ament_package(
         "@rclcpp//:ament_package",
         "@rmf_building_map_msgs//:ament_package",
         "@rmf_fleet_msgs//:ament_package",
-        "@rosdistro//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "Eigen3",
+        "rclcpp",
+        "geometry_msgs",
+        "tf2_ros",
+        "rmf_fleet_msgs",
+        "rmf_building_map_msgs",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_libraries = False,
+    cmake_export_sets = {
+        "readonly_common": ["readonly_common"],
+        "rmf_robot_sim_utils": ["rmf_robot_sim_utils"],
+        "slotcar_common": ["slotcar_common"],
+    },
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":rmf_robot_sim_utils",
+        ":readonly_common",
+        ":slotcar_common",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rmf_building_map_msgs//:ament_package",
+        "@rmf_fleet_msgs//:ament_package",
         "@tf2_ros//:ament_package",
     ],
 )
