@@ -1,0 +1,138 @@
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:curl": "@rosdistro//cc:curl_library",
+}
+
+CC_DEPS = [
+    "@diagnostic_msgs//:cc",
+]
+
+cc_library(
+    name = "influx_component_library",
+    srcs = ["src/influxdb_connector.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/diagnostic_remote_logging",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "influx_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":influx_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "influxdb_connector",
+    component = ":influx_component",
+    node_name = "influxdb_connector",
+    plugin = "InfluxDBConnector",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":influx_component"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":influxdb_connector_record"],
+    lib_data = [":influxdb_connector"],
+    libraries = [":influx_component"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@rclcpp_components//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "unit_tests",
+    srcs = ["test/influx_line_protocol.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/diagnostic_remote_logging",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":influx_component_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "influx_component",
+        "ament_cmake",
+        "rclcpp",
+        "rclcpp_components",
+        "diagnostic_msgs",
+        "CURL",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_influx_component",
+    libraries = [":influx_component"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@rclcpp_components//:ament_package",
+    ],
+)
