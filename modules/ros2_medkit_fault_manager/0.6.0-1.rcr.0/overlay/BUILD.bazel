@@ -1,0 +1,665 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@ros2_medkit_serialization//:ros2_medkit_serialization": "@ros2_medkit_serialization//:ros2_medkit_serialization_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosbag2_storage//:rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:sqlite3": "@rosdistro//cc:sqlite3_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@ros2_medkit_msgs//:cc",
+    "@rosdistro//cc:nlohmann_json",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "fault_manager_lib_library",
+    srcs = [
+        "src/capture_thread_pool.cpp",
+        "src/correlation/config_parser.cpp",
+        "src/correlation/correlation_engine.cpp",
+        "src/correlation/pattern_matcher.cpp",
+        "src/correlation/types.cpp",
+        "src/entity_threshold_resolver.cpp",
+        "src/fault_manager_node.cpp",
+        "src/fault_storage.cpp",
+        "src/rosbag_capture.cpp",
+        "src/snapshot_capture.cpp",
+        "src/sqlite_fault_storage.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "fault_manager_node",
+    srcs = ["src/main.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":fault_manager_lib_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/fault_manager.yaml",
+        "config/snapshots.yaml",
+        "launch/fault_manager.launch.py",
+        "test/test_capture_thread_pool.cpp",
+        "test/test_correlation.yaml",
+        "test/test_correlation_config_parser.cpp",
+        "test/test_correlation_engine.cpp",
+        "test/test_entity_thresholds.cpp",
+        "test/test_entity_thresholds.yaml",
+        "test/test_entity_thresholds_integration.test.py",
+        "test/test_fault_manager.cpp",
+        "test/test_integration.test.py",
+        "test/test_pattern_matcher.cpp",
+        "test/test_rosbag_capture.cpp",
+        "test/test_rosbag_entity_scope.test.py",
+        "test/test_rosbag_integration.test.py",
+        "test/test_snapshot_capture.cpp",
+        "test/test_snapshots.yaml",
+        "test/test_sqlite_storage.cpp",
+    ],
+    lib_data = [":fault_manager_node"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_clang_tidy//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros2_medkit_cmake//:ament_package",
+        "@ros2_medkit_msgs//:ament_package",
+        "@ros2_medkit_serialization//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosbag2_storage_mcap//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_capture_thread_pool",
+    srcs = ["test/test_capture_thread_pool.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fault_manager_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_correlation_config_parser",
+    srcs = ["test/test_correlation_config_parser.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fault_manager_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_correlation_engine",
+    srcs = ["test/test_correlation_engine.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fault_manager_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_entity_thresholds",
+    srcs = ["test/test_entity_thresholds.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fault_manager_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_fault_manager",
+    srcs = ["test/test_fault_manager.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fault_manager_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_pattern_matcher",
+    srcs = ["test/test_pattern_matcher.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fault_manager_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_rosbag_capture",
+    srcs = ["test/test_rosbag_capture.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fault_manager_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_snapshot_capture",
+    srcs = ["test/test_snapshot_capture.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fault_manager_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_sqlite_storage",
+    srcs = ["test/test_sqlite_storage.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fault_manager_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+py_pytest(
+    name = "test_integration",
+    srcs = ["test/test_integration.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":ament_index",
+        ":fault_manager_node",
+    ],
+    deps = [
+        "@ament_index_python",
+        "@launch",
+        "@launch//:test_support",
+        "@launch_ros",
+        "@launch_testing_ros",
+        "@ros2_medkit_msgs//:py",
+        "@rosbag2_py",
+        "@rosbag2_py//:test_common",
+        "@rosbag2_storage_mcap//:ros2bag_mcap_cli",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_rosbag_integration",
+    srcs = ["test/test_rosbag_integration.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":ament_index",
+        ":fault_manager_node",
+    ],
+    deps = [
+        "@ament_index_python",
+        "@launch",
+        "@launch//:test_support",
+        "@launch_ros",
+        "@launch_testing_ros",
+        "@ros2_medkit_msgs//:py",
+        "@rosbag2_py",
+        "@rosbag2_py//:test_common",
+        "@rosbag2_storage_mcap//:ros2bag_mcap_cli",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_entity_thresholds_integration",
+    srcs = ["test/test_entity_thresholds_integration.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":ament_index",
+        ":fault_manager_node",
+    ],
+    deps = [
+        "@ament_index_python",
+        "@launch",
+        "@launch//:test_support",
+        "@launch_ros",
+        "@launch_testing_ros",
+        "@ros2_medkit_msgs//:py",
+        "@rosbag2_py",
+        "@rosbag2_py//:test_common",
+        "@rosbag2_storage_mcap//:ros2bag_mcap_cli",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_rosbag_entity_scope",
+    srcs = ["test/test_rosbag_entity_scope.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":ament_index",
+        ":fault_manager_node",
+    ],
+    deps = [
+        "@ament_index_python",
+        "@launch",
+        "@launch//:test_support",
+        "@launch_ros",
+        "@launch_testing_ros",
+        "@ros2_medkit_msgs//:py",
+        "@rosbag2_py",
+        "@rosbag2_py//:test_common",
+        "@rosbag2_storage_mcap//:ros2bag_mcap_cli",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_clang_tidy//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros2_medkit_cmake//:ament_package",
+        "@ros2_medkit_msgs//:ament_package",
+        "@ros2_medkit_serialization//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosbag2_storage_mcap//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
