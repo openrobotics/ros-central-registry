@@ -1,0 +1,205 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@@rosidl_typesupport_introspection_c+//:rosidl_typesupport_introspection_c": "@@rosidl_typesupport_introspection_c+//:rosidl_typesupport_introspection_c_library",
+    "@@rosidl_typesupport_introspection_cpp+//:rosidl_typesupport_introspection_cpp": "@@rosidl_typesupport_introspection_cpp+//:rosidl_typesupport_introspection_cpp_library",
+    "@@urdf+//:urdf": "@@urdf+//:urdf_library",
+    "@@urdfdom+//:urdfdom_world": "@@urdfdom+//:urdfdom_world_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosbag2_storage//:rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@inverse_dynamics_solver//:inverse_dynamics_solver_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@trajectory_msgs//:cc",
+]
+
+cc_library(
+    name = "ur10_inverse_dynamics_solver_library",
+    srcs = [
+        "src/getCoriolisCurrents.cpp",
+        "src/getCurrents.cpp",
+        "src/getGravityCurrents.cpp",
+        "src/getInertiaCurrents.cpp",
+        "src/ur10_inverse_dynamics_solver.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/ur10_inverse_dynamics_solver",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ur10_inverse_dynamics_solver",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":ur10_inverse_dynamics_solver_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ur10_inverse_dynamics_solver"],
+)
+
+cc_binary(
+    name = "ur10_inverse_dynamics_solver_test",
+    srcs = ["test/test_ur10_inverse_dynamics_solver.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ur10_inverse_dynamics_solver",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ur10_inverse_dynamics_solver_library",
+        "@rosdistro//cc:gtest_main",
+    ],
+)
+
+pkg_files(
+    name = "pkg_files_share_0",
+    srcs = ["test/bagfiles/metadata.yaml"],
+    prefix = "share/ur10_inverse_dynamics_solver/bagfiles",
+)
+
+pkg_files(
+    name = "pkg_files_share_2",
+    srcs = ["test/bagfiles/validation_trajectory.db3"],
+    prefix = "share/ur10_inverse_dynamics_solver/bagfiles",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "bagfiles/ur10_exciting_trajectory.db3",
+        "launch/evaluate_solver_ur10.launch.py",
+    ],
+    lib_data = [":ur10_inverse_dynamics_solver_test"],
+    libraries = [":ur10_inverse_dynamics_solver"],
+    package_xml = "package.xml",
+    plugin_category = "inverse_dynamics_solver",
+    plugins = ["ur10_inverse_dynamics_solver.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@inverse_dynamics_solver//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_testing//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosbag2_storage_default_plugins//:ament_package",
+        "@trajectory_msgs//:ament_package",
+        "@ur_description//:ament_package",
+    ],
+)
+
+py_pytest(
+    name = "test_test_ur10_inverse_dynamics_solver.py",
+    srcs = ["test/test_ur10_inverse_dynamics_solver.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":ament_index",
+        ":ur10_inverse_dynamics_solver_test",
+    ],
+    deps = [
+        "@rosbag2_storage_default_plugins//:rosbag2_storage_default_plugins_py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "pluginlib",
+        "inverse_dynamics_solver",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_ur10_inverse_dynamics_solver",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install = [
+        ":pkg_files_share_0",
+        ":pkg_files_share_2",
+    ],
+    libraries = [":ur10_inverse_dynamics_solver"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@inverse_dynamics_solver//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_testing//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosbag2_storage_default_plugins//:ament_package",
+        "@trajectory_msgs//:ament_package",
+        "@ur_description//:ament_package",
+    ],
+)
