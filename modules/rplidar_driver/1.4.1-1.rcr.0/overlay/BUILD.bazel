@@ -1,0 +1,247 @@
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-2-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@lifecycle_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "rplidar_sdk_library",
+    srcs = [
+        "src/sdk/src/arch/linux/net_serial.cpp",
+        "src/sdk/src/arch/linux/net_socket.cpp",
+        "src/sdk/src/arch/linux/timer.cpp",
+        "src/sdk/src/dataunpacker/dataunpacker.cpp",
+        "src/sdk/src/dataunpacker/unpacker/handler_capsules.cpp",
+        "src/sdk/src/dataunpacker/unpacker/handler_hqnode.cpp",
+        "src/sdk/src/dataunpacker/unpacker/handler_normalnode.cpp",
+        "src/sdk/src/hal/thread.cpp",
+        "src/sdk/src/rplidar_driver.cpp",
+        "src/sdk/src/sl_async_transceiver.cpp",
+        "src/sdk/src/sl_crc.cpp",
+        "src/sdk/src/sl_lidar_driver.cpp",
+        "src/sdk/src/sl_lidarprotocol_codec.cpp",
+        "src/sdk/src/sl_serial_channel.cpp",
+        "src/sdk/src/sl_tcp_channel.cpp",
+        "src/sdk/src/sl_udp_channel.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "src/sdk/include",
+        "src/sdk/src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_library(
+    name = "rplidar_node_component_library",
+    srcs = [
+        "src/lidar_driver_wrapper.cpp",
+        "src/rplidar_node.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "src/sdk/include",
+        "src/sdk/src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":rplidar_sdk_library"],
+)
+
+cc_shared_library(
+    name = "rplidar_node_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":rplidar_node_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "rplidar_node",
+    component = ":rplidar_node_component",
+    node_name = "rplidar_node",
+    plugin = "rplidar_driver::RPlidarNode",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rplidar_node_component"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":rplidar_node_record"],
+    data = [
+        "config/debug.rviz",
+        "config/rplidar.rviz",
+        "launch/composition.launch.py",
+        "launch/debug_rviz.launch.py",
+        "launch/rplidar.launch.py",
+        "launch/rplidar_with_args.launch.py",
+        "param/rplidar.yaml",
+    ],
+    lib_data = [":rplidar_node"],
+    libraries = [":rplidar_node_component"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_cppcheck//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@launch_ros//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_rplidar_node",
+    srcs = ["test/test_rplidar_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "src/sdk/include",
+        "src/sdk/src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rplidar_node_component_library",
+        ":rplidar_sdk_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_rplidar_wrapper",
+    srcs = ["test/test_rplidar_wrapper.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "src/sdk/include",
+        "src/sdk/src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rplidar_node_component_library",
+        ":rplidar_sdk_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    libraries = [":rplidar_node_component"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_cppcheck//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@launch_ros//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
