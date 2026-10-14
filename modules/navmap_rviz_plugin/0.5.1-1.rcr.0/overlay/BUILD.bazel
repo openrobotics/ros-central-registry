@@ -1,0 +1,154 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@navmap_core//:navmap_core": "@navmap_core//:navmap_core_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_default_plugins//:rviz_default_plugins": "@rviz_default_plugins//:rviz_default_plugins_library",
+    "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@navmap_ros_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@rules_qt//:qt_widgets",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@visualization_msgs//:cc",
+]
+
+qt_cc_library(
+    name = "navmap_rviz_plugin_library",
+    srcs = [
+        "src/navmap_rviz_plugin/NavMapDisplay.cpp",
+        "src/navmap_rviz_plugin/navmap_goal_tool.cpp",
+        "src/navmap_rviz_plugin/navmap_pose_tool.cpp",
+    ],
+    hdrs = [
+        "include/navmap_rviz_plugin/NavMapDisplay.hpp",
+        "include/navmap_rviz_plugin/navmap_goal_tool.hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "char_traits_patch.h",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/navmap_ros",
+        "include",
+        "include/navmap_rviz_plugin",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    normal_hdrs = [
+        "include/navmap_rviz_plugin/navmap_pose_tool.hpp",
+        ":gen_navmap_ros_conversions_hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "navmap_rviz_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":navmap_rviz_plugin_library",
+        "//:__subpackages__",
+    ],
+    deps = [":navmap_rviz_plugin_library"],
+)
+
+write_file(
+    name = "gen_navmap_ros_conversions_hpp",
+    out = "_gen/include/navmap_ros/conversions.hpp",
+    content = ["#ifndef NAVMAP_ROS__CONVERSIONS_HPP_\n#define NAVMAP_ROS__CONVERSIONS_HPP_\n#include \"navmap_core/NavMap.hpp\"\n#include \"navmap_ros_interfaces/msg/nav_map.hpp\"\n#include \"navmap_ros_interfaces/msg/nav_map_layer.hpp\"\nnamespace navmap_ros {\nnavmap::NavMap from_msg(const navmap_ros_interfaces::msg::NavMap & msg);\n}  // namespace navmap_ros\n#endif\n"],
+)
+
+pkg_files(
+    name = "pkg_files_share_1",
+    srcs = ["resource/navmap_rviz_plugin_description.xml"],
+    prefix = "share/navmap_rviz_plugin",
+)
+
+ament_index(
+    name = "ament_index",
+    data = ["icons/classes/NavMapSetGoal.png"],
+    libraries = [":navmap_rviz_plugin"],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["resource/navmap_rviz_plugin_description.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@navmap_core//:ament_package",
+        "@navmap_ros//:ament_package",
+        "@navmap_ros_interfaces//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "Qt6",
+        "rclcpp",
+        "pluginlib",
+        "rviz_common",
+        "rviz_rendering",
+        "rviz_default_plugins",
+        "navmap_ros_interfaces",
+        "geometry_msgs",
+        "std_msg",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_name = "export_navmap_rviz_plugin",
+    install = [":pkg_files_share_1"],
+    libraries = [":navmap_rviz_plugin"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@navmap_core//:ament_package",
+        "@navmap_ros//:ament_package",
+        "@navmap_ros_interfaces//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
