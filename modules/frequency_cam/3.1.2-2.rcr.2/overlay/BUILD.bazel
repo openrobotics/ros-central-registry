@@ -1,0 +1,192 @@
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@event_camera_codecs//:codec": "@event_camera_codecs//:codec_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@event_camera_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "frequency_cam_library",
+    srcs = [
+        "src/frequency_cam.cpp",
+        "src/frequency_cam_ros2.cpp",
+        "src/image_maker.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/frequency_cam",
+    ],
+    local_defines = ros_local_defines() + [
+        "IMAGE_TRANSPORT_USE_NODEINTERFACE",
+        "IMAGE_TRANSPORT_USE_QOS",
+        "USE_CV_BRIDGE_HPP",
+        "USE_MATCHED_EVENTS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "frequency_cam",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":frequency_cam_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "frequency_cam_components",
+    component = ":frequency_cam",
+    plugins = ["frequency_cam::FrequencyCamROS"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":frequency_cam"],
+)
+
+cc_binary(
+    name = "cpu_benchmark",
+    srcs = ["src/cpu_benchmark.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/frequency_cam",
+    ],
+    local_defines = ros_local_defines() + [
+        "IMAGE_TRANSPORT_USE_NODEINTERFACE",
+        "IMAGE_TRANSPORT_USE_QOS",
+        "USE_CV_BRIDGE_HPP",
+        "USE_MATCHED_EVENTS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":frequency_cam_library"],
+)
+
+cc_binary(
+    name = "frequency_cam_node",
+    srcs = ["src/frequency_cam_node_ros2.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/frequency_cam",
+    ],
+    local_defines = ros_local_defines() + [
+        "IMAGE_TRANSPORT_USE_NODEINTERFACE",
+        "IMAGE_TRANSPORT_USE_QOS",
+        "USE_CV_BRIDGE_HPP",
+        "USE_MATCHED_EVENTS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":frequency_cam_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":frequency_cam_components"],
+    data = ["launch/frequency_cam.launch.py"],
+    lib_data = [
+        ":cpu_benchmark",
+        ":frequency_cam_node",
+    ],
+    libraries = [":frequency_cam"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@event_camera_codecs//:ament_package",
+        "@event_camera_msgs//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    libraries = [":frequency_cam"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@event_camera_codecs//:ament_package",
+        "@event_camera_msgs//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
