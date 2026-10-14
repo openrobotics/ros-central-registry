@@ -1,0 +1,297 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@navmap_core//:navmap_core": "@navmap_core//:navmap_core_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+}
+
+CC_DEPS = [
+    "@@std_msgs+//:cc",
+    "@geometry_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@navmap_ros_interfaces//:cc",
+    "@pcl_conversions//:pcl_conversions_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:pcl_common",
+    "@rosdistro//cc:pcl_io",
+    "@rosdistro//cc:pcl_kdtree",
+    "@rosdistro//cc:pcl_octree",
+    "@rosdistro//cc:pcl_search",
+    "@sensor_msgs//:cc",
+    "@std_srvs//:cc",
+]
+
+cc_library(
+    name = "navmap_ros_library",
+    srcs = [
+        "src/navmap_ros/conversions.cpp",
+        "src/navmap_ros/navmap_io.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++23"],
+    includes = [
+        "include",
+        "include/navmap_ros",
+        "tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "navmap_ros",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":navmap_ros_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "slam_server_app",
+    srcs = ["src/slam_server_app.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++23"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/navmap_ros",
+        "tests",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":navmap_ros_library"],
+)
+
+write_file(
+    name = "gen_cmake_4",
+    out = "_gen/share/navmap_ros/cmake/ament_cmake_export_include_directories-extras.cmake",
+    content = ["# generated from ament_cmake_export_include_directories/cmake/ament_cmake_export_include_directories-extras.cmake.in\n\nset(_exported_include_dirs \"${navmap_ros_DIR}/../../../include/navmap_ros\")\n\n# append include directories to navmap_ros_INCLUDE_DIRS\n# warn about not existing paths\nif(NOT _exported_include_dirs STREQUAL \"\")\n  find_package(ament_cmake_core QUIET REQUIRED)\n  foreach(_exported_include_dir ${_exported_include_dirs})\n    if(NOT IS_DIRECTORY \"${_exported_include_dir}\")\n      message(WARNING \"Package 'navmap_ros' exports the include directory '${_exported_include_dir}' which doesn't exist\")\n    endif()\n    normalize_path(_exported_include_dir \"${_exported_include_dir}\")\n    list(APPEND navmap_ros_INCLUDE_DIRS \"${_exported_include_dir}\")\n  endforeach()\nendif()\n"],
+)
+
+pkg_files(
+    name = "pkg_files_inc_0",
+    srcs = ["include/navmap_ros/conversions.hpp"],
+    prefix = "include/navmap_ros",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["include/navmap_ros/navmap_io.hpp"],
+    prefix = "include/navmap_ros",
+)
+
+pkg_files(
+    name = "pkg_files_inc_2",
+    srcs = ["include/navmap_ros/conversions.hpp"],
+    prefix = "include/navmap_ros/navmap_ros",
+)
+
+pkg_files(
+    name = "pkg_files_inc_3",
+    srcs = ["include/navmap_ros/navmap_io.hpp"],
+    prefix = "include/navmap_ros/navmap_ros",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_4",
+    srcs = [":gen_cmake_4"],
+    prefix = "share/navmap_ros/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [":slam_server_app"],
+    libraries = [":navmap_ros"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@navmap_core//:ament_package",
+        "@navmap_ros_interfaces//:ament_package",
+        "@pcl_conversions//:ament_package",
+        "@pcl_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_conversions",
+    srcs = ["tests/test_conversions.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++23"],
+    data = [
+        ":ament_index",
+        ":navmap_ros",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/navmap_ros",
+        "tests",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":navmap_ros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_navmap_io",
+    srcs = ["tests/test_navmap_io.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++23"],
+    data = [
+        ":ament_index",
+        ":navmap_ros",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/navmap_ros",
+        "tests",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":navmap_ros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "navmap_core",
+        "navmap_ros_interfaces",
+        "nav_msgs",
+        "geometry_msgs",
+        "sensor_msgs",
+        "std_srvs",
+        "PCL",
+        "pcl_conversions",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_name = "export_navmap_ros",
+    install = [
+        ":pkg_files_inc_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_inc_2",
+        ":pkg_files_inc_3",
+        ":pkg_files_cmake_4",
+    ],
+    libraries = [":navmap_ros"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@navmap_core//:ament_package",
+        "@navmap_ros_interfaces//:ament_package",
+        "@pcl_conversions//:ament_package",
+        "@pcl_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+    ],
+)
