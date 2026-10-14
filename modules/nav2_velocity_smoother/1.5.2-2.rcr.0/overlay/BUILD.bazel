@@ -1,0 +1,211 @@
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@nav2_util//:nav2_util_core": "@nav2_util//:nav2_util_core_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@nav2_ros_common//:nav2_ros_common",
+    "@nav_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "velocity_smoother_core_library",
+    srcs = ["src/velocity_smoother.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        "include",
+        "include/nav2_velocity_smoother",
+        "test",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "velocity_smoother_core",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":velocity_smoother_core_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "velocity_smoother_core_components",
+    component = ":velocity_smoother_core",
+    plugins = ["nav2_velocity_smoother::VelocitySmoother"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":velocity_smoother_core"],
+)
+
+cc_binary(
+    name = "velocity_smoother",
+    srcs = ["src/main.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/nav2_velocity_smoother",
+        "test",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":velocity_smoother_core_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":velocity_smoother_core_components"],
+    lib_data = [":velocity_smoother"],
+    libraries = [":velocity_smoother_core"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@backward_ros//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "velocity_smoother_tests",
+    srcs = ["test/test_velocity_smoother.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/nav2_velocity_smoother",
+        "test",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":velocity_smoother_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "geometry_msgs",
+        "nav2_util",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "nav2_ros_common",
+    ],
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":velocity_smoother_core"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@backward_ros//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+    ],
+)
