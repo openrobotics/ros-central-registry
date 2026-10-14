@@ -1,0 +1,55 @@
+--- a/src/minimal_publisher_main.cpp
++++ b/src/minimal_publisher_main.cpp
+@@ -15,11 +15,42 @@
+ //
+ // SPDX-License-Identifier: Apache-2.0
+ 
++#include <atomic>
++#include <chrono>
++#include <csignal>
++#include <cstdlib>
++#include <thread>
++#include <unistd.h>
++
+ #include "minimal_publisher_node.hpp"
++
++namespace
++{
++std::atomic<bool> g_shutdown_requested{false};
++
++void sigterm_handler(int)
++{
++  g_shutdown_requested.store(true);
++}
++}  // namespace
+ 
+ int main(int argc, char * argv[])
+ {
++  // Stagger startup across simultaneously launched test publisher processes
++  // (whose PIDs increment by 2) to avoid FastDDS port/SHM discovery races.
++  std::this_thread::sleep_for(std::chrono::milliseconds(((getpid() / 2) % 8) * 40));
++
+   rclcpp::init(argc, argv);
++  std::signal(SIGTERM, sigterm_handler);
++  std::thread watchdog([]() {
++    while (!g_shutdown_requested.load() && rclcpp::ok()) {
++      std::this_thread::sleep_for(std::chrono::milliseconds(50));
++    }
++    std::this_thread::sleep_for(std::chrono::seconds(2));
++    std::_Exit(0);
++  });
++  watchdog.detach();
++
+   rclcpp::NodeOptions options;
+   auto node = std::make_shared<MinimalPublisher>(options);
+   try {
+@@ -29,6 +60,8 @@
+       node->get_logger(),
+       "Context became invalid during spin (expected during shutdown): %s", e.what());
+   }
++  g_shutdown_requested.store(true);
++  node.reset();
+   rclcpp::shutdown();
+-  return 0;
++  std::_Exit(0);
+ }
