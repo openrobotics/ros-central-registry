@@ -1,0 +1,296 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@can_msgs//:cc",
+    "@dataspeed_can_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "dataspeed_can_tools_library",
+    srcs = [
+        "src/CanExtractor.cpp",
+        "src/DbcIterator.cpp",
+        "src/DbcMessage.cpp",
+        "src/DbcSignal.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "dataspeed_can_tools",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":dataspeed_can_tools_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":dataspeed_can_tools"],
+)
+
+cc_binary(
+    name = "dbc_bag",
+    srcs = ["src/dbc_bag.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":dataspeed_can_tools_library"],
+)
+
+cc_binary(
+    name = "dbc_node",
+    srcs = ["src/dbc_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":dataspeed_can_tools_library"],
+)
+
+write_file(
+    name = "gen_cmake_1",
+    out = "_gen/share/dataspeed_can_tools/cmake/ament_cmake_export_libraries-extras.cmake",
+    content = ["# generated from ament_cmake_export_libraries/cmake/template/ament_cmake_export_libraries.cmake.in\n\nset(_exported_libraries \"dataspeed_can_tools\")\nset(_exported_library_names \"\")\n\n# populate dataspeed_can_tools_LIBRARIES\nif(NOT _exported_libraries STREQUAL \"\")\n  # loop over libraries, either target names or absolute paths\n  list(LENGTH _exported_libraries _length)\n  set(_i 0)\n  while(_i LESS _length)\n    list(GET _exported_libraries ${_i} _arg)\n\n    # pass linker flags along\n    if(\"${_arg}\" MATCHES \"^-\" AND NOT \"${_arg}\" MATCHES \"^-[l|framework]\")\n      list(APPEND dataspeed_can_tools_LIBRARIES \"${_arg}\")\n      math(EXPR _i \"${_i} + 1\")\n      continue()\n    endif()\n\n    if(\"${_arg}\" MATCHES \"^(debug|optimized|general)$\")\n      # remember build configuration keyword\n      # and get following library\n      set(_cfg \"${_arg}\")\n      math(EXPR _i \"${_i} + 1\")\n      if(_i EQUAL _length)\n        message(FATAL_ERROR \"Package 'dataspeed_can_tools' passes the build configuration keyword '${_cfg}' as the last exported library\")\n      endif()\n      list(GET _exported_libraries ${_i} _library)\n    else()\n      # the value is a library without a build configuration keyword\n      set(_cfg \"\")\n      set(_library \"${_arg}\")\n    endif()\n    math(EXPR _i \"${_i} + 1\")\n\n    if(NOT IS_ABSOLUTE \"${_library}\")\n      # search for library target relative to this CMake file\n      set(_lib \"NOTFOUND\")\n      find_library(\n        _lib NAMES \"${_library}\"\n        PATHS\n        # This is for packages that install libraries to destinations using GNUInstallDirs variables.\n        \"${dataspeed_can_tools_DIR}/../../../lib\"\n        # Historically ROS packages have installed libraries to this hardcoded lib directory.\n        \"${dataspeed_can_tools_DIR}/../../../lib\"\n        NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH\n      )\n\n      if(NOT _lib)\n        # warn about not existing library and ignore it\n        message(FATAL_ERROR \"Package 'dataspeed_can_tools' exports the library '${_library}' which couldn't be found\")\n      elseif(NOT IS_ABSOLUTE \"${_lib}\")\n        # the found library must be an absolute path\n        message(FATAL_ERROR \"Package 'dataspeed_can_tools' found the library '${_library}' at '${_lib}' which is not an absolute path\")\n      elseif(NOT EXISTS \"${_lib}\")\n        # the found library must exist\n        message(FATAL_ERROR \"Package 'dataspeed_can_tools' found the library '${_lib}' which doesn't exist\")\n      else()\n        list(APPEND dataspeed_can_tools_LIBRARIES ${_cfg} \"${_lib}\")\n      endif()\n\n    else()\n      if(NOT EXISTS \"${_library}\")\n        # the found library must exist\n        message(WARNING \"Package 'dataspeed_can_tools' exports the library '${_library}' which doesn't exist\")\n      else()\n        list(APPEND dataspeed_can_tools_LIBRARIES ${_cfg} \"${_library}\")\n      endif()\n    endif()\n  endwhile()\nendif()\n\n# find_library() library names with optional LIBRARY_DIRS\n# and add the libraries to dataspeed_can_tools_LIBRARIES\nif(NOT _exported_library_names STREQUAL \"\")\n  # loop over library names\n  # but remember related build configuration keyword if available\n  list(LENGTH _exported_library_names _length)\n  set(_i 0)\n  while(_i LESS _length)\n    list(GET _exported_library_names ${_i} _arg)\n    # pass linker flags along\n    if(\"${_arg}\" MATCHES \"^-\" AND NOT \"${_arg}\" MATCHES \"^-[l|framework]\")\n      list(APPEND dataspeed_can_tools_LIBRARIES \"${_arg}\")\n      math(EXPR _i \"${_i} + 1\")\n      continue()\n    endif()\n\n    if(\"${_arg}\" MATCHES \"^(debug|optimized|general)$\")\n      # remember build configuration keyword\n      # and get following library name\n      set(_cfg \"${_arg}\")\n      math(EXPR _i \"${_i} + 1\")\n      if(_i EQUAL _length)\n        message(FATAL_ERROR \"Package 'dataspeed_can_tools' passes the build configuration keyword '${_cfg}' as the last exported target\")\n      endif()\n      list(GET _exported_library_names ${_i} _library)\n    else()\n      # the value is a library target without a build configuration keyword\n      set(_cfg \"\")\n      set(_library \"${_arg}\")\n    endif()\n    math(EXPR _i \"${_i} + 1\")\n\n    # extract optional LIBRARY_DIRS from library name\n    string(REPLACE \":\" \";\" _library_dirs \"${_library}\")\n    list(GET _library_dirs 0 _library_name)\n    list(REMOVE_AT _library_dirs 0)\n\n    set(_lib \"NOTFOUND\")\n    if(NOT _library_dirs)\n      # search for library in the common locations\n      find_library(\n        _lib\n        NAMES \"${_library_name}\"\n      )\n      if(NOT _lib)\n        # warn about not existing library and later ignore it\n        message(WARNING \"Package 'dataspeed_can_tools' exports library '${_library_name}' which couldn't be found\")\n      endif()\n    else()\n      # search for library in the specified directories\n      find_library(\n        _lib\n        NAMES \"${_library_name}\"\n        PATHS ${_library_dirs}\n        NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH\n      )\n      if(NOT _lib)\n        # warn about not existing library and later ignore it\n        message(WARNING\n          \"Package 'dataspeed_can_tools' exports library '${_library_name}' with LIBRARY_DIRS '${_library_dirs}' which couldn't be found\")\n      endif()\n    endif()\n    if(_lib)\n      list(APPEND dataspeed_can_tools_LIBRARIES ${_cfg} \"${_lib}\")\n    endif()\n  endwhile()\nendif()\n\n# TODO(dirk-thomas) deduplicate dataspeed_can_tools_LIBRARIES\n# while maintaining library order\n# as well as build configuration keywords\n# as well as linker flags\n"],
+)
+
+pkg_files(
+    name = "pkg_files_shlib_dataspeed_can_tools",
+    srcs = [":dataspeed_can_tools"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/dataspeed_can_tools",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_1",
+    srcs = [":gen_cmake_1"],
+    prefix = "share/dataspeed_can_tools/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    data = ["tests/Test.dbc"],
+    lib_data = [
+        ":dbc_bag",
+        ":dbc_node",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@can_msgs//:ament_package",
+        "@dataspeed_can_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_iterator",
+    srcs = ["tests/test_iterator.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":dataspeed_can_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_message",
+    srcs = ["tests/test_message.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":dataspeed_can_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_signal",
+    srcs = ["tests/test_signal.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":dataspeed_can_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install = [
+        ":pkg_files_shlib_dataspeed_can_tools",
+        ":pkg_files_cmake_1",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@can_msgs//:ament_package",
+        "@dataspeed_can_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
