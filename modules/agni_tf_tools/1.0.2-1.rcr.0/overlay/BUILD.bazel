@@ -1,0 +1,244 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("@rules_qt//:qt.bzl", "qt_cc_library", "qt_ui_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@interactive_markers//:interactive_markers": "@interactive_markers//:interactive_markers_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_default_plugins//:rviz_default_plugins": "@rviz_default_plugins//:rviz_default_plugins_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@angles//:angles",
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.assign",
+    "@rosdistro//cc:eigen",
+    "@std_msgs//:cc",
+    "@visualization_msgs//:cc",
+]
+
+genrule(
+    name = "euler_ui_rename",
+    srcs = ["src/common/euler.ui"],
+    outs = ["euler.ui"],
+    cmd = "cp $(location :src/common/euler.ui) $(location :euler.ui)",
+)
+
+qt_ui_library(
+    name = "euler_ui",
+    ui = "euler.ui",
+    deps = ["@rules_qt//:qt_widgets"],
+)
+
+genrule(
+    name = "frames_ui_rename",
+    srcs = ["src/common/frames.ui"],
+    outs = ["frames.ui"],
+    cmd = "cp $(location :src/common/frames.ui) $(location :frames.ui)",
+)
+
+qt_ui_library(
+    name = "frames_ui",
+    ui = "frames.ui",
+    deps = ["@rules_qt//:qt_widgets"],
+)
+
+genrule(
+    name = "transform_ui_rename",
+    srcs = ["src/common/transform.ui"],
+    outs = ["transform.ui"],
+    cmd = "cp $(location :src/common/transform.ui) $(location :transform.ui)",
+)
+
+qt_ui_library(
+    name = "transform_ui",
+    ui = "transform.ui",
+    deps = ["@rules_qt//:qt_widgets"],
+)
+
+qt_cc_library(
+    name = "agni_tf_tools_library",
+    srcs = glob([
+        "src/common/*.cpp",
+        "src/plugin/*.cpp",
+    ]),
+    hdrs = glob([
+        "src/common/*.h",
+        "src/plugin/*.h",
+    ]),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "src",
+        "src/common",
+        "src/plugin",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":euler_ui",
+        ":frames_ui",
+        ":transform_ui",
+        "@rules_qt//:qt_widgets",
+    ],
+)
+
+cc_shared_library(
+    name = "agni_tf_tools",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":agni_tf_tools_library",
+    ],
+    deps = [":agni_tf_tools_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":agni_tf_tools"],
+)
+
+cc_binary(
+    name = "static_transform_publisher",
+    srcs = ["src/static_transform_broadcaster_program.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "src",
+        "src/common",
+        "src/plugin",
+    ],
+    linkopts = ["-Wl,--allow-shlib-undefined"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        "@rosdistro//cc:boost.program_options",
+    ],
+)
+
+cc_binary(
+    name = "static_transform_publisher_gui",
+    srcs = ["src/static_transform_publisher_gui.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "src",
+        "src/common",
+        "src/plugin",
+    ],
+    linkopts = ["-Wl,--allow-shlib-undefined"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":agni_tf_tools_library",
+        "@rosdistro//cc:boost.program_options",
+        "@rules_qt//:qt_widgets",
+    ],
+)
+
+pkg_files(
+    name = "pkg_files_inc_0",
+    srcs = ["src/plugin/euler_property.h"],
+    prefix = "include/agni_tf_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["src/plugin/rotation_property.h"],
+    prefix = "include/agni_tf_tools",
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":static_transform_publisher",
+        ":static_transform_publisher_gui",
+    ],
+    libraries = [":agni_tf_tools"],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugin_description.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@angles//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install = [
+        ":pkg_files_inc_0",
+        ":pkg_files_inc_1",
+    ],
+    libraries = [":agni_tf_tools"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@angles//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
