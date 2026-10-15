@@ -1,0 +1,64 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#include <memory>\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@sick_safevisionary_base//:ament_package",
+        "@sick_safevisionary_interfaces//:ament_package",
+    ],
+)
+
+genrule(
+    name = "tar",
+    srcs = [":raw_tar"],
+    outs = ["tar.tar.gz"],
+    cmd = "tmpdir=$$(mktemp -d) && tar -xzf $(location :raw_tar) -C $$tmpdir && rm -rf $$tmpdir/opt/ros/lyrical/sick_safevisionary_driver/share/sick_safevisionary_driver/hook && tar -czf $@ -C $$tmpdir opt && rm -rf $$tmpdir",
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install_package_xml = False,
+    package_xml = "package.xml",
+    tar_name = "raw_tar",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@sick_safevisionary_base//:ament_package",
+        "@sick_safevisionary_interfaces//:ament_package",
+    ],
+)
