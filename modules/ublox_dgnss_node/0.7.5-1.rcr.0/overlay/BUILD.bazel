@@ -1,25 +1,111 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@@rcl_interfaces+//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rtcm_msgs//:cc",
+    "@std_msgs//:cc",
+    "@ublox_ubx_interfaces//:cc",
+    "@ublox_ubx_msgs//:cc",
+]
+
+cc_library(
+    name = "ublox_dgnss_components_library",
+    srcs = [":gen_ublox_dgnss_node_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ublox_dgnss_node",
+    ],
+    local_defines = ros_local_defines() + ["UBLOX_DGNSS_NODE_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ublox_dgnss_components",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":ublox_dgnss_components_library"],
+)
+
+rclcpp_components_register_node(
+    name = "ublox_dgnss_node",
+    component = ":ublox_dgnss_components",
+    node_name = "ublox_dgnss_node",
+    plugin = "ublox_dgnss::UbloxDGNSSNode",
+)
+
+write_file(
+    name = "gen_ublox_dgnss_node_stub_cpp",
+    out = "_gen/ublox_dgnss_node_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_libusb_h",
+    out = "_gen/include/libusb.h",
+    content = ["#ifndef RCR_LIBUSB_H_\n#define RCR_LIBUSB_H_\n#include <cstdint>\n#include <sys/types.h>\n#define LIBUSB_API_VERSION 0x01000108\nenum libusb_error {\n  LIBUSB_SUCCESS = 0,\n  LIBUSB_ERROR_IO = -1,\n  LIBUSB_ERROR_INVALID_PARAM = -2,\n  LIBUSB_ERROR_ACCESS = -3,\n  LIBUSB_ERROR_NO_DEVICE = -4,\n  LIBUSB_ERROR_NOT_FOUND = -5,\n  LIBUSB_ERROR_BUSY = -6,\n  LIBUSB_ERROR_TIMEOUT = -7,\n  LIBUSB_ERROR_OVERFLOW = -8,\n  LIBUSB_ERROR_PIPE = -9,\n  LIBUSB_ERROR_INTERRUPTED = -10,\n  LIBUSB_ERROR_NO_MEM = -11,\n  LIBUSB_ERROR_NOT_SUPPORTED = -12,\n  LIBUSB_ERROR_OTHER = -99\n};\nenum libusb_log_level { LIBUSB_LOG_LEVEL_NONE = 0, LIBUSB_LOG_LEVEL_ERROR = 1, LIBUSB_LOG_LEVEL_WARNING = 2, LIBUSB_LOG_LEVEL_INFO = 3, LIBUSB_LOG_LEVEL_DEBUG = 4 };\nenum libusb_option { LIBUSB_OPTION_LOG_LEVEL = 0 };\nconstexpr uint8_t LIBUSB_ENDPOINT_IN = 0x80;\nconstexpr uint8_t LIBUSB_ENDPOINT_OUT = 0x00;\nconstexpr uint8_t LIBUSB_REQUEST_TYPE_VENDOR = (0x02 << 5);\nstruct libusb_context {};\nstruct libusb_device {};\nstruct libusb_device_handle {};\nstruct libusb_device_descriptor {\n  uint8_t bLength;\n  uint8_t bDescriptorType;\n  uint16_t bcdUSB;\n  uint8_t bDeviceClass;\n  uint8_t bDeviceSubClass;\n  uint8_t bDeviceProtocol;\n  uint8_t bMaxPacketSize0;\n  uint16_t idVendor;\n  uint16_t idProduct;\n  uint16_t bcdDevice;\n  uint8_t iManufacturer;\n  uint8_t iProduct;\n  uint8_t iSerialNumber;\n  uint8_t bNumConfigurations;\n};\ninline int libusb_init(libusb_context ** ctx) { if (ctx) *ctx = nullptr; return 0; }\ninline void libusb_exit(libusb_context *) {}\ninline int libusb_set_option(libusb_context *, libusb_option, ...) { return 0; }\ninline void libusb_set_debug(libusb_context *, int) {}\ninline const char * libusb_error_name(int) { return \"LIBUSB_SUCCESS\"; }\ninline ssize_t libusb_get_device_list(libusb_context *, libusb_device *** list) { if (list) *list = nullptr; return 0; }\ninline void libusb_free_device_list(libusb_device **, int) {}\ninline int libusb_get_device_descriptor(libusb_device *, libusb_device_descriptor * desc) { if (desc) *desc = {}; return 0; }\ninline uint8_t libusb_get_bus_number(libusb_device *) { return 0; }\ninline uint8_t libusb_get_port_number(libusb_device *) { return 0; }\ninline uint8_t libusb_get_device_address(libusb_device *) { return 0; }\ninline int libusb_open(libusb_device *, libusb_device_handle ** h) { if (h) *h = nullptr; return LIBUSB_ERROR_NO_DEVICE; }\ninline libusb_device_handle * libusb_open_device_with_vid_pid(libusb_context *, uint16_t, uint16_t) { return nullptr; }\ninline void libusb_close(libusb_device_handle *) {}\ninline libusb_device * libusb_ref_device(libusb_device * dev) { return dev; }\ninline void libusb_unref_device(libusb_device *) {}\ninline int libusb_kernel_driver_active(libusb_device_handle *, int) { return 0; }\ninline int libusb_detach_kernel_driver(libusb_device_handle *, int) { return 0; }\ninline int libusb_claim_interface(libusb_device_handle *, int) { return 0; }\ninline int libusb_release_interface(libusb_device_handle *, int) { return 0; }\ninline int libusb_get_string_descriptor_ascii(libusb_device_handle *, uint8_t, unsigned char * data, int length) { if (data && length > 0) data[0] = 0; return 0; }\ninline int libusb_control_transfer(libusb_device_handle *, uint8_t, uint8_t, uint16_t, uint16_t, unsigned char *, uint16_t, unsigned int) { return 0; }\ninline int libusb_bulk_transfer(libusb_device_handle *, unsigned char, unsigned char *, int, int * transferred, unsigned int) { if (transferred) *transferred = 0; return 0; }\ninline int libusb_interrupt_transfer(libusb_device_handle *, unsigned char, unsigned char *, int, int * transferred, unsigned int) { if (transferred) *transferred = 0; return 0; }\n#endif\n"],
+)
+
+write_file(
+    name = "gen_libusb_1_0_libusb_h",
+    out = "_gen/include/libusb-1.0/libusb.h",
+    content = ["#include <libusb.h>\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":ublox_dgnss_node_record"],
+    lib_data = [":ublox_dgnss_node"],
+    libraries = [":ublox_dgnss_components"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -31,7 +117,30 @@ ament_package(
         "@ament_lint_common//:ament_package",
         "@rclcpp//:ament_package",
         "@rclcpp_components//:ament_package",
-        "@rosdistro//:ament_package",
+        "@rtcm_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@ublox_ubx_interfaces//:ament_package",
+        "@ublox_ubx_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    libraries = [":ublox_dgnss_components"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_copyright//:ament_package",
+        "@ament_cmake_cppcheck//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
         "@rtcm_msgs//:ament_package",
         "@std_msgs//:ament_package",
         "@ublox_ubx_interfaces//:ament_package",
