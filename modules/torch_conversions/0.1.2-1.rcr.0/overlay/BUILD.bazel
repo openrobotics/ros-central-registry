@@ -1,0 +1,303 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosidl_buffer//:rosidl_buffer": "@rosidl_buffer//:rosidl_buffer_library",
+}
+
+CC_DEPS = [
+    "@libtorch_vendor//:libtorch_vendor_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@std_msgs//:cc",
+    "@tensor_msgs//:cc",
+]
+
+cc_library(
+    name = "torch_tensor_publisher_component_library",
+    srcs = ["test/src/torch_tensor_publisher_node.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/torch_conversions",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_C10D_GLOO",
+        "USE_C10D_NCCL",
+        "USE_DISTRIBUTED",
+        "USE_RPC",
+        "USE_TENSORPIPE",
+        "_GLIBCXX_USE_CXX11_ABI=1",
+        "__NV_NO_HOST_COMPILER_CHECK=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "torch_tensor_publisher_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":torch_tensor_publisher_component_library"],
+)
+
+cc_library(
+    name = "torch_tensor_subscriber_component_library",
+    srcs = ["test/src/torch_tensor_subscriber_node.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/torch_conversions",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_C10D_GLOO",
+        "USE_C10D_NCCL",
+        "USE_DISTRIBUTED",
+        "USE_RPC",
+        "USE_TENSORPIPE",
+        "_GLIBCXX_USE_CXX11_ABI=1",
+        "__NV_NO_HOST_COMPILER_CHECK=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "torch_tensor_subscriber_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":torch_tensor_subscriber_component_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@libtorch_vendor//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rosidl_buffer//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tensor_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_torch_conversions",
+    srcs = ["test/test_torch_conversions.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":torch_tensor_publisher_component",
+        ":torch_tensor_subscriber_component",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/torch_conversions",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "USE_C10D_GLOO",
+        "USE_C10D_NCCL",
+        "USE_DISTRIBUTED",
+        "USE_RPC",
+        "USE_TENSORPIPE",
+        "_GLIBCXX_USE_CXX11_ABI=1",
+        "__NV_NO_HOST_COMPILER_CHECK=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":torch_tensor_publisher_component_library",
+        ":torch_tensor_subscriber_component_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+py_pytest(
+    name = "test_torch_tensor_intra_pubsub_fastrtps_launch",
+    srcs = ["test/test_torch_tensor_intra_pubsub_fastrtps_launch.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [":ament_index"],
+    deps = [
+        "@std_msgs//:py",
+        "@tensor_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_torch_tensor_inter_pubsub_fastrtps_launch",
+    srcs = ["test/test_torch_tensor_inter_pubsub_fastrtps_launch.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [":ament_index"],
+    deps = [
+        "@std_msgs//:py",
+        "@tensor_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_torch_tensor_multi_pub_fastrtps_launch",
+    srcs = ["test/test_torch_tensor_multi_pub_fastrtps_launch.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [":ament_index"],
+    deps = [
+        "@std_msgs//:py",
+        "@tensor_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_torch_tensor_multi_sub_fastrtps_launch",
+    srcs = ["test/test_torch_tensor_multi_sub_fastrtps_launch.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [":ament_index"],
+    deps = [
+        "@std_msgs//:py",
+        "@tensor_msgs//:py",
+    ],
+)
+
+genrule(
+    name = "tar",
+    srcs = [":raw_tar"],
+    outs = ["tar.tar.gz"],
+    cmd = "tmpdir=$$(mktemp -d) && tar -xzf $(location :raw_tar) -C $$tmpdir && rm -rf $$tmpdir/opt/ros/lyrical/torch_conversions/share/torch_conversions/hook && tar -czf $@ -C $$tmpdir opt && rm -rf $$tmpdir",
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install_package_xml = False,
+    package_xml = "package.xml",
+    tar_name = "raw_tar",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@libtorch_vendor//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rosidl_buffer//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tensor_msgs//:ament_package",
+    ],
+)
