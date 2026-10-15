@@ -1,27 +1,2188 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:ament_resource.bzl", "register_ament_resource")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_eigen_kdl//:tf2_eigen_kdl": "@tf2_eigen_kdl//:tf2_eigen_kdl_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_kdl//:tf2_kdl": "@tf2_kdl//:tf2_kdl_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    ":_gen_textual_hdrs",
+    "@@sensor_msgs+//:cc",
+    "@@trajectory_msgs+//:cc",
+    "@generate_parameter_library//:generate_parameter_library",
+    "@geometry_msgs//:cc",
+    "@moveit_core//:moveit_collision_detection_bullet_library",
+    "@moveit_core//:moveit_collision_detection_fcl_library",
+    "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_collision_distance_field_library",
+    "@moveit_core//:moveit_constraint_samplers_library",
+    "@moveit_core//:moveit_distance_field_library",
+    "@moveit_core//:moveit_dynamics_solver_library",
+    "@moveit_core//:moveit_exceptions_library",
+    "@moveit_core//:moveit_kinematic_constraints_library",
+    "@moveit_core//:moveit_kinematics_base_library",
+    "@moveit_core//:moveit_kinematics_metrics_library",
+    "@moveit_core//:moveit_planning_interface_library",
+    "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_smoothing_base_library",
+    "@moveit_core//:moveit_test_utils_library",
+    "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils_library",
+    "@moveit_msgs//:cc",
+    "@moveit_ros_move_group//:moveit_move_group_capabilities_base_library",
+    "@moveit_ros_planning//:moveit_collision_plugin_loader_library",
+    "@moveit_ros_planning//:moveit_constraint_sampler_manager_loader_library",
+    "@moveit_ros_planning//:moveit_cpp_library",
+    "@moveit_ros_planning//:moveit_kinematics_plugin_loader_library",
+    "@moveit_ros_planning//:moveit_plan_execution_library",
+    "@moveit_ros_planning//:moveit_planning_pipeline_interfaces_library",
+    "@moveit_ros_planning//:moveit_planning_pipeline_library",
+    "@moveit_ros_planning//:moveit_planning_scene_monitor_library",
+    "@moveit_ros_planning//:moveit_rdf_loader_library",
+    "@moveit_ros_planning//:moveit_robot_model_loader_library",
+    "@moveit_ros_planning//:moveit_trajectory_execution_manager_library",
+    "@moveit_ros_planning//:srdf_publisher_node_library",
+    "@pilz_industrial_motion_planner_testutils//:pilz_industrial_motion_planner_testutils_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.algorithm",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+]
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [":gen_eigen3_eigen_h"],
+)
+
+cc_library(
+    name = "joint_limits_common_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "joint_limits_common",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":joint_limits_common_library"],
+)
+
+cc_library(
+    name = "trajectory_generation_common_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":joint_limits_common_library"],
+)
+
+cc_shared_library(
+    name = "trajectory_generation_common",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":trajectory_generation_common_library"],
+)
+
+cc_library(
+    name = "command_list_manager_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "command_list_manager",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":command_list_manager_library"],
+)
+
+cc_library(
+    name = "planning_context_loader_base_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":joint_limits_common_library"],
+)
+
+cc_shared_library(
+    name = "planning_context_loader_base",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":planning_context_loader_base_library"],
+)
+
+cc_library(
+    name = "pilz_industrial_motion_planner_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":planning_context_loader_base_library",
+    ],
+)
+
+cc_shared_library(
+    name = "pilz_industrial_motion_planner",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":pilz_industrial_motion_planner_library"],
+)
+
+cc_library(
+    name = "pilz_industrial_motion_planner_test_utils_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "pilz_industrial_motion_planner_test_utils",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":pilz_industrial_motion_planner_test_utils_library"],
+)
+
+cc_library(
+    name = "planning_context_loader_circ_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":planning_context_loader_base_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "planning_context_loader_circ",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":planning_context_loader_circ_library"],
+)
+
+cc_library(
+    name = "planning_context_loader_lin_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":planning_context_loader_base_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "planning_context_loader_lin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":planning_context_loader_lin_library"],
+)
+
+cc_library(
+    name = "planning_context_loader_polyline_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":planning_context_loader_base_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "planning_context_loader_polyline",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":planning_context_loader_polyline_library"],
+)
+
+cc_library(
+    name = "planning_context_loader_ptp_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":planning_context_loader_base_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "planning_context_loader_ptp",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":planning_context_loader_ptp_library"],
+)
+
+cc_library(
+    name = "sequence_capability_library",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":command_list_manager_library",
+        ":joint_limits_common_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "sequence_capability",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":sequence_capability_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "_bin/unittest_get_solver_tip_frame",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":planning_context_loader_base_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "unittest_joint_limit",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":joint_limits_common_library"],
+)
+
+cc_binary(
+    name = "unittest_joint_limits_aggregator",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":joint_limits_common_library"],
+)
+
+cc_binary(
+    name = "_bin/unittest_joint_limits_container",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/unittest_joint_limits_validator",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "unittest_pilz_industrial_motion_planner",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":planning_context_loader_base_library",
+    ],
+)
+
+cc_binary(
+    name = "_bin/unittest_pilz_industrial_motion_planner_direct",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":planning_context_loader_base_library",
+        ":planning_context_loader_ptp_library",
+        ":trajectory_generation_common_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "unittest_planning_context",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":pilz_industrial_motion_planner_test_utils_library",
+        ":planning_context_loader_base_library",
+        ":planning_context_loader_circ_library",
+        ":planning_context_loader_lin_library",
+        ":planning_context_loader_ptp_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_binary(
+    name = "unittest_planning_context_loaders",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":pilz_industrial_motion_planner_test_utils_library",
+        ":planning_context_loader_base_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_binary(
+    name = "unittest_trajectory_blender_transition_window",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_test_utils_library",
+        ":planning_context_loader_base_library",
+        ":planning_context_loader_lin_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_binary(
+    name = "unittest_trajectory_functions",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_test_utils_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_binary(
+    name = "_bin/unittest_trajectory_generator",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":planning_context_loader_base_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "unittest_trajectory_generator_circ",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_test_utils_library",
+        ":planning_context_loader_base_library",
+        ":planning_context_loader_circ_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_binary(
+    name = "unittest_trajectory_generator_common",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_test_utils_library",
+        ":planning_context_loader_base_library",
+        ":planning_context_loader_circ_library",
+        ":planning_context_loader_lin_library",
+        ":planning_context_loader_ptp_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_binary(
+    name = "unittest_trajectory_generator_lin",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_test_utils_library",
+        ":planning_context_loader_base_library",
+        ":planning_context_loader_lin_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_binary(
+    name = "unittest_trajectory_generator_ptp",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_test_utils_library",
+        ":planning_context_loader_base_library",
+        ":planning_context_loader_ptp_library",
+        ":trajectory_generation_common_library",
+    ],
+)
+
+cc_binary(
+    name = "_bin/unittest_velocity_profile_atrap",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":planning_context_loader_base_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+register_ament_resource(
+    name = "res_moveit_ros_move_group__pluginlib__plugin",
+    category = "moveit_ros_move_group__pluginlib__plugin",
+    content = "share/pilz_industrial_motion_planner/plugins/sequence_capability_plugin_description.xml\n",
+)
+
+register_ament_resource(
+    name = "res_pilz_industrial_motion_planner__pluginlib__plugin",
+    category = "pilz_industrial_motion_planner__pluginlib__plugin",
+    content = "share/pilz_industrial_motion_planner/plugins/planning_context_plugin_description.xml\n",
+)
+
+write_file(
+    name = "gen_pilz_industrial_motion_planner_stub_cpp",
+    out = "_gen/pilz_industrial_motion_planner_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_0",
+    out = "_gen/include/pilz_industrial_motion_planner/cartesian_limits_parameters.hpp",
+    content = ["// auto-generated DO NOT EDIT\n\n#pragma once\n\n#include <algorithm>\n#include <array>\n#include <functional>\n#include <limits>\n#include <mutex>\n#include <rclcpp/node.hpp>\n#include <rclcpp_lifecycle/lifecycle_node.hpp>\n#include <rclcpp/logger.hpp>\n#include <set>\n#include <sstream>\n#include <string>\n#include <type_traits>\n#include <utility>\n#include <vector>\n\n#include <fmt/core.h>\n#include <fmt/format.h>\n#include <fmt/ranges.h>\n\n#include <rsl/static_string.hpp>\n#include <rsl/static_vector.hpp>\n#include <rsl/parameter_validators.hpp>\n\n\n\nnamespace cartesian_limits {\n\n// Use validators from RSL\nusing rsl::unique;\nusing rsl::subset_of;\nusing rsl::fixed_size;\nusing rsl::size_gt;\nusing rsl::size_lt;\nusing rsl::not_empty;\nusing rsl::element_bounds;\nusing rsl::lower_element_bounds;\nusing rsl::upper_element_bounds;\nusing rsl::bounds;\nusing rsl::lt;\nusing rsl::gt;\nusing rsl::lt_eq;\nusing rsl::gt_eq;\nusing rsl::one_of;\nusing rsl::to_parameter_result_msg;\n\ntemplate <typename T>\n[[nodiscard]] auto to_parameter_value(T value) {\n    return rclcpp::ParameterValue(value);\n}\n\ntemplate <size_t capacity>\n[[nodiscard]] auto to_parameter_value(rsl::StaticString<capacity> const& value) {\n    return rclcpp::ParameterValue(rsl::to_string(value));\n}\n\ntemplate <typename T, size_t capacity>\n[[nodiscard]] auto to_parameter_value(rsl::StaticVector<T, capacity> const& value) {\n    return rclcpp::ParameterValue(rsl::to_vector(value));\n}\n    struct Params {\n        double max_trans_vel;\n        double max_trans_acc;\n        double max_trans_dec;\n        double max_rot_vel;\n        // for detecting if the parameter struct has been updated\n        rclcpp::Time __stamp;\n    };\n    struct StackParams {\n        double max_trans_vel;\n        double max_trans_acc;\n        double max_trans_dec;\n        double max_rot_vel;\n    };\n\n  class ParamListener{\n  public:\n    // throws rclcpp::exceptions::InvalidParameterValueException on initialization if invalid parameter are loaded\n    template <typename NodeT>\n    ParamListener(NodeT node, std::string const& prefix = \"\")\n    : ParamListener(node->get_node_parameters_interface(), node->get_logger(), prefix) {}\n\n    ParamListener(const std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface>& parameters_interface,\n                  std::string const& prefix = \"\")\n    : ParamListener(parameters_interface, rclcpp::get_logger(\"cartesian_limits\"), prefix) {\n      RCLCPP_DEBUG(logger_, \"ParameterListener: Not using node logger, recommend using other constructors to use a node logger\");\n    }\n\n    ParamListener(const std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface>& parameters_interface,\n                  rclcpp::Logger logger, std::string const& prefix = \"\")\n    : prefix_{prefix},\n      logger_{std::move(logger)} {\n      if (!prefix_.empty() && prefix_.back() != '.') {\n        prefix_ += \".\";\n      }\n\n      parameters_interface_ = parameters_interface;\n      declare_params();\n      auto update_param_cb = [this](const std::vector<rclcpp::Parameter> &parameters){return this->update(parameters);};\n      handle_ = parameters_interface_->add_on_set_parameters_callback(update_param_cb);\n      clock_ = rclcpp::Clock();\n    }\n\n    Params get_params() const{\n      std::lock_guard<std::mutex> lock(mutex_);\n      return params_;\n    }\n\n    /**\n     * @brief Tries to update the parsed Params object\n     * @param params_in The Params object to update\n     * @return true if the Params object was updated, false if it was already up to date or the mutex could not be locked\n     * @note This function tries to lock the mutex without blocking, so it can be used in a RT loop\n     */\n    bool try_update_params(Params & params_in) const {\n      std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);\n      if (lock.owns_lock()) {\n        if (const bool is_old = params_in.__stamp != params_.__stamp; is_old) {\n          params_in = params_;\n          return true;\n        }\n      }\n      return false;\n    }\n\n    /**\n     * @brief Tries to get the current Params object\n     * @param params_in The Params object to fill with the current parameters\n     * @return true if mutex can be locked, false if mutex could not be locked\n     * @note The parameters are only filled, when the mutex can be locked and the params timestamp is different\n     * @note This function tries to lock the mutex without blocking, so it can be used in a RT loop\n     */\n    bool try_get_params(Params & params_in) const {\n      if (mutex_.try_lock()) {\n        if (const bool is_old = params_in.__stamp != params_.__stamp; is_old) {\n          params_in = params_;\n        }\n        mutex_.unlock();\n        return true;\n      }\n      return false;\n    }\n\n    bool is_old(Params const& other) const {\n      std::lock_guard<std::mutex> lock(mutex_);\n      return params_.__stamp != other.__stamp;\n    }\n\n    StackParams get_stack_params() {\n      Params params = get_params();\n      StackParams output;\n      output.max_trans_vel = params.max_trans_vel;\n      output.max_trans_acc = params.max_trans_acc;\n      output.max_trans_dec = params.max_trans_dec;\n      output.max_rot_vel = params.max_rot_vel;\n\n      return output;\n    }\n\n    void refresh_dynamic_parameters() {\n      auto updated_params = get_params();\n      // TODO remove any destroyed dynamic parameters\n\n      // declare any new dynamic parameters\n      rclcpp::Parameter param;\n\n    }\n\n    rcl_interfaces::msg::SetParametersResult update(const std::vector<rclcpp::Parameter> &parameters) {\n      auto updated_params = get_params();\n\n      for (const auto &param: parameters) {\n        if (param.get_name() == (prefix_ + \"max_trans_vel\")) {\n            updated_params.max_trans_vel = param.as_double();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"max_trans_acc\")) {\n            updated_params.max_trans_acc = param.as_double();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"max_trans_dec\")) {\n            updated_params.max_trans_dec = param.as_double();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"max_rot_vel\")) {\n            updated_params.max_rot_vel = param.as_double();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n      }\n\n      updated_params.__stamp = clock_.now();\n      update_internal_params(updated_params);\n      if (user_callback_) {\n         user_callback_(updated_params);\n      }\n      return rsl::to_parameter_result_msg({});\n    }\n\n    void declare_params(){\n      auto updated_params = get_params();\n      // declare all parameters and give default values to non-required ones\n      if (!parameters_interface_->has_parameter(prefix_ + \"max_trans_vel\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Max translation velocity\";\n          descriptor.read_only = false;\n          auto parameter = rclcpp::ParameterType::PARAMETER_DOUBLE;\n          parameters_interface_->declare_parameter(prefix_ + \"max_trans_vel\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"max_trans_acc\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Max translation acceleraion\";\n          descriptor.read_only = false;\n          auto parameter = rclcpp::ParameterType::PARAMETER_DOUBLE;\n          parameters_interface_->declare_parameter(prefix_ + \"max_trans_acc\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"max_trans_dec\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Max translation deceleration\";\n          descriptor.read_only = false;\n          auto parameter = rclcpp::ParameterType::PARAMETER_DOUBLE;\n          parameters_interface_->declare_parameter(prefix_ + \"max_trans_dec\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"max_rot_vel\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Max rotational velocity\";\n          descriptor.read_only = false;\n          auto parameter = rclcpp::ParameterType::PARAMETER_DOUBLE;\n          parameters_interface_->declare_parameter(prefix_ + \"max_rot_vel\", parameter, descriptor);\n      }\n      // get parameters and fill struct fields\n      rclcpp::Parameter param;\n      param = parameters_interface_->get_parameter(prefix_ + \"max_trans_vel\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"max_trans_vel\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.max_trans_vel = param.as_double();\n      param = parameters_interface_->get_parameter(prefix_ + \"max_trans_acc\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"max_trans_acc\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.max_trans_acc = param.as_double();\n      param = parameters_interface_->get_parameter(prefix_ + \"max_trans_dec\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"max_trans_dec\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.max_trans_dec = param.as_double();\n      param = parameters_interface_->get_parameter(prefix_ + \"max_rot_vel\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"max_rot_vel\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.max_rot_vel = param.as_double();\n\n\n      updated_params.__stamp = clock_.now();\n      update_internal_params(updated_params);\n    }\n\n    using userParameterUpdateCB = std::function<void(const Params&)>;\n    void setUserCallback(const userParameterUpdateCB& callback){\n      user_callback_ = callback;\n    }\n\n    void clearUserCallback(){\n      user_callback_ = {};\n    }\n\n    private:\n      void update_internal_params(Params updated_params) {\n        std::lock_guard<std::mutex> lock(mutex_);\n        params_ = std::move(updated_params);\n      }\n\n      std::string prefix_;\n      Params params_;\n      rclcpp::Clock clock_;\n      std::shared_ptr<rclcpp::node_interfaces::OnSetParametersCallbackHandle> handle_;\n      std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface> parameters_interface_;\n      userParameterUpdateCB user_callback_;\n\n      rclcpp::Logger logger_;\n      std::mutex mutable mutex_;\n  };\n\n} // namespace cartesian_limits\n"],
+)
+
+write_file(
+    name = "gen_extra_81",
+    out = "_gen/share/ament_index/resource_index/moveit_ros_move_group__pluginlib__plugin/pilz_industrial_motion_planner",
+    content = ["share/pilz_industrial_motion_planner/plugins/sequence_capability_plugin_description.xml\n"],
+)
+
+write_file(
+    name = "gen_extra_82",
+    out = "_gen/share/ament_index/resource_index/pilz_industrial_motion_planner__pluginlib__plugin/pilz_industrial_motion_planner",
+    content = ["share/pilz_industrial_motion_planner/plugins/planning_context_plugin_description.xml\n"],
+)
+
+write_file(
+    name = "gen_cmake_83",
+    out = "_gen/share/pilz_industrial_motion_planner/cmake/ament_cmake_export_include_directories-extras.cmake",
+    content = ["# generated from ament_cmake_export_include_directories/cmake/ament_cmake_export_include_directories-extras.cmake.in\n\nset(_exported_include_dirs \"${pilz_industrial_motion_planner_DIR}/../../../include/pilz_industrial_motion_planner\")\n\n# append include directories to pilz_industrial_motion_planner_INCLUDE_DIRS\n# warn about not existing paths\nif(NOT _exported_include_dirs STREQUAL \"\")\n  find_package(ament_cmake_core QUIET REQUIRED)\n  foreach(_exported_include_dir ${_exported_include_dirs})\n    if(NOT IS_DIRECTORY \"${_exported_include_dir}\")\n      message(WARNING \"Package 'pilz_industrial_motion_planner' exports the include directory '${_exported_include_dir}' which doesn't exist\")\n    endif()\n    normalize_path(_exported_include_dir \"${_exported_include_dir}\")\n    list(APPEND pilz_industrial_motion_planner_INCLUDE_DIRS \"${_exported_include_dir}\")\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_cmake_84",
+    out = "_gen/share/pilz_industrial_motion_planner/cmake/ament_cmake_export_targets-extras.cmake",
+    content = ["# generated from ament_cmake_export_targets/cmake/ament_cmake_export_targets-extras.cmake.in\n\nset(_exported_targets \"pilz_industrial_motion_plannerTargets\")\n\n# include all exported targets\nif(NOT _exported_targets STREQUAL \"\")\n  foreach(_target ${_exported_targets})\n    set(_export_file \"${pilz_industrial_motion_planner_DIR}/${_target}Export.cmake\")\n    include(\"${_export_file}\")\n\n    # extract the target names associated with the export\n    set(_regex \"foreach\\\\((_cmake)?_expected_?[Tt]arget (IN ITEMS )?(.+)\\\\)\")\n    file(\n      STRINGS \"${_export_file}\" _foreach_targets\n      REGEX \"${_regex}\")\n    list(LENGTH _foreach_targets _matches)\n    if(NOT _matches EQUAL 1)\n      message(FATAL_ERROR\n        \"Failed to find exported target names in '${_export_file}'\")\n    endif()\n    string(REGEX REPLACE \"${_regex}\" \"\\\\3\" _targets \"${_foreach_targets}\")\n    string(REPLACE \" \" \";\" _targets \"${_targets}\")\n    list(LENGTH _targets _length)\n\n    list(APPEND pilz_industrial_motion_planner_TARGETS ${_targets})\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_cmake_85",
+    out = "_gen/share/pilz_industrial_motion_planner/cmake/pilz_industrial_motion_plannerTargetsExport-release.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"pilz_industrial_motion_planner::pilz_industrial_motion_planner\" for configuration \"Release\"\nset_property(TARGET pilz_industrial_motion_planner::pilz_industrial_motion_planner APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(pilz_industrial_motion_planner::pilz_industrial_motion_planner PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libpilz_industrial_motion_planner.so\"\n  IMPORTED_SONAME_RELEASE \"libpilz_industrial_motion_planner.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets pilz_industrial_motion_planner::pilz_industrial_motion_planner )\nlist(APPEND _cmake_import_check_files_for_pilz_industrial_motion_planner::pilz_industrial_motion_planner \"${_IMPORT_PREFIX}/lib/libpilz_industrial_motion_planner.so\" )\n\n# Import target \"pilz_industrial_motion_planner::joint_limits_common\" for configuration \"Release\"\nset_property(TARGET pilz_industrial_motion_planner::joint_limits_common APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(pilz_industrial_motion_planner::joint_limits_common PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libjoint_limits_common.so\"\n  IMPORTED_SONAME_RELEASE \"libjoint_limits_common.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets pilz_industrial_motion_planner::joint_limits_common )\nlist(APPEND _cmake_import_check_files_for_pilz_industrial_motion_planner::joint_limits_common \"${_IMPORT_PREFIX}/lib/libjoint_limits_common.so\" )\n\n# Import target \"pilz_industrial_motion_planner::planning_context_loader_base\" for configuration \"Release\"\nset_property(TARGET pilz_industrial_motion_planner::planning_context_loader_base APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(pilz_industrial_motion_planner::planning_context_loader_base PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libplanning_context_loader_base.so\"\n  IMPORTED_SONAME_RELEASE \"libplanning_context_loader_base.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets pilz_industrial_motion_planner::planning_context_loader_base )\nlist(APPEND _cmake_import_check_files_for_pilz_industrial_motion_planner::planning_context_loader_base \"${_IMPORT_PREFIX}/lib/libplanning_context_loader_base.so\" )\n\n# Import target \"pilz_industrial_motion_planner::planning_context_loader_ptp\" for configuration \"Release\"\nset_property(TARGET pilz_industrial_motion_planner::planning_context_loader_ptp APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(pilz_industrial_motion_planner::planning_context_loader_ptp PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libplanning_context_loader_ptp.so\"\n  IMPORTED_SONAME_RELEASE \"libplanning_context_loader_ptp.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets pilz_industrial_motion_planner::planning_context_loader_ptp )\nlist(APPEND _cmake_import_check_files_for_pilz_industrial_motion_planner::planning_context_loader_ptp \"${_IMPORT_PREFIX}/lib/libplanning_context_loader_ptp.so\" )\n\n# Import target \"pilz_industrial_motion_planner::planning_context_loader_lin\" for configuration \"Release\"\nset_property(TARGET pilz_industrial_motion_planner::planning_context_loader_lin APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(pilz_industrial_motion_planner::planning_context_loader_lin PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libplanning_context_loader_lin.so\"\n  IMPORTED_SONAME_RELEASE \"libplanning_context_loader_lin.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets pilz_industrial_motion_planner::planning_context_loader_lin )\nlist(APPEND _cmake_import_check_files_for_pilz_industrial_motion_planner::planning_context_loader_lin \"${_IMPORT_PREFIX}/lib/libplanning_context_loader_lin.so\" )\n\n# Import target \"pilz_industrial_motion_planner::planning_context_loader_circ\" for configuration \"Release\"\nset_property(TARGET pilz_industrial_motion_planner::planning_context_loader_circ APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(pilz_industrial_motion_planner::planning_context_loader_circ PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libplanning_context_loader_circ.so\"\n  IMPORTED_SONAME_RELEASE \"libplanning_context_loader_circ.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets pilz_industrial_motion_planner::planning_context_loader_circ )\nlist(APPEND _cmake_import_check_files_for_pilz_industrial_motion_planner::planning_context_loader_circ \"${_IMPORT_PREFIX}/lib/libplanning_context_loader_circ.so\" )\n\n# Import target \"pilz_industrial_motion_planner::planning_context_loader_polyline\" for configuration \"Release\"\nset_property(TARGET pilz_industrial_motion_planner::planning_context_loader_polyline APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(pilz_industrial_motion_planner::planning_context_loader_polyline PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libplanning_context_loader_polyline.so\"\n  IMPORTED_SONAME_RELEASE \"libplanning_context_loader_polyline.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets pilz_industrial_motion_planner::planning_context_loader_polyline )\nlist(APPEND _cmake_import_check_files_for_pilz_industrial_motion_planner::planning_context_loader_polyline \"${_IMPORT_PREFIX}/lib/libplanning_context_loader_polyline.so\" )\n\n# Import target \"pilz_industrial_motion_planner::command_list_manager\" for configuration \"Release\"\nset_property(TARGET pilz_industrial_motion_planner::command_list_manager APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(pilz_industrial_motion_planner::command_list_manager PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libcommand_list_manager.so\"\n  IMPORTED_SONAME_RELEASE \"libcommand_list_manager.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets pilz_industrial_motion_planner::command_list_manager )\nlist(APPEND _cmake_import_check_files_for_pilz_industrial_motion_planner::command_list_manager \"${_IMPORT_PREFIX}/lib/libcommand_list_manager.so\" )\n\n# Import target \"pilz_industrial_motion_planner::sequence_capability\" for configuration \"Release\"\nset_property(TARGET pilz_industrial_motion_planner::sequence_capability APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(pilz_industrial_motion_planner::sequence_capability PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libsequence_capability.so\"\n  IMPORTED_SONAME_RELEASE \"libsequence_capability.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets pilz_industrial_motion_planner::sequence_capability )\nlist(APPEND _cmake_import_check_files_for_pilz_industrial_motion_planner::sequence_capability \"${_IMPORT_PREFIX}/lib/libsequence_capability.so\" )\n\n# Import target \"pilz_industrial_motion_planner::trajectory_generation_common\" for configuration \"Release\"\nset_property(TARGET pilz_industrial_motion_planner::trajectory_generation_common APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(pilz_industrial_motion_planner::trajectory_generation_common PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libtrajectory_generation_common.so\"\n  IMPORTED_SONAME_RELEASE \"libtrajectory_generation_common.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets pilz_industrial_motion_planner::trajectory_generation_common )\nlist(APPEND _cmake_import_check_files_for_pilz_industrial_motion_planner::trajectory_generation_common \"${_IMPORT_PREFIX}/lib/libtrajectory_generation_common.so\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_cmake_86",
+    out = "_gen/share/pilz_industrial_motion_planner/cmake/pilz_industrial_motion_plannerTargetsExport.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"3.0.0\")\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 3.0.0...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS pilz_industrial_motion_planner::pilz_industrial_motion_planner pilz_industrial_motion_planner::cartesian_limits_parameters pilz_industrial_motion_planner::joint_limits_common pilz_industrial_motion_planner::planning_context_loader_base pilz_industrial_motion_planner::planning_context_loader_ptp pilz_industrial_motion_planner::planning_context_loader_lin pilz_industrial_motion_planner::planning_context_loader_circ pilz_industrial_motion_planner::planning_context_loader_polyline pilz_industrial_motion_planner::command_list_manager pilz_industrial_motion_planner::sequence_capability pilz_industrial_motion_planner::trajectory_generation_common)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target pilz_industrial_motion_planner::pilz_industrial_motion_planner\nadd_library(pilz_industrial_motion_planner::pilz_industrial_motion_planner SHARED IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::pilz_industrial_motion_planner PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"pilz_industrial_motion_planner::planning_context_loader_base;pilz_industrial_motion_planner::joint_limits_common;Eigen3::Eigen;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_msgs::moveit_msgs__rosidl_generator_c;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_c;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_c;moveit_msgs::moveit_msgs__rosidl_typesupport_c;moveit_msgs::moveit_msgs__rosidl_generator_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_cpp;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_ros_move_group::moveit_ros_move_group;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;tf2::tf2;tf2_eigen::tf2_eigen;tf2_eigen_kdl::tf2_eigen_kdl;tf2_geometry_msgs::tf2_geometry_msgs;tf2_kdl::tf2_kdl;tf2_ros::tf2_ros;orocos-kdl;Boost::headers\"\n)\n\n# Create imported target pilz_industrial_motion_planner::cartesian_limits_parameters\nadd_library(pilz_industrial_motion_planner::cartesian_limits_parameters INTERFACE IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::cartesian_limits_parameters PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include;${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"fmt::fmt;rclcpp::rclcpp;rclcpp_lifecycle::rclcpp_lifecycle;rsl::rsl;tcb_span::tcb_span;tl::expected\"\n)\n\n# Create imported target pilz_industrial_motion_planner::joint_limits_common\nadd_library(pilz_industrial_motion_planner::joint_limits_common SHARED IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::joint_limits_common PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"pilz_industrial_motion_planner::cartesian_limits_parameters;Eigen3::Eigen;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_msgs::moveit_msgs__rosidl_generator_c;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_c;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_c;moveit_msgs::moveit_msgs__rosidl_typesupport_c;moveit_msgs::moveit_msgs__rosidl_generator_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_cpp;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_ros_move_group::moveit_ros_move_group;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;tf2::tf2;tf2_eigen::tf2_eigen;tf2_eigen_kdl::tf2_eigen_kdl;tf2_geometry_msgs::tf2_geometry_msgs;tf2_kdl::tf2_kdl;tf2_ros::tf2_ros;orocos-kdl;Boost::headers\"\n)\n\n# Create imported target pilz_industrial_motion_planner::planning_context_loader_base\nadd_library(pilz_industrial_motion_planner::planning_context_loader_base SHARED IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::planning_context_loader_base PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"pilz_industrial_motion_planner::cartesian_limits_parameters;pilz_industrial_motion_planner::joint_limits_common;Eigen3::Eigen;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_msgs::moveit_msgs__rosidl_generator_c;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_c;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_c;moveit_msgs::moveit_msgs__rosidl_typesupport_c;moveit_msgs::moveit_msgs__rosidl_generator_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_cpp;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_ros_move_group::moveit_ros_move_group;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;tf2::tf2;tf2_eigen::tf2_eigen;tf2_eigen_kdl::tf2_eigen_kdl;tf2_geometry_msgs::tf2_geometry_msgs;tf2_kdl::tf2_kdl;tf2_ros::tf2_ros;orocos-kdl;Boost::headers\"\n)\n\n# Create imported target pilz_industrial_motion_planner::planning_context_loader_ptp\nadd_library(pilz_industrial_motion_planner::planning_context_loader_ptp SHARED IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::planning_context_loader_ptp PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"pilz_industrial_motion_planner::planning_context_loader_base;pilz_industrial_motion_planner::joint_limits_common;pilz_industrial_motion_planner::trajectory_generation_common;Eigen3::Eigen;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_msgs::moveit_msgs__rosidl_generator_c;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_c;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_c;moveit_msgs::moveit_msgs__rosidl_typesupport_c;moveit_msgs::moveit_msgs__rosidl_generator_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_cpp;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_ros_move_group::moveit_ros_move_group;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;tf2::tf2;tf2_eigen::tf2_eigen;tf2_eigen_kdl::tf2_eigen_kdl;tf2_geometry_msgs::tf2_geometry_msgs;tf2_kdl::tf2_kdl;tf2_ros::tf2_ros;orocos-kdl;Boost::headers\"\n)\n\n# Create imported target pilz_industrial_motion_planner::planning_context_loader_lin\nadd_library(pilz_industrial_motion_planner::planning_context_loader_lin SHARED IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::planning_context_loader_lin PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"pilz_industrial_motion_planner::planning_context_loader_base;pilz_industrial_motion_planner::joint_limits_common;pilz_industrial_motion_planner::trajectory_generation_common;Eigen3::Eigen;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_msgs::moveit_msgs__rosidl_generator_c;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_c;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_c;moveit_msgs::moveit_msgs__rosidl_typesupport_c;moveit_msgs::moveit_msgs__rosidl_generator_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_cpp;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_ros_move_group::moveit_ros_move_group;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;tf2::tf2;tf2_eigen::tf2_eigen;tf2_eigen_kdl::tf2_eigen_kdl;tf2_geometry_msgs::tf2_geometry_msgs;tf2_kdl::tf2_kdl;tf2_ros::tf2_ros;orocos-kdl;Boost::headers\"\n)\n\n# Create imported target pilz_industrial_motion_planner::planning_context_loader_circ\nadd_library(pilz_industrial_motion_planner::planning_context_loader_circ SHARED IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::planning_context_loader_circ PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"pilz_industrial_motion_planner::planning_context_loader_base;pilz_industrial_motion_planner::joint_limits_common;pilz_industrial_motion_planner::trajectory_generation_common;Eigen3::Eigen;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_msgs::moveit_msgs__rosidl_generator_c;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_c;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_c;moveit_msgs::moveit_msgs__rosidl_typesupport_c;moveit_msgs::moveit_msgs__rosidl_generator_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_cpp;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_ros_move_group::moveit_ros_move_group;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;tf2::tf2;tf2_eigen::tf2_eigen;tf2_eigen_kdl::tf2_eigen_kdl;tf2_geometry_msgs::tf2_geometry_msgs;tf2_kdl::tf2_kdl;tf2_ros::tf2_ros;orocos-kdl;Boost::headers\"\n)\n\n# Create imported target pilz_industrial_motion_planner::planning_context_loader_polyline\nadd_library(pilz_industrial_motion_planner::planning_context_loader_polyline SHARED IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::planning_context_loader_polyline PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"pilz_industrial_motion_planner::planning_context_loader_base;pilz_industrial_motion_planner::joint_limits_common;pilz_industrial_motion_planner::trajectory_generation_common;Eigen3::Eigen;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_msgs::moveit_msgs__rosidl_generator_c;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_c;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_c;moveit_msgs::moveit_msgs__rosidl_typesupport_c;moveit_msgs::moveit_msgs__rosidl_generator_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_cpp;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_ros_move_group::moveit_ros_move_group;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;tf2::tf2;tf2_eigen::tf2_eigen;tf2_eigen_kdl::tf2_eigen_kdl;tf2_geometry_msgs::tf2_geometry_msgs;tf2_kdl::tf2_kdl;tf2_ros::tf2_ros;orocos-kdl;Boost::headers\"\n)\n\n# Create imported target pilz_industrial_motion_planner::command_list_manager\nadd_library(pilz_industrial_motion_planner::command_list_manager SHARED IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::command_list_manager PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"pilz_industrial_motion_planner::trajectory_generation_common;pilz_industrial_motion_planner::joint_limits_common;Eigen3::Eigen;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_msgs::moveit_msgs__rosidl_generator_c;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_c;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_c;moveit_msgs::moveit_msgs__rosidl_typesupport_c;moveit_msgs::moveit_msgs__rosidl_generator_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_cpp;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_ros_move_group::moveit_ros_move_group;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;tf2::tf2;tf2_eigen::tf2_eigen;tf2_eigen_kdl::tf2_eigen_kdl;tf2_geometry_msgs::tf2_geometry_msgs;tf2_kdl::tf2_kdl;tf2_ros::tf2_ros;orocos-kdl;Boost::headers\"\n)\n\n# Create imported target pilz_industrial_motion_planner::sequence_capability\nadd_library(pilz_industrial_motion_planner::sequence_capability SHARED IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::sequence_capability PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"pilz_industrial_motion_planner::joint_limits_common;pilz_industrial_motion_planner::command_list_manager;pilz_industrial_motion_planner::trajectory_generation_common;Eigen3::Eigen;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_msgs::moveit_msgs__rosidl_generator_c;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_c;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_c;moveit_msgs::moveit_msgs__rosidl_typesupport_c;moveit_msgs::moveit_msgs__rosidl_generator_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_cpp;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_ros_move_group::moveit_ros_move_group;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;tf2::tf2;tf2_eigen::tf2_eigen;tf2_eigen_kdl::tf2_eigen_kdl;tf2_geometry_msgs::tf2_geometry_msgs;tf2_kdl::tf2_kdl;tf2_ros::tf2_ros;orocos-kdl;Boost::headers\"\n)\n\n# Create imported target pilz_industrial_motion_planner::trajectory_generation_common\nadd_library(pilz_industrial_motion_planner::trajectory_generation_common SHARED IMPORTED)\n\nset_target_properties(pilz_industrial_motion_planner::trajectory_generation_common PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/pilz_industrial_motion_planner\"\n  INTERFACE_LINK_LIBRARIES \"pilz_industrial_motion_planner::cartesian_limits_parameters;pilz_industrial_motion_planner::joint_limits_common;Eigen3::Eigen;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_msgs::moveit_msgs__rosidl_generator_c;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_c;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_c;moveit_msgs::moveit_msgs__rosidl_typesupport_c;moveit_msgs::moveit_msgs__rosidl_generator_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_fastrtps_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_introspection_cpp;moveit_msgs::moveit_msgs__rosidl_typesupport_cpp;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_msgs::moveit_msgs__rosidl_generator_py;moveit_ros_move_group::moveit_ros_move_group;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;tf2::tf2;tf2_eigen::tf2_eigen;tf2_eigen_kdl::tf2_eigen_kdl;tf2_geometry_msgs::tf2_geometry_msgs;tf2_kdl::tf2_kdl;tf2_ros::tf2_ros;orocos-kdl;Boost::headers\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/pilz_industrial_motion_plannerTargetsExport-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+write_file(
+    name = "gen_eigen3_eigen_h",
+    out = "_gen/include/eigen3/Eigen/Eigen",
+    content = ["#include <Eigen/Eigen>\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = [":gen_extra_0"],
+    prefix = "include/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["include/joint_limits_copy/joint_limits.h"],
+    prefix = "include/pilz_industrial_motion_planner/joint_limits_copy",
+)
+
+pkg_files(
+    name = "pkg_files_inc_2",
+    srcs = ["include/joint_limits_copy/joint_limits.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/joint_limits_copy",
+)
+
+pkg_files(
+    name = "pkg_files_inc_3",
+    srcs = ["include/joint_limits_copy/joint_limits_rosparam.h"],
+    prefix = "include/pilz_industrial_motion_planner/joint_limits_copy",
+)
+
+pkg_files(
+    name = "pkg_files_inc_4",
+    srcs = ["include/joint_limits_copy/joint_limits_rosparam.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/joint_limits_copy",
+)
+
+pkg_files(
+    name = "pkg_files_inc_5",
+    srcs = ["include/pilz_industrial_motion_planner/capability_names.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_6",
+    srcs = ["include/pilz_industrial_motion_planner/capability_names.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_7",
+    srcs = ["include/pilz_industrial_motion_planner/cartesian_trajectory.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_8",
+    srcs = ["include/pilz_industrial_motion_planner/cartesian_trajectory.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_9",
+    srcs = ["include/pilz_industrial_motion_planner/cartesian_trajectory_point.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_10",
+    srcs = ["include/pilz_industrial_motion_planner/cartesian_trajectory_point.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_11",
+    srcs = ["include/pilz_industrial_motion_planner/command_list_manager.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_12",
+    srcs = ["include/pilz_industrial_motion_planner/command_list_manager.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_13",
+    srcs = ["include/pilz_industrial_motion_planner/joint_limits_aggregator.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_14",
+    srcs = ["include/pilz_industrial_motion_planner/joint_limits_aggregator.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_15",
+    srcs = ["include/pilz_industrial_motion_planner/joint_limits_container.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_16",
+    srcs = ["include/pilz_industrial_motion_planner/joint_limits_container.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_17",
+    srcs = ["include/pilz_industrial_motion_planner/joint_limits_extension.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_18",
+    srcs = ["include/pilz_industrial_motion_planner/joint_limits_extension.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_19",
+    srcs = ["include/pilz_industrial_motion_planner/joint_limits_interface_extension.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_20",
+    srcs = ["include/pilz_industrial_motion_planner/joint_limits_interface_extension.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_21",
+    srcs = ["include/pilz_industrial_motion_planner/joint_limits_validator.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_22",
+    srcs = ["include/pilz_industrial_motion_planner/joint_limits_validator.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_23",
+    srcs = ["include/pilz_industrial_motion_planner/limits_container.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_24",
+    srcs = ["include/pilz_industrial_motion_planner/limits_container.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_25",
+    srcs = ["include/pilz_industrial_motion_planner/move_group_sequence_action.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_26",
+    srcs = ["include/pilz_industrial_motion_planner/move_group_sequence_action.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_27",
+    srcs = ["include/pilz_industrial_motion_planner/move_group_sequence_service.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_28",
+    srcs = ["include/pilz_industrial_motion_planner/move_group_sequence_service.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_29",
+    srcs = ["include/pilz_industrial_motion_planner/path_circle_generator.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_30",
+    srcs = ["include/pilz_industrial_motion_planner/path_circle_generator.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_31",
+    srcs = ["include/pilz_industrial_motion_planner/path_polyline_generator.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_32",
+    srcs = ["include/pilz_industrial_motion_planner/pilz_industrial_motion_planner.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_33",
+    srcs = ["include/pilz_industrial_motion_planner/pilz_industrial_motion_planner.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_34",
+    srcs = ["include/pilz_industrial_motion_planner/plan_components_builder.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_35",
+    srcs = ["include/pilz_industrial_motion_planner/plan_components_builder.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_36",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_base.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_37",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_base.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_38",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_circ.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_39",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_circ.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_40",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_lin.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_41",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_lin.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_42",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_loader.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_43",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_loader.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_44",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_loader_circ.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_45",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_loader_circ.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_46",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_loader_lin.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_47",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_loader_lin.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_48",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_loader_polyline.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_49",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_loader_ptp.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_50",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_loader_ptp.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_51",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_polyline.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_52",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_ptp.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_53",
+    srcs = ["include/pilz_industrial_motion_planner/planning_context_ptp.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_54",
+    srcs = ["include/pilz_industrial_motion_planner/planning_exceptions.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_55",
+    srcs = ["include/pilz_industrial_motion_planner/planning_exceptions.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_56",
+    srcs = ["include/pilz_industrial_motion_planner/tip_frame_getter.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_57",
+    srcs = ["include/pilz_industrial_motion_planner/tip_frame_getter.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_58",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_blend_request.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_59",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_blend_request.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_60",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_blend_response.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_61",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_blend_response.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_62",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_blender.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_63",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_blender.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_64",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_blender_transition_window.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_65",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_blender_transition_window.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_66",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_functions.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_67",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_functions.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_68",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generation_exceptions.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_69",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generation_exceptions.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_70",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generator.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_71",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generator.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_72",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generator_circ.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_73",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generator_circ.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_74",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generator_lin.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_75",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generator_lin.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_76",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generator_polyline.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_77",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generator_ptp.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_78",
+    srcs = ["include/pilz_industrial_motion_planner/trajectory_generator_ptp.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_79",
+    srcs = ["include/pilz_industrial_motion_planner/velocity_profile_atrap.h"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_inc_80",
+    srcs = ["include/pilz_industrial_motion_planner/velocity_profile_atrap.hpp"],
+    prefix = "include/pilz_industrial_motion_planner/pilz_industrial_motion_planner",
+)
+
+pkg_files(
+    name = "pkg_files_extra_81",
+    srcs = [":gen_extra_81"],
+    prefix = "share/ament_index/resource_index/moveit_ros_move_group__pluginlib__plugin",
+)
+
+pkg_files(
+    name = "pkg_files_extra_82",
+    srcs = [":gen_extra_82"],
+    prefix = "share/ament_index/resource_index/pilz_industrial_motion_planner__pluginlib__plugin",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_83",
+    srcs = [":gen_cmake_83"],
+    prefix = "share/pilz_industrial_motion_planner/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_84",
+    srcs = [":gen_cmake_84"],
+    prefix = "share/pilz_industrial_motion_planner/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_85",
+    srcs = [":gen_cmake_85"],
+    prefix = "share/pilz_industrial_motion_planner/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_86",
+    srcs = [":gen_cmake_86"],
+    prefix = "share/pilz_industrial_motion_planner/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_share_87",
+    srcs = ["test/unit_tests/config/unittest_joint_limit_config.yaml"],
+    prefix = "share/pilz_industrial_motion_planner/config",
+)
+
+pkg_files(
+    name = "pkg_files_share_88",
+    srcs = ["test/unit_tests/config/unittest_joint_limits_aggregator.yaml"],
+    prefix = "share/pilz_industrial_motion_planner/config",
+)
+
+pkg_files(
+    name = "pkg_files_share_89",
+    srcs = ["test/unit_tests/config/unittest_trajectory_blender_transition_window.yaml"],
+    prefix = "share/pilz_industrial_motion_planner/config",
+)
+
+pkg_files(
+    name = "pkg_files_share_90",
+    srcs = ["test/unit_tests/config/unittest_trajectory_functions.yaml"],
+    prefix = "share/pilz_industrial_motion_planner/config",
+)
+
+pkg_files(
+    name = "pkg_files_share_91",
+    srcs = ["test/unit_tests/config/unittest_trajectory_generator_circ.yaml"],
+    prefix = "share/pilz_industrial_motion_planner/config",
+)
+
+pkg_files(
+    name = "pkg_files_share_92",
+    srcs = ["test/unit_tests/config/unittest_trajectory_generator_common.yaml"],
+    prefix = "share/pilz_industrial_motion_planner/config",
+)
+
+pkg_files(
+    name = "pkg_files_share_93",
+    srcs = ["test/unit_tests/config/unittest_trajectory_generator_lin.yaml"],
+    prefix = "share/pilz_industrial_motion_planner/config",
+)
+
+pkg_files(
+    name = "pkg_files_share_94",
+    srcs = ["test/unit_tests/config/unittest_trajectory_generator_ptp.yaml"],
+    prefix = "share/pilz_industrial_motion_planner/config",
+)
+
+pkg_files(
+    name = "pkg_files_share_95",
+    srcs = ["test/unit_tests/launch/common_parameters.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_96",
+    srcs = ["test/unit_tests/launch/unittest_cartesian_limits_aggregator.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_97",
+    srcs = ["test/unit_tests/launch/unittest_joint_limit.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_98",
+    srcs = ["test/unit_tests/launch/unittest_joint_limits_aggregator.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_99",
+    srcs = ["test/unit_tests/launch/unittest_pilz_industrial_motion_planner.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_100",
+    srcs = ["test/unit_tests/launch/unittest_planning_context.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_101",
+    srcs = ["test/unit_tests/launch/unittest_planning_context_loaders.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_102",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_blender_transition_window.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_103",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_functions.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_104",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_generator_circ.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_105",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_generator_common.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_106",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_generator_lin.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_107",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_generator_ptp.test.py"],
+    prefix = "share/pilz_industrial_motion_planner/launch",
+)
+
+pkg_files(
+    name = "pkg_files_share_110",
+    srcs = ["test/test_data/concept_testdata.odp"],
+    prefix = "share/pilz_industrial_motion_planner/test_data",
+)
+
+pkg_files(
+    name = "pkg_files_share_111",
+    srcs = ["test/test_data/concept_testdata.png"],
+    prefix = "share/pilz_industrial_motion_planner/test_data",
+)
+
+pkg_files(
+    name = "pkg_files_share_112",
+    srcs = ["test/test_data/frankaemika_panda/testdata_sequence.xml"],
+    prefix = "share/pilz_industrial_motion_planner/test_data/frankaemika_panda",
+)
+
+pkg_files(
+    name = "pkg_files_share_113",
+    srcs = ["test/test_data/prbt/testdata_deprecated.xml"],
+    prefix = "share/pilz_industrial_motion_planner/test_data/prbt",
+)
+
+pkg_files(
+    name = "pkg_files_share_114",
+    srcs = ["test/test_data/prbt/testdata_sequence.xml"],
+    prefix = "share/pilz_industrial_motion_planner/test_data/prbt",
+)
+
+pkg_files(
+    name = "pkg_files_share_115",
+    srcs = ["test/test_data/prbt/testdata_with_gripper.xml"],
+    prefix = "share/pilz_industrial_motion_planner/test_data/prbt",
+)
+
+pkg_files(
+    name = "pkg_files_share_116",
+    srcs = ["test/test_data/testpoints.py"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "share/pilz_industrial_motion_planner/test_data",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "plugins/planning_context_plugin_description.xml",
+        "plugins/sequence_capability_plugin_description.xml",
+    ],
+    lib_data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":_bin/unittest_trajectory_generator",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+        ":_bin/unittest_velocity_profile_atrap",
+    ],
+    libraries = [
+        ":joint_limits_common",
+        ":trajectory_generation_common",
+        ":command_list_manager",
+        ":planning_context_loader_base",
+        ":pilz_industrial_motion_planner",
+        ":pilz_industrial_motion_planner_test_utils",
+        ":planning_context_loader_circ",
+        ":planning_context_loader_lin",
+        ":planning_context_loader_polyline",
+        ":planning_context_loader_ptp",
+        ":sequence_capability",
+    ],
     package_xml = "package.xml",
+    plugin_category = "moveit_core",
+    plugins = ["plugins/pilz_industrial_motion_planner_plugin_description.xml"],
     deps = [
+        ":res_moveit_ros_move_group__pluginlib__plugin",
+        ":res_pilz_industrial_motion_planner__pluginlib__plugin",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gmock//:ament_package",
         "@ament_cmake_gtest//:ament_package",
@@ -44,7 +2205,950 @@ ament_package(
         "@pluginlib//:ament_package",
         "@rclcpp//:ament_package",
         "@ros_testing//:ament_package",
-        "@rosdistro//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_eigen_kdl//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_kdl//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "unittest_get_solver_tip_frame",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":command_list_manager",
+        ":joint_limits_common",
+        ":pilz_industrial_motion_planner",
+        ":pilz_industrial_motion_planner_test_utils",
+        ":planning_context_loader_base",
+        ":planning_context_loader_circ",
+        ":planning_context_loader_lin",
+        ":planning_context_loader_polyline",
+        ":planning_context_loader_ptp",
+        ":sequence_capability",
+        ":trajectory_generation_common",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":planning_context_loader_base_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "unittest_joint_limits_container",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":command_list_manager",
+        ":joint_limits_common",
+        ":pilz_industrial_motion_planner",
+        ":pilz_industrial_motion_planner_test_utils",
+        ":planning_context_loader_base",
+        ":planning_context_loader_circ",
+        ":planning_context_loader_lin",
+        ":planning_context_loader_polyline",
+        ":planning_context_loader_ptp",
+        ":sequence_capability",
+        ":trajectory_generation_common",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "unittest_joint_limits_validator",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":command_list_manager",
+        ":joint_limits_common",
+        ":pilz_industrial_motion_planner",
+        ":pilz_industrial_motion_planner_test_utils",
+        ":planning_context_loader_base",
+        ":planning_context_loader_circ",
+        ":planning_context_loader_lin",
+        ":planning_context_loader_polyline",
+        ":planning_context_loader_ptp",
+        ":sequence_capability",
+        ":trajectory_generation_common",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "unittest_pilz_industrial_motion_planner_direct",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":command_list_manager",
+        ":joint_limits_common",
+        ":pilz_industrial_motion_planner",
+        ":pilz_industrial_motion_planner_test_utils",
+        ":planning_context_loader_base",
+        ":planning_context_loader_circ",
+        ":planning_context_loader_lin",
+        ":planning_context_loader_polyline",
+        ":planning_context_loader_ptp",
+        ":sequence_capability",
+        ":trajectory_generation_common",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":planning_context_loader_base_library",
+        ":planning_context_loader_ptp_library",
+        ":trajectory_generation_common_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "unittest_trajectory_generator",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":command_list_manager",
+        ":joint_limits_common",
+        ":pilz_industrial_motion_planner",
+        ":pilz_industrial_motion_planner_test_utils",
+        ":planning_context_loader_base",
+        ":planning_context_loader_circ",
+        ":planning_context_loader_lin",
+        ":planning_context_loader_polyline",
+        ":planning_context_loader_ptp",
+        ":sequence_capability",
+        ":trajectory_generation_common",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":planning_context_loader_base_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "unittest_velocity_profile_atrap",
+    srcs = [":gen_pilz_industrial_motion_planner_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":command_list_manager",
+        ":joint_limits_common",
+        ":pilz_industrial_motion_planner",
+        ":pilz_industrial_motion_planner_test_utils",
+        ":planning_context_loader_base",
+        ":planning_context_loader_circ",
+        ":planning_context_loader_lin",
+        ":planning_context_loader_polyline",
+        ":planning_context_loader_ptp",
+        ":sequence_capability",
+        ":trajectory_generation_common",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/pilz_industrial_motion_planner",
+        "include",
+        "include/pilz_industrial_motion_planner",
+        "test",
+        "test/unit_tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limits_common_library",
+        ":pilz_industrial_motion_planner_library",
+        ":planning_context_loader_base_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_trajectory_functions.test.py",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_functions.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_trajectory_blender_transition_window.test.py",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_blender_transition_window.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_trajectory_generator_common.test.py",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_generator_common.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_trajectory_generator_circ.test.py",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_generator_circ.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_trajectory_generator_lin.test.py",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_generator_lin.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_trajectory_generator_ptp.test.py",
+    srcs = ["test/unit_tests/launch/unittest_trajectory_generator_ptp.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_pilz_industrial_motion_planner.test.py",
+    srcs = ["test/unit_tests/launch/unittest_pilz_industrial_motion_planner.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_joint_limit.test.py",
+    srcs = ["test/unit_tests/launch/unittest_joint_limit.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_joint_limits_aggregator.test.py",
+    srcs = ["test/unit_tests/launch/unittest_joint_limits_aggregator.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_planning_context_loaders.test.py",
+    srcs = ["test/unit_tests/launch/unittest_planning_context_loaders.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+py_pytest(
+    name = "test_unit_tests_launch_unittest_planning_context.test.py",
+    srcs = ["test/unit_tests/launch/unittest_planning_context.test.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":_bin/unittest_get_solver_tip_frame",
+        ":_bin/unittest_joint_limits_container",
+        ":_bin/unittest_joint_limits_validator",
+        ":_bin/unittest_pilz_industrial_motion_planner_direct",
+        ":_bin/unittest_trajectory_generator",
+        ":_bin/unittest_velocity_profile_atrap",
+        ":ament_index",
+        ":unittest_joint_limit",
+        ":unittest_joint_limits_aggregator",
+        ":unittest_pilz_industrial_motion_planner",
+        ":unittest_planning_context",
+        ":unittest_planning_context_loaders",
+        ":unittest_trajectory_blender_transition_window",
+        ":unittest_trajectory_functions",
+        ":unittest_trajectory_generator_circ",
+        ":unittest_trajectory_generator_common",
+        ":unittest_trajectory_generator_lin",
+        ":unittest_trajectory_generator_ptp",
+    ],
+    deps = [
+        "@geometry_msgs//:py",
+        "@launch_param_builder",
+        "@moveit_configs_utils",
+        "@moveit_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@tf2_kdl//:tf2_kdl_py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "fmt",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "rsl",
+        "tcb_span",
+        "tl-expected",
+        "Eigen3",
+        "eigen3_cmake_module",
+        "generate_parameter_library",
+        "geometry_msgs",
+        "moveit_core",
+        "moveit_msgs",
+        "moveit_ros_move_group",
+        "moveit_ros_planning",
+        "pluginlib",
+        "rclcpp",
+        "tf2",
+        "tf2_eigen",
+        "tf2_eigen_kdl",
+        "tf2_geometry_msgs",
+        "tf2_kdl",
+        "tf2_ros",
+        "orocos_kdl",
+        "Boost",
+        "orocos_kdl_vendor",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install = [
+        ":pkg_files_extra_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_inc_2",
+        ":pkg_files_inc_3",
+        ":pkg_files_inc_4",
+        ":pkg_files_inc_5",
+        ":pkg_files_inc_6",
+        ":pkg_files_inc_7",
+        ":pkg_files_inc_8",
+        ":pkg_files_inc_9",
+        ":pkg_files_inc_10",
+        ":pkg_files_inc_11",
+        ":pkg_files_inc_12",
+        ":pkg_files_inc_13",
+        ":pkg_files_inc_14",
+        ":pkg_files_inc_15",
+        ":pkg_files_inc_16",
+        ":pkg_files_inc_17",
+        ":pkg_files_inc_18",
+        ":pkg_files_inc_19",
+        ":pkg_files_inc_20",
+        ":pkg_files_inc_21",
+        ":pkg_files_inc_22",
+        ":pkg_files_inc_23",
+        ":pkg_files_inc_24",
+        ":pkg_files_inc_25",
+        ":pkg_files_inc_26",
+        ":pkg_files_inc_27",
+        ":pkg_files_inc_28",
+        ":pkg_files_inc_29",
+        ":pkg_files_inc_30",
+        ":pkg_files_inc_31",
+        ":pkg_files_inc_32",
+        ":pkg_files_inc_33",
+        ":pkg_files_inc_34",
+        ":pkg_files_inc_35",
+        ":pkg_files_inc_36",
+        ":pkg_files_inc_37",
+        ":pkg_files_inc_38",
+        ":pkg_files_inc_39",
+        ":pkg_files_inc_40",
+        ":pkg_files_inc_41",
+        ":pkg_files_inc_42",
+        ":pkg_files_inc_43",
+        ":pkg_files_inc_44",
+        ":pkg_files_inc_45",
+        ":pkg_files_inc_46",
+        ":pkg_files_inc_47",
+        ":pkg_files_inc_48",
+        ":pkg_files_inc_49",
+        ":pkg_files_inc_50",
+        ":pkg_files_inc_51",
+        ":pkg_files_inc_52",
+        ":pkg_files_inc_53",
+        ":pkg_files_inc_54",
+        ":pkg_files_inc_55",
+        ":pkg_files_inc_56",
+        ":pkg_files_inc_57",
+        ":pkg_files_inc_58",
+        ":pkg_files_inc_59",
+        ":pkg_files_inc_60",
+        ":pkg_files_inc_61",
+        ":pkg_files_inc_62",
+        ":pkg_files_inc_63",
+        ":pkg_files_inc_64",
+        ":pkg_files_inc_65",
+        ":pkg_files_inc_66",
+        ":pkg_files_inc_67",
+        ":pkg_files_inc_68",
+        ":pkg_files_inc_69",
+        ":pkg_files_inc_70",
+        ":pkg_files_inc_71",
+        ":pkg_files_inc_72",
+        ":pkg_files_inc_73",
+        ":pkg_files_inc_74",
+        ":pkg_files_inc_75",
+        ":pkg_files_inc_76",
+        ":pkg_files_inc_77",
+        ":pkg_files_inc_78",
+        ":pkg_files_inc_79",
+        ":pkg_files_inc_80",
+        ":pkg_files_extra_81",
+        ":pkg_files_extra_82",
+        ":pkg_files_cmake_83",
+        ":pkg_files_cmake_84",
+        ":pkg_files_cmake_85",
+        ":pkg_files_cmake_86",
+        ":pkg_files_share_87",
+        ":pkg_files_share_88",
+        ":pkg_files_share_89",
+        ":pkg_files_share_90",
+        ":pkg_files_share_91",
+        ":pkg_files_share_92",
+        ":pkg_files_share_93",
+        ":pkg_files_share_94",
+        ":pkg_files_share_95",
+        ":pkg_files_share_96",
+        ":pkg_files_share_97",
+        ":pkg_files_share_98",
+        ":pkg_files_share_99",
+        ":pkg_files_share_100",
+        ":pkg_files_share_101",
+        ":pkg_files_share_102",
+        ":pkg_files_share_103",
+        ":pkg_files_share_104",
+        ":pkg_files_share_105",
+        ":pkg_files_share_106",
+        ":pkg_files_share_107",
+        ":pkg_files_share_110",
+        ":pkg_files_share_111",
+        ":pkg_files_share_112",
+        ":pkg_files_share_113",
+        ":pkg_files_share_114",
+        ":pkg_files_share_115",
+        ":pkg_files_share_116",
+    ],
+    libraries = [
+        ":joint_limits_common",
+        ":trajectory_generation_common",
+        ":command_list_manager",
+        ":planning_context_loader_base",
+        ":pilz_industrial_motion_planner",
+        ":pilz_industrial_motion_planner_test_utils",
+        ":planning_context_loader_circ",
+        ":planning_context_loader_lin",
+        ":planning_context_loader_polyline",
+        ":planning_context_loader_ptp",
+        ":sequence_capability",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        ":res_moveit_ros_move_group__pluginlib__plugin",
+        ":res_pilz_industrial_motion_planner__pluginlib__plugin",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@launch_param_builder//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_configs_utils//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_msgs//:ament_package",
+        "@moveit_resources_panda_moveit_config//:ament_package",
+        "@moveit_resources_prbt_moveit_config//:ament_package",
+        "@moveit_resources_prbt_pg70_support//:ament_package",
+        "@moveit_resources_prbt_support//:ament_package",
+        "@moveit_ros_move_group//:ament_package",
+        "@moveit_ros_planning//:ament_package",
+        "@orocos_kdl_vendor//:ament_package",
+        "@pilz_industrial_motion_planner_testutils//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_testing//:ament_package",
         "@tf2//:ament_package",
         "@tf2_eigen//:ament_package",
         "@tf2_eigen_kdl//:ament_package",
