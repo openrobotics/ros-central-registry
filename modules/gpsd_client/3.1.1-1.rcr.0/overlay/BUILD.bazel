@@ -1,26 +1,99 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
 
-ament_package(
-    name = "ament_package",
-    data = glob(["config/**"]),
+CC_DEPS = [
+    "@gps_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "gpsd_client_library",
+    srcs = [":gen_gpsd_client_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/gpsd_client",
+    ],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "gpsd_client",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":gpsd_client_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "gpsd_client_components",
+    component = ":gpsd_client",
+    plugins = ["gpsd_client::GPSDClientComponent"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":gpsd_client"],
+)
+
+write_file(
+    name = "gen_gpsd_client_stub_cpp",
+    out = "_gen/gpsd_client_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":gpsd_client_components"],
+    data = [
+        "config/gpsd_client.yaml",
+        "launch/gpsd_client-launch.py",
+    ],
+    libraries = [":gpsd_client"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -28,7 +101,47 @@ ament_package(
         "@gps_msgs//:ament_package",
         "@rclcpp//:ament_package",
         "@rclcpp_components//:ament_package",
-        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_gpsd_parser",
+    srcs = [":gen_gpsd_client_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/gpsd_client",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":gpsd_client_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ament_cmake",
+        "rclcpp",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_targets = False,
+    libraries = [":gpsd_client"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
         "@sensor_msgs//:ament_package",
     ],
 )
