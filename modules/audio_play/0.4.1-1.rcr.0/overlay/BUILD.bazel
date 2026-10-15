@@ -1,0 +1,126 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+CC_DEPS = [
+    "@audio_common_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.thread",
+]
+
+cc_library(
+    name = "audio_play_library",
+    srcs = ["src/audio_play_node.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_gst_app_gstappsink_h",
+        ":gen_gst_app_gstappsrc_h",
+        ":gen_gst_gst_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = ["_gen/include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "audio_play",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":audio_play_library"],
+)
+
+rclcpp_components_register_node(
+    name = "audio_play_node",
+    component = ":audio_play",
+    node_name = "audio_play_node",
+    plugin = "audio_play::AudioPlayNode",
+)
+
+write_file(
+    name = "gen_gst_gst_h",
+    out = "_gen/include/gst/gst.h",
+    content = ["#ifndef RCR_GST_GST_H_\n#define RCR_GST_GST_H_\n#include <cstddef>\n#include <cstdint>\n#include <cstring>\nusing gboolean = int;\nusing gchar = char;\nusing gpointer = void *;\nusing GCallback = void (*)();\nusing GstClockTime = uint64_t;\n#ifndef TRUE\n#define TRUE 1\n#endif\n#ifndef FALSE\n#define FALSE 0\n#endif\n#define G_TYPE_STRING 1\n#define G_TYPE_INT 2\n#define G_TYPE_BOOLEAN 3\n#define GST_CLOCK_TYPE_REALTIME 0\n#define GST_FORMAT_TIME 3\n#define GST_MAP_READ 1\n#define G_OBJECT(x) (x)\n#define G_CALLBACK(f) reinterpret_cast<GCallback>(f)\nstruct GError { const char * message; };\nstruct GMainLoop {};\nstruct GstObject {};\nstruct GstElement : GstObject {};\nstruct GstBin : GstElement {};\nstruct GstPipeline : GstBin {};\nstruct GstClock : GstObject {};\nstruct GstBus : GstObject {};\nstruct GstCaps {};\nstruct GstPad : GstObject {};\nstruct GstStructure {};\nstruct GstAppSink : GstElement {};\nstruct GstAppSrc : GstElement {};\nstruct GstSample {};\nstruct GstBuffer { uint64_t pts{0}; };\nstruct GstMessage {};\nstruct GstMapInfo { uint8_t * data{nullptr}; std::size_t size{0}; };\nenum GstFlowReturn { GST_FLOW_OK = 0 };\nenum GstState { GST_STATE_NULL = 1, GST_STATE_PLAYING = 4 };\n#define GST_PIPELINE(x) reinterpret_cast<GstPipeline *>(x)\n#define GST_PIPELINE_CAST(x) reinterpret_cast<GstPipeline *>(x)\n#define GST_BIN(x) reinterpret_cast<GstBin *>(x)\n#define GST_ELEMENT(x) reinterpret_cast<GstElement *>(x)\n#define GST_BUFFER_PTS(b) ((b)->pts)\n#define GST_PAD_IS_LINKED(p) (true)\ninline void gst_init(int *, char ***) {}\ninline GMainLoop * g_main_loop_new(void *, gboolean) { return new GMainLoop{}; }\ninline void g_main_loop_run(GMainLoop *) {}\ninline void g_main_loop_quit(GMainLoop *) {}\ninline void g_main_loop_unref(GMainLoop * l) { delete l; }\ninline void g_object_set(void *, const char *, ...) {}\ninline void g_object_unref(void *) {}\ninline void gst_object_unref(void *) {}\ninline unsigned long g_signal_connect(void *, const char *, GCallback, void *) { return 0; }\ninline void g_signal_emit_by_name(void *, const char *, ...) {}\ninline void g_error_free(GError *) {}\ninline void g_free(void *) {}\ninline const char * g_strrstr(const char * h, const char * n) { return h ? std::strstr(h, n) : nullptr; }\ninline GstElement * gst_pipeline_new(const char *) { return new GstPipeline{}; }\ninline GstElement * gst_bin_new(const char *) { return new GstBin{}; }\ninline GstClock * gst_system_clock_obtain() { return new GstClock{}; }\ninline void gst_pipeline_use_clock(GstPipeline *, GstClock *) {}\ninline GstBus * gst_pipeline_get_bus(GstPipeline *) { return new GstBus{}; }\ninline void gst_bus_add_signal_watch(GstBus *) {}\ninline GstElement * gst_element_factory_make(const char *, const char *) { return new GstElement{}; }\ninline GstCaps * gst_caps_new_simple(const char *, const char *, ...) { return new GstCaps{}; }\ninline void gst_caps_unref(GstCaps * c) { delete c; }\ninline void gst_bin_add_many(GstBin *, GstElement *, ...) {}\ninline gboolean gst_element_link_many(GstElement *, GstElement *, ...) { return TRUE; }\ninline gboolean gst_element_link(GstElement *, GstElement *) { return TRUE; }\ninline int gst_element_set_state(GstElement *, GstState) { return 1; }\ninline GstPad * gst_element_get_static_pad(GstElement *, const char *) { return new GstPad{}; }\ninline gboolean gst_element_add_pad(GstElement *, GstPad *) { return TRUE; }\ninline GstPad * gst_ghost_pad_new(const char *, GstPad *) { return new GstPad{}; }\ninline GstCaps * gst_pad_query_caps(GstPad *, GstCaps *) { return new GstCaps{}; }\ninline GstStructure * gst_caps_get_structure(const GstCaps *, unsigned int) { static GstStructure s; return &s; }\ninline const char * gst_structure_get_name(const GstStructure *) { return \"audio/x-raw\"; }\ninline int gst_pad_link(GstPad *, GstPad *) { return 0; }\ninline GstBuffer * gst_sample_get_buffer(GstSample *) { static GstBuffer b{0}; return &b; }\ninline void gst_sample_unref(GstSample *) {}\ninline GstClockTime gst_element_get_base_time(GstElement *) { return 0; }\ninline gboolean gst_buffer_map(GstBuffer *, GstMapInfo * info, int) { if (info) { info->data = nullptr; info->size = 0; } return TRUE; }\ninline void gst_buffer_unmap(GstBuffer *, GstMapInfo *) {}\ninline GstBuffer * gst_buffer_new_and_alloc(std::size_t) { return new GstBuffer{0}; }\ninline std::size_t gst_buffer_fill(GstBuffer *, std::size_t, const void *, std::size_t size) { return size; }\ninline void gst_buffer_unref(GstBuffer * b) { delete b; }\ninline void gst_message_parse_error(GstMessage *, GError ** err, gchar ** debug) { static GError e{\"error\"}; if (err) *err = &e; if (debug) *debug = nullptr; }\n#endif\n"],
+)
+
+write_file(
+    name = "gen_gst_app_gstappsink_h",
+    out = "_gen/include/gst/app/gstappsink.h",
+    content = ["#include <gst/gst.h>\n"],
+)
+
+write_file(
+    name = "gen_gst_app_gstappsrc_h",
+    out = "_gen/include/gst/app/gstappsrc.h",
+    content = ["#include <gst/gst.h>\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":audio_play_node_record"],
+    data = [
+        "launch/play.launch.py",
+        "launch/play.launch.xml",
+    ],
+    lib_data = [":audio_play_node"],
+    libraries = [":audio_play"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@audio_common_msgs//:ament_package",
+        "@launch_xml//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_targets = False,
+    libraries = [":audio_play"],
+    package_xml = "package.xml",
+    programs = [":audio_play_node"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@audio_common_msgs//:ament_package",
+        "@launch_xml//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+    ],
+)
