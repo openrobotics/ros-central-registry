@@ -1,0 +1,170 @@
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@spinnaker_camera_driver//:camera_driver": "@spinnaker_camera_driver//:camera_driver_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "synchronized_camera_driver_library",
+    srcs = [
+        "src/exposure_controller_factory.cpp",
+        "src/follower_exposure_controller.cpp",
+        "src/master_exposure_controller.cpp",
+        "src/synchronized_camera_driver.cpp",
+        "src/time_estimator.cpp",
+        "src/time_keeper.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/spinnaker_synchronized_camera_driver",
+    ],
+    local_defines = ros_local_defines() + [
+        "IMAGE_TRANSPORT_SUPPORTS_LIFECYCLE_NODE",
+        "IMAGE_TRANSPORT_SUPPORTS_NODE_INTERFACES",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "synchronized_camera_driver",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":synchronized_camera_driver_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "synchronized_camera_driver_components",
+    component = ":synchronized_camera_driver",
+    plugins = ["spinnaker_synchronized_camera_driver::SynchronizedCameraDriver"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":synchronized_camera_driver"],
+)
+
+cc_binary(
+    name = "synchronized_camera_driver_node",
+    srcs = ["src/synchronized_camera_driver_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/spinnaker_synchronized_camera_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "IMAGE_TRANSPORT_SUPPORTS_LIFECYCLE_NODE",
+        "IMAGE_TRANSPORT_SUPPORTS_NODE_INTERFACES",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":synchronized_camera_driver_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":synchronized_camera_driver_components"],
+    data = [
+        "launch/follower_example.launch.py",
+        "launch/master_example.launch.py",
+        "launch/primary_secondary.launch.py",
+    ],
+    lib_data = [":synchronized_camera_driver_node"],
+    libraries = [":synchronized_camera_driver"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_black//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@spinnaker_camera_driver//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    libraries = [":synchronized_camera_driver"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_black//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@spinnaker_camera_driver//:ament_package",
+    ],
+)
