@@ -1,26 +1,315 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@@moveit_msgs+//:cc",
+    "@moveit_core//:moveit_collision_detection_bullet_library",
+    "@moveit_core//:moveit_collision_detection_fcl_library",
+    "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_collision_distance_field_library",
+    "@moveit_core//:moveit_constraint_samplers_library",
+    "@moveit_core//:moveit_distance_field_library",
+    "@moveit_core//:moveit_dynamics_solver_library",
+    "@moveit_core//:moveit_exceptions_library",
+    "@moveit_core//:moveit_kinematic_constraints_library",
+    "@moveit_core//:moveit_kinematics_base_library",
+    "@moveit_core//:moveit_kinematics_metrics_library",
+    "@moveit_core//:moveit_planning_interface_library",
+    "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_smoothing_base_library",
+    "@moveit_core//:moveit_test_utils_library",
+    "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils_library",
+    "@moveit_ros_occupancy_map_monitor//:moveit_ros_occupancy_map_monitor_library",
+    "@moveit_ros_planning//:moveit_collision_plugin_loader_library",
+    "@moveit_ros_planning//:moveit_constraint_sampler_manager_loader_library",
+    "@moveit_ros_planning//:moveit_cpp_library",
+    "@moveit_ros_planning//:moveit_kinematics_plugin_loader_library",
+    "@moveit_ros_planning//:moveit_plan_execution_library",
+    "@moveit_ros_planning//:moveit_planning_pipeline_interfaces_library",
+    "@moveit_ros_planning//:moveit_planning_pipeline_library",
+    "@moveit_ros_planning//:moveit_planning_scene_monitor_library",
+    "@moveit_ros_planning//:moveit_rdf_loader_library",
+    "@moveit_ros_planning//:moveit_robot_model_loader_library",
+    "@moveit_ros_planning//:moveit_trajectory_execution_manager_library",
+    "@moveit_ros_planning//:srdf_publisher_node_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:boost.tokenizer",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@std_srvs//:cc",
+]
+
+cc_library(
+    name = "moveit_move_group_capabilities_base_library",
+    srcs = [":gen_moveit_ros_move_group_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = ["include"],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_move_group_capabilities_base",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":moveit_move_group_capabilities_base_library"],
+)
+
+cc_library(
+    name = "moveit_move_group_default_capabilities_library",
+    srcs = [":gen_moveit_ros_move_group_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = ["include"],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_move_group_capabilities_base_library"],
+)
+
+cc_shared_library(
+    name = "moveit_move_group_default_capabilities",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":moveit_move_group_default_capabilities_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "list_move_group_capabilities",
+    srcs = [":gen_moveit_ros_move_group_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_move_group_capabilities_base_library"],
+)
+
+cc_binary(
+    name = "move_group",
+    srcs = [":gen_moveit_ros_move_group_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_move_group_capabilities_base_library"],
+)
+
+write_file(
+    name = "gen_moveit_ros_move_group_stub_cpp",
+    out = "_gen/moveit_ros_move_group_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_cmake_5",
+    out = "_gen/share/moveit_ros_move_group/cmake/ament_cmake_export_targets-extras.cmake",
+    content = ["# generated from ament_cmake_export_targets/cmake/ament_cmake_export_targets-extras.cmake.in\n\nset(_exported_targets \"moveit_ros_move_groupTargets\")\n\n# include all exported targets\nif(NOT _exported_targets STREQUAL \"\")\n  foreach(_target ${_exported_targets})\n    set(_export_file \"${moveit_ros_move_group_DIR}/${_target}Export.cmake\")\n    include(\"${_export_file}\")\n\n    # extract the target names associated with the export\n    set(_regex \"foreach\\\\((_cmake)?_expected_?[Tt]arget (IN ITEMS )?(.+)\\\\)\")\n    file(\n      STRINGS \"${_export_file}\" _foreach_targets\n      REGEX \"${_regex}\")\n    list(LENGTH _foreach_targets _matches)\n    if(NOT _matches EQUAL 1)\n      message(FATAL_ERROR\n        \"Failed to find exported target names in '${_export_file}'\")\n    endif()\n    string(REGEX REPLACE \"${_regex}\" \"\\\\3\" _targets \"${_foreach_targets}\")\n    string(REPLACE \" \" \";\" _targets \"${_targets}\")\n    list(LENGTH _targets _length)\n\n    list(APPEND moveit_ros_move_group_TARGETS ${_targets})\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_cmake_6",
+    out = "_gen/share/moveit_ros_move_group/cmake/moveit_ros_move_groupTargetsExport-release.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"moveit_ros_move_group::moveit_move_group_capabilities_base\" for configuration \"Release\"\nset_property(TARGET moveit_ros_move_group::moveit_move_group_capabilities_base APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(moveit_ros_move_group::moveit_move_group_capabilities_base PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmoveit_move_group_capabilities_base.so.2.15.2\"\n  IMPORTED_SONAME_RELEASE \"libmoveit_move_group_capabilities_base.so.2.15.2\"\n  )\n\nlist(APPEND _cmake_import_check_targets moveit_ros_move_group::moveit_move_group_capabilities_base )\nlist(APPEND _cmake_import_check_files_for_moveit_ros_move_group::moveit_move_group_capabilities_base \"${_IMPORT_PREFIX}/lib/libmoveit_move_group_capabilities_base.so.2.15.2\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_cmake_7",
+    out = "_gen/share/moveit_ros_move_group/cmake/moveit_ros_move_groupTargetsExport.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"3.0.0\")\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 3.0.0...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS moveit_ros_move_group::moveit_ros_move_group moveit_ros_move_group::moveit_move_group_capabilities_base)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target moveit_ros_move_group::moveit_ros_move_group\nadd_library(moveit_ros_move_group::moveit_ros_move_group INTERFACE IMPORTED)\n\nset_target_properties(moveit_ros_move_group::moveit_ros_move_group PROPERTIES\n  INTERFACE_LINK_LIBRARIES \"moveit_ros_move_group::moveit_move_group_capabilities_base\"\n)\n\n# Create imported target moveit_ros_move_group::moveit_move_group_capabilities_base\nadd_library(moveit_ros_move_group::moveit_move_group_capabilities_base SHARED IMPORTED)\n\nset_target_properties(moveit_ros_move_group::moveit_move_group_capabilities_base PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/moveit_ros_move_group\"\n  INTERFACE_LINK_LIBRARIES \"fmt::fmt;moveit_core::moveit_core;moveit_ros_occupancy_map_monitor::moveit_ros_occupancy_map_monitor;moveit_ros_planning::moveit_ros_planning;pluginlib::pluginlib;rclcpp::rclcpp;rclcpp_action::rclcpp_action;std_srvs::std_srvs__rosidl_generator_c;std_srvs::std_srvs__rosidl_typesupport_fastrtps_c;std_srvs::std_srvs__rosidl_typesupport_introspection_c;std_srvs::std_srvs__rosidl_typesupport_c;std_srvs::std_srvs__rosidl_generator_cpp;std_srvs::std_srvs__rosidl_typesupport_fastrtps_cpp;std_srvs::std_srvs__rosidl_typesupport_introspection_cpp;std_srvs::std_srvs__rosidl_typesupport_cpp;std_srvs::std_srvs__rosidl_generator_py;std_srvs::std_srvs__rosidl_generator_py;tf2::tf2;tf2_geometry_msgs::tf2_geometry_msgs;tf2_ros::tf2_ros\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/moveit_ros_move_groupTargetsExport-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+pkg_files(
+    name = "pkg_files_soname_0",
+    srcs = [":moveit_move_group_capabilities_base"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":moveit_move_group_capabilities_base": "libmoveit_move_group_capabilities_base.so.2.15.2"},
+)
+
+pkg_files(
+    name = "pkg_files_soname_1",
+    srcs = [":moveit_move_group_default_capabilities"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":moveit_move_group_default_capabilities": "libmoveit_move_group_default_capabilities.so.2.15.2"},
+)
+
+pkg_files(
+    name = "pkg_files_extra_2",
+    srcs = ["scripts/load_map"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/moveit_ros_move_group",
+)
+
+pkg_files(
+    name = "pkg_files_extra_3",
+    srcs = ["scripts/save_map"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/moveit_ros_move_group",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_4",
+    srcs = ["ConfigExtras.cmake"],
+    prefix = "share/moveit_ros_move_group/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_5",
+    srcs = [":gen_cmake_5"],
+    prefix = "share/moveit_ros_move_group/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_6",
+    srcs = [":gen_cmake_6"],
+    prefix = "share/moveit_ros_move_group/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_7",
+    srcs = [":gen_cmake_7"],
+    prefix = "share/moveit_ros_move_group/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":list_move_group_capabilities",
+        ":move_group",
+    ],
+    libraries = [
+        ":moveit_move_group_capabilities_base",
+        ":moveit_move_group_default_capabilities",
+    ],
     package_xml = "package.xml",
+    plugins = ["default_capabilities_plugin_description.xml"],
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
@@ -36,7 +325,76 @@ ament_package(
         "@rclcpp//:ament_package",
         "@rclcpp_action//:ament_package",
         "@ros_testing//:ament_package",
-        "@rosdistro//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "fmt",
+        "ament_cmake",
+        "moveit_core",
+        "moveit_ros_occupancy_map_monitor",
+        "moveit_ros_planning",
+        "pluginlib",
+        "rclcpp",
+        "rclcpp_action",
+        "std_srvs",
+        "tf2",
+        "tf2_geometry_msgs",
+        "tf2_ros",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    cmake_extras = ["ConfigExtras.cmake"],
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    install = [
+        ":pkg_files_soname_0",
+        ":pkg_files_soname_1",
+        ":pkg_files_extra_2",
+        ":pkg_files_extra_3",
+        ":pkg_files_cmake_4",
+        ":pkg_files_cmake_5",
+        ":pkg_files_cmake_6",
+        ":pkg_files_cmake_7",
+    ],
+    libraries = [
+        ":moveit_move_group_capabilities_base",
+        ":moveit_move_group_default_capabilities",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_configs_utils//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_kinematics//:ament_package",
+        "@moveit_resources_fanuc_moveit_config//:ament_package",
+        "@moveit_resources_panda_moveit_config//:ament_package",
+        "@moveit_ros_occupancy_map_monitor//:ament_package",
+        "@moveit_ros_planning//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@ros_testing//:ament_package",
         "@std_srvs//:ament_package",
         "@tf2//:ament_package",
         "@tf2_geometry_msgs//:ament_package",
