@@ -1,28 +1,96 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@rmf_traffic//:rmf_traffic": "@rmf_traffic//:rmf_traffic_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+]
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "three_robots",
+    srcs = ["src/three_robots.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+write_file(
+    name = "gen_extra_0",
+    out = "_gen/share/rmf_traffic_examples/hook/ament_prefix_path.dsv",
+    content = ["prepend-non-duplicate;AMENT_PREFIX_PATH;"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = [":gen_extra_0"],
+    prefix = "share/rmf_traffic_examples/hook",
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [":three_robots"],
+    package_xml = "package.xml",
+    deps = ["@rmf_traffic//:ament_package"],
+)
+
+genrule(
+    name = "tar",
+    srcs = [":raw_tar"],
+    outs = ["tar.tar.gz"],
+    cmd = "tmpdir=$$(mktemp -d) && tar -xzf $(location :raw_tar) -C $$tmpdir && rm -rf $$tmpdir/opt/ros/lyrical/rmf_traffic_examples/share/rmf_traffic_examples/hook/cmake_prefix_path* && tar -czf $@ -C $$tmpdir opt && rm -rf $$tmpdir",
+)
 
 ament_package(
-    name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install = [":pkg_files_extra_0"],
+    install_package_xml = False,
     package_xml = "package.xml",
-    deps = [
+    tar_name = "raw_tar",
+    deps = [":ament_index"] + [
         "@rmf_traffic//:ament_package",
-        "@rosdistro//:ament_package",
     ],
 )
