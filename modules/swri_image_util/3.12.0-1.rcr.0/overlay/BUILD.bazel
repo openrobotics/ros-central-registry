@@ -1,25 +1,241 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@swri_geometry_util//:swri_geometry_util": "@swri_geometry_util//:swri_geometry_util_library",
+    "@swri_math_util//:swri_math_util": "@swri_math_util//:swri_math_util_library",
+    "@swri_opencv_util//:swri_opencv_util": "@swri_opencv_util//:swri_opencv_util_library",
+    "@swri_opencv_util//:swri_opencv_util_show": "@swri_opencv_util//:swri_opencv_util_show_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@rcl_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "swri_image_util_library",
+    srcs = [
+        "src/draw_util.cpp",
+        "src/geometry_util.cpp",
+        "src/image_matching.cpp",
+        "src/image_normalization.cpp",
+        "src/image_warp_util.cpp",
+        "src/replace_colors.cpp",
+        "src/rolling_normalization.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_opencv2_stitching_detail_warpers_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_image_util",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "swri_image_util",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["@@//:__subpackages__"],
+    deps = [":swri_image_util_library"],
+)
+
+cc_library(
+    name = "swri_image_util_display_library",
+    srcs = [
+        "src/draw_util_display.cpp",
+        "src/image_warp_util_display.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_opencv2_stitching_detail_warpers_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_image_util",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":swri_image_util_library"],
+)
+
+cc_shared_library(
+    name = "swri_image_util_display",
+    dynamic_deps = DEPENDENCIES.keys() + [":swri_image_util"],
+    deps = [":swri_image_util_display_library"],
+)
+
+cc_library(
+    name = "swri_image_util_nodes_library",
+    srcs = [
+        "src/nodes/blend_images_node.cpp",
+        "src/nodes/contrast_stretch_node.cpp",
+        "src/nodes/crosshairs_node.cpp",
+        "src/nodes/draw_polygon_node.cpp",
+        "src/nodes/draw_text_node.cpp",
+        "src/nodes/dummy_image_publisher_node.cpp",
+        "src/nodes/image_pub_node.cpp",
+        "src/nodes/normalization_image_node.cpp",
+        "src/nodes/normalize_response_node.cpp",
+        "src/nodes/replace_colors_node.cpp",
+        "src/nodes/rotate_image_node.cpp",
+        "src/nodes/scale_image_node.cpp",
+        "src/nodes/warp_image_node.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_opencv2_stitching_detail_warpers_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_image_util",
+    ],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":swri_image_util_library"],
+)
+
+cc_shared_library(
+    name = "swri_image_util_nodes",
+    dynamic_deps = DEPENDENCIES.keys() + [":swri_image_util"],
+    deps = [":swri_image_util_nodes_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "swri_image_util_nodes_components",
+    component = ":swri_image_util_nodes",
+    plugins = [
+        "swri_image_util::BlendImagesNode",
+        "swri_image_util::ContrastStretchNode",
+        "swri_image_util::CrosshairsNode",
+        "swri_image_util::DrawPolygonNode",
+        "swri_image_util::DrawTextNode",
+        "swri_image_util::DummyImagePublisherNode",
+        "swri_image_util::ImagePubNode",
+        "swri_image_util::NormalizationImageNode",
+        "swri_image_util::NormalizeResponseNode",
+        "swri_image_util::ReplaceColorsNode",
+        "swri_image_util::RotateImageNode",
+        "swri_image_util::ScaleImageNode",
+        "swri_image_util::WarpImageNode",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":swri_image_util"],
+)
+
+write_file(
+    name = "gen_cmake_0",
+    out = "_gen/share/swri_image_util/cmake/export_swri_image_util_display-noconfig.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"swri_image_util::swri_image_util_display\" for configuration \"\"\nset_property(TARGET swri_image_util::swri_image_util_display APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)\nset_target_properties(swri_image_util::swri_image_util_display PROPERTIES\n  IMPORTED_LINK_DEPENDENT_LIBRARIES_NOCONFIG \"opencv_highgui;opencv_imgproc;swri_opencv_util::swri_opencv_util_show\"\n  IMPORTED_LOCATION_NOCONFIG \"${_IMPORT_PREFIX}/lib/libswri_image_util_display.so\"\n  IMPORTED_SONAME_NOCONFIG \"libswri_image_util_display.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets swri_image_util::swri_image_util_display )\nlist(APPEND _cmake_import_check_files_for_swri_image_util::swri_image_util_display \"${_IMPORT_PREFIX}/lib/libswri_image_util_display.so\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_cmake_1",
+    out = "_gen/share/swri_image_util/cmake/export_swri_image_util_display.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS swri_image_util::swri_image_util_display)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target swri_image_util::swri_image_util_display\nadd_library(swri_image_util::swri_image_util_display SHARED IMPORTED)\n\nset_target_properties(swri_image_util::swri_image_util_display PROPERTIES\n  INTERFACE_LINK_LIBRARIES \"swri_image_util::swri_image_util\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/export_swri_image_util_display-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# Make sure the targets which have been exported in some other\n# export set exist.\nunset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\nforeach(_target \"swri_image_util::swri_image_util\" )\n  if(NOT TARGET \"${_target}\" )\n    set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets \"${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets} ${_target}\")\n  endif()\nendforeach()\n\nif(DEFINED ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\n  if(CMAKE_FIND_PACKAGE_NAME)\n    set( ${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)\n    set( ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE \"The following imported targets are referenced, but are missing: ${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets}\")\n  else()\n    message(FATAL_ERROR \"The following imported targets are referenced, but are missing: ${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets}\")\n  endif()\nendif()\nunset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+write_file(
+    name = "gen_opencv2_stitching_detail_warpers_hpp",
+    out = "_gen/include/opencv2/stitching/detail/warpers.hpp",
+    content = ["#ifndef RCR_OPENCV2_STITCHING_DETAIL_WARPERS_HPP_\n#define RCR_OPENCV2_STITCHING_DETAIL_WARPERS_HPP_\n#include <opencv2/core.hpp>\n#include <opencv2/imgproc.hpp>\nnamespace cv {\nnamespace detail {\nclass PlaneWarper {\n public:\n  explicit PlaneWarper(float = 1.0f) {}\n  Point warp(InputArray src, InputArray, InputArray, InputArray, int, int, OutputArray dst) {\n    src.copyTo(dst);\n    return Point();\n  }\n  Point2f warpPoint(const Point2f & pt, InputArray, InputArray, InputArray) {\n    return pt;\n  }\n};\n}  // namespace detail\n}  // namespace cv\n#endif\n"],
+)
+
+pkg_files(
+    name = "pkg_files_cmake_0",
+    srcs = [":gen_cmake_0"],
+    prefix = "share/swri_image_util/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_1",
+    srcs = [":gen_cmake_1"],
+    prefix = "share/swri_image_util/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":swri_image_util_nodes_components"],
+    libraries = [
+        ":swri_image_util",
+        ":swri_image_util_display",
+        ":swri_image_util_nodes",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -31,7 +247,110 @@ ament_package(
         "@rcl_interfaces//:ament_package",
         "@rclcpp//:ament_package",
         "@rclcpp_components//:ament_package",
-        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@swri_geometry_util//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@swri_opencv_util//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_geometry_util",
+    srcs = ["test/test_geometry_util.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_opencv2_stitching_detail_warpers_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":swri_image_util_display",
+        ":swri_image_util_nodes",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_image_util",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_image_util_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake = ["cmake/swri_image_util-extras.cmake"],
+    cmake_export_dependencies_list = [
+        "OpenCV",
+        "rclcpp",
+        "swri_opencv_util",
+        "tf2",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_swri_image_util",
+    cmake_extras = ["swri_image_util-extras.cmake"],
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    install = [
+        ":pkg_files_cmake_0",
+        ":pkg_files_cmake_1",
+    ],
+    libraries = [
+        ":swri_image_util",
+        ":swri_image_util_display",
+        ":swri_image_util_nodes",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@image_transport//:ament_package",
+        "@message_filters//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
         "@sensor_msgs//:ament_package",
         "@swri_geometry_util//:ament_package",
         "@swri_math_util//:ament_package",
