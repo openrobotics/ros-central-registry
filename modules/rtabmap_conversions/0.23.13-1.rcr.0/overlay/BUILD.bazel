@@ -1,0 +1,227 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@laser_geometry//:laser_geometry": "@laser_geometry//:laser_geometry_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:protobuf": "@rosdistro//cc:protobuf_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@cv_bridge//:cv_bridge_library",
+    "@geometry_msgs//:cc",
+    "@image_geometry//:image_geometry_library",
+    "@pcl_conversions//:pcl_conversions_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:pcl_common",
+    "@rosdistro//cc:pcl_features",
+    "@rosdistro//cc:pcl_filters",
+    "@rosdistro//cc:pcl_io",
+    "@rosdistro//cc:pcl_kdtree",
+    "@rosdistro//cc:pcl_ml",
+    "@rosdistro//cc:pcl_octree",
+    "@rosdistro//cc:pcl_registration",
+    "@rosdistro//cc:pcl_sample_consensus",
+    "@rosdistro//cc:pcl_search",
+    "@rosdistro//cc:pcl_segmentation",
+    "@rosdistro//cc:pcl_surface",
+    "@rosdistro//cc:pcl_visualization",
+    "@rtabmap//:_gen_textual_hdrs",
+    "@rtabmap//:gtest_library",
+    "@rtabmap//:gtest_main_library",
+    "@rtabmap//:rtabmap_core_library",
+    "@rtabmap//:rtabmap_utilite_library",
+    "@rtabmap_msgs//:cc",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "rtabmap_conversions_library",
+    srcs = [":gen_rtabmap_conversions_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/rtabmap_conversions",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rtabmap_conversions",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":rtabmap_conversions_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_rtabmap_conversions_stub_cpp",
+    out = "_gen/rtabmap_conversions_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":rtabmap_conversions"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@image_geometry//:ament_package",
+        "@laser_geometry//:ament_package",
+        "@pcl_conversions//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rtabmap//:ament_package",
+        "@rtabmap_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_msg_conversion",
+    srcs = [":gen_rtabmap_conversions_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":rtabmap_conversions",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rtabmap_conversions",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "GTEST_LINKED_AS_SHARED_LIBRARY=1",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_conversions_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "cv_bridge",
+        "geometry_msgs",
+        "image_geometry",
+        "laser_geometry",
+        "pcl_conversions",
+        "rclcpp",
+        "rtabmap_msgs",
+        "sensor_msgs",
+        "std_msgs",
+        "tf2",
+        "tf2_eigen",
+        "tf2_geometry_msgs",
+        "RTABMap",
+    ],
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":rtabmap_conversions"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@image_geometry//:ament_package",
+        "@laser_geometry//:ament_package",
+        "@pcl_conversions//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rtabmap//:ament_package",
+        "@rtabmap_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
