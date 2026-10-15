@@ -1,0 +1,148 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@tf2//:tf2": "@tf2//:tf2_library",
+}
+
+CC_DEPS = [
+    "@@geometry_msgs+//:cc",
+    "@octomap_msgs//:cc",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "octomap_ros_library",
+    srcs = ["src/conversions.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_octomap_octomap_h"],
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/octomap_ros",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "octomap_ros",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":octomap_ros_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":octomap_ros"],
+)
+
+write_file(
+    name = "gen_octomap_octomap_h",
+    out = "_gen/include/octomap/octomap.h",
+    content = ["#ifndef RCR_OCTOMAP_OCTOMAP_H_\n#define RCR_OCTOMAP_OCTOMAP_H_\n#include <cstddef>\n#include <list>\n#include <vector>\nnamespace octomath {\nclass Vector3 {\n public:\n  Vector3() : x_(0.0f), y_(0.0f), z_(0.0f) {}\n  Vector3(float x, float y, float z) : x_(x), y_(y), z_(z) {}\n  float x() const { return x_; }\n  float y() const { return y_; }\n  float z() const { return z_; }\n  float & x() { return x_; }\n  float & y() { return y_; }\n  float & z() { return z_; }\n private:\n  float x_, y_, z_;\n};\nclass Quaternion {\n public:\n  Quaternion() : u_(1.0f), x_(0.0f), y_(0.0f), z_(0.0f) {}\n  Quaternion(float u, float x, float y, float z) : u_(u), x_(x), y_(y), z_(z) {}\n  float u() const { return u_; }\n  float x() const { return x_; }\n  float y() const { return y_; }\n  float z() const { return z_; }\n  float & u() { return u_; }\n  float & x() { return x_; }\n  float & y() { return y_; }\n  float & z() { return z_; }\n private:\n  float u_, x_, y_, z_;\n};\nclass Pose6D {\n public:\n  Pose6D() = default;\n  Pose6D(const Vector3 & t, const Quaternion & r) : t_(t), r_(r) {}\n  const Vector3 & trans() const { return t_; }\n  Vector3 & trans() { return t_; }\n  const Quaternion & rot() const { return r_; }\n  Quaternion & rot() { return r_; }\n private:\n  Vector3 t_;\n  Quaternion r_;\n};\n}  // namespace octomath\nnamespace octomap {\nusing point3d = octomath::Vector3;\nusing pose6d = octomath::Pose6D;\nusing point3d_list = std::list<point3d>;\nclass Pointcloud {\n public:\n  using iterator = std::vector<point3d>::iterator;\n  using const_iterator = std::vector<point3d>::const_iterator;\n  void reserve(std::size_t n) { pts_.reserve(n); }\n  void push_back(float x, float y, float z) { pts_.emplace_back(x, y, z); }\n  void push_back(const point3d & p) { pts_.push_back(p); }\n  std::size_t size() const { return pts_.size(); }\n  const point3d & operator[](std::size_t i) const { return pts_[i]; }\n  point3d & operator[](std::size_t i) { return pts_[i]; }\n  iterator begin() { return pts_.begin(); }\n  iterator end() { return pts_.end(); }\n  const_iterator begin() const { return pts_.begin(); }\n  const_iterator end() const { return pts_.end(); }\n  void clear() { pts_.clear(); }\n private:\n  std::vector<point3d> pts_;\n};\n}  // namespace octomap\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":octomap_ros"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@octomap_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_octomap_ros",
+    srcs = ["test/test_conversions.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_octomap_octomap_h"],
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/octomap_ros",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":octomap_ros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "octomap_msgs",
+        "sensor_msgs",
+        "tf2",
+    ],
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":octomap_ros"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@octomap_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)
