@@ -1,26 +1,659 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@point_cloud_transport//:point_cloud_transport": "@point_cloud_transport//:point_cloud_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosbag2_storage//:rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:static_transform_broadcaster_node": "@tf2_ros//:static_transform_broadcaster_node_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
 
-ament_package(
-    name = "ament_package",
-    data = glob(["config/**"]),
+CC_DEPS = [
+    "@@builtin_interfaces+//:cc",
+    "@@tf2_msgs+//:cc",
+    "@geometry_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@point_cloud_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@rosdistro//cc:pybind11",
+    "@rosdistro//cc:spdlog",
+    "@rules_python//python/cc:current_py_cc_headers",
+    "@sensor_msgs//:cc",
+    "@sophus//:sophus",
+    "@sophus//:sophus_library",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "rko_lio.core_library",
+    srcs = [":gen_rko_lio_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_6",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+genrule(
+    name = "static_rko_lio.core_a",
+    srcs = [":rko_lio.core_library"],
+    outs = ["librko_lio.core.a"],
+    cmd = "for f in $(SRCS); do case $$f in *.a) cp $$f $@; exit 0;; esac; done; ar rcs $@",
+)
+
+cc_library(
+    name = "rko_lio.ros_library",
+    srcs = [":gen_rko_lio_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_6",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+genrule(
+    name = "static_rko_lio.ros_a",
+    srcs = [":rko_lio.ros_library"],
+    outs = ["librko_lio.ros.a"],
+    cmd = "for f in $(SRCS); do case $$f in *.a) cp $$f $@; exit 0;; esac; done; ar rcs $@",
+)
+
+cc_library(
+    name = "rko_lio.ros.utils_library",
+    srcs = [":gen_rko_lio_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_6",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+genrule(
+    name = "static_rko_lio.ros.utils_a",
+    srcs = [":rko_lio.ros.utils_library"],
+    outs = ["librko_lio.ros.utils.a"],
+    cmd = "for f in $(SRCS); do case $$f in *.a) cp $$f $@; exit 0;; esac; done; ar rcs $@",
+)
+
+cc_library(
+    name = "online_imu_rate_node_component_library",
+    srcs = [":gen_rko_lio_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_6",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rko_lio.core_library",
+        ":rko_lio.ros.utils_library",
+        ":rko_lio.ros_library",
+    ],
+)
+
+cc_shared_library(
+    name = "online_imu_rate_node_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":online_imu_rate_node_component_library"],
+)
+
+cc_library(
+    name = "online_node_component_library",
+    srcs = [":gen_rko_lio_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_6",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rko_lio.core_library",
+        ":rko_lio.ros.utils_library",
+        ":rko_lio.ros_library",
+    ],
+)
+
+cc_shared_library(
+    name = "online_node_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":online_node_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "online_imu_rate_node",
+    component = ":online_node_component",
+    node_name = "online_imu_rate_node",
+    plugin = "rko_lio::ros::OnlineNode",
+)
+
+rclcpp_components_register_node(
+    name = "online_node",
+    component = ":online_node_component",
+    node_name = "online_node",
+    plugin = "rko_lio::ros::OnlineNode",
+)
+
+rclcpp_components_register_nodes(
+    name = "online_imu_rate_node_component_components",
+    component = ":online_imu_rate_node_component",
+    plugins = ["rko_lio::ros::OnlineImuRateNode"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "offline_node",
+    srcs = [":gen_rko_lio_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_6",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rko_lio.core_library",
+        ":rko_lio.ros.utils_library",
+        ":rko_lio.ros_library",
+    ],
+)
+
+write_file(
+    name = "gen_rko_lio_stub_cpp",
+    out = "_gen/rko_lio_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_6",
+    out = "_gen/include/rko_lio/core/scalar.hpp",
+    content = ["// MIT License\n//\n// Copyright (c) 2025 Meher V.R. Malladi.\n//\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to deal\n// in the Software without restriction, including without limitation the rights\n// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n// copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n//\n// The above copyright notice and this permission notice shall be included in all\n// copies or substantial portions of the Software.\n//\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n// SOFTWARE.\n\n// Generated from scalar.hpp.in - do not edit. The type is fixed when the library is\n// configured, via the RKO_LIO_SCALAR cmake option.\n#pragma once\n#include <concepts>\n\nnamespace rko_lio::core {\n\ntemplate <std::floating_point T>\nusing FloatingPoint = T;\n\nusing Scalar = FloatingPoint<float>;\n\n} // namespace rko_lio::core\n"],
+)
+
+write_file(
+    name = "gen_cmake_20",
+    out = "_gen/share/rko_lio/cmake/ament_cmake_export_targets-extras.cmake",
+    content = ["# generated from ament_cmake_export_targets/cmake/ament_cmake_export_targets-extras.cmake.in\n\nset(_exported_targets \"rko_lioTargets\")\n\n# include all exported targets\nif(NOT _exported_targets STREQUAL \"\")\n  foreach(_target ${_exported_targets})\n    set(_export_file \"${rko_lio_DIR}/${_target}Export.cmake\")\n    include(\"${_export_file}\")\n\n    # extract the target names associated with the export\n    set(_regex \"foreach\\\\((_cmake)?_expected_?[Tt]arget (IN ITEMS )?(.+)\\\\)\")\n    file(\n      STRINGS \"${_export_file}\" _foreach_targets\n      REGEX \"${_regex}\")\n    list(LENGTH _foreach_targets _matches)\n    if(NOT _matches EQUAL 1)\n      message(FATAL_ERROR\n        \"Failed to find exported target names in '${_export_file}'\")\n    endif()\n    string(REGEX REPLACE \"${_regex}\" \"\\\\3\" _targets \"${_foreach_targets}\")\n    string(REPLACE \" \" \";\" _targets \"${_targets}\")\n    list(LENGTH _targets _length)\n\n    list(APPEND rko_lio_TARGETS ${_targets})\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_cmake_21",
+    out = "_gen/share/rko_lio/cmake/rko_lioTargetsExport-release.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"rko_lio::core\" for configuration \"Release\"\nset_property(TARGET rko_lio::core APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(rko_lio::core PROPERTIES\n  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE \"CXX\"\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/librko_lio.core.a\"\n  )\n\nlist(APPEND _cmake_import_check_targets rko_lio::core )\nlist(APPEND _cmake_import_check_files_for_rko_lio::core \"${_IMPORT_PREFIX}/lib/librko_lio.core.a\" )\n\n# Import target \"rko_lio::ros\" for configuration \"Release\"\nset_property(TARGET rko_lio::ros APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(rko_lio::ros PROPERTIES\n  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE \"CXX\"\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/librko_lio.ros.a\"\n  )\n\nlist(APPEND _cmake_import_check_targets rko_lio::ros )\nlist(APPEND _cmake_import_check_files_for_rko_lio::ros \"${_IMPORT_PREFIX}/lib/librko_lio.ros.a\" )\n\n# Import target \"rko_lio::ros::utils\" for configuration \"Release\"\nset_property(TARGET rko_lio::ros::utils APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(rko_lio::ros::utils PROPERTIES\n  IMPORTED_LINK_INTERFACE_LANGUAGES_RELEASE \"CXX\"\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/librko_lio.ros.utils.a\"\n  )\n\nlist(APPEND _cmake_import_check_targets rko_lio::ros::utils )\nlist(APPEND _cmake_import_check_files_for_rko_lio::ros::utils \"${_IMPORT_PREFIX}/lib/librko_lio.ros.utils.a\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_cmake_22",
+    out = "_gen/share/rko_lio/cmake/rko_lioTargetsExport.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS rko_lio::core rko_lio::ros rko_lio::ros::utils)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target rko_lio::core\nadd_library(rko_lio::core STATIC IMPORTED)\n\nset_target_properties(rko_lio::core PROPERTIES\n  INTERFACE_COMPILE_FEATURES \"cxx_std_20\"\n  INTERFACE_LINK_LIBRARIES \"TBB::tbb;tsl::robin_map;Sophus::Sophus;Eigen3::Eigen;spdlog::spdlog\"\n)\n\nif(NOT CMAKE_VERSION VERSION_LESS \"3.23.0\")\n  target_sources(rko_lio::core\n    INTERFACE\n      FILE_SET \"HEADERS\"\n      TYPE \"HEADERS\"\n      BASE_DIRS \"${_IMPORT_PREFIX}/include\"\n      FILES \"${_IMPORT_PREFIX}/include/rko_lio/core/deskew.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/core/error.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/core/lio.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/core/preprocess_scan.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/core/process_timestamps.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/core/profiler.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/core/voxel_hash_map.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/core/util.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/core/voxel_down_sample.hpp\"\n    INTERFACE\n      FILE_SET \"generated_headers\"\n      TYPE \"HEADERS\"\n      BASE_DIRS \"${_IMPORT_PREFIX}/include\"\n      FILES \"${_IMPORT_PREFIX}/include/rko_lio/core/scalar.hpp\"\n  )\nelse()\n  set_property(TARGET rko_lio::core\n    APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES\n      \"${_IMPORT_PREFIX}/include\"\n      \"${_IMPORT_PREFIX}/include\"\n  )\nendif()\n\n# Create imported target rko_lio::ros\nadd_library(rko_lio::ros STATIC IMPORTED)\n\nset_target_properties(rko_lio::ros PROPERTIES\n  INTERFACE_LINK_LIBRARIES \"rko_lio::ros::utils;geometry_msgs::geometry_msgs__rosidl_generator_c;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_c;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_c;geometry_msgs::geometry_msgs__rosidl_typesupport_c;geometry_msgs::geometry_msgs__rosidl_generator_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_fastrtps_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_introspection_cpp;geometry_msgs::geometry_msgs__rosidl_typesupport_cpp;geometry_msgs::geometry_msgs__rosidl_generator_py;geometry_msgs::geometry_msgs__rosidl_generator_py;nav_msgs::nav_msgs__rosidl_generator_c;nav_msgs::nav_msgs__rosidl_typesupport_fastrtps_c;nav_msgs::nav_msgs__rosidl_generator_cpp;nav_msgs::nav_msgs__rosidl_typesupport_fastrtps_cpp;nav_msgs::nav_msgs__rosidl_typesupport_introspection_c;nav_msgs::nav_msgs__rosidl_typesupport_c;nav_msgs::nav_msgs__rosidl_typesupport_introspection_cpp;nav_msgs::nav_msgs__rosidl_typesupport_cpp;nav_msgs::nav_msgs__rosidl_generator_py;nav_msgs::nav_msgs__rosidl_generator_py;sensor_msgs::sensor_msgs__rosidl_generator_c;sensor_msgs::sensor_msgs__rosidl_typesupport_fastrtps_c;sensor_msgs::sensor_msgs__rosidl_generator_cpp;sensor_msgs::sensor_msgs__rosidl_typesupport_fastrtps_cpp;sensor_msgs::sensor_msgs__rosidl_typesupport_introspection_c;sensor_msgs::sensor_msgs__rosidl_typesupport_c;sensor_msgs::sensor_msgs__rosidl_typesupport_introspection_cpp;sensor_msgs::sensor_msgs__rosidl_typesupport_cpp;sensor_msgs::sensor_msgs__rosidl_generator_py;sensor_msgs::sensor_msgs_library;sensor_msgs::sensor_msgs__rosidl_generator_py;std_msgs::std_msgs__rosidl_generator_c;std_msgs::std_msgs__rosidl_typesupport_fastrtps_c;std_msgs::std_msgs__rosidl_generator_cpp;std_msgs::std_msgs__rosidl_typesupport_fastrtps_cpp;std_msgs::std_msgs__rosidl_typesupport_introspection_c;std_msgs::std_msgs__rosidl_typesupport_c;std_msgs::std_msgs__rosidl_typesupport_introspection_cpp;std_msgs::std_msgs__rosidl_typesupport_cpp;std_msgs::std_msgs__rosidl_generator_py;std_msgs::std_msgs__rosidl_generator_py;rclcpp::rclcpp;sensor_msgs::sensor_msgs_library;tf2::tf2;tf2_ros::static_transform_broadcaster_node;tf2_ros::tf2_ros;rko_lio::core;Sophus::Sophus;Eigen3::Eigen\"\n)\n\nif(NOT CMAKE_VERSION VERSION_LESS \"3.23.0\")\n  target_sources(rko_lio::ros\n    INTERFACE\n      FILE_SET \"HEADERS\"\n      TYPE \"HEADERS\"\n      BASE_DIRS \"${_IMPORT_PREFIX}/include\"\n      FILES \"${_IMPORT_PREFIX}/include/rko_lio/ros/base_node.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/ros/threaded_node.hpp\"\n  )\nelse()\n  set_property(TARGET rko_lio::ros\n    APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES\n      \"${_IMPORT_PREFIX}/include\"\n  )\nendif()\n\n# Create imported target rko_lio::ros::utils\nadd_library(rko_lio::ros::utils STATIC IMPORTED)\n\nset_target_properties(rko_lio::ros::utils PROPERTIES\n  INTERFACE_LINK_LIBRARIES \"point_cloud_transport::point_cloud_transport;sensor_msgs::sensor_msgs__rosidl_generator_c;sensor_msgs::sensor_msgs__rosidl_typesupport_fastrtps_c;sensor_msgs::sensor_msgs__rosidl_generator_cpp;sensor_msgs::sensor_msgs__rosidl_typesupport_fastrtps_cpp;sensor_msgs::sensor_msgs__rosidl_typesupport_introspection_c;sensor_msgs::sensor_msgs__rosidl_typesupport_c;sensor_msgs::sensor_msgs__rosidl_typesupport_introspection_cpp;sensor_msgs::sensor_msgs__rosidl_typesupport_cpp;sensor_msgs::sensor_msgs__rosidl_generator_py;sensor_msgs::sensor_msgs_library;sensor_msgs::sensor_msgs__rosidl_generator_py;rclcpp::rclcpp;rosbag2_cpp::rosbag2_cpp;rosbag2_storage::rosbag2_storage;sensor_msgs::sensor_msgs_library;tf2::tf2;tf2_ros::static_transform_broadcaster_node;tf2_ros::tf2_ros;rko_lio::core;Sophus::Sophus;Eigen3::Eigen;\\$<LINK_ONLY:point_cloud_interfaces::point_cloud_interfaces__rosidl_generator_c>;\\$<LINK_ONLY:point_cloud_interfaces::point_cloud_interfaces__rosidl_typesupport_fastrtps_c>;\\$<LINK_ONLY:point_cloud_interfaces::point_cloud_interfaces__rosidl_generator_cpp>;\\$<LINK_ONLY:point_cloud_interfaces::point_cloud_interfaces__rosidl_typesupport_fastrtps_cpp>;\\$<LINK_ONLY:point_cloud_interfaces::point_cloud_interfaces__rosidl_typesupport_introspection_c>;\\$<LINK_ONLY:point_cloud_interfaces::point_cloud_interfaces__rosidl_typesupport_c>;\\$<LINK_ONLY:point_cloud_interfaces::point_cloud_interfaces__rosidl_typesupport_introspection_cpp>;\\$<LINK_ONLY:point_cloud_interfaces::point_cloud_interfaces__rosidl_typesupport_cpp>;\\$<LINK_ONLY:point_cloud_interfaces::point_cloud_interfaces__rosidl_generator_py>;\\$<LINK_ONLY:point_cloud_interfaces::point_cloud_interfaces__rosidl_generator_py>\"\n)\n\nif(NOT CMAKE_VERSION VERSION_LESS \"3.23.0\")\n  target_sources(rko_lio::ros::utils\n    INTERFACE\n      FILE_SET \"HEADERS\"\n      TYPE \"HEADERS\"\n      BASE_DIRS \"${_IMPORT_PREFIX}/include\"\n      FILES \"${_IMPORT_PREFIX}/include/rko_lio/ros/utils/point_cloud_read.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/ros/utils/point_cloud_write.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/ros/utils/ros_vectors.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/ros/utils/rosbag.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/ros/utils/spdlog_sink.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/ros/utils/time.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/ros/utils/transforms.hpp\" \"${_IMPORT_PREFIX}/include/rko_lio/ros/utils/utils.hpp\"\n  )\nelse()\n  set_property(TARGET rko_lio::ros::utils\n    APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES\n      \"${_IMPORT_PREFIX}/include\"\n  )\nendif()\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/rko_lioTargetsExport-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+write_file(
+    name = "gen_tbb_blocked_range_h",
+    out = "_gen/include/tbb/blocked_range.h",
+    content = ["#ifndef RCR_TBB_BLOCKED_RANGE_H_\n#define RCR_TBB_BLOCKED_RANGE_H_\n#include <cstddef>\nnamespace tbb {\nstruct split {};\ntemplate <typename Value>\nclass blocked_range {\n public:\n  blocked_range(Value begin, Value end, std::size_t grainsize = 1)\n      : begin_(begin), end_(end), grainsize_(grainsize) {}\n  blocked_range(blocked_range & r, split)\n      : begin_(r.begin_), end_(r.end_), grainsize_(r.grainsize_) {}\n  Value begin() const { return begin_; }\n  Value end() const { return end_; }\n  std::size_t size() const { return static_cast<std::size_t>(end_ - begin_); }\n  std::size_t grainsize() const { return grainsize_; }\n  bool empty() const { return !(begin_ < end_); }\n private:\n  Value begin_, end_;\n  std::size_t grainsize_;\n};\n}  // namespace tbb\n#endif\n"],
+)
+
+write_file(
+    name = "gen_tbb_parallel_for_h",
+    out = "_gen/include/tbb/parallel_for.h",
+    content = ["#ifndef RCR_TBB_PARALLEL_FOR_H_\n#define RCR_TBB_PARALLEL_FOR_H_\n#include \"tbb/blocked_range.h\"\nnamespace tbb {\ntemplate <typename Range, typename Body>\ninline void parallel_for(const Range & range, const Body & body) {\n  body(range);\n}\ntemplate <typename Index, typename Func>\ninline void parallel_for(Index first, Index last, const Func & f) {\n  for (Index i = first; i < last; ++i) f(i);\n}\n}  // namespace tbb\n#endif\n"],
+)
+
+write_file(
+    name = "gen_tbb_parallel_for_each_h",
+    out = "_gen/include/tbb/parallel_for_each.h",
+    content = ["#ifndef RCR_TBB_PARALLEL_FOR_EACH_H_\n#define RCR_TBB_PARALLEL_FOR_EACH_H_\nnamespace tbb {\ntemplate <typename Iterator, typename Body>\ninline void parallel_for_each(Iterator first, Iterator last, const Body & body) {\n  for (; first != last; ++first) body(*first);\n}\ntemplate <typename Container, typename Body>\ninline void parallel_for_each(Container & c, const Body & body) {\n  for (auto & item : c) body(item);\n}\ntemplate <typename Container, typename Body>\ninline void parallel_for_each(const Container & c, const Body & body) {\n  for (const auto & item : c) body(item);\n}\n}  // namespace tbb\n#endif\n"],
+)
+
+write_file(
+    name = "gen_tbb_blocked_range2d_h",
+    out = "_gen/include/tbb/blocked_range2d.h",
+    content = ["#pragma once\n#include \"tbb/blocked_range.h\"\nnamespace tbb {\ntemplate <typename RowValue, typename ColValue = RowValue>\nclass blocked_range2d {\npublic:\n  using row_range_type = blocked_range<RowValue>;\n  using col_range_type = blocked_range<ColValue>;\n  blocked_range2d(RowValue rbegin, RowValue rend, std::size_t rgrain, ColValue cbegin, ColValue cend, std::size_t cgrain = 1)\n    : rows_(rbegin, rend, rgrain), cols_(cbegin, cend, cgrain) {}\n  blocked_range2d(RowValue rbegin, RowValue rend, ColValue cbegin, ColValue cend)\n    : rows_(rbegin, rend), cols_(cbegin, cend) {}\n  blocked_range2d(blocked_range2d & r, split) : rows_(r.rows_, split()), cols_(r.cols_, split()) {}\n  const row_range_type & rows() const { return rows_; }\n  const col_range_type & cols() const { return cols_; }\nprivate:\n  row_range_type rows_;\n  col_range_type cols_;\n};\n}  // namespace tbb\n"],
+)
+
+write_file(
+    name = "gen_tbb_parallel_reduce_h",
+    out = "_gen/include/tbb/parallel_reduce.h",
+    content = ["#pragma once\n#include \"tbb/blocked_range.h\"\nnamespace tbb {\ntemplate <typename Range, typename Body>\nvoid parallel_reduce(const Range & range, Body & body) { body(range); }\ntemplate <typename Range, typename Value, typename RealBody, typename Reduction>\nValue parallel_reduce(const Range & range, const Value & identity, const RealBody & real_body, const Reduction &) {\n  return real_body(range, identity);\n}\n}  // namespace tbb\n"],
+)
+
+write_file(
+    name = "gen_tbb_global_control_h",
+    out = "_gen/include/tbb/global_control.h",
+    content = ["#pragma once\n#include <cstddef>\nnamespace tbb {\nclass global_control {\npublic:\n  enum parameter { max_allowed_parallelism, thread_stack_size };\n  global_control(parameter, std::size_t) {}\n  static std::size_t active_value(parameter) { return 1; }\n};\n}  // namespace tbb\n"],
+)
+
+pkg_files(
+    name = "pkg_files_static_rko_lio.ros.utils",
+    srcs = [":static_rko_lio.ros.utils_a"],
+    prefix = "lib",
+)
+
+pkg_files(
+    name = "pkg_files_static_rko_lio.core",
+    srcs = [":static_rko_lio.core_a"],
+    prefix = "lib",
+)
+
+pkg_files(
+    name = "pkg_files_static_rko_lio.ros",
+    srcs = [":static_rko_lio.ros_a"],
+    prefix = "lib",
+)
+
+pkg_files(
+    name = "pkg_files_inc_0",
+    srcs = ["rko_lio/core/deskew.hpp"],
+    prefix = "include/rko_lio/core",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["rko_lio/core/error.hpp"],
+    prefix = "include/rko_lio/core",
+)
+
+pkg_files(
+    name = "pkg_files_inc_2",
+    srcs = ["rko_lio/core/lio.hpp"],
+    prefix = "include/rko_lio/core",
+)
+
+pkg_files(
+    name = "pkg_files_inc_3",
+    srcs = ["rko_lio/core/preprocess_scan.hpp"],
+    prefix = "include/rko_lio/core",
+)
+
+pkg_files(
+    name = "pkg_files_inc_4",
+    srcs = ["rko_lio/core/process_timestamps.hpp"],
+    prefix = "include/rko_lio/core",
+)
+
+pkg_files(
+    name = "pkg_files_inc_5",
+    srcs = ["rko_lio/core/profiler.hpp"],
+    prefix = "include/rko_lio/core",
+)
+
+pkg_files(
+    name = "pkg_files_extra_6",
+    srcs = [":gen_extra_6"],
+    prefix = "include/rko_lio/core",
+)
+
+pkg_files(
+    name = "pkg_files_inc_7",
+    srcs = ["rko_lio/core/util.hpp"],
+    prefix = "include/rko_lio/core",
+)
+
+pkg_files(
+    name = "pkg_files_inc_8",
+    srcs = ["rko_lio/core/voxel_down_sample.hpp"],
+    prefix = "include/rko_lio/core",
+)
+
+pkg_files(
+    name = "pkg_files_inc_9",
+    srcs = ["rko_lio/core/voxel_hash_map.hpp"],
+    prefix = "include/rko_lio/core",
+)
+
+pkg_files(
+    name = "pkg_files_inc_10",
+    srcs = ["rko_lio/ros/base_node.hpp"],
+    prefix = "include/rko_lio/ros",
+)
+
+pkg_files(
+    name = "pkg_files_inc_11",
+    srcs = ["rko_lio/ros/threaded_node.hpp"],
+    prefix = "include/rko_lio/ros",
+)
+
+pkg_files(
+    name = "pkg_files_inc_12",
+    srcs = ["rko_lio/ros/utils/point_cloud_read.hpp"],
+    prefix = "include/rko_lio/ros/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_13",
+    srcs = ["rko_lio/ros/utils/point_cloud_write.hpp"],
+    prefix = "include/rko_lio/ros/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_14",
+    srcs = ["rko_lio/ros/utils/ros_vectors.hpp"],
+    prefix = "include/rko_lio/ros/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_15",
+    srcs = ["rko_lio/ros/utils/rosbag.hpp"],
+    prefix = "include/rko_lio/ros/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_16",
+    srcs = ["rko_lio/ros/utils/spdlog_sink.hpp"],
+    prefix = "include/rko_lio/ros/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_17",
+    srcs = ["rko_lio/ros/utils/time.hpp"],
+    prefix = "include/rko_lio/ros/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_18",
+    srcs = ["rko_lio/ros/utils/transforms.hpp"],
+    prefix = "include/rko_lio/ros/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_19",
+    srcs = ["rko_lio/ros/utils/utils.hpp"],
+    prefix = "include/rko_lio/ros/utils",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_20",
+    srcs = [":gen_cmake_20"],
+    prefix = "share/rko_lio/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_21",
+    srcs = [":gen_cmake_21"],
+    prefix = "share/rko_lio/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_22",
+    srcs = [":gen_cmake_22"],
+    prefix = "share/rko_lio/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":online_imu_rate_node_record",
+        ":online_node_record",
+        ":online_imu_rate_node_component_components",
+    ],
+    data = [
+        "config/default.rviz",
+        "config/leg_kilo.yaml",
+        "config/oxford_spires.yaml",
+        "config/ros_default.yaml",
+        "launch/autodetect.py",
+        "launch/odometry.launch.py",
+    ],
+    lib_data = [
+        ":offline_node",
+        ":online_imu_rate_node",
+        ":online_node",
+    ],
+    libraries = [
+        ":online_imu_rate_node_component",
+        ":online_node_component",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -34,7 +667,84 @@ ament_package(
         "@rosbag2_cpp//:ament_package",
         "@rosbag2_py//:ament_package",
         "@rosbag2_storage//:ament_package",
-        "@rosdistro//:ament_package",
+        "@rosidl_runtime_py//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@sophus//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@tf2_ros_py//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "Eigen3",
+        "Sophus",
+        "TBB",
+        "tsl-robin-map",
+        "spdlog",
+        "rclcpp",
+        "std_msgs",
+        "tf2",
+        "tf2_ros",
+        "sensor_msgs",
+        "nav_msgs",
+        "geometry_msgs",
+        "rosbag2_cpp",
+        "rosbag2_storage",
+        "point_cloud_transport",
+        "point_cloud_interfaces",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install = [
+        ":pkg_files_static_rko_lio.ros.utils",
+        ":pkg_files_static_rko_lio.core",
+        ":pkg_files_static_rko_lio.ros",
+        ":pkg_files_inc_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_inc_2",
+        ":pkg_files_inc_3",
+        ":pkg_files_inc_4",
+        ":pkg_files_inc_5",
+        ":pkg_files_extra_6",
+        ":pkg_files_inc_7",
+        ":pkg_files_inc_8",
+        ":pkg_files_inc_9",
+        ":pkg_files_inc_10",
+        ":pkg_files_inc_11",
+        ":pkg_files_inc_12",
+        ":pkg_files_inc_13",
+        ":pkg_files_inc_14",
+        ":pkg_files_inc_15",
+        ":pkg_files_inc_16",
+        ":pkg_files_inc_17",
+        ":pkg_files_inc_18",
+        ":pkg_files_inc_19",
+        ":pkg_files_cmake_20",
+        ":pkg_files_cmake_21",
+        ":pkg_files_cmake_22",
+    ],
+    libraries = [
+        ":online_imu_rate_node_component",
+        ":online_node_component",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@point_cloud_interfaces//:ament_package",
+        "@point_cloud_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosbag2_storage//:ament_package",
         "@rosidl_runtime_py//:ament_package",
         "@sensor_msgs//:ament_package",
         "@sophus//:ament_package",
