@@ -1,25 +1,156 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@camera_info_manager//:camera_info_manager": "@camera_info_manager//:camera_info_manager_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@libcaer_vendor//:caer": "@libcaer_vendor//:caer_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@@builtin_interfaces+//:cc",
+    "@@std_msgs+//:cc",
+    "@event_camera_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+    "@std_srvs//:cc",
+]
+
+cc_library(
+    name = "driver_library",
+    srcs = [":gen_libcaer_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/libcaer_driver",
+    ],
+    local_defines = ros_local_defines() + [
+        "IMAGE_TRANSPORT_USE_NODEINTERFACE",
+        "IMAGE_TRANSPORT_USE_QOS",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "driver",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":driver_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "driver_components",
+    component = ":driver",
+    plugins = ["libcaer_driver::Driver"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":driver"],
+)
+
+cc_binary(
+    name = "driver_node",
+    srcs = [":gen_libcaer_driver_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/libcaer_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "IMAGE_TRANSPORT_USE_NODEINTERFACE",
+        "IMAGE_TRANSPORT_USE_QOS",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":driver_library"],
+)
+
+write_file(
+    name = "gen_libcaer_driver_stub_cpp",
+    out = "_gen/libcaer_driver_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = ["src/stop_recording.py"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/libcaer_driver",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":driver_components"],
+    data = [
+        "launch/driver_composition.launch.py",
+        "launch/driver_node.launch.py",
+        "launch/recording_driver.launch.py",
+        "launch/recording_driver_composable.launch.py",
+        "launch/start_recording.launch.py",
+    ],
+    lib_data = [":driver_node"],
+    libraries = [":driver"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -39,7 +170,37 @@ ament_package(
         "@rclcpp//:ament_package",
         "@rclcpp_components//:ament_package",
         "@ros_environment//:ament_package",
-        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install = [":pkg_files_extra_0"],
+    libraries = [":driver"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_copyright//:ament_package",
+        "@ament_cmake_cppcheck//:ament_package",
+        "@ament_cmake_cpplint//:ament_package",
+        "@ament_cmake_flake8//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@camera_info_manager//:ament_package",
+        "@event_camera_msgs//:ament_package",
+        "@image_transport//:ament_package",
+        "@libcaer_vendor//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@ros_environment//:ament_package",
         "@sensor_msgs//:ament_package",
         "@std_srvs//:ament_package",
     ],
