@@ -1,25 +1,223 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@rosdistro//cc:asio": "@rosdistro//cc:asio_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+]
+
+cc_library(
+    name = "mavconn_library",
+    srcs = [":gen_libmavconn_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_3",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mavconn",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["@@//:__subpackages__"],
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":mavconn_library"],
+)
+
+cc_library(
+    name = "mavconn_e2e_shim_library",
+    srcs = [":gen_libmavconn_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_3",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mavconn_library"],
+)
+
+cc_shared_library(
+    name = "mavconn_e2e_shim",
+    dynamic_deps = DEPENDENCIES.keys() + [":mavconn"],
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":mavconn_e2e_shim_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":mavconn"],
+)
+
+write_file(
+    name = "gen_libmavconn_stub_cpp",
+    out = "_gen/libmavconn_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_3",
+    out = "_gen/include/mavconn/mavlink_dialect.hpp",
+    content = ["//\n// libmavconn\n// Copyright 2014,2015,2016,2021 Vladimir Ermakov, All rights reserved.\n//\n// This file is part of the mavros package and subject to the license terms\n// in the top-level LICENSE file of the mavros repository.\n// https://github.com/mavlink/mavros/tree/master/LICENSE.md\n//\n/**\n * @brief MAVConn mavlink.h selector\n * @file mavlink_dialect.hpp\n * @author Vladimir Ermakov <vooon341@gmail.com>\n *\n * @addtogroup mavconn\n * @{\n */\n\n#pragma once\n#ifndef MAVCONN__MAVLINK_DIALECT_HPP_\n#define MAVCONN__MAVLINK_DIALECT_HPP_\n\n// AUTOMATIC GENERATED FILE!\n// from include/mavconn/mavlink_dialect.hpp.em\n\nnamespace mavlink\n{\n#ifndef MAVLINK_VERSION\n#include <mavlink/config.h>\nconstexpr auto version = MAVLINK_VERSION;\n#undef MAVLINK_VERSION\n#else\nconstexpr auto version = \"unknown\";\n#endif\n}  // namespace mavlink\n\n#define MAVLINK_START_SIGN_STREAM(link_id)\n#define MAVLINK_END_SIGN_STREAM(link_id)\n\n// NOTE(vooon): ignore warning\n// warning: ISO C++ prohibits anonymous structs\n#pragma GCC diagnostic push\n#pragma GCC diagnostic ignored \"-Wpedantic\"\n\n#include <mavlink/v2.0/common/common.hpp>\n#include <mavlink/v2.0/ardupilotmega/ardupilotmega.hpp>\n#include <mavlink/v2.0/ASLUAV/ASLUAV.hpp>\n#include <mavlink/v2.0/AVSSUAS/AVSSUAS.hpp>\n#include <mavlink/v2.0/all/all.hpp>\n#include <mavlink/v2.0/csAirLink/csAirLink.hpp>\n#include <mavlink/v2.0/cubepilot/cubepilot.hpp>\n#include <mavlink/v2.0/development/development.hpp>\n#include <mavlink/v2.0/icarous/icarous.hpp>\n#include <mavlink/v2.0/loweheiser/loweheiser.hpp>\n#include <mavlink/v2.0/marsh/marsh.hpp>\n#include <mavlink/v2.0/paparazzi/paparazzi.hpp>\n#include <mavlink/v2.0/standard/standard.hpp>\n#include <mavlink/v2.0/stemstudios/stemstudios.hpp>\n#include <mavlink/v2.0/storm32/storm32.hpp>\n#include <mavlink/v2.0/uAvionix/uAvionix.hpp>\n\n\n#pragma GCC diagnostic pop\n\n#endif  // MAVCONN__MAVLINK_DIALECT_HPP_\n"],
+)
+
+write_file(
+    name = "gen_cmake_13",
+    out = "_gen/share/libmavconn/cmake/ament_cmake_export_include_directories-extras.cmake",
+    content = ["# generated from ament_cmake_export_include_directories/cmake/ament_cmake_export_include_directories-extras.cmake.in\n\nset(_exported_include_dirs \"${libmavconn_DIR}/../../../include\")\n\n# append include directories to libmavconn_INCLUDE_DIRS\n# warn about not existing paths\nif(NOT _exported_include_dirs STREQUAL \"\")\n  find_package(ament_cmake_core QUIET REQUIRED)\n  foreach(_exported_include_dir ${_exported_include_dirs})\n    if(NOT IS_DIRECTORY \"${_exported_include_dir}\")\n      message(WARNING \"Package 'libmavconn' exports the include directory '${_exported_include_dir}' which doesn't exist\")\n    endif()\n    normalize_path(_exported_include_dir \"${_exported_include_dir}\")\n    list(APPEND libmavconn_INCLUDE_DIRS \"${_exported_include_dir}\")\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+pkg_files(
+    name = "pkg_files_inc_0",
+    srcs = ["include/mavconn/console_bridge_compat.hpp"],
+    prefix = "include/mavconn",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["include/mavconn/interface.hpp"],
+    prefix = "include/mavconn",
+)
+
+pkg_files(
+    name = "pkg_files_inc_2",
+    srcs = ["include/mavconn/io_context_runner.hpp"],
+    prefix = "include/mavconn",
+)
+
+pkg_files(
+    name = "pkg_files_extra_3",
+    srcs = [":gen_extra_3"],
+    prefix = "include/mavconn",
+)
+
+pkg_files(
+    name = "pkg_files_inc_4",
+    srcs = ["include/mavconn/mavlink_dialect.hpp.em"],
+    prefix = "include/mavconn",
+)
+
+pkg_files(
+    name = "pkg_files_inc_5",
+    srcs = ["include/mavconn/msgbuffer.hpp"],
+    prefix = "include/mavconn",
+)
+
+pkg_files(
+    name = "pkg_files_inc_6",
+    srcs = ["include/mavconn/serial.hpp"],
+    prefix = "include/mavconn",
+)
+
+pkg_files(
+    name = "pkg_files_inc_7",
+    srcs = ["include/mavconn/tcp.hpp"],
+    prefix = "include/mavconn",
+)
+
+pkg_files(
+    name = "pkg_files_inc_8",
+    srcs = ["include/mavconn/thread_utils.hpp"],
+    prefix = "include/mavconn",
+)
+
+pkg_files(
+    name = "pkg_files_inc_9",
+    srcs = ["include/mavconn/udp.hpp"],
+    prefix = "include/mavconn",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_13",
+    srcs = [":gen_cmake_13"],
+    prefix = "share/libmavconn/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_14",
+    srcs = ["libmavconn-extras.cmake"],
+    prefix = "share/libmavconn/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":mavconn"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -29,6 +227,82 @@ ament_package(
         "@ament_lint_auto//:ament_package",
         "@ament_lint_common//:ament_package",
         "@mavlink//:ament_package",
-        "@rosdistro//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_mavconn",
+    srcs = [":gen_libmavconn_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":mavconn_e2e_shim",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavconn_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake = [
+        "cmake/Modules/CheckGeographicLibDatasets.cmake",
+        "cmake/Modules/FindASIO.cmake",
+        "cmake/Modules/em_expand.cmake",
+    ],
+    cmake_export_dependencies_list = ["console_bridge"],
+    cmake_export_include_directories = False,
+    cmake_export_targets = False,
+    cmake_extras = ["libmavconn-extras.cmake"],
+    install = [
+        ":pkg_files_inc_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_inc_2",
+        ":pkg_files_extra_3",
+        ":pkg_files_inc_4",
+        ":pkg_files_inc_5",
+        ":pkg_files_inc_6",
+        ":pkg_files_inc_7",
+        ":pkg_files_inc_8",
+        ":pkg_files_inc_9",
+        ":pkg_files_cmake_13",
+        ":pkg_files_cmake_14",
+    ],
+    libraries = [":mavconn"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_google_benchmark//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@mavlink//:ament_package",
     ],
 )
