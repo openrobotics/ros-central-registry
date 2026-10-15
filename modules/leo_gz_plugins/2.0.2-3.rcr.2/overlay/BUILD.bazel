@@ -1,25 +1,88 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@gz_sim_vendor//:gz_sim": "@gz_sim_vendor//:gz_sim_library",
+    "@rosdistro//cc:protobuf": "@rosdistro//cc:protobuf_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@gz_plugin_vendor//:gz_plugin_register_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@rosdistro//cc:spdlog",
+]
+
+cc_library(
+    name = "leo_gz_differential_plugin_library",
+    srcs = [":gen_leo_gz_plugins_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    local_defines = ros_local_defines() + ["HAVE_PYBIND11"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "leo_gz_differential_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":leo_gz_differential_plugin_library"],
+)
+
+write_file(
+    name = "gen_leo_gz_plugins_stub_cpp",
+    out = "_gen/leo_gz_plugins_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+pkg_files(
+    name = "pkg_files_share_0",
+    srcs = ["hooks/gz_sim_system_plugin_path.dsv"],
+    prefix = "share/leo_gz_plugins/environment",
+)
+
+pkg_files(
+    name = "pkg_files_share_1",
+    srcs = ["hooks/gz_sim_system_plugin_path.sh"],
+    prefix = "share/leo_gz_plugins/environment",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":leo_gz_differential_plugin"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -31,6 +94,29 @@ ament_package(
         "@ament_lint_auto//:ament_package",
         "@gz_plugin_vendor//:ament_package",
         "@gz_sim_vendor//:ament_package",
-        "@rosdistro//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install = [
+        ":pkg_files_share_0",
+        ":pkg_files_share_1",
+    ],
+    libraries = [":leo_gz_differential_plugin"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_copyright//:ament_package",
+        "@ament_cmake_cpplint//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@gz_plugin_vendor//:ament_package",
+        "@gz_sim_vendor//:ament_package",
     ],
 )
