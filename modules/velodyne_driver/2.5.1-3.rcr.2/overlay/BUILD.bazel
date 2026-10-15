@@ -1,0 +1,303 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@@rcl_interfaces+//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@velodyne_msgs//:cc",
+]
+
+cc_library(
+    name = "velodyne_input_library",
+    srcs = [":gen_velodyne_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/velodyne_driver",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "velodyne_input",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["@@//:__subpackages__"],
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":velodyne_input_library"],
+)
+
+cc_library(
+    name = "velodyne_driver_library",
+    srcs = [":gen_velodyne_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/velodyne_driver",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":velodyne_input_library"],
+)
+
+cc_shared_library(
+    name = "velodyne_driver",
+    dynamic_deps = DEPENDENCIES.keys() + [":velodyne_input"],
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":velodyne_driver_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "velodyne_driver_components",
+    component = ":velodyne_driver",
+    plugins = ["velodyne_driver::VelodyneDriver"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "velodyne_driver_node",
+    srcs = [":gen_velodyne_driver_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/velodyne_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":velodyne_driver_library",
+        ":velodyne_input_library",
+    ],
+)
+
+write_file(
+    name = "gen_velodyne_driver_stub_cpp",
+    out = "_gen/velodyne_driver_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = ["src/vdump"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/velodyne_driver",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":velodyne_driver_components"],
+    data = [
+        "config/VLP16-velodyne_driver_node-params.yaml",
+        "config/VLP32C-velodyne_driver_node-params.yaml",
+        "config/VLS128-velodyne_driver_node-params.yaml",
+        "launch/velodyne_driver_node-VLP16-composed-launch.py",
+        "launch/velodyne_driver_node-VLP16-launch.py",
+        "launch/velodyne_driver_node-VLP32C-composed-launch.py",
+        "launch/velodyne_driver_node-VLP32C-launch.py",
+        "launch/velodyne_driver_node-VLS128-composed-launch.py",
+        "launch/velodyne_driver_node-VLS128-launch.py",
+    ],
+    lib_data = [":velodyne_driver_node"],
+    libraries = [
+        ":velodyne_input",
+        ":velodyne_driver",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@velodyne_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "time_test",
+    srcs = [":gen_velodyne_driver_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":velodyne_driver",
+        ":velodyne_input",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/velodyne_driver",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":velodyne_input_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "diagnostic_updater",
+        "rclcpp",
+        "velodyne_msgs",
+    ],
+    cmake_export_libraries = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install = [":pkg_files_extra_0"],
+    libraries = [
+        ":velodyne_input",
+        ":velodyne_driver",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@velodyne_msgs//:ament_package",
+    ],
+)
