@@ -1,0 +1,613 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@@std_msgs+//:cc",
+    "@crazyflie_interfaces//:cc",
+    "@geometry_msgs//:cc",
+    "@motion_capture_tracking_interfaces//:cc",
+    "@nav_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.optional",
+    "@rosdistro//cc:boost.program_options",
+    "@rosdistro//cc:boost.variant",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+    "@sensor_msgs//:cc",
+    "@std_srvs//:cc",
+]
+
+cc_library(
+    name = "crazyflieLinkCpp_library",
+    srcs = [
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/src/Connection.cpp",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/src/CrazyflieUSB.cpp",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/src/CrazyflieUSBThread.cpp",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/src/Crazyradio.cpp",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/src/CrazyradioThread.cpp",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/src/USBDevice.cpp",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/src/USBManager.cpp",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/src/Version.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    textual_hdrs = ["deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/version"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "crazyflieLinkCpp",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":crazyflieLinkCpp_library"],
+)
+
+cc_library(
+    name = "crazyflie_cpp_library",
+    srcs = [
+        "deps/crazyflie_tools/crazyflie_cpp/src/Crazyflie.cpp",
+        "deps/crazyflie_tools/crazyflie_cpp/src/crtp.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    textual_hdrs = ["deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/version"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":crazyflieLinkCpp_library"],
+)
+
+cc_shared_library(
+    name = "crazyflie_cpp",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":crazyflie_cpp_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "battery",
+    srcs = ["deps/crazyflie_tools/src/battery.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "comCheck",
+    srcs = ["deps/crazyflie_tools/src/comCheck.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "console",
+    srcs = ["deps/crazyflie_tools/src/console.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "crazyflie_server",
+    srcs = ["src/crazyflie_server.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "downloadUSDLogfile",
+    srcs = ["deps/crazyflie_tools/src/downloadUSDLogfile.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "listLogVariables",
+    srcs = ["deps/crazyflie_tools/src/listLogVariables.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "listMemories",
+    srcs = ["deps/crazyflie_tools/src/listMemories.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "listParams",
+    srcs = ["deps/crazyflie_tools/src/listParams.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "log",
+    srcs = ["deps/crazyflie_tools/src/log.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "reboot",
+    srcs = ["deps/crazyflie_tools/src/reboot.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "scan",
+    srcs = ["deps/crazyflie_tools/src/scan.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "setParam",
+    srcs = ["deps/crazyflie_tools/src/setParam.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+cc_binary(
+    name = "version",
+    srcs = ["deps/crazyflie_tools/src/version.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_libusb_1_0_libusb_h",
+        ":gen_libusb_h",
+    ],
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "deps/crazyflie_tools/crazyflie_cpp/crazyflie-link-cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include",
+        "deps/crazyflie_tools/crazyflie_cpp/include/crazyflie_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":crazyflieLinkCpp_library",
+        ":crazyflie_cpp_library",
+    ],
+)
+
+write_file(
+    name = "gen_libusb_h",
+    out = "_gen/include/libusb.h",
+    content = ["#ifndef RCR_LIBUSB_H_\n#define RCR_LIBUSB_H_\n#include <cstdint>\n#include <sys/types.h>\n#define LIBUSB_API_VERSION 0x01000108\nenum libusb_error {\n  LIBUSB_SUCCESS = 0,\n  LIBUSB_ERROR_IO = -1,\n  LIBUSB_ERROR_INVALID_PARAM = -2,\n  LIBUSB_ERROR_ACCESS = -3,\n  LIBUSB_ERROR_NO_DEVICE = -4,\n  LIBUSB_ERROR_NOT_FOUND = -5,\n  LIBUSB_ERROR_BUSY = -6,\n  LIBUSB_ERROR_TIMEOUT = -7,\n  LIBUSB_ERROR_OVERFLOW = -8,\n  LIBUSB_ERROR_PIPE = -9,\n  LIBUSB_ERROR_INTERRUPTED = -10,\n  LIBUSB_ERROR_NO_MEM = -11,\n  LIBUSB_ERROR_NOT_SUPPORTED = -12,\n  LIBUSB_ERROR_OTHER = -99\n};\nenum libusb_log_level { LIBUSB_LOG_LEVEL_NONE = 0, LIBUSB_LOG_LEVEL_ERROR = 1, LIBUSB_LOG_LEVEL_WARNING = 2, LIBUSB_LOG_LEVEL_INFO = 3, LIBUSB_LOG_LEVEL_DEBUG = 4 };\nenum libusb_option { LIBUSB_OPTION_LOG_LEVEL = 0 };\nconstexpr uint8_t LIBUSB_ENDPOINT_IN = 0x80;\nconstexpr uint8_t LIBUSB_ENDPOINT_OUT = 0x00;\nconstexpr uint8_t LIBUSB_REQUEST_TYPE_VENDOR = (0x02 << 5);\nstruct libusb_context {};\nstruct libusb_device {};\nstruct libusb_device_handle {};\nstruct libusb_device_descriptor {\n  uint8_t bLength;\n  uint8_t bDescriptorType;\n  uint16_t bcdUSB;\n  uint8_t bDeviceClass;\n  uint8_t bDeviceSubClass;\n  uint8_t bDeviceProtocol;\n  uint8_t bMaxPacketSize0;\n  uint16_t idVendor;\n  uint16_t idProduct;\n  uint16_t bcdDevice;\n  uint8_t iManufacturer;\n  uint8_t iProduct;\n  uint8_t iSerialNumber;\n  uint8_t bNumConfigurations;\n};\ninline int libusb_init(libusb_context ** ctx) { if (ctx) *ctx = nullptr; return 0; }\ninline void libusb_exit(libusb_context *) {}\ninline int libusb_set_option(libusb_context *, libusb_option, ...) { return 0; }\ninline void libusb_set_debug(libusb_context *, int) {}\ninline const char * libusb_error_name(int) { return \"LIBUSB_SUCCESS\"; }\ninline ssize_t libusb_get_device_list(libusb_context *, libusb_device *** list) { if (list) *list = nullptr; return 0; }\ninline void libusb_free_device_list(libusb_device **, int) {}\ninline int libusb_get_device_descriptor(libusb_device *, libusb_device_descriptor * desc) { if (desc) *desc = {}; return 0; }\ninline uint8_t libusb_get_bus_number(libusb_device *) { return 0; }\ninline uint8_t libusb_get_port_number(libusb_device *) { return 0; }\ninline uint8_t libusb_get_device_address(libusb_device *) { return 0; }\ninline int libusb_open(libusb_device *, libusb_device_handle ** h) { if (h) *h = nullptr; return LIBUSB_ERROR_NO_DEVICE; }\ninline void libusb_close(libusb_device_handle *) {}\ninline libusb_device * libusb_ref_device(libusb_device * dev) { return dev; }\ninline void libusb_unref_device(libusb_device *) {}\ninline int libusb_kernel_driver_active(libusb_device_handle *, int) { return 0; }\ninline int libusb_detach_kernel_driver(libusb_device_handle *, int) { return 0; }\ninline int libusb_claim_interface(libusb_device_handle *, int) { return 0; }\ninline int libusb_release_interface(libusb_device_handle *, int) { return 0; }\ninline int libusb_get_string_descriptor_ascii(libusb_device_handle *, uint8_t, unsigned char * data, int length) { if (data && length > 0) data[0] = 0; return 0; }\ninline int libusb_control_transfer(libusb_device_handle *, uint8_t, uint8_t, uint16_t, uint16_t, unsigned char *, uint16_t, unsigned int) { return 0; }\ninline int libusb_bulk_transfer(libusb_device_handle *, unsigned char, unsigned char *, int, int * transferred, unsigned int) { if (transferred) *transferred = 0; return 0; }\ninline int libusb_interrupt_transfer(libusb_device_handle *, unsigned char, unsigned char *, int, int * transferred, unsigned int) { if (transferred) *transferred = 0; return 0; }\n#endif\n"],
+)
+
+write_file(
+    name = "gen_libusb_1_0_libusb_h",
+    out = "_gen/include/libusb-1.0/libusb.h",
+    content = ["#include <libusb.h>\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":battery",
+        ":comCheck",
+        ":console",
+        ":crazyflie_server",
+        ":downloadUSDLogfile",
+        ":listLogVariables",
+        ":listMemories",
+        ":listParams",
+        ":log",
+        ":reboot",
+        ":scan",
+        ":setParam",
+        ":version",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@crazyflie_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@motion_capture_tracking_interfaces//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_environment//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@crazyflie_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@motion_capture_tracking_interfaces//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_environment//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
