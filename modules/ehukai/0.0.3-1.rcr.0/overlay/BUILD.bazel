@@ -1,0 +1,521 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    ":_gen_textual_hdrs",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [":gen_eigen_fft_h"],
+)
+
+cc_library(
+    name = "ehukai_library",
+    srcs = [
+        "src/Foundation.cpp",
+        "src/util/Exception.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_imath_box_h",
+        ":gen_imath_fun_h",
+        ":gen_imath_math_h",
+        ":gen_imath_vec_h",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ehukai",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ehukai",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":ehukai_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ehukai"],
+)
+
+write_file(
+    name = "gen_extra_0",
+    out = "_gen/lib/cmake/ehukai/ehukaiConfig.cmake",
+    content = ["# Copyright (C) 2026 Honu Robotics\n# SPDX-License-Identifier: Apache-2.0\n\n####### Expanded from @PACKAGE_INIT@ by configure_package_config_file() #######\n####### Any changes to this file will be overwritten by the next CMake run ####\n####### The input file was ehukaiConfig.cmake.in                            ########\n\nget_filename_component(PACKAGE_PREFIX_DIR \"${CMAKE_CURRENT_LIST_DIR}/../../../\" ABSOLUTE)\n\nmacro(set_and_check _var _file)\n  set(${_var} \"${_file}\")\n  if(NOT EXISTS \"${_file}\")\n    message(FATAL_ERROR \"File or directory ${_file} referenced by variable ${_var} does not exist !\")\n  endif()\nendmacro()\n\nmacro(check_required_components _NAME)\n  foreach(comp ${${_NAME}_FIND_COMPONENTS})\n    if(NOT ${_NAME}_${comp}_FOUND)\n      if(${_NAME}_FIND_REQUIRED_${comp})\n        set(${_NAME}_FOUND FALSE)\n      endif()\n    endif()\n  endforeach()\nendmacro()\n\n####################################################################################\ninclude(CMakeFindDependencyMacro)\nfind_dependency(Eigen3 3.4 NO_MODULE)\nfind_dependency(TBB    2021)\nfind_dependency(Imath  3.1)\ninclude(\"${CMAKE_CURRENT_LIST_DIR}/ehukaiTargets.cmake\")\n"],
+)
+
+write_file(
+    name = "gen_extra_1",
+    out = "_gen/lib/cmake/ehukai/ehukaiConfigVersion.cmake",
+    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version,\n# but only if the requested major version is the same as the current one.\n# The variable CVF_VERSION must be set before calling configure_file().\n\n\nset(PACKAGE_VERSION \"0.0.2\")\n\nif(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n  set(PACKAGE_VERSION_COMPATIBLE FALSE)\nelse()\n\n  if(\"0.0.2\" MATCHES \"^([0-9]+)\\\\.\")\n    set(CVF_VERSION_MAJOR \"${CMAKE_MATCH_1}\")\n    if(NOT CVF_VERSION_MAJOR VERSION_EQUAL 0)\n      string(REGEX REPLACE \"^0+\" \"\" CVF_VERSION_MAJOR \"${CVF_VERSION_MAJOR}\")\n    endif()\n  else()\n    set(CVF_VERSION_MAJOR \"0.0.2\")\n  endif()\n\n  if(PACKAGE_FIND_VERSION_RANGE)\n    # both endpoints of the range must have the expected major version\n    math (EXPR CVF_VERSION_MAJOR_NEXT \"${CVF_VERSION_MAJOR} + 1\")\n    if (NOT PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX_MAJOR STREQUAL CVF_VERSION_MAJOR)\n          OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX VERSION_LESS_EQUAL CVF_VERSION_MAJOR_NEXT)))\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    elseif(PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        AND ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS_EQUAL PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MAX)))\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n  else()\n    if(PACKAGE_FIND_VERSION_MAJOR STREQUAL CVF_VERSION_MAJOR)\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
+)
+
+write_file(
+    name = "gen_extra_2",
+    out = "_gen/lib/cmake/ehukai/ehukaiTargets-relwithdebinfo.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"RelWithDebInfo\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"ehukai::ehukai\" for configuration \"RelWithDebInfo\"\nset_property(TARGET ehukai::ehukai APPEND PROPERTY IMPORTED_CONFIGURATIONS RELWITHDEBINFO)\nset_target_properties(ehukai::ehukai PROPERTIES\n  IMPORTED_LOCATION_RELWITHDEBINFO \"${_IMPORT_PREFIX}/lib/libehukai.so.0.0.2\"\n  IMPORTED_SONAME_RELWITHDEBINFO \"libehukai.so.0\"\n  )\n\nlist(APPEND _cmake_import_check_targets ehukai::ehukai )\nlist(APPEND _cmake_import_check_files_for_ehukai::ehukai \"${_IMPORT_PREFIX}/lib/libehukai.so.0.0.2\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_extra_3",
+    out = "_gen/lib/cmake/ehukai/ehukaiTargets.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS ehukai::ehukai)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target ehukai::ehukai\nadd_library(ehukai::ehukai SHARED IMPORTED)\n\nset_target_properties(ehukai::ehukai PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include;${_IMPORT_PREFIX}/include\"\n  INTERFACE_LINK_LIBRARIES \"Eigen3::Eigen;TBB::tbb;Imath::Imath\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/ehukaiTargets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+write_file(
+    name = "gen_tbb_blocked_range_h",
+    out = "_gen/include/tbb/blocked_range.h",
+    content = ["#ifndef RCR_TBB_BLOCKED_RANGE_H_\n#define RCR_TBB_BLOCKED_RANGE_H_\n#include <cstddef>\nnamespace tbb {\nstruct split {};\ntemplate <typename Value>\nclass blocked_range {\n public:\n  blocked_range(Value begin, Value end, std::size_t grainsize = 1)\n      : begin_(begin), end_(end), grainsize_(grainsize) {}\n  blocked_range(blocked_range & r, split)\n      : begin_(r.begin_), end_(r.end_), grainsize_(r.grainsize_) {}\n  Value begin() const { return begin_; }\n  Value end() const { return end_; }\n  std::size_t size() const { return static_cast<std::size_t>(end_ - begin_); }\n  std::size_t grainsize() const { return grainsize_; }\n  bool empty() const { return !(begin_ < end_); }\n private:\n  Value begin_, end_;\n  std::size_t grainsize_;\n};\n}  // namespace tbb\n#endif\n"],
+)
+
+write_file(
+    name = "gen_tbb_parallel_for_h",
+    out = "_gen/include/tbb/parallel_for.h",
+    content = ["#ifndef RCR_TBB_PARALLEL_FOR_H_\n#define RCR_TBB_PARALLEL_FOR_H_\n#include \"tbb/blocked_range.h\"\nnamespace tbb {\ntemplate <typename Range, typename Body>\ninline void parallel_for(const Range & range, const Body & body) {\n  body(range);\n}\ntemplate <typename Index, typename Func>\ninline void parallel_for(Index first, Index last, const Func & f) {\n  for (Index i = first; i < last; ++i) f(i);\n}\n}  // namespace tbb\n#endif\n"],
+)
+
+write_file(
+    name = "gen_tbb_parallel_for_each_h",
+    out = "_gen/include/tbb/parallel_for_each.h",
+    content = ["#ifndef RCR_TBB_PARALLEL_FOR_EACH_H_\n#define RCR_TBB_PARALLEL_FOR_EACH_H_\nnamespace tbb {\ntemplate <typename Iterator, typename Body>\ninline void parallel_for_each(Iterator first, Iterator last, const Body & body) {\n  for (; first != last; ++first) body(*first);\n}\ntemplate <typename Container, typename Body>\ninline void parallel_for_each(Container & c, const Body & body) {\n  for (auto & item : c) body(item);\n}\ntemplate <typename Container, typename Body>\ninline void parallel_for_each(const Container & c, const Body & body) {\n  for (const auto & item : c) body(item);\n}\n}  // namespace tbb\n#endif\n"],
+)
+
+write_file(
+    name = "gen_tbb_blocked_range2d_h",
+    out = "_gen/include/tbb/blocked_range2d.h",
+    content = ["#pragma once\n#include \"tbb/blocked_range.h\"\nnamespace tbb {\ntemplate <typename RowValue, typename ColValue = RowValue>\nclass blocked_range2d {\npublic:\n  using row_range_type = blocked_range<RowValue>;\n  using col_range_type = blocked_range<ColValue>;\n  blocked_range2d(RowValue rbegin, RowValue rend, std::size_t rgrain, ColValue cbegin, ColValue cend, std::size_t cgrain = 1)\n    : rows_(rbegin, rend, rgrain), cols_(cbegin, cend, cgrain) {}\n  blocked_range2d(RowValue rbegin, RowValue rend, ColValue cbegin, ColValue cend)\n    : rows_(rbegin, rend), cols_(cbegin, cend) {}\n  blocked_range2d(blocked_range2d & r, split) : rows_(r.rows_, split()), cols_(r.cols_, split()) {}\n  const row_range_type & rows() const { return rows_; }\n  const col_range_type & cols() const { return cols_; }\nprivate:\n  row_range_type rows_;\n  col_range_type cols_;\n};\n}  // namespace tbb\n"],
+)
+
+write_file(
+    name = "gen_tbb_parallel_reduce_h",
+    out = "_gen/include/tbb/parallel_reduce.h",
+    content = ["#pragma once\n#include \"tbb/blocked_range.h\"\nnamespace tbb {\ntemplate <typename Range, typename Body>\nvoid parallel_reduce(const Range & range, Body & body) { body(range); }\ntemplate <typename Range, typename Value, typename RealBody, typename Reduction>\nValue parallel_reduce(const Range & range, const Value & identity, const RealBody & real_body, const Reduction &) {\n  return real_body(range, identity);\n}\n}  // namespace tbb\n"],
+)
+
+write_file(
+    name = "gen_tbb_global_control_h",
+    out = "_gen/include/tbb/global_control.h",
+    content = ["#pragma once\n#include <cstddef>\nnamespace tbb {\nclass global_control {\npublic:\n  enum parameter { max_allowed_parallelism, thread_stack_size };\n  global_control(parameter, std::size_t) {}\n  static std::size_t active_value(parameter) { return 1; }\n};\n}  // namespace tbb\n"],
+)
+
+write_file(
+    name = "gen_imath_vec_h",
+    out = "_gen/include/ImathVec.h",
+    content = ["#pragma once\n#include <cmath>\n#include <iostream>\nnamespace Imath {\ntemplate <typename T> struct Vec2 {\n  T x = 0, y = 0;\n  constexpr Vec2() = default;\n  constexpr explicit Vec2(T a) : x(a), y(a) {}\n  constexpr Vec2(T a, T b) : x(a), y(b) {}\n  template <typename S> constexpr Vec2(const Vec2<S> & o) : x(static_cast<T>(o.x)), y(static_cast<T>(o.y)) {}\n  T & operator[](int i) { return i == 0 ? x : y; }\n  const T & operator[](int i) const { return i == 0 ? x : y; }\n  Vec2 operator+(const Vec2 & o) const { return Vec2(x + o.x, y + o.y); }\n  Vec2 operator-(const Vec2 & o) const { return Vec2(x - o.x, y - o.y); }\n  Vec2 operator*(T s) const { return Vec2(x * s, y * s); }\n  Vec2 operator/(T s) const { return Vec2(x / s, y / s); }\n  Vec2 & operator+=(const Vec2 & o) { x += o.x; y += o.y; return *this; }\n  Vec2 & operator-=(const Vec2 & o) { x -= o.x; y -= o.y; return *this; }\n  Vec2 & operator*=(T s) { x *= s; y *= s; return *this; }\n  bool operator==(const Vec2 & o) const { return x == o.x && y == o.y; }\n  bool operator!=(const Vec2 & o) const { return !(*this == o); }\n  T dot(const Vec2 & o) const { return x * o.x + y * o.y; }\n  T length() const { return static_cast<T>(std::sqrt(x * x + y * y)); }\n  T length2() const { return x * x + y * y; }\n  const Vec2 & normalize() { T l = length(); if (l > 0) { x /= l; y /= l; } return *this; }\n  Vec2 normalized() const { Vec2 r(*this); r.normalize(); return r; }\n};\ntemplate <typename T> struct Vec3 {\n  T x = 0, y = 0, z = 0;\n  constexpr Vec3() = default;\n  constexpr explicit Vec3(T a) : x(a), y(a), z(a) {}\n  constexpr Vec3(T a, T b, T c) : x(a), y(b), z(c) {}\n  template <typename S> constexpr Vec3(const Vec3<S> & o) : x(static_cast<T>(o.x)), y(static_cast<T>(o.y)), z(static_cast<T>(o.z)) {}\n  T & operator[](int i) { return i == 0 ? x : (i == 1 ? y : z); }\n  const T & operator[](int i) const { return i == 0 ? x : (i == 1 ? y : z); }\n  Vec3 operator+(const Vec3 & o) const { return Vec3(x + o.x, y + o.y, z + o.z); }\n  Vec3 operator-(const Vec3 & o) const { return Vec3(x - o.x, y - o.y, z - o.z); }\n  Vec3 operator*(T s) const { return Vec3(x * s, y * s, z * s); }\n  Vec3 operator/(T s) const { return Vec3(x / s, y / s, z / s); }\n  Vec3 & operator+=(const Vec3 & o) { x += o.x; y += o.y; z += o.z; return *this; }\n  Vec3 & operator-=(const Vec3 & o) { x -= o.x; y -= o.y; z -= o.z; return *this; }\n  Vec3 & operator*=(T s) { x *= s; y *= s; z *= s; return *this; }\n  bool operator==(const Vec3 & o) const { return x == o.x && y == o.y && z == o.z; }\n  bool operator!=(const Vec3 & o) const { return !(*this == o); }\n  T dot(const Vec3 & o) const { return x * o.x + y * o.y + z * o.z; }\n  Vec3 cross(const Vec3 & o) const { return Vec3(y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x); }\n  T length() const { return static_cast<T>(std::sqrt(x * x + y * y + z * z)); }\n  T length2() const { return x * x + y * y + z * z; }\n  const Vec3 & normalize() { T l = length(); if (l > 0) { x /= l; y /= l; z /= l; } return *this; }\n  Vec3 normalized() const { Vec3 r(*this); r.normalize(); return r; }\n};\nusing V2s = Vec2<short>;\nusing V2i = Vec2<int>;\nusing V2f = Vec2<float>;\nusing V2d = Vec2<double>;\nusing V3s = Vec3<short>;\nusing V3i = Vec3<int>;\nusing V3f = Vec3<float>;\nusing V3d = Vec3<double>;\n}  // namespace Imath\n"],
+)
+
+write_file(
+    name = "gen_imath_box_h",
+    out = "_gen/include/ImathBox.h",
+    content = ["#pragma once\n#include \"ImathVec.h\"\nnamespace Imath {\ntemplate <typename V> struct Box {\n  V min, max;\n  Box() { makeEmpty(); }\n  explicit Box(const V & p) : min(p), max(p) {}\n  Box(const V & minV, const V & maxV) : min(minV), max(maxV) {}\n  void makeEmpty() { min = V(1); max = V(-1); }\n  void extendBy(const V & p) {\n    if (isEmpty()) { min = max = p; return; }\n    if (p.x < min.x) min.x = p.x;\n    if (p.y < min.y) min.y = p.y;\n    if (p.x > max.x) max.x = p.x;\n    if (p.y > max.y) max.y = p.y;\n  }\n  void extendBy(const Box & b) { if (!b.isEmpty()) { extendBy(b.min); extendBy(b.max); } }\n  V size() const { return isEmpty() ? V(0) : (max - min); }\n  V center() const { return (max + min) / 2; }\n  bool intersects(const V & p) const { return p.x >= min.x && p.x <= max.x && p.y >= min.y && p.y <= max.y; }\n  bool intersects(const Box & b) const { return min.x <= b.max.x && max.x >= b.min.x && min.y <= b.max.y && max.y >= b.min.y; }\n  bool isEmpty() const { return max.x < min.x || max.y < min.y; }\n  bool hasVolume() const { return max.x > min.x && max.y > min.y; }\n  bool operator==(const Box & o) const { return min == o.min && max == o.max; }\n  bool operator!=(const Box & o) const { return !(*this == o); }\n};\nusing Box2s = Box<V2s>;\nusing Box2i = Box<V2i>;\nusing Box2f = Box<V2f>;\nusing Box2d = Box<V2d>;\nusing Box3s = Box<V3s>;\nusing Box3i = Box<V3i>;\nusing Box3f = Box<V3f>;\nusing Box3d = Box<V3d>;\n}  // namespace Imath\n"],
+)
+
+write_file(
+    name = "gen_imath_fun_h",
+    out = "_gen/include/ImathFun.h",
+    content = ["#pragma once\nnamespace Imath {\ntemplate <typename T, typename Q> constexpr T lerp(T a, T b, Q t) { return static_cast<T>(a + (b - a) * t); }\ntemplate <typename T> constexpr T clamp(T a, T l, T h) { return (a < l) ? l : ((a > h) ? h : a); }\ntemplate <typename T> constexpr int sign(T a) { return (a > T(0)) ? 1 : ((a < T(0)) ? -1 : 0); }\ntemplate <typename T> constexpr T abs(T a) { return (a < T(0)) ? -a : a; }\n}  // namespace Imath\n"],
+)
+
+write_file(
+    name = "gen_imath_math_h",
+    out = "_gen/include/ImathMath.h",
+    content = ["#pragma once\n#include <cmath>\nnamespace Imath {\ntemplate <typename T> struct Math {\n  static T sqrt(T x) { return std::sqrt(x); }\n  static T fabs(T x) { return std::fabs(x); }\n  static T sin(T x) { return std::sin(x); }\n  static T cos(T x) { return std::cos(x); }\n  static T atan2(T y, T x) { return std::atan2(y, x); }\n  static T floor(T x) { return std::floor(x); }\n  static T ceil(T x) { return std::ceil(x); }\n  static T exp(T x) { return std::exp(x); }\n  static T log(T x) { return std::log(x); }\n  static T pow(T x, T y) { return std::pow(x, y); }\n};\n}  // namespace Imath\n"],
+)
+
+write_file(
+    name = "gen_eigen_fft_h",
+    out = "_gen/include/unsupported/Eigen/FFT",
+    content = ["#pragma once\n#include <complex>\n#include <vector>\n#include <Eigen/Core>\nnamespace Eigen {\ntemplate <typename T> class FFT {\npublic:\n  using Scalar = T;\n  using Complex = std::complex<T>;\n  void fwd(std::vector<Complex> & dst, const std::vector<Scalar> & src) { dst.assign(src.size(), Complex(0, 0)); }\n  void fwd(std::vector<Complex> & dst, const std::vector<Complex> & src) { dst = src; }\n  void inv(std::vector<Scalar> & dst, const std::vector<Complex> & src) { dst.assign(src.size(), Scalar(0)); }\n  void inv(std::vector<Complex> & dst, const std::vector<Complex> & src) { dst = src; }\n  template <typename InputDerived, typename ComplexDerived>\n  void fwd(MatrixBase<ComplexDerived> & dst, const MatrixBase<InputDerived> & src) { dst.derived().resize(src.size()); dst.setZero(); }\n  template <typename OutputDerived, typename ComplexDerived>\n  void inv(MatrixBase<OutputDerived> & dst, const MatrixBase<ComplexDerived> & src) { dst.derived().resize(src.size()); dst.setZero(); }\n};\n}  // namespace Eigen\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = [":gen_extra_0"],
+    prefix = "lib/cmake/ehukai",
+)
+
+pkg_files(
+    name = "pkg_files_extra_1",
+    srcs = [":gen_extra_1"],
+    prefix = "lib/cmake/ehukai",
+)
+
+pkg_files(
+    name = "pkg_files_extra_2",
+    srcs = [":gen_extra_2"],
+    prefix = "lib/cmake/ehukai",
+)
+
+pkg_files(
+    name = "pkg_files_extra_3",
+    srcs = [":gen_extra_3"],
+    prefix = "lib/cmake/ehukai",
+)
+
+pkg_files(
+    name = "pkg_files_soname_4",
+    srcs = [":ehukai"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":ehukai": "libehukai.so.0"},
+)
+
+pkg_files(
+    name = "pkg_files_soname_5",
+    srcs = [":ehukai"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":ehukai": "libehukai.so.0.0.2"},
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":ehukai"],
+    package_xml = "package.xml",
+)
+
+cc_test(
+    name = "test_DirectionalSpreading",
+    srcs = ["test/test_DirectionalSpreading.cc"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_imath_box_h",
+        ":gen_imath_fun_h",
+        ":gen_imath_math_h",
+        ":gen_imath_vec_h",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ehukai",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ehukai_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_FftwWrapper",
+    srcs = ["test/test_FftwWrapper.cc"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_imath_box_h",
+        ":gen_imath_fun_h",
+        ":gen_imath_math_h",
+        ":gen_imath_vec_h",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ehukai",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ehukai_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_Propagation",
+    srcs = ["test/test_Propagation.cc"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_imath_box_h",
+        ":gen_imath_fun_h",
+        ":gen_imath_math_h",
+        ":gen_imath_vec_h",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ehukai",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ehukai_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_Random",
+    srcs = ["test/test_Random.cc"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_imath_box_h",
+        ":gen_imath_fun_h",
+        ":gen_imath_math_h",
+        ":gen_imath_vec_h",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ehukai",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ehukai_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_headers",
+    srcs = ["test/test_headers.cc"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_imath_box_h",
+        ":gen_imath_fun_h",
+        ":gen_imath_math_h",
+        ":gen_imath_vec_h",
+        ":gen_tbb_blocked_range2d_h",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_global_control_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_reduce_h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ehukai",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ehukai_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install = [
+        ":pkg_files_extra_0",
+        ":pkg_files_extra_1",
+        ":pkg_files_extra_2",
+        ":pkg_files_extra_3",
+        ":pkg_files_soname_4",
+        ":pkg_files_soname_5",
+    ],
+    libraries = [":ehukai"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+    ],
+)
