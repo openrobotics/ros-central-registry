@@ -1,25 +1,139 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@lifecycle_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.lockfree",
+    "@rosdistro//cc:fmt",
+    "@test_msgs//:cc",
+]
+
+cc_library(
+    name = "realtime_tools_library",
+    srcs = ["src/realtime_helpers.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_sys_capability_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/sys",
+        "include",
+        "include/realtime_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "realtime_tools",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":realtime_tools_library"],
+)
+
+cc_library(
+    name = "thread_priority_library",
+    srcs = ["src/realtime_helpers.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_sys_capability_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/sys",
+        "include",
+        "include/realtime_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "thread_priority",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":thread_priority_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#include <memory>\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+write_file(
+    name = "gen_sys_capability_h",
+    out = "_gen/include/sys/capability.h",
+    content = ["#ifndef RCR_SYS_CAPABILITY_H_\n#define RCR_SYS_CAPABILITY_H_\nusing cap_value_t = int;\nusing cap_t = void *;\nconstexpr int CAP_EFFECTIVE = 0;\nconstexpr int CAP_SET = 1;\nconstexpr int CAP_IPC_LOCK = 14;\ninline cap_t cap_get_proc() { return nullptr; }\ninline int cap_set_flag(cap_t, int, int, const cap_value_t *, int) { return -1; }\ninline int cap_set_proc(cap_t) { return -1; }\ninline int cap_free(void *) { return 0; }\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":realtime_tools",
+        ":thread_priority",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -29,7 +143,498 @@ ament_package(
         "@rclcpp_action//:ament_package",
         "@rclcpp_lifecycle//:ament_package",
         "@ros2_control_cmake//:ament_package",
-        "@rosdistro//:ament_package",
+        "@test_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "lock_free_queue_tests",
+    srcs = ["test/lock_free_queue_tests.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_sys_capability_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":realtime_tools",
+        ":thread_priority",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/sys",
+        "include",
+        "include/realtime_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "realtime_buffer_tests",
+    srcs = ["test/realtime_buffer_tests.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_sys_capability_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":realtime_tools",
+        ":thread_priority",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/sys",
+        "include",
+        "include/realtime_tools",
+    ],
+    local_defines = ros_local_defines() + ["SILENCE_DEPRECATION_WARNINGS"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "realtime_mutex_tests",
+    srcs = ["test/realtime_mutex_tests.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_sys_capability_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":realtime_tools",
+        ":thread_priority",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/sys",
+        "include",
+        "include/realtime_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "realtime_publisher_tests",
+    srcs = ["test/realtime_publisher_tests.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_sys_capability_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":realtime_tools",
+        ":thread_priority",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/sys",
+        "include",
+        "include/realtime_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "realtime_server_goal_handle_tests",
+    srcs = ["test/realtime_server_goal_handle_tests.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_sys_capability_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":realtime_tools",
+        ":thread_priority",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/sys",
+        "include",
+        "include/realtime_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "realtime_thread_safe_box_tests",
+    srcs = ["test/realtime_thread_safe_box_tests.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_sys_capability_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":realtime_tools",
+        ":thread_priority",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/sys",
+        "include",
+        "include/realtime_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":realtime_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_async_function_handler",
+    srcs = ["test/test_async_function_handler.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_sys_capability_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":realtime_tools",
+        ":thread_priority",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/sys",
+        "include",
+        "include/realtime_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":realtime_tools_library",
+        ":thread_priority_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "thread_priority_tests",
+    srcs = ["test/thread_priority_tests.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_sys_capability_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":realtime_tools",
+        ":thread_priority",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/sys",
+        "include",
+        "include/realtime_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":thread_priority_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake = ["cmake/realtime_tools-extras.cmake"],
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "rclcpp_action",
+        "Threads",
+        "rcpputils",
+        "fmt",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_realtime_tools",
+    cmake_extras = ["realtime_tools-extras.cmake"],
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [
+        ":realtime_tools",
+        ":thread_priority",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@ros2_control_cmake//:ament_package",
         "@test_msgs//:ament_package",
     ],
 )
