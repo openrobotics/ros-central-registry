@@ -1,25 +1,90 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@@std_msgs+//:cc",
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rmf_building_map_msgs//:cc",
+    "@rmf_fleet_msgs//:cc",
+    "@rmf_traffic//:rmf_traffic_library",
+    "@rmf_traffic_ros2//:rmf_traffic_ros2_library",
+    "@rmf_utils//:rmf_utils_library",
+    "@rmf_visualization_msgs//:cc",
+    "@rosdistro//cc:eigen",
+    "@visualization_msgs//:cc",
+]
+
+cc_library(
+    name = "navgraph_visualizer_library",
+    srcs = ["src/NavGraphVisualizer.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "navgraph_visualizer",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":navgraph_visualizer_library"],
+)
+
+rclcpp_components_register_node(
+    name = "navgraph_visualizer_node",
+    component = ":navgraph_visualizer",
+    node_name = "navgraph_visualizer_node",
+    plugin = "NavGraphVisualizer",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":navgraph_visualizer_node_record"],
+    lib_data = [":navgraph_visualizer_node"],
+    libraries = [":navgraph_visualizer"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -34,7 +99,30 @@ ament_package(
         "@rmf_traffic_ros2//:ament_package",
         "@rmf_utils//:ament_package",
         "@rmf_visualization_msgs//:ament_package",
-        "@rosdistro//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    libraries = [":navgraph_visualizer"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rmf_building_map_msgs//:ament_package",
+        "@rmf_fleet_msgs//:ament_package",
+        "@rmf_traffic//:ament_package",
+        "@rmf_traffic_ros2//:ament_package",
+        "@rmf_utils//:ament_package",
+        "@rmf_visualization_msgs//:ament_package",
         "@visualization_msgs//:ament_package",
     ],
 )
