@@ -1,0 +1,197 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:protobuf": "@rosdistro//cc:protobuf_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@easynav_common//:easynav_common_library",
+    "@easynav_core//:easynav_core_library",
+    "@easynav_sensors//:easynav_sensors_library",
+    "@easynav_system//:easynav_system_library",
+    "@geometry_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@pcl_conversions//:pcl_conversions_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:pcl_common",
+    "@rosdistro//cc:pcl_features",
+    "@rosdistro//cc:pcl_filters",
+    "@rosdistro//cc:pcl_io",
+    "@rosdistro//cc:pcl_kdtree",
+    "@rosdistro//cc:pcl_keypoints",
+    "@rosdistro//cc:pcl_ml",
+    "@rosdistro//cc:pcl_octree",
+    "@rosdistro//cc:pcl_outofcore",
+    "@rosdistro//cc:pcl_people",
+    "@rosdistro//cc:pcl_recognition",
+    "@rosdistro//cc:pcl_registration",
+    "@rosdistro//cc:pcl_sample_consensus",
+    "@rosdistro//cc:pcl_search",
+    "@rosdistro//cc:pcl_segmentation",
+    "@rosdistro//cc:pcl_surface",
+    "@rosdistro//cc:pcl_tracking",
+    "@rosdistro//cc:pcl_visualization",
+    "@sensor_msgs//:cc",
+    "@std_srvs//:cc",
+]
+
+cc_library(
+    name = "easynav_mpc_controller_library",
+    srcs = [
+        "src/easynav_mpc_controller/MPCController.cpp",
+        "src/easynav_mpc_controller/MPCOptimizer.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_nlopt_hpp"],
+    copts = ["-std=c++20"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/easynav_mpc_controller",
+    ],
+    local_defines = ros_local_defines() + [
+        "EASYNAV_DEBUG_WITH_YAETS",
+        "GLAD_API_CALL_EXPORT",
+        "_FILE_OFFSET_BITS=64",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "easynav_mpc_controller",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":easynav_mpc_controller_library"],
+)
+
+write_file(
+    name = "gen_nlopt_hpp",
+    out = "_gen/include/nlopt.hpp",
+    content = ["#ifndef RCR_NLOPT_HPP_\n#define RCR_NLOPT_HPP_\n#include <algorithm>\n#include <cmath>\n#include <vector>\nnamespace nlopt {\nenum algorithm { LN_COBYLA = 0, LD_MMA = 1, LD_SLSQP = 2, LN_BOBYQA = 3, LN_NELDERMEAD = 4 };\nenum result { FAILURE = -1, INVALID_ARGS = -2, OUT_OF_MEMORY = -3, ROUNDOFF_LIMITED = -4, FORCED_STOP = -5, SUCCESS = 1, STOPVAL_REACHED = 2, FTOL_REACHED = 3, XTOL_REACHED = 4, MAXEVAL_REACHED = 5, MAXTIME_REACHED = 6 };\nusing vfunc = double (*)(const std::vector<double> &, std::vector<double> &, void *);\nclass opt {\n public:\n  opt(algorithm, unsigned int n) : n_(n), lb_(n, -1e9), ub_(n, 1e9) {}\n  void set_min_objective(vfunc f, void * f_data) { f_ = f; f_data_ = f_data; }\n  void set_lower_bounds(const std::vector<double> & lb) { lb_ = lb; }\n  void set_upper_bounds(const std::vector<double> & ub) { ub_ = ub; }\n  void set_xtol_rel(double t) { xtol_rel_ = t; }\n  void set_ftol_rel(double t) { ftol_rel_ = t; }\n  void set_maxeval(int m) { maxeval_ = m; }\n  void set_maxtime(double t) { maxtime_ = t; }\n  result optimize(std::vector<double> & x, double & opt_f) {\n    if (!f_) return FAILURE;\n    std::vector<double> grad;\n    for (unsigned int i = 0; i < n_ && i < x.size(); ++i)\n      x[i] = std::clamp(x[i], lb_[i], ub_[i]);\n    opt_f = f_(x, grad, f_data_);\n    double step = 0.2;\n    int evals = 1;\n    for (int iter = 0; iter < 25 && evals < maxeval_; ++iter) {\n      bool improved = false;\n      for (unsigned int i = 0; i < n_ && i < x.size(); ++i) {\n        double orig = x[i];\n        for (double dir : {1.0, -1.0}) {\n          x[i] = std::clamp(orig + dir * step, lb_[i], ub_[i]);\n          double val = f_(x, grad, f_data_);\n          ++evals;\n          if (val < opt_f) { opt_f = val; orig = x[i]; improved = true; break; }\n          x[i] = orig;\n        }\n      }\n      if (!improved) step *= 0.5;\n      if (step < xtol_rel_) break;\n    }\n    return SUCCESS;\n  }\n private:\n  unsigned int n_;\n  std::vector<double> lb_, ub_;\n  vfunc f_{nullptr};\n  void * f_data_{nullptr};\n  double xtol_rel_{1e-3}, ftol_rel_{1e-3}, maxtime_{1.0};\n  int maxeval_{500};\n};\n}  // namespace nlopt\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":easynav_mpc_controller"],
+    package_xml = "package.xml",
+    plugin_category = "easynav_core",
+    plugins = ["easynav_mpc_controller_plugins.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@easynav_common//:ament_package",
+        "@easynav_core//:ament_package",
+        "@easynav_sensors//:ament_package",
+        "@easynav_simple_common//:ament_package",
+        "@easynav_system//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pcl_conversions//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "easynav_common",
+        "easynav_core",
+        "easynav_system",
+        "easynav_sensors",
+        "pluginlib",
+        "rclcpp",
+        "tf2",
+        "tf2_ros",
+        "geometry_msgs",
+        "nav_msgs",
+        "sensor_msgs",
+        "pcl_conversions",
+        "Eigen3",
+        "nlopt",
+    ],
+    cmake_export_name = "export_easynav_mpc_controller",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":easynav_mpc_controller"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@easynav_common//:ament_package",
+        "@easynav_core//:ament_package",
+        "@easynav_sensors//:ament_package",
+        "@easynav_simple_common//:ament_package",
+        "@easynav_system//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pcl_conversions//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
