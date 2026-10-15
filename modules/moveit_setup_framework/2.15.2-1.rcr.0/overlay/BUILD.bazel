@@ -1,26 +1,191 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:boringssl": "@rosdistro//cc:boringssl_crypto_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@srdfdom//:srdfdom": "@srdfdom//:srdfdom_library",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@googletest//:gtest",
+    "@moveit_core//:moveit_collision_detection_bullet_library",
+    "@moveit_core//:moveit_collision_detection_fcl_library",
+    "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_collision_distance_field_library",
+    "@moveit_core//:moveit_constraint_samplers_library",
+    "@moveit_core//:moveit_distance_field_library",
+    "@moveit_core//:moveit_dynamics_solver_library",
+    "@moveit_core//:moveit_exceptions_library",
+    "@moveit_core//:moveit_kinematic_constraints_library",
+    "@moveit_core//:moveit_kinematics_base_library",
+    "@moveit_core//:moveit_kinematics_metrics_library",
+    "@moveit_core//:moveit_planning_interface_library",
+    "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_smoothing_base_library",
+    "@moveit_core//:moveit_test_utils_library",
+    "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils_library",
+    "@moveit_ros_planning//:moveit_collision_plugin_loader_library",
+    "@moveit_ros_planning//:moveit_constraint_sampler_manager_loader_library",
+    "@moveit_ros_planning//:moveit_cpp_library",
+    "@moveit_ros_planning//:moveit_kinematics_plugin_loader_library",
+    "@moveit_ros_planning//:moveit_plan_execution_library",
+    "@moveit_ros_planning//:moveit_planning_pipeline_interfaces_library",
+    "@moveit_ros_planning//:moveit_planning_pipeline_library",
+    "@moveit_ros_planning//:moveit_planning_scene_monitor_library",
+    "@moveit_ros_planning//:moveit_rdf_loader_library",
+    "@moveit_ros_planning//:moveit_robot_model_loader_library",
+    "@moveit_ros_planning//:moveit_trajectory_execution_manager_library",
+    "@moveit_ros_planning//:srdf_publisher_node_library",
+    "@moveit_ros_visualization//:moveit_motion_planning_rviz_plugin_core_library",
+    "@moveit_ros_visualization//:moveit_motion_planning_rviz_plugin_library",
+    "@moveit_ros_visualization//:moveit_planning_scene_rviz_plugin_core_library",
+    "@moveit_ros_visualization//:moveit_planning_scene_rviz_plugin_library",
+    "@moveit_ros_visualization//:moveit_robot_state_rviz_plugin_core_library",
+    "@moveit_ros_visualization//:moveit_robot_state_rviz_plugin_library",
+    "@moveit_ros_visualization//:moveit_rviz_plugin_render_tools_library",
+    "@moveit_ros_visualization//:moveit_trajectory_rviz_plugin_core_library",
+    "@moveit_ros_visualization//:moveit_trajectory_rviz_plugin_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.algorithm",
+    "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:boringssl_ssl_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@rules_qt//:qt_core",
+    "@rules_qt//:qt_gui",
+    "@rules_qt//:qt_svg",
+    "@rules_qt//:qt_widgets",
+    "@rviz_common//:rviz_common_library",
+    "@rviz_rendering//:rviz_rendering_library",
+]
+
+cc_library(
+    name = "moveit_setup_framework_library",
+    srcs = [":gen_moveit_setup_framework_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/moveit_setup_framework",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_setup_framework",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":moveit_setup_framework_library"],
+)
+
+write_file(
+    name = "gen_moveit_setup_framework_stub_cpp",
+    out = "_gen/moveit_setup_framework_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_cmake_0",
+    out = "_gen/share/moveit_setup_framework/cmake/ament_cmake_export_targets-extras.cmake",
+    content = ["# generated from ament_cmake_export_targets/cmake/ament_cmake_export_targets-extras.cmake.in\n\nset(_exported_targets \"moveit_setup_frameworkTargets\")\n\n# include all exported targets\nif(NOT _exported_targets STREQUAL \"\")\n  foreach(_target ${_exported_targets})\n    set(_export_file \"${moveit_setup_framework_DIR}/${_target}Export.cmake\")\n    include(\"${_export_file}\")\n\n    # extract the target names associated with the export\n    set(_regex \"foreach\\\\((_cmake)?_expected_?[Tt]arget (IN ITEMS )?(.+)\\\\)\")\n    file(\n      STRINGS \"${_export_file}\" _foreach_targets\n      REGEX \"${_regex}\")\n    list(LENGTH _foreach_targets _matches)\n    if(NOT _matches EQUAL 1)\n      message(FATAL_ERROR\n        \"Failed to find exported target names in '${_export_file}'\")\n    endif()\n    string(REGEX REPLACE \"${_regex}\" \"\\\\3\" _targets \"${_foreach_targets}\")\n    string(REPLACE \" \" \";\" _targets \"${_targets}\")\n    list(LENGTH _targets _length)\n\n    list(APPEND moveit_setup_framework_TARGETS ${_targets})\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_cmake_1",
+    out = "_gen/share/moveit_setup_framework/cmake/moveit_setup_frameworkTargetsExport-release.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"moveit_setup_framework::moveit_setup_framework\" for configuration \"Release\"\nset_property(TARGET moveit_setup_framework::moveit_setup_framework APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(moveit_setup_framework::moveit_setup_framework PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmoveit_setup_framework.so\"\n  IMPORTED_SONAME_RELEASE \"libmoveit_setup_framework.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets moveit_setup_framework::moveit_setup_framework )\nlist(APPEND _cmake_import_check_files_for_moveit_setup_framework::moveit_setup_framework \"${_IMPORT_PREFIX}/lib/libmoveit_setup_framework.so\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_cmake_2",
+    out = "_gen/share/moveit_setup_framework/cmake/moveit_setup_frameworkTargetsExport.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS moveit_setup_framework::moveit_setup_framework)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target moveit_setup_framework::moveit_setup_framework\nadd_library(moveit_setup_framework::moveit_setup_framework SHARED IMPORTED)\n\nset_target_properties(moveit_setup_framework::moveit_setup_framework PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/moveit_setup_framework;${_IMPORT_PREFIX}/include/moveit_setup_framework\"\n  INTERFACE_LINK_LIBRARIES \"ament_index_cpp::ament_index_cpp;fmt::fmt;moveit_core::moveit_core;moveit_ros_planning::moveit_ros_planning;moveit_ros_visualization::moveit_ros_visualization;pluginlib::pluginlib;Qt6::Core;Qt6::Widgets;rclcpp::rclcpp;rviz_common::rviz_common;rviz_rendering::rviz_rendering;srdfdom::srdfdom;urdf::urdf\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/moveit_setup_frameworkTargetsExport-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+pkg_files(
+    name = "pkg_files_cmake_0",
+    srcs = [":gen_cmake_0"],
+    prefix = "share/moveit_setup_framework/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_1",
+    srcs = [":gen_cmake_1"],
+    prefix = "share/moveit_setup_framework/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_2",
+    srcs = [":gen_cmake_2"],
+    prefix = "share/moveit_setup_framework/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "templates/CMakeLists.txt",
+        "templates/config/pilz_cartesian_limits.yaml",
+        "templates/package.xml.template",
+    ],
+    libraries = [":moveit_setup_framework"],
     package_xml = "package.xml",
+    plugins = ["moveit_setup_framework_plugins.xml"],
     deps = [
         "@ament_cmake_ros//:ament_package",
         "@ament_index_cpp//:ament_package",
@@ -30,7 +195,59 @@ ament_package(
         "@moveit_ros_visualization//:ament_package",
         "@pluginlib//:ament_package",
         "@rclcpp//:ament_package",
-        "@rosdistro//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@srdfdom//:ament_package",
+        "@urdf//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "fmt",
+        "rclcpp",
+        "Qt6Core",
+        "Qt6Widgets",
+        "moveit_common",
+        "moveit_core",
+        "moveit_ros_planning",
+        "moveit_ros_visualization",
+        "rviz_common",
+        "rviz_rendering",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    install = [
+        ":pkg_files_cmake_0",
+        ":pkg_files_cmake_1",
+        ":pkg_files_cmake_2",
+    ],
+    libraries = [":moveit_setup_framework"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_ros_planning//:ament_package",
+        "@moveit_ros_visualization//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
         "@rviz_common//:ament_package",
         "@rviz_rendering//:ament_package",
         "@srdfdom//:ament_package",
