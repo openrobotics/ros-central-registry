@@ -1,0 +1,234 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+]
+
+cc_library(
+    name = "fusion_localizer_library",
+    srcs = [":gen_easynav_fusion_localizer_stub_cpp"],
+    hdrs = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_geographiclib_utmups_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/easynav_fusion_localizer",
+        "tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "EASYNAV_DEBUG_WITH_YAETS",
+        "GLAD_API_CALL_EXPORT",
+        "_FILE_OFFSET_BITS=64",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "fusion_localizer",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":fusion_localizer_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_easynav_fusion_localizer_stub_cpp",
+    out = "_gen/easynav_fusion_localizer_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_geographiclib_utmups_hpp",
+    out = "_gen/include/GeographicLib/UTMUPS.hpp",
+    content = ["#ifndef RCR_GEOGRAPHICLIB_UTMUPS_HPP_\n#define RCR_GEOGRAPHICLIB_UTMUPS_HPP_\n#include <cmath>\nnamespace GeographicLib {\nclass UTMUPS {\n public:\n  static void Forward(double lat, double lon, int & zone, bool & northp, double & x, double & y) {\n    zone = static_cast<int>((lon + 180.0) / 6.0) + 1;\n    northp = (lat >= 0.0);\n    constexpr double kPi = 3.14159265358979323846;\n    constexpr double a = 6378137.0;\n    constexpr double f = 1.0 / 298.257223563;\n    constexpr double k0 = 0.9996;\n    double e2 = f * (2.0 - f);\n    double ep2 = e2 / (1.0 - e2);\n    double phi = lat * kPi / 180.0;\n    double lam = lon * kPi / 180.0;\n    double lam0 = ((zone - 1) * 6 - 180 + 3) * kPi / 180.0;\n    double sin_phi = std::sin(phi), cos_phi = std::cos(phi), tan_phi = std::tan(phi);\n    double N = a / std::sqrt(1.0 - e2 * sin_phi * sin_phi);\n    double T = tan_phi * tan_phi;\n    double C = ep2 * cos_phi * cos_phi;\n    double A = cos_phi * (lam - lam0);\n    double M = a * ((1.0 - e2 / 4.0 - 3.0 * e2 * e2 / 64.0) * phi\n      - (3.0 * e2 / 8.0 + 3.0 * e2 * e2 / 32.0) * std::sin(2.0 * phi)\n      + (15.0 * e2 * e2 / 256.0) * std::sin(4.0 * phi));\n    x = k0 * N * (A + (1.0 - T + C) * A * A * A / 6.0) + 500000.0;\n    y = k0 * (M + N * tan_phi * (A * A / 2.0 + (5.0 - T + 9.0 * C + 4.0 * C * C) * A * A * A * A / 24.0));\n    if (!northp) y += 10000000.0;\n  }\n};\n}  // namespace GeographicLib\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "maps/empty.png",
+        "maps/empty.yaml",
+        "maps/square.png",
+        "maps/square.yaml",
+    ],
+    libraries = [":fusion_localizer"],
+    package_xml = "package.xml",
+    plugin_category = "easynav_core",
+    plugins = ["easynav_fusion_localizer_plugins.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@easynav_common//:ament_package",
+        "@easynav_core//:ament_package",
+        "@easynav_localizer//:ament_package",
+        "@easynav_sensors//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@robot_localization//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@yaets//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "fusion_localizer_tests",
+    srcs = [":gen_easynav_fusion_localizer_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":fusion_localizer",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/easynav_fusion_localizer",
+        "tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "EASYNAV_DEBUG_WITH_YAETS",
+        "GLAD_API_CALL_EXPORT",
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fusion_localizer_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "easynav_core",
+        "easynav_common",
+        "easynav_localizer",
+        "easynav_sensors",
+        "pluginlib",
+        "robot_localization",
+        "std_srvs",
+        "angles",
+        "diagnostic_msgs",
+        "diagnostic_updater",
+        "sensor_msgs",
+        "geometry_msgs",
+        "nav_msgs",
+        "tf2",
+        "tf2_ros",
+        "tf2_geometry_msgs",
+        "Eigen3",
+        "yaets",
+    ],
+    cmake_export_name = "export_easynav_fusion_localizer",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":fusion_localizer"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@easynav_common//:ament_package",
+        "@easynav_core//:ament_package",
+        "@easynav_localizer//:ament_package",
+        "@easynav_sensors//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@robot_localization//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@yaets//:ament_package",
+    ],
+)
