@@ -1,25 +1,263 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@cras_cpp_common//:cras_c_api": "@cras_cpp_common//:cras_c_api_library",
+    "@cras_cpp_common//:cras_cloud": "@cras_cpp_common//:cras_cloud_library",
+    "@cras_cpp_common//:cras_filter_base": "@cras_cpp_common//:cras_filter_base_library",
+    "@cras_cpp_common//:cras_log_utils": "@cras_cpp_common//:cras_log_utils_library",
+    "@cras_cpp_common//:cras_param_utils": "@cras_cpp_common//:cras_param_utils_library",
+    "@cras_cpp_common//:cras_qos_utils": "@cras_cpp_common//:cras_qos_utils_library",
+    "@cras_cpp_common//:cras_rate_limiter": "@cras_cpp_common//:cras_rate_limiter_library",
+    "@cras_cpp_common//:cras_semaphore": "@cras_cpp_common//:cras_semaphore_library",
+    "@cras_cpp_common//:cras_string_utils": "@cras_cpp_common//:cras_string_utils_library",
+    "@cras_cpp_common//:cras_tf2_sensor_msgs": "@cras_cpp_common//:cras_tf2_sensor_msgs_library",
+    "@cras_cpp_common//:cras_tf2_utils": "@cras_cpp_common//:cras_tf2_utils_library",
+    "@cras_cpp_common//:cras_thread_utils": "@cras_cpp_common//:cras_thread_utils_library",
+    "@cras_cpp_common//:cras_time_utils": "@cras_cpp_common//:cras_time_utils_library",
+    "@cras_cpp_common//:cras_type_utils": "@cras_cpp_common//:cras_type_utils_library",
+    "@cras_cpp_common//:cras_urdf_utils": "@cras_cpp_common//:cras_urdf_utils_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@angles//:angles",
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "magnetic_model_library",
+    srcs = [":gen_magnetic_model_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_2"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/magnetic_model",
+        "_gen/include/magnetic_model/magnetic_model",
+        "include",
+        "include/magnetic_model",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "magnetic_model",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":magnetic_model_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_magnetic_model_stub_cpp",
+    out = "_gen/magnetic_model_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_2",
+    out = "_gen/include/magnetic_model/magnetic_model/version.h",
+    content = ["// Copyright 2015 Open Source Robotics Foundation, Inc.\n//\n// Licensed under the Apache License, Version 2.0 (the \"License\");\n// you may not use this file except in compliance with the License.\n// You may obtain a copy of the License at\n//\n//     http://www.apache.org/licenses/LICENSE-2.0\n//\n// Unless required by applicable law or agreed to in writing, software\n// distributed under the License is distributed on an \"AS IS\" BASIS,\n// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n// See the License for the specific language governing permissions and\n// limitations under the License.\n\n#ifndef MAGNETIC_MODEL__VERSION_H_\n#define MAGNETIC_MODEL__VERSION_H_\n\n/// \\def MAGNETIC_MODEL_VERSION_MAJOR\n/// Defines MAGNETIC_MODEL major version number\n#define MAGNETIC_MODEL_VERSION_MAJOR (4)\n\n/// \\def MAGNETIC_MODEL_VERSION_MINOR\n/// Defines MAGNETIC_MODEL minor version number\n#define MAGNETIC_MODEL_VERSION_MINOR (0)\n\n/// \\def MAGNETIC_MODEL_VERSION_PATCH\n/// Defines MAGNETIC_MODEL version patch number\n#define MAGNETIC_MODEL_VERSION_PATCH (1)\n\n/// \\def MAGNETIC_MODEL_VERSION_STR\n/// Defines MAGNETIC_MODEL version string\n#define MAGNETIC_MODEL_VERSION_STR \"4.0.1\"\n\n/// \\def MAGNETIC_MODEL_VERSION_GTE\n/// Defines a macro to check whether the version of MAGNETIC_MODEL is greater than or equal to\n/// the given version triple.\n#define MAGNETIC_MODEL_VERSION_GTE(major, minor, patch) ( \\\n     (major < MAGNETIC_MODEL_VERSION_MAJOR) ? true \\\n     : ((major > MAGNETIC_MODEL_VERSION_MAJOR) ? false \\\n     : ((minor < MAGNETIC_MODEL_VERSION_MINOR) ? true \\\n     : ((minor > MAGNETIC_MODEL_VERSION_MINOR) ? false \\\n     : ((patch < MAGNETIC_MODEL_VERSION_PATCH) ? true \\\n     : ((patch > MAGNETIC_MODEL_VERSION_PATCH) ? false \\\n     : true))))))\n\n#endif  // MAGNETIC_MODEL__VERSION_H_\n"],
+)
+
+pkg_files(
+    name = "pkg_files_inc_0",
+    srcs = ["include/magnetic_model/magnetic_model.hpp"],
+    prefix = "include/magnetic_model/magnetic_model",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["include/magnetic_model/magnetic_model_manager.hpp"],
+    prefix = "include/magnetic_model/magnetic_model",
+)
+
+pkg_files(
+    name = "pkg_files_extra_2",
+    srcs = [":gen_extra_2"],
+    prefix = "include/magnetic_model/magnetic_model",
+)
+
+pkg_files(
+    name = "pkg_files_share_3",
+    srcs = ["share/data/magnetic/LICENSE"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_4",
+    srcs = ["share/data/magnetic/README.md"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_5",
+    srcs = ["share/data/magnetic/igrf14.wmm"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_6",
+    srcs = ["share/data/magnetic/igrf14.wmm.cof"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_7",
+    srcs = ["share/data/magnetic/igrf14.wmm.cof.license"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_8",
+    srcs = ["share/data/magnetic/igrf14.wmm.license"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_9",
+    srcs = ["share/data/magnetic/wmm2010.wmm"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_10",
+    srcs = ["share/data/magnetic/wmm2010.wmm.cof"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_11",
+    srcs = ["share/data/magnetic/wmm2010.wmm.cof.license"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_12",
+    srcs = ["share/data/magnetic/wmm2010.wmm.license"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_13",
+    srcs = ["share/data/magnetic/wmm2015v2.wmm"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_14",
+    srcs = ["share/data/magnetic/wmm2015v2.wmm.cof"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_15",
+    srcs = ["share/data/magnetic/wmm2015v2.wmm.cof.license"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_16",
+    srcs = ["share/data/magnetic/wmm2015v2.wmm.license"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_17",
+    srcs = ["share/data/magnetic/wmm2020.wmm"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_18",
+    srcs = ["share/data/magnetic/wmm2020.wmm.cof"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_19",
+    srcs = ["share/data/magnetic/wmm2020.wmm.cof.license"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_20",
+    srcs = ["share/data/magnetic/wmm2020.wmm.license"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_21",
+    srcs = ["share/data/magnetic/wmm2025.wmm"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_22",
+    srcs = ["share/data/magnetic/wmm2025.wmm.cof"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_23",
+    srcs = ["share/data/magnetic/wmm2025.wmm.cof.license"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+pkg_files(
+    name = "pkg_files_share_24",
+    srcs = ["share/data/magnetic/wmm2025.wmm.license"],
+    prefix = "share/magnetic_model/data/magnetic",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":magnetic_model"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -30,7 +268,90 @@ ament_package(
         "@cras_lint//:ament_package",
         "@geometry_msgs//:ament_package",
         "@rclcpp//:ament_package",
-        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_magnetic_model",
+    srcs = [":gen_magnetic_model_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":magnetic_model",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/magnetic_model",
+        "_gen/include/magnetic_model/magnetic_model",
+        "include",
+        "include/magnetic_model",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "TEST_DATA_DIR=\\\"share/data/magnetic\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":magnetic_model_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "cras_cpp_common",
+        "geometry_msgs",
+        "rclcpp",
+        "sensor_msgs",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_magnetic_model",
+    install = [
+        ":pkg_files_inc_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_extra_2",
+        ":pkg_files_share_3",
+        ":pkg_files_share_4",
+        ":pkg_files_share_5",
+        ":pkg_files_share_6",
+        ":pkg_files_share_7",
+        ":pkg_files_share_8",
+        ":pkg_files_share_9",
+        ":pkg_files_share_10",
+        ":pkg_files_share_11",
+        ":pkg_files_share_12",
+        ":pkg_files_share_13",
+        ":pkg_files_share_14",
+        ":pkg_files_share_15",
+        ":pkg_files_share_16",
+        ":pkg_files_share_17",
+        ":pkg_files_share_18",
+        ":pkg_files_share_19",
+        ":pkg_files_share_20",
+        ":pkg_files_share_21",
+        ":pkg_files_share_22",
+        ":pkg_files_share_23",
+        ":pkg_files_share_24",
+    ],
+    libraries = [":magnetic_model"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@angles//:ament_package",
+        "@cras_cpp_common//:ament_package",
+        "@cras_lint//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
         "@sensor_msgs//:ament_package",
     ],
 )
