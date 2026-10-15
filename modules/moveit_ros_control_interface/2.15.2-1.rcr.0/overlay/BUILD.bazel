@@ -1,27 +1,417 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:ament_resource.bzl", "register_ament_resource")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    ":_gen_textual_hdrs",
+    "@controller_manager_msgs//:cc",
+    "@moveit_core//:moveit_collision_detection_bullet_library",
+    "@moveit_core//:moveit_collision_detection_fcl_library",
+    "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_collision_distance_field_library",
+    "@moveit_core//:moveit_constraint_samplers_library",
+    "@moveit_core//:moveit_distance_field_library",
+    "@moveit_core//:moveit_dynamics_solver_library",
+    "@moveit_core//:moveit_exceptions_library",
+    "@moveit_core//:moveit_kinematic_constraints_library",
+    "@moveit_core//:moveit_kinematics_base_library",
+    "@moveit_core//:moveit_kinematics_metrics_library",
+    "@moveit_core//:moveit_planning_interface_library",
+    "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_smoothing_base_library",
+    "@moveit_core//:moveit_test_utils_library",
+    "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils_library",
+    "@moveit_simple_controller_manager//:moveit_simple_controller_manager_library",
+    "@rosdistro//cc:boost.bimap",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@trajectory_msgs//:cc",
+]
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [":gen_eigen3_eigen_h"],
+)
+
+cc_library(
+    name = "moveit_ros_control_interface_empty_plugin_library",
+    srcs = [":gen_moveit_ros_control_interface_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/moveit_ros_control_interface",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_ros_control_interface_empty_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":moveit_ros_control_interface_empty_plugin_library"],
+)
+
+cc_library(
+    name = "moveit_ros_control_interface_gripper_plugin_library",
+    srcs = [":gen_moveit_ros_control_interface_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/moveit_ros_control_interface",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_ros_control_interface_gripper_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":moveit_ros_control_interface_gripper_plugin_library"],
+)
+
+cc_library(
+    name = "moveit_ros_control_interface_parallel_gripper_plugin_library",
+    srcs = [":gen_moveit_ros_control_interface_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/moveit_ros_control_interface",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_ros_control_interface_parallel_gripper_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":moveit_ros_control_interface_parallel_gripper_plugin_library"],
+)
+
+cc_library(
+    name = "moveit_ros_control_interface_plugin_library",
+    srcs = [":gen_moveit_ros_control_interface_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/moveit_ros_control_interface",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_ros_control_interface_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":moveit_ros_control_interface_plugin_library"],
+)
+
+cc_library(
+    name = "moveit_ros_control_interface_trajectory_plugin_library",
+    srcs = [":gen_moveit_ros_control_interface_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/moveit_ros_control_interface",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_ros_control_interface_trajectory_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":moveit_ros_control_interface_trajectory_plugin_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+register_ament_resource(
+    name = "res_moveit_ros_control_interface__pluginlib__plugin",
+    category = "moveit_ros_control_interface__pluginlib__plugin",
+    content = "share/moveit_ros_control_interface/moveit_ros_control_interface_plugins.xml\n",
+)
+
+write_file(
+    name = "gen_moveit_ros_control_interface_stub_cpp",
+    out = "_gen/moveit_ros_control_interface_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_5",
+    out = "_gen/share/ament_index/resource_index/moveit_ros_control_interface__pluginlib__plugin/moveit_ros_control_interface",
+    content = ["share/moveit_ros_control_interface/moveit_ros_control_interface_plugins.xml\n"],
+)
+
+write_file(
+    name = "gen_cmake_7",
+    out = "_gen/share/moveit_ros_control_interface/cmake/ament_cmake_export_targets-extras.cmake",
+    content = ["# generated from ament_cmake_export_targets/cmake/ament_cmake_export_targets-extras.cmake.in\n\nset(_exported_targets \"moveit_ros_control_interfaceTargets\")\n\n# include all exported targets\nif(NOT _exported_targets STREQUAL \"\")\n  foreach(_target ${_exported_targets})\n    set(_export_file \"${moveit_ros_control_interface_DIR}/${_target}Export.cmake\")\n    include(\"${_export_file}\")\n\n    # extract the target names associated with the export\n    set(_regex \"foreach\\\\((_cmake)?_expected_?[Tt]arget (IN ITEMS )?(.+)\\\\)\")\n    file(\n      STRINGS \"${_export_file}\" _foreach_targets\n      REGEX \"${_regex}\")\n    list(LENGTH _foreach_targets _matches)\n    if(NOT _matches EQUAL 1)\n      message(FATAL_ERROR\n        \"Failed to find exported target names in '${_export_file}'\")\n    endif()\n    string(REGEX REPLACE \"${_regex}\" \"\\\\3\" _targets \"${_foreach_targets}\")\n    string(REPLACE \" \" \";\" _targets \"${_targets}\")\n    list(LENGTH _targets _length)\n\n    list(APPEND moveit_ros_control_interface_TARGETS ${_targets})\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_cmake_8",
+    out = "_gen/share/moveit_ros_control_interface/cmake/moveit_ros_control_interfaceTargetsExport-release.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"moveit_ros_control_interface::moveit_ros_control_interface_plugin\" for configuration \"Release\"\nset_property(TARGET moveit_ros_control_interface::moveit_ros_control_interface_plugin APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface_plugin PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmoveit_ros_control_interface_plugin.so.2.15.2\"\n  IMPORTED_SONAME_RELEASE \"libmoveit_ros_control_interface_plugin.so.2.15.2\"\n  )\n\nlist(APPEND _cmake_import_check_targets moveit_ros_control_interface::moveit_ros_control_interface_plugin )\nlist(APPEND _cmake_import_check_files_for_moveit_ros_control_interface::moveit_ros_control_interface_plugin \"${_IMPORT_PREFIX}/lib/libmoveit_ros_control_interface_plugin.so.2.15.2\" )\n\n# Import target \"moveit_ros_control_interface::moveit_ros_control_interface_trajectory_plugin\" for configuration \"Release\"\nset_property(TARGET moveit_ros_control_interface::moveit_ros_control_interface_trajectory_plugin APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface_trajectory_plugin PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmoveit_ros_control_interface_trajectory_plugin.so.2.15.2\"\n  IMPORTED_SONAME_RELEASE \"libmoveit_ros_control_interface_trajectory_plugin.so.2.15.2\"\n  )\n\nlist(APPEND _cmake_import_check_targets moveit_ros_control_interface::moveit_ros_control_interface_trajectory_plugin )\nlist(APPEND _cmake_import_check_files_for_moveit_ros_control_interface::moveit_ros_control_interface_trajectory_plugin \"${_IMPORT_PREFIX}/lib/libmoveit_ros_control_interface_trajectory_plugin.so.2.15.2\" )\n\n# Import target \"moveit_ros_control_interface::moveit_ros_control_interface_gripper_plugin\" for configuration \"Release\"\nset_property(TARGET moveit_ros_control_interface::moveit_ros_control_interface_gripper_plugin APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface_gripper_plugin PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmoveit_ros_control_interface_gripper_plugin.so.2.15.2\"\n  IMPORTED_SONAME_RELEASE \"libmoveit_ros_control_interface_gripper_plugin.so.2.15.2\"\n  )\n\nlist(APPEND _cmake_import_check_targets moveit_ros_control_interface::moveit_ros_control_interface_gripper_plugin )\nlist(APPEND _cmake_import_check_files_for_moveit_ros_control_interface::moveit_ros_control_interface_gripper_plugin \"${_IMPORT_PREFIX}/lib/libmoveit_ros_control_interface_gripper_plugin.so.2.15.2\" )\n\n# Import target \"moveit_ros_control_interface::moveit_ros_control_interface_parallel_gripper_plugin\" for configuration \"Release\"\nset_property(TARGET moveit_ros_control_interface::moveit_ros_control_interface_parallel_gripper_plugin APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface_parallel_gripper_plugin PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmoveit_ros_control_interface_parallel_gripper_plugin.so.2.15.2\"\n  IMPORTED_SONAME_RELEASE \"libmoveit_ros_control_interface_parallel_gripper_plugin.so.2.15.2\"\n  )\n\nlist(APPEND _cmake_import_check_targets moveit_ros_control_interface::moveit_ros_control_interface_parallel_gripper_plugin )\nlist(APPEND _cmake_import_check_files_for_moveit_ros_control_interface::moveit_ros_control_interface_parallel_gripper_plugin \"${_IMPORT_PREFIX}/lib/libmoveit_ros_control_interface_parallel_gripper_plugin.so.2.15.2\" )\n\n# Import target \"moveit_ros_control_interface::moveit_ros_control_interface_empty_plugin\" for configuration \"Release\"\nset_property(TARGET moveit_ros_control_interface::moveit_ros_control_interface_empty_plugin APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface_empty_plugin PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmoveit_ros_control_interface_empty_plugin.so.2.15.2\"\n  IMPORTED_SONAME_RELEASE \"libmoveit_ros_control_interface_empty_plugin.so.2.15.2\"\n  )\n\nlist(APPEND _cmake_import_check_targets moveit_ros_control_interface::moveit_ros_control_interface_empty_plugin )\nlist(APPEND _cmake_import_check_files_for_moveit_ros_control_interface::moveit_ros_control_interface_empty_plugin \"${_IMPORT_PREFIX}/lib/libmoveit_ros_control_interface_empty_plugin.so.2.15.2\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_cmake_9",
+    out = "_gen/share/moveit_ros_control_interface/cmake/moveit_ros_control_interfaceTargetsExport.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"3.0.0\")\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 3.0.0...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS moveit_ros_control_interface::moveit_ros_control_interface moveit_ros_control_interface::moveit_ros_control_interface_plugin moveit_ros_control_interface::moveit_ros_control_interface_trajectory_plugin moveit_ros_control_interface::moveit_ros_control_interface_gripper_plugin moveit_ros_control_interface::moveit_ros_control_interface_parallel_gripper_plugin moveit_ros_control_interface::moveit_ros_control_interface_empty_plugin)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target moveit_ros_control_interface::moveit_ros_control_interface\nadd_library(moveit_ros_control_interface::moveit_ros_control_interface INTERFACE IMPORTED)\n\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/moveit_ros_control_interface\"\n  INTERFACE_LINK_LIBRARIES \"moveit_ros_control_interface::moveit_ros_control_interface_plugin;moveit_ros_control_interface::moveit_ros_control_interface_trajectory_plugin;moveit_ros_control_interface::moveit_ros_control_interface_gripper_plugin;moveit_ros_control_interface::moveit_ros_control_interface_parallel_gripper_plugin;moveit_ros_control_interface::moveit_ros_control_interface_empty_plugin\"\n)\n\n# Create imported target moveit_ros_control_interface::moveit_ros_control_interface_plugin\nadd_library(moveit_ros_control_interface::moveit_ros_control_interface_plugin SHARED IMPORTED)\n\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface_plugin PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/moveit_ros_control_interface\"\n  INTERFACE_LINK_LIBRARIES \"rclcpp_action::rclcpp_action;controller_manager_msgs::controller_manager_msgs__rosidl_generator_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_fastrtps_c;controller_manager_msgs::controller_manager_msgs__rosidl_generator_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_fastrtps_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_introspection_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_introspection_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_generator_py;controller_manager_msgs::controller_manager_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_simple_controller_manager::moveit_simple_controller_manager;pluginlib::pluginlib;trajectory_msgs::trajectory_msgs__rosidl_generator_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_fastrtps_c;trajectory_msgs::trajectory_msgs__rosidl_generator_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_fastrtps_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_introspection_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_introspection_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_cpp;trajectory_msgs::trajectory_msgs__rosidl_generator_py;trajectory_msgs::trajectory_msgs__rosidl_generator_py;Boost::headers\"\n)\n\n# Create imported target moveit_ros_control_interface::moveit_ros_control_interface_trajectory_plugin\nadd_library(moveit_ros_control_interface::moveit_ros_control_interface_trajectory_plugin SHARED IMPORTED)\n\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface_trajectory_plugin PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/moveit_ros_control_interface\"\n  INTERFACE_LINK_LIBRARIES \"rclcpp_action::rclcpp_action;controller_manager_msgs::controller_manager_msgs__rosidl_generator_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_fastrtps_c;controller_manager_msgs::controller_manager_msgs__rosidl_generator_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_fastrtps_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_introspection_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_introspection_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_generator_py;controller_manager_msgs::controller_manager_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_simple_controller_manager::moveit_simple_controller_manager;pluginlib::pluginlib;trajectory_msgs::trajectory_msgs__rosidl_generator_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_fastrtps_c;trajectory_msgs::trajectory_msgs__rosidl_generator_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_fastrtps_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_introspection_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_introspection_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_cpp;trajectory_msgs::trajectory_msgs__rosidl_generator_py;trajectory_msgs::trajectory_msgs__rosidl_generator_py;Boost::headers\"\n)\n\n# Create imported target moveit_ros_control_interface::moveit_ros_control_interface_gripper_plugin\nadd_library(moveit_ros_control_interface::moveit_ros_control_interface_gripper_plugin SHARED IMPORTED)\n\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface_gripper_plugin PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/moveit_ros_control_interface\"\n  INTERFACE_LINK_LIBRARIES \"rclcpp_action::rclcpp_action;controller_manager_msgs::controller_manager_msgs__rosidl_generator_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_fastrtps_c;controller_manager_msgs::controller_manager_msgs__rosidl_generator_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_fastrtps_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_introspection_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_introspection_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_generator_py;controller_manager_msgs::controller_manager_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_simple_controller_manager::moveit_simple_controller_manager;pluginlib::pluginlib;trajectory_msgs::trajectory_msgs__rosidl_generator_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_fastrtps_c;trajectory_msgs::trajectory_msgs__rosidl_generator_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_fastrtps_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_introspection_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_introspection_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_cpp;trajectory_msgs::trajectory_msgs__rosidl_generator_py;trajectory_msgs::trajectory_msgs__rosidl_generator_py;Boost::headers\"\n)\n\n# Create imported target moveit_ros_control_interface::moveit_ros_control_interface_parallel_gripper_plugin\nadd_library(moveit_ros_control_interface::moveit_ros_control_interface_parallel_gripper_plugin SHARED IMPORTED)\n\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface_parallel_gripper_plugin PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/moveit_ros_control_interface\"\n  INTERFACE_LINK_LIBRARIES \"rclcpp_action::rclcpp_action;controller_manager_msgs::controller_manager_msgs__rosidl_generator_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_fastrtps_c;controller_manager_msgs::controller_manager_msgs__rosidl_generator_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_fastrtps_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_introspection_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_introspection_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_generator_py;controller_manager_msgs::controller_manager_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_simple_controller_manager::moveit_simple_controller_manager;pluginlib::pluginlib;trajectory_msgs::trajectory_msgs__rosidl_generator_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_fastrtps_c;trajectory_msgs::trajectory_msgs__rosidl_generator_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_fastrtps_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_introspection_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_introspection_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_cpp;trajectory_msgs::trajectory_msgs__rosidl_generator_py;trajectory_msgs::trajectory_msgs__rosidl_generator_py;Boost::headers\"\n)\n\n# Create imported target moveit_ros_control_interface::moveit_ros_control_interface_empty_plugin\nadd_library(moveit_ros_control_interface::moveit_ros_control_interface_empty_plugin SHARED IMPORTED)\n\nset_target_properties(moveit_ros_control_interface::moveit_ros_control_interface_empty_plugin PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/moveit_ros_control_interface\"\n  INTERFACE_LINK_LIBRARIES \"rclcpp_action::rclcpp_action;controller_manager_msgs::controller_manager_msgs__rosidl_generator_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_fastrtps_c;controller_manager_msgs::controller_manager_msgs__rosidl_generator_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_fastrtps_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_introspection_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_c;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_introspection_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_typesupport_cpp;controller_manager_msgs::controller_manager_msgs__rosidl_generator_py;controller_manager_msgs::controller_manager_msgs__rosidl_generator_py;moveit_core::moveit_core;moveit_simple_controller_manager::moveit_simple_controller_manager;pluginlib::pluginlib;trajectory_msgs::trajectory_msgs__rosidl_generator_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_fastrtps_c;trajectory_msgs::trajectory_msgs__rosidl_generator_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_fastrtps_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_introspection_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_c;trajectory_msgs::trajectory_msgs__rosidl_typesupport_introspection_cpp;trajectory_msgs::trajectory_msgs__rosidl_typesupport_cpp;trajectory_msgs::trajectory_msgs__rosidl_generator_py;trajectory_msgs::trajectory_msgs__rosidl_generator_py;Boost::headers\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/moveit_ros_control_interfaceTargetsExport-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+write_file(
+    name = "gen_eigen3_eigen_h",
+    out = "_gen/include/eigen3/Eigen/Eigen",
+    content = ["#include <Eigen/Eigen>\n"],
+)
+
+pkg_files(
+    name = "pkg_files_soname_0",
+    srcs = [":moveit_ros_control_interface_empty_plugin"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":moveit_ros_control_interface_empty_plugin": "libmoveit_ros_control_interface_empty_plugin.so.2.15.2"},
+)
+
+pkg_files(
+    name = "pkg_files_soname_1",
+    srcs = [":moveit_ros_control_interface_gripper_plugin"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":moveit_ros_control_interface_gripper_plugin": "libmoveit_ros_control_interface_gripper_plugin.so.2.15.2"},
+)
+
+pkg_files(
+    name = "pkg_files_soname_2",
+    srcs = [":moveit_ros_control_interface_parallel_gripper_plugin"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":moveit_ros_control_interface_parallel_gripper_plugin": "libmoveit_ros_control_interface_parallel_gripper_plugin.so.2.15.2"},
+)
+
+pkg_files(
+    name = "pkg_files_soname_3",
+    srcs = [":moveit_ros_control_interface_plugin"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":moveit_ros_control_interface_plugin": "libmoveit_ros_control_interface_plugin.so.2.15.2"},
+)
+
+pkg_files(
+    name = "pkg_files_soname_4",
+    srcs = [":moveit_ros_control_interface_trajectory_plugin"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":moveit_ros_control_interface_trajectory_plugin": "libmoveit_ros_control_interface_trajectory_plugin.so.2.15.2"},
+)
+
+pkg_files(
+    name = "pkg_files_extra_5",
+    srcs = [":gen_extra_5"],
+    prefix = "share/ament_index/resource_index/moveit_ros_control_interface__pluginlib__plugin",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_6",
+    srcs = ["ConfigExtras.cmake"],
+    prefix = "share/moveit_ros_control_interface/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_7",
+    srcs = [":gen_cmake_7"],
+    prefix = "share/moveit_ros_control_interface/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_8",
+    srcs = [":gen_cmake_8"],
+    prefix = "share/moveit_ros_control_interface/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_9",
+    srcs = [":gen_cmake_9"],
+    prefix = "share/moveit_ros_control_interface/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    data = ["moveit_ros_control_interface_plugins.xml"],
+    libraries = [
+        ":moveit_ros_control_interface_empty_plugin",
+        ":moveit_ros_control_interface_gripper_plugin",
+        ":moveit_ros_control_interface_parallel_gripper_plugin",
+        ":moveit_ros_control_interface_plugin",
+        ":moveit_ros_control_interface_trajectory_plugin",
+    ],
     package_xml = "package.xml",
+    plugin_category = "moveit_core",
+    plugins = ["moveit_core_plugins.xml"],
     deps = [
+        ":res_moveit_ros_control_interface__pluginlib__plugin",
         "@ament_cmake//:ament_package",
         "@controller_manager_msgs//:ament_package",
         "@moveit_common//:ament_package",
@@ -29,7 +419,114 @@ ament_package(
         "@moveit_simple_controller_manager//:ament_package",
         "@pluginlib//:ament_package",
         "@rclcpp_action//:ament_package",
-        "@rosdistro//:ament_package",
+        "@trajectory_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_controller_manager_plugin",
+    srcs = [":gen_moveit_ros_control_interface_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":moveit_ros_control_interface_empty_plugin",
+        ":moveit_ros_control_interface_gripper_plugin",
+        ":moveit_ros_control_interface_parallel_gripper_plugin",
+        ":moveit_ros_control_interface_plugin",
+        ":moveit_ros_control_interface_trajectory_plugin",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/moveit_ros_control_interface",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":moveit_ros_control_interface_plugin_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp_action",
+        "controller_manager_msgs",
+        "moveit_core",
+        "moveit_simple_controller_manager",
+        "pluginlib",
+        "trajectory_msgs",
+        "Boost",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    cmake_extras = ["ConfigExtras.cmake"],
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    install = [
+        ":pkg_files_soname_0",
+        ":pkg_files_soname_1",
+        ":pkg_files_soname_2",
+        ":pkg_files_soname_3",
+        ":pkg_files_soname_4",
+        ":pkg_files_extra_5",
+        ":pkg_files_cmake_6",
+        ":pkg_files_cmake_7",
+        ":pkg_files_cmake_8",
+        ":pkg_files_cmake_9",
+    ],
+    libraries = [
+        ":moveit_ros_control_interface_empty_plugin",
+        ":moveit_ros_control_interface_gripper_plugin",
+        ":moveit_ros_control_interface_parallel_gripper_plugin",
+        ":moveit_ros_control_interface_plugin",
+        ":moveit_ros_control_interface_trajectory_plugin",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        ":res_moveit_ros_control_interface__pluginlib__plugin",
+        "@ament_cmake//:ament_package",
+        "@controller_manager_msgs//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_simple_controller_manager//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp_action//:ament_package",
         "@trajectory_msgs//:ament_package",
     ],
 )
