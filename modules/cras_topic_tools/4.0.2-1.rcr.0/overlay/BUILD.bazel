@@ -1,25 +1,210 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@cras_cpp_common//:cras_c_api": "@cras_cpp_common//:cras_c_api_library",
+    "@cras_cpp_common//:cras_cloud": "@cras_cpp_common//:cras_cloud_library",
+    "@cras_cpp_common//:cras_filter_base": "@cras_cpp_common//:cras_filter_base_library",
+    "@cras_cpp_common//:cras_log_utils": "@cras_cpp_common//:cras_log_utils_library",
+    "@cras_cpp_common//:cras_param_utils": "@cras_cpp_common//:cras_param_utils_library",
+    "@cras_cpp_common//:cras_qos_utils": "@cras_cpp_common//:cras_qos_utils_library",
+    "@cras_cpp_common//:cras_rate_limiter": "@cras_cpp_common//:cras_rate_limiter_library",
+    "@cras_cpp_common//:cras_semaphore": "@cras_cpp_common//:cras_semaphore_library",
+    "@cras_cpp_common//:cras_string_utils": "@cras_cpp_common//:cras_string_utils_library",
+    "@cras_cpp_common//:cras_tf2_sensor_msgs": "@cras_cpp_common//:cras_tf2_sensor_msgs_library",
+    "@cras_cpp_common//:cras_tf2_utils": "@cras_cpp_common//:cras_tf2_utils_library",
+    "@cras_cpp_common//:cras_thread_utils": "@cras_cpp_common//:cras_thread_utils_library",
+    "@cras_cpp_common//:cras_time_utils": "@cras_cpp_common//:cras_time_utils_library",
+    "@cras_cpp_common//:cras_type_utils": "@cras_cpp_common//:cras_type_utils_library",
+    "@cras_cpp_common//:cras_urdf_utils": "@cras_cpp_common//:cras_urdf_utils_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@@geometry_msgs+//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.bind",
+    "@rosdistro//cc:boost.smart_ptr",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "cras_count_messages_library",
+    srcs = [":gen_cras_topic_tools_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_14"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/cras_topic_tools",
+        "_gen/include/cras_topic_tools/cras_topic_tools",
+        "include",
+        "include/cras_topic_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "cras_count_messages",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":cras_count_messages_library"],
+)
+
+rclcpp_components_register_node(
+    name = "count_messages",
+    component = ":cras_count_messages",
+    node_name = "count_messages",
+    plugin = "cras::CountMessagesComponent",
+)
+
+write_file(
+    name = "gen_cras_topic_tools_stub_cpp",
+    out = "_gen/cras_topic_tools_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_14",
+    out = "_gen/include/cras_topic_tools/cras_topic_tools/version.h",
+    content = ["// Copyright 2015 Open Source Robotics Foundation, Inc.\n//\n// Licensed under the Apache License, Version 2.0 (the \"License\");\n// you may not use this file except in compliance with the License.\n// You may obtain a copy of the License at\n//\n//     http://www.apache.org/licenses/LICENSE-2.0\n//\n// Unless required by applicable law or agreed to in writing, software\n// distributed under the License is distributed on an \"AS IS\" BASIS,\n// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n// See the License for the specific language governing permissions and\n// limitations under the License.\n\n#ifndef CRAS_TOPIC_TOOLS__VERSION_H_\n#define CRAS_TOPIC_TOOLS__VERSION_H_\n\n/// \\def CRAS_TOPIC_TOOLS_VERSION_MAJOR\n/// Defines CRAS_TOPIC_TOOLS major version number\n#define CRAS_TOPIC_TOOLS_VERSION_MAJOR (4)\n\n/// \\def CRAS_TOPIC_TOOLS_VERSION_MINOR\n/// Defines CRAS_TOPIC_TOOLS minor version number\n#define CRAS_TOPIC_TOOLS_VERSION_MINOR (0)\n\n/// \\def CRAS_TOPIC_TOOLS_VERSION_PATCH\n/// Defines CRAS_TOPIC_TOOLS version patch number\n#define CRAS_TOPIC_TOOLS_VERSION_PATCH (2)\n\n/// \\def CRAS_TOPIC_TOOLS_VERSION_STR\n/// Defines CRAS_TOPIC_TOOLS version string\n#define CRAS_TOPIC_TOOLS_VERSION_STR \"4.0.2\"\n\n/// \\def CRAS_TOPIC_TOOLS_VERSION_GTE\n/// Defines a macro to check whether the version of CRAS_TOPIC_TOOLS is greater than or equal to\n/// the given version triple.\n#define CRAS_TOPIC_TOOLS_VERSION_GTE(major, minor, patch) ( \\\n     (major < CRAS_TOPIC_TOOLS_VERSION_MAJOR) ? true \\\n     : ((major > CRAS_TOPIC_TOOLS_VERSION_MAJOR) ? false \\\n     : ((minor < CRAS_TOPIC_TOOLS_VERSION_MINOR) ? true \\\n     : ((minor > CRAS_TOPIC_TOOLS_VERSION_MINOR) ? false \\\n     : ((patch < CRAS_TOPIC_TOOLS_VERSION_PATCH) ? true \\\n     : ((patch > CRAS_TOPIC_TOOLS_VERSION_PATCH) ? false \\\n     : true))))))\n\n#endif  // CRAS_TOPIC_TOOLS__VERSION_H_\n"],
+)
+
+pkg_files(
+    name = "pkg_files_inc_0",
+    srcs = ["include/cras_topic_tools/change_header.h"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["include/cras_topic_tools/count_messages.hpp"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_2",
+    srcs = ["include/cras_topic_tools/generic_lazy_pubsub.hpp"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_3",
+    srcs = ["include/cras_topic_tools/generic_subscription.hpp"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_4",
+    srcs = ["include/cras_topic_tools/heartbeat.h"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_5",
+    srcs = ["include/cras_topic_tools/impl/lazy_subscriber.hpp"],
+    prefix = "include/cras_topic_tools/cras_topic_tools/impl",
+)
+
+pkg_files(
+    name = "pkg_files_inc_6",
+    srcs = ["include/cras_topic_tools/impl/shape_shifter.hpp"],
+    prefix = "include/cras_topic_tools/cras_topic_tools/impl",
+)
+
+pkg_files(
+    name = "pkg_files_inc_7",
+    srcs = ["include/cras_topic_tools/lazy_subscriber.hpp"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_8",
+    srcs = ["include/cras_topic_tools/priority_mux.h"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_9",
+    srcs = ["include/cras_topic_tools/priority_mux_base.h"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_10",
+    srcs = ["include/cras_topic_tools/relay.h"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_11",
+    srcs = ["include/cras_topic_tools/repeat.h"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_12",
+    srcs = ["include/cras_topic_tools/shape_shifter.h"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_13",
+    srcs = ["include/cras_topic_tools/throttle_messages.h"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+pkg_files(
+    name = "pkg_files_extra_14",
+    srcs = [":gen_extra_14"],
+    prefix = "include/cras_topic_tools/cras_topic_tools",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":count_messages_record"],
+    lib_data = [":count_messages"],
+    libraries = [":cras_count_messages"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -28,7 +213,55 @@ ament_package(
         "@cras_lint//:ament_package",
         "@rclcpp//:ament_package",
         "@rclcpp_components//:ament_package",
-        "@rosdistro//:ament_package",
+        "@std_msgs//:ament_package",
+        "@topic_tools//:ament_package",
+    ],
+)
+
+genrule(
+    name = "tar",
+    srcs = [":raw_tar"],
+    outs = ["tar.tar.gz"],
+    cmd = "tmpdir=$$(mktemp -d) && tar -xzf $(location :raw_tar) -C $$tmpdir && rm -rf $$tmpdir/opt/ros/lyrical/cras_topic_tools/share/cras_topic_tools/cmake/export_cras_topic_toolsExport-noconfig.cmake && tar -czf $@ -C $$tmpdir opt && rm -rf $$tmpdir",
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "cras_cpp_common",
+        "rclcpp",
+        "rclcpp_components",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_cras_topic_tools",
+    install = [
+        ":pkg_files_inc_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_inc_2",
+        ":pkg_files_inc_3",
+        ":pkg_files_inc_4",
+        ":pkg_files_inc_5",
+        ":pkg_files_inc_6",
+        ":pkg_files_inc_7",
+        ":pkg_files_inc_8",
+        ":pkg_files_inc_9",
+        ":pkg_files_inc_10",
+        ":pkg_files_inc_11",
+        ":pkg_files_inc_12",
+        ":pkg_files_inc_13",
+        ":pkg_files_extra_14",
+    ],
+    libraries = [":cras_count_messages"],
+    package_xml = "package.xml",
+    tar_name = "raw_tar",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@cras_cpp_common//:ament_package",
+        "@cras_lint//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
         "@std_msgs//:ament_package",
         "@topic_tools//:ament_package",
     ],
