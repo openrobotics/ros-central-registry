@@ -1,26 +1,279 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_python//python:defs.bzl", "py_library")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+]
+
+cc_library(
+    name = "lodepng_library",
+    srcs = [":gen_mujoco_ros2_control_stub_cpp"],
+    hdrs = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/mujoco_ros2_control",
+        "src",
+        "tests",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+genrule(
+    name = "static_lodepng_a",
+    srcs = [":lodepng_library"],
+    outs = ["liblodepng.a"],
+    cmd = "for f in $(SRCS); do case $$f in *.a) cp $$f $@; exit 0;; esac; done; ar rcs $@",
+)
+
+cc_library(
+    name = "simulate_library",
+    srcs = [":gen_mujoco_ros2_control_stub_cpp"],
+    hdrs = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/mujoco_ros2_control",
+        "src",
+        "tests",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+genrule(
+    name = "static_simulate_a",
+    srcs = [":simulate_library"],
+    outs = ["libsimulate.a"],
+    cmd = "for f in $(SRCS); do case $$f in *.a) cp $$f $@; exit 0;; esac; done; ar rcs $@",
+)
+
+cc_library(
+    name = "mujoco_ros2_control_library",
+    srcs = [":gen_mujoco_ros2_control_stub_cpp"],
+    hdrs = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/mujoco_ros2_control",
+        "src",
+        "tests",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mujoco_ros2_control",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":mujoco_ros2_control_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "ros2_control_node",
+    srcs = [":gen_mujoco_ros2_control_stub_cpp"] + glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/mujoco_ros2_control",
+        "src",
+        "tests",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+py_library(
+    name = "mujoco_ros2_control_py",
+    srcs = glob(["mujoco_ros2_control/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@controller_manager//:controller_manager_py",
+        "@geometry_msgs//:py",
+        "@mujoco_ros2_control_msgs//:py",
+        "@nav_msgs//:py",
+        "@ros2pkg",
+        "@rosgraph_msgs//:py",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+        "@urdfdom_py",
+    ],
+)
+
+write_file(
+    name = "gen_mujoco_ros2_control_stub_cpp",
+    out = "_gen/mujoco_ros2_control_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+pkg_files(
+    name = "pkg_files_static_simulate",
+    srcs = [":static_simulate_a"],
+    prefix = "lib",
+)
+
+pkg_files(
+    name = "pkg_files_static_lodepng",
+    srcs = [":static_lodepng_a"],
+    prefix = "lib",
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = ["scripts/find_missing_inertias.py"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/mujoco_ros2_control",
+)
+
+pkg_files(
+    name = "pkg_files_extra_1",
+    srcs = ["scripts/make_mjcf_from_robot_description.py"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/mujoco_ros2_control",
+)
+
+pkg_files(
+    name = "pkg_files_extra_2",
+    srcs = ["scripts/robot_description_to_mjcf.sh"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/mujoco_ros2_control",
+)
+
+pkg_files(
+    name = "pkg_files_share_3",
+    srcs = ["scripts/requirements.txt"],
+    prefix = "share/mujoco_ros2_control",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "resources/mujoco_logo.png",
+        "resources/scene.xml",
+        "scripts/find_missing_inertias.py",
+        "scripts/make_mjcf_from_robot_description.py",
+        "scripts/requirements.txt",
+        "scripts/robot_description_to_mjcf.sh",
+    ],
+    lib_data = [":ros2_control_node"],
+    libraries = [":mujoco_ros2_control"],
     package_xml = "package.xml",
+    plugin_category = "hardware_interface",
+    plugins = ["mujoco_system_interface_plugin.xml"],
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
@@ -43,7 +296,287 @@ ament_package(
         "@realtime_tools//:ament_package",
         "@ros2_control_cmake//:ament_package",
         "@ros2pkg//:ament_package",
-        "@rosdistro//:ament_package",
+        "@rosgraph_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tinyxml2_vendor//:ament_package",
+        "@transmission_interface//:ament_package",
+        "@urdfdom_py//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_headless_init",
+    srcs = [":gen_mujoco_ros2_control_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":mujoco_ros2_control",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/mujoco_ros2_control",
+        "src",
+        "tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mujoco_ros2_control_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_mujoco_simulation",
+    srcs = [":gen_mujoco_ros2_control_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":mujoco_ros2_control",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/mujoco_ros2_control",
+        "src",
+        "tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mujoco_ros2_control_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_mujoco_system_interface",
+    srcs = [":gen_mujoco_ros2_control_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":mujoco_ros2_control",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/mujoco_ros2_control",
+        "src",
+        "tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mujoco_ros2_control_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_plugin",
+    srcs = [":gen_mujoco_ros2_control_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":mujoco_ros2_control",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/mujoco_ros2_control",
+        "src",
+        "tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mujoco_ros2_control_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+py_pytest(
+    name = "test_urdf_to_mujoco_utils",
+    srcs = ["tests/test_urdf_to_mujoco_utils.py"],
+    data = [
+        ":ament_index",
+        ":ros2_control_node",
+    ],
+    deps = [
+        ":mujoco_ros2_control_py",
+        "@ament_index_python",
+        "@controller_manager//:controller_manager_py",
+        "@geometry_msgs//:py",
+        "@mujoco_ros2_control_msgs//:py",
+        "@nav_msgs//:py",
+        "@ros2pkg",
+        "@rosgraph_msgs//:py",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+        "@urdfdom_py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ament_index_cpp",
+        "hardware_interface",
+        "transmission_interface",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "realtime_tools",
+        "rosgraph_msgs",
+        "sensor_msgs",
+        "geometry_msgs",
+        "nav_msgs",
+        "mujoco_ros2_control_msgs",
+        "mujoco_ros2_control_plugins",
+        "pluginlib",
+        "control_toolbox",
+        "Eigen3",
+        "mujoco_vendor",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_mujoco_ros2_control",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install = [
+        ":pkg_files_static_simulate",
+        ":pkg_files_static_lodepng",
+        ":pkg_files_extra_0",
+        ":pkg_files_extra_1",
+        ":pkg_files_extra_2",
+        ":pkg_files_share_3",
+    ],
+    libraries = [":mujoco_ros2_control"],
+    package_xml = "package.xml",
+    python = [":mujoco_ros2_control_py"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@backward_ros//:ament_package",
+        "@control_toolbox//:ament_package",
+        "@controller_manager//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@mujoco_ros2_control_msgs//:ament_package",
+        "@mujoco_ros2_control_plugins//:ament_package",
+        "@mujoco_vendor//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@realtime_tools//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@ros2pkg//:ament_package",
         "@rosgraph_msgs//:ament_package",
         "@sensor_msgs//:ament_package",
         "@std_msgs//:ament_package",
