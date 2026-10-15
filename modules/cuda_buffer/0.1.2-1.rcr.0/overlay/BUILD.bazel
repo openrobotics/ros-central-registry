@@ -1,0 +1,185 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+    "@rosidl_buffer//:rosidl_buffer": "@rosidl_buffer//:rosidl_buffer_library",
+}
+
+CC_DEPS = [
+    "@cuda_buffer_backend_msgs//:cc",
+]
+
+cc_library(
+    name = "cuda_buffer_library",
+    srcs = [
+        "src/cuda_buffer.cpp",
+        "src/cuda_buffer_ipc_manager.cpp",
+        "src/cuda_memory_pool.cpp",
+        "src/host_endpoint_manager.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_cuda_h",
+        ":gen_cuda_runtime_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/cuda_buffer",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "cuda_buffer",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":cuda_buffer_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":cuda_buffer"],
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+write_file(
+    name = "gen_cuda_h",
+    out = "_gen/include/cuda.h",
+    content = ["#pragma once\n#include <cstdint>\n#include <cstddef>\nenum CUresult {\n  CUDA_SUCCESS = 0,\n  CUDA_ERROR_INVALID_VALUE = 1,\n  CUDA_ERROR_OUT_OF_MEMORY = 2,\n  CUDA_ERROR_NOT_INITIALIZED = 3,\n  CUDA_ERROR_DEINITIALIZED = 4,\n  CUDA_ERROR_NO_DEVICE = 100,\n  CUDA_ERROR_INVALID_DEVICE = 101,\n  CUDA_ERROR_ALREADY_ACQUIRED = 210,\n  CUDA_ERROR_NOT_READY = 600,\n  CUDA_ERROR_NOT_SUPPORTED = 801\n};\ntypedef int CUdevice;\ntypedef unsigned long long CUdeviceptr;\ntypedef unsigned long long CUmemGenericAllocationHandle;\nenum CUmemAllocationType { CU_MEM_ALLOCATION_TYPE_INVALID = 0, CU_MEM_ALLOCATION_TYPE_PINNED = 1 };\nenum CUmemLocationType { CU_MEM_LOCATION_TYPE_INVALID = 0, CU_MEM_LOCATION_TYPE_DEVICE = 1 };\nenum CUmemAllocationHandleType { CU_MEM_HANDLE_TYPE_NONE = 0, CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR = 1 };\nenum CUmemAllocationGranularity_flags { CU_MEM_ALLOC_GRANULARITY_MINIMUM = 0, CU_MEM_ALLOC_GRANULARITY_RECOMMENDED = 1 };\nenum CUmemAccess_flags { CU_MEM_ACCESS_FLAGS_PROT_NONE = 0, CU_MEM_ACCESS_FLAGS_PROT_READ = 1, CU_MEM_ACCESS_FLAGS_PROT_READWRITE = 3 };\nstruct CUmemLocation { CUmemLocationType type; int id; };\nstruct CUmemAllocationProp {\n  CUmemAllocationType type;\n  CUmemAllocationHandleType requestedHandleTypes;\n  CUmemLocation location;\n  void * win32HandleMetaData;\n  struct { unsigned char compressionType; unsigned char gpuDirectRDMACapable; unsigned short usage; unsigned char reserved[4]; } allocFlags;\n};\nstruct CUmemAccessDesc { CUmemLocation location; CUmemAccess_flags flags; };\ninline CUresult cuInit(unsigned int) { return CUDA_SUCCESS; }\ninline CUresult cuGetErrorName(CUresult, const char ** pStr) { if (pStr) *pStr = \"CUDA_SUCCESS\"; return CUDA_SUCCESS; }\ninline CUresult cuGetErrorString(CUresult, const char ** pStr) { if (pStr) *pStr = \"no error\"; return CUDA_SUCCESS; }\ninline CUresult cuMemGetAllocationGranularity(size_t * gran, const CUmemAllocationProp *, CUmemAllocationGranularity_flags) { if (gran) *gran = 4096; return CUDA_SUCCESS; }\ninline CUresult cuMemCreate(CUmemGenericAllocationHandle * h, size_t, const CUmemAllocationProp *, unsigned long long) { if (h) *h = 1; return CUDA_SUCCESS; }\ninline CUresult cuMemAddressReserve(CUdeviceptr * ptr, size_t, size_t, CUdeviceptr, unsigned long long) { if (ptr) *ptr = 0x1000; return CUDA_SUCCESS; }\ninline CUresult cuMemAddressFree(CUdeviceptr, size_t) { return CUDA_SUCCESS; }\ninline CUresult cuMemMap(CUdeviceptr, size_t, size_t, CUmemGenericAllocationHandle, unsigned long long) { return CUDA_SUCCESS; }\ninline CUresult cuMemUnmap(CUdeviceptr, size_t) { return CUDA_SUCCESS; }\ninline CUresult cuMemSetAccess(CUdeviceptr, size_t, const CUmemAccessDesc *, size_t) { return CUDA_SUCCESS; }\ninline CUresult cuMemRelease(CUmemGenericAllocationHandle) { return CUDA_SUCCESS; }\ninline CUresult cuMemExportToShareableHandle(void * sh, CUmemGenericAllocationHandle, CUmemAllocationHandleType, unsigned long long) { if (sh) *static_cast<int *>(sh) = 0; return CUDA_SUCCESS; }\ninline CUresult cuMemImportFromShareableHandle(CUmemGenericAllocationHandle * h, void *, CUmemAllocationHandleType) { if (h) *h = 1; return CUDA_SUCCESS; }\n"],
+)
+
+write_file(
+    name = "gen_cuda_runtime_h",
+    out = "_gen/include/cuda_runtime.h",
+    content = ["#pragma once\n#include \"cuda.h\"\nenum cudaError_t {\n  cudaSuccess = 0,\n  cudaErrorInvalidValue = 1,\n  cudaErrorMemoryAllocation = 2,\n  cudaErrorInitializationError = 3,\n  cudaErrorCudartUnloading = 4,\n  cudaErrorInvalidDevice = 101,\n  cudaErrorNotReady = 600,\n  cudaErrorNotSupported = 801\n};\ntypedef void * cudaStream_t;\ntypedef void * cudaEvent_t;\n#define cudaStreamDefault 0x00\n#define cudaStreamNonBlocking 0x01\n#define cudaEventDefault 0x00\n#define cudaEventBlockingSync 0x01\n#define cudaEventDisableTiming 0x02\n#define cudaEventInterprocess 0x04\nenum cudaMemcpyKind {\n  cudaMemcpyHostToHost = 0,\n  cudaMemcpyHostToDevice = 1,\n  cudaMemcpyDeviceToHost = 2,\n  cudaMemcpyDeviceToDevice = 3,\n  cudaMemcpyDefault = 4\n};\ninline const char * cudaGetErrorName(cudaError_t) { return \"cudaSuccess\"; }\ninline const char * cudaGetErrorString(cudaError_t) { return \"no error\"; }\ninline cudaError_t cudaGetLastError() { return cudaSuccess; }\ninline cudaError_t cudaPeekAtLastError() { return cudaSuccess; }\ninline cudaError_t cudaGetDevice(int * dev) { if (dev) *dev = 0; return cudaSuccess; }\ninline cudaError_t cudaSetDevice(int) { return cudaSuccess; }\ninline cudaError_t cudaGetDeviceCount(int * count) { if (count) *count = 0; return cudaSuccess; }\ninline cudaError_t cudaMalloc(void ** p, size_t) { if (p) *p = nullptr; return cudaSuccess; }\ninline cudaError_t cudaFree(void *) { return cudaSuccess; }\ninline cudaError_t cudaMemcpy(void *, const void *, size_t, cudaMemcpyKind) { return cudaSuccess; }\ninline cudaError_t cudaMemcpyAsync(void *, const void *, size_t, cudaMemcpyKind, cudaStream_t = nullptr) { return cudaSuccess; }\ninline cudaError_t cudaMemset(void *, int, size_t) { return cudaSuccess; }\ninline cudaError_t cudaMemsetAsync(void *, int, size_t, cudaStream_t = nullptr) { return cudaSuccess; }\ninline cudaError_t cudaStreamCreate(cudaStream_t * s) { if (s) *s = nullptr; return cudaSuccess; }\ninline cudaError_t cudaStreamCreateWithFlags(cudaStream_t * s, unsigned int) { if (s) *s = nullptr; return cudaSuccess; }\ninline cudaError_t cudaStreamDestroy(cudaStream_t) { return cudaSuccess; }\ninline cudaError_t cudaStreamQuery(cudaStream_t) { return cudaSuccess; }\ninline cudaError_t cudaStreamSynchronize(cudaStream_t) { return cudaSuccess; }\ninline cudaError_t cudaStreamWaitEvent(cudaStream_t, cudaEvent_t, unsigned int = 0) { return cudaSuccess; }\ninline cudaError_t cudaEventCreate(cudaEvent_t * e) { if (e) *e = nullptr; return cudaSuccess; }\ninline cudaError_t cudaEventCreateWithFlags(cudaEvent_t * e, unsigned int) { if (e) *e = nullptr; return cudaSuccess; }\ninline cudaError_t cudaEventRecord(cudaEvent_t, cudaStream_t = nullptr) { return cudaSuccess; }\ninline cudaError_t cudaEventQuery(cudaEvent_t) { return cudaSuccess; }\ninline cudaError_t cudaEventSynchronize(cudaEvent_t) { return cudaSuccess; }\ninline cudaError_t cudaEventDestroy(cudaEvent_t) { return cudaSuccess; }\ninline cudaError_t cudaDeviceSynchronize() { return cudaSuccess; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":cuda_buffer"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@cuda_buffer_backend_msgs//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rosidl_buffer//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_cuda_buffer",
+    srcs = ["test/test_cuda_buffer.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_cuda_h",
+        ":gen_cuda_runtime_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/cuda_buffer",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cuda_buffer_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rosidl_buffer",
+        "cuda_buffer_backend_msgs",
+        "rmw",
+        "rcutils",
+    ],
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":cuda_buffer"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@cuda_buffer_backend_msgs//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rosidl_buffer//:ament_package",
+    ],
+)
