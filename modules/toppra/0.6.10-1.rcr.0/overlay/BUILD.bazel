@@ -1,30 +1,539 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "toppra_library",
+    srcs = [":gen_toppra_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_9"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "_gen/include/toppra",
+        "bindings",
+        "src",
+        "tests",
+    ],
+    local_defines = ros_local_defines() + ["TOPPRA_WARN_ON"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "toppra",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":toppra_library"],
+)
+
+cc_library(
+    name = "toppra_int.cpython-314-x86_64-linux-gnu_library",
+    srcs = [":gen_toppra_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_9"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "_gen/include/toppra",
+        "bindings",
+        "src",
+        "tests",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":toppra_library"],
+)
+
+cc_shared_library(
+    name = "toppra_int.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "toppra_int/toppra_int.so",
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":toppra_int.cpython-314-x86_64-linux-gnu_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_toppra_stub_cpp",
+    out = "_gen/toppra_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_9",
+    out = "_gen/include/toppra/export.hpp",
+    content = ["\n#ifndef TOPPRA_EXPORT_H\n#define TOPPRA_EXPORT_H\n\n#ifdef TOPPRA_STATIC_DEFINE\n#  define TOPPRA_EXPORT\n#  define TOPPRA_NO_EXPORT\n#else\n#  ifndef TOPPRA_EXPORT\n#    ifdef toppra_EXPORTS\n        /* We are building this library */\n#      define TOPPRA_EXPORT __attribute__((visibility(\"default\")))\n#    else\n        /* We are using this library */\n#      define TOPPRA_EXPORT __attribute__((visibility(\"default\")))\n#    endif\n#  endif\n\n#  ifndef TOPPRA_NO_EXPORT\n#    define TOPPRA_NO_EXPORT __attribute__((visibility(\"hidden\")))\n#  endif\n#endif\n\n#ifndef TOPPRA_DEPRECATED\n#  define TOPPRA_DEPRECATED __attribute__ ((__deprecated__))\n#endif\n\n#ifndef TOPPRA_DEPRECATED_EXPORT\n#  define TOPPRA_DEPRECATED_EXPORT TOPPRA_EXPORT TOPPRA_DEPRECATED\n#endif\n\n#ifndef TOPPRA_DEPRECATED_NO_EXPORT\n#  define TOPPRA_DEPRECATED_NO_EXPORT TOPPRA_NO_EXPORT TOPPRA_DEPRECATED\n#endif\n\n/* NOLINTNEXTLINE(readability-avoid-unconditional-preprocessor-if) */\n#if 0 /* DEFINE_NO_DEPRECATED */\n#  ifndef TOPPRA_NO_DEPRECATED\n#    define TOPPRA_NO_DEPRECATED\n#  endif\n#endif\n\n#endif /* TOPPRA_EXPORT_H */\n"],
+)
+
+write_file(
+    name = "gen_extra_20",
+    out = "_gen/lib/cmake/toppra/toppraConfig.cmake",
+    content = ["set(TOPPRA_WITH_PINOCCHIO OFF)\nset(TOPPRA_WITH_qpOASES   OFF)\nset(TOPPRA_WITH_GLPK      OFF)\n\nfind_package(Eigen3 REQUIRED)\n\nif(TOPPRA_WITH_PINOCCHIO)\n  find_package(pinocchio REQUIRED)\nendif()\n# qpOASES and GLPK do not need to be found again, because\n# they are not used as targets.\n\ninclude(\"${CMAKE_CURRENT_LIST_DIR}/toppraTargets.cmake\")\n"],
+)
+
+write_file(
+    name = "gen_extra_21",
+    out = "_gen/lib/cmake/toppra/toppraConfigVersion.cmake",
+    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version,\n# but only if the requested major version is the same as the current one.\n# The variable CVF_VERSION must be set before calling configure_file().\n\n\nset(PACKAGE_VERSION \"0.6.10\")\n\nif(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n  set(PACKAGE_VERSION_COMPATIBLE FALSE)\nelse()\n\n  if(\"0.6.10\" MATCHES \"^([0-9]+)\\\\.\")\n    set(CVF_VERSION_MAJOR \"${CMAKE_MATCH_1}\")\n    if(NOT CVF_VERSION_MAJOR VERSION_EQUAL 0)\n      string(REGEX REPLACE \"^0+\" \"\" CVF_VERSION_MAJOR \"${CVF_VERSION_MAJOR}\")\n    endif()\n  else()\n    set(CVF_VERSION_MAJOR \"0.6.10\")\n  endif()\n\n  if(PACKAGE_FIND_VERSION_RANGE)\n    # both endpoints of the range must have the expected major version\n    math (EXPR CVF_VERSION_MAJOR_NEXT \"${CVF_VERSION_MAJOR} + 1\")\n    if (NOT PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX_MAJOR STREQUAL CVF_VERSION_MAJOR)\n          OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX VERSION_LESS_EQUAL CVF_VERSION_MAJOR_NEXT)))\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    elseif(PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        AND ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS_EQUAL PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MAX)))\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n  else()\n    if(PACKAGE_FIND_VERSION_MAJOR STREQUAL CVF_VERSION_MAJOR)\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
+)
+
+write_file(
+    name = "gen_extra_22",
+    out = "_gen/lib/cmake/toppra/toppraTargets-noconfig.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"toppra::toppra\" for configuration \"\"\nset_property(TARGET toppra::toppra APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)\nset_target_properties(toppra::toppra PROPERTIES\n  IMPORTED_LOCATION_NOCONFIG \"${_IMPORT_PREFIX}/lib/libtoppra.so\"\n  IMPORTED_SONAME_NOCONFIG \"libtoppra.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets toppra::toppra )\nlist(APPEND _cmake_import_check_files_for_toppra::toppra \"${_IMPORT_PREFIX}/lib/libtoppra.so\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_extra_23",
+    out = "_gen/lib/cmake/toppra/toppraTargets.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS toppra::toppra)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target toppra::toppra\nadd_library(toppra::toppra SHARED IMPORTED)\n\nset_target_properties(toppra::toppra PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include\"\n  INTERFACE_LINK_LIBRARIES \"Eigen3::Eigen\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/toppraTargets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+write_file(
+    name = "gen_extra_24",
+    out = "_gen/share/toppra/hook/catkin_pythonpath.dsv",
+    content = ["prepend-non-duplicate;PYTHONPATH;lib/python3.14/site-packages\n"],
+)
+
+write_file(
+    name = "gen_extra_25",
+    out = "_gen/share/toppra/hook/catkin_pythonpath.ps1",
+    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value PYTHONPATH \"$env:COLCON_CURRENT_PREFIX/lib/python3.14/site-packages\"\n"],
+)
+
+write_file(
+    name = "gen_extra_26",
+    out = "_gen/share/toppra/hook/catkin_pythonpath.sh",
+    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value PYTHONPATH \"$COLCON_CURRENT_PREFIX/lib/python3.14/site-packages\"\n"],
+)
+
+write_file(
+    name = "gen_extra_27",
+    out = "_gen/share/toppra/hook/pkg_config_path.dsv",
+    content = ["prepend-non-duplicate;PKG_CONFIG_PATH;lib/pkgconfig\n"],
+)
+
+write_file(
+    name = "gen_extra_28",
+    out = "_gen/share/toppra/hook/pkg_config_path.ps1",
+    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value PKG_CONFIG_PATH \"$env:COLCON_CURRENT_PREFIX/lib/pkgconfig\"\n"],
+)
+
+write_file(
+    name = "gen_extra_29",
+    out = "_gen/share/toppra/hook/pkg_config_path.sh",
+    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value PKG_CONFIG_PATH \"$COLCON_CURRENT_PREFIX/lib/pkgconfig\"\n"],
+)
+
+write_file(
+    name = "gen_extra_30",
+    out = "_gen/share/toppra/hook/pkg_config_path_multiarch.dsv",
+    content = ["prepend-non-duplicate;PKG_CONFIG_PATH;lib/x86_64-linux-gnu/pkgconfig\n"],
+)
+
+write_file(
+    name = "gen_extra_31",
+    out = "_gen/share/toppra/hook/pkg_config_path_multiarch.ps1",
+    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value PKG_CONFIG_PATH \"$env:COLCON_CURRENT_PREFIX/lib/x86_64-linux-gnu/pkgconfig\"\n"],
+)
+
+write_file(
+    name = "gen_extra_32",
+    out = "_gen/share/toppra/hook/pkg_config_path_multiarch.sh",
+    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value PKG_CONFIG_PATH \"$COLCON_CURRENT_PREFIX/lib/x86_64-linux-gnu/pkgconfig\"\n"],
+)
+
+write_file(
+    name = "gen_extra_33",
+    out = "_gen/share/toppra/hook/ros_package_path.dsv",
+    content = ["prepend-non-duplicate;ROS_PACKAGE_PATH;share\n"],
+)
+
+write_file(
+    name = "gen_extra_34",
+    out = "_gen/share/toppra/hook/ros_package_path.ps1",
+    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value ROS_PACKAGE_PATH \"$env:COLCON_CURRENT_PREFIX/share\"\n"],
+)
+
+write_file(
+    name = "gen_extra_35",
+    out = "_gen/share/toppra/hook/ros_package_path.sh",
+    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value ROS_PACKAGE_PATH \"$COLCON_CURRENT_PREFIX/share\"\n"],
+)
+
+pkg_files(
+    name = "pkg_files_inc_0",
+    srcs = ["src/toppra/algorithm.hpp"],
+    prefix = "include/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["src/toppra/algorithm/toppra.hpp"],
+    prefix = "include/toppra/algorithm",
+)
+
+pkg_files(
+    name = "pkg_files_inc_2",
+    srcs = ["src/toppra/constraint.hpp"],
+    prefix = "include/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_inc_3",
+    srcs = ["src/toppra/constraint/cartesian_velocity_norm.hpp"],
+    prefix = "include/toppra/constraint",
+)
+
+pkg_files(
+    name = "pkg_files_inc_4",
+    srcs = ["src/toppra/constraint/cartesian_velocity_norm/pinocchio.hpp"],
+    prefix = "include/toppra/constraint/cartesian_velocity_norm",
+)
+
+pkg_files(
+    name = "pkg_files_inc_5",
+    srcs = ["src/toppra/constraint/joint_torque.hpp"],
+    prefix = "include/toppra/constraint",
+)
+
+pkg_files(
+    name = "pkg_files_inc_6",
+    srcs = ["src/toppra/constraint/joint_torque/pinocchio.hpp"],
+    prefix = "include/toppra/constraint/joint_torque",
+)
+
+pkg_files(
+    name = "pkg_files_inc_7",
+    srcs = ["src/toppra/constraint/linear_joint_acceleration.hpp"],
+    prefix = "include/toppra/constraint",
+)
+
+pkg_files(
+    name = "pkg_files_inc_8",
+    srcs = ["src/toppra/constraint/linear_joint_velocity.hpp"],
+    prefix = "include/toppra/constraint",
+)
+
+pkg_files(
+    name = "pkg_files_extra_9",
+    srcs = [":gen_extra_9"],
+    prefix = "include/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_inc_10",
+    srcs = ["src/toppra/geometric_path.hpp"],
+    prefix = "include/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_inc_11",
+    srcs = ["src/toppra/geometric_path/piecewise_poly_path.hpp"],
+    prefix = "include/toppra/geometric_path",
+)
+
+pkg_files(
+    name = "pkg_files_inc_12",
+    srcs = ["src/toppra/parametrizer.hpp"],
+    prefix = "include/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_inc_13",
+    srcs = ["src/toppra/parametrizer/const_accel.hpp"],
+    prefix = "include/toppra/parametrizer",
+)
+
+pkg_files(
+    name = "pkg_files_inc_14",
+    srcs = ["src/toppra/parametrizer/spline.hpp"],
+    prefix = "include/toppra/parametrizer",
+)
+
+pkg_files(
+    name = "pkg_files_inc_15",
+    srcs = ["src/toppra/solver.hpp"],
+    prefix = "include/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_inc_16",
+    srcs = ["src/toppra/solver/glpk-wrapper.hpp"],
+    prefix = "include/toppra/solver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_17",
+    srcs = ["src/toppra/solver/qpOASES-wrapper.hpp"],
+    prefix = "include/toppra/solver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_18",
+    srcs = ["src/toppra/solver/seidel.hpp"],
+    prefix = "include/toppra/solver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_19",
+    srcs = ["src/toppra/toppra.hpp"],
+    prefix = "include/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_extra_20",
+    srcs = [":gen_extra_20"],
+    prefix = "lib/cmake/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_extra_21",
+    srcs = [":gen_extra_21"],
+    prefix = "lib/cmake/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_extra_22",
+    srcs = [":gen_extra_22"],
+    prefix = "lib/cmake/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_extra_23",
+    srcs = [":gen_extra_23"],
+    prefix = "lib/cmake/toppra",
+)
+
+pkg_files(
+    name = "pkg_files_extra_24",
+    srcs = [":gen_extra_24"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_25",
+    srcs = [":gen_extra_25"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_26",
+    srcs = [":gen_extra_26"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_27",
+    srcs = [":gen_extra_27"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_28",
+    srcs = [":gen_extra_28"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_29",
+    srcs = [":gen_extra_29"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_30",
+    srcs = [":gen_extra_30"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_31",
+    srcs = [":gen_extra_31"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_32",
+    srcs = [":gen_extra_32"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_33",
+    srcs = [":gen_extra_33"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_34",
+    srcs = [":gen_extra_34"],
+    prefix = "share/toppra/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_35",
+    srcs = [":gen_extra_35"],
+    prefix = "share/toppra/hook",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":toppra"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_cmake_python//:ament_package",
-        "@rosdistro//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "all_tests",
+    srcs = [":gen_toppra_stub_cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":toppra",
+        ":toppra_int.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/toppra",
+        "bindings",
+        "src",
+        "tests",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "TOPPRA_WARN_ON",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":toppra_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    install = [
+        ":pkg_files_inc_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_inc_2",
+        ":pkg_files_inc_3",
+        ":pkg_files_inc_4",
+        ":pkg_files_inc_5",
+        ":pkg_files_inc_6",
+        ":pkg_files_inc_7",
+        ":pkg_files_inc_8",
+        ":pkg_files_extra_9",
+        ":pkg_files_inc_10",
+        ":pkg_files_inc_11",
+        ":pkg_files_inc_12",
+        ":pkg_files_inc_13",
+        ":pkg_files_inc_14",
+        ":pkg_files_inc_15",
+        ":pkg_files_inc_16",
+        ":pkg_files_inc_17",
+        ":pkg_files_inc_18",
+        ":pkg_files_inc_19",
+        ":pkg_files_extra_20",
+        ":pkg_files_extra_21",
+        ":pkg_files_extra_22",
+        ":pkg_files_extra_23",
+        ":pkg_files_extra_24",
+        ":pkg_files_extra_25",
+        ":pkg_files_extra_26",
+        ":pkg_files_extra_27",
+        ":pkg_files_extra_28",
+        ":pkg_files_extra_29",
+        ":pkg_files_extra_30",
+        ":pkg_files_extra_31",
+        ":pkg_files_extra_32",
+        ":pkg_files_extra_33",
+        ":pkg_files_extra_34",
+        ":pkg_files_extra_35",
+    ],
+    libraries = [":toppra"],
+    package_xml = "package.xml",
+    python = [":toppra_int.cpython-314-x86_64-linux-gnu"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_python//:ament_package",
     ],
 )
