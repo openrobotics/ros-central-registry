@@ -1,0 +1,930 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@behaviortree_cpp//:behaviortree_cpp": "@behaviortree_cpp//:behaviortree_cpp_library",
+    "@plansys2_core//:plansys2_core": "@plansys2_core//:plansys2_core_library",
+    "@plansys2_domain_expert//:plansys2_domain_expert": "@plansys2_domain_expert//:plansys2_domain_expert_library",
+    "@plansys2_pddl_parser//:plansys2_pddl_parser": "@plansys2_pddl_parser//:plansys2_pddl_parser_library",
+    "@plansys2_planner//:plansys2_planner": "@plansys2_planner//:plansys2_planner_library",
+    "@plansys2_problem_expert//:plansys2_problem_expert": "@plansys2_problem_expert//:plansys2_problem_expert_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rclcpp_cascade_lifecycle//:rclcpp_cascade_lifecycle": "@rclcpp_cascade_lifecycle//:rclcpp_cascade_lifecycle_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+CC_DEPS = [
+    ":_gen_textual_hdrs",
+    "@@builtin_interfaces+//:cc",
+    "@lifecycle_msgs//:cc",
+    "@plansys2_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@std_msgs//:cc",
+    "@std_srvs//:cc",
+]
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [":gen_eigen3_dense_h"],
+)
+
+cc_library(
+    name = "bt_builder_plugins_library",
+    srcs = [
+        "src/plansys2_executor/bt_builder_plugins/sequential_bt_builder.cpp",
+        "src/plansys2_executor/bt_builder_plugins/simple_bt_builder.cpp",
+        "src/plansys2_executor/bt_builder_plugins/stn_bt_builder.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "bt_builder_plugins",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":bt_builder_plugins_library"],
+)
+
+cc_library(
+    name = "plansys2_executor_library",
+    srcs = [
+        "src/plansys2_executor/ActionExecutor.cpp",
+        "src/plansys2_executor/ActionExecutorClient.cpp",
+        "src/plansys2_executor/ComputeBT.cpp",
+        "src/plansys2_executor/ExecutorClient.cpp",
+        "src/plansys2_executor/ExecutorNode.cpp",
+        "src/plansys2_executor/behavior_tree/apply_atend_effect_node.cpp",
+        "src/plansys2_executor/behavior_tree/apply_atstart_effect_node.cpp",
+        "src/plansys2_executor/behavior_tree/check_action_node.cpp",
+        "src/plansys2_executor/behavior_tree/check_atend_req_node.cpp",
+        "src/plansys2_executor/behavior_tree/check_overall_req_node.cpp",
+        "src/plansys2_executor/behavior_tree/check_timeout_node.cpp",
+        "src/plansys2_executor/behavior_tree/execute_action_node.cpp",
+        "src/plansys2_executor/behavior_tree/restore_atstart_effect_node.cpp",
+        "src/plansys2_executor/behavior_tree/wait_action_node.cpp",
+        "src/plansys2_executor/behavior_tree/wait_atstart_req_node.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "plansys2_executor",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":plansys2_executor_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "compute_bt",
+    srcs = ["src/compute_bt.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":plansys2_executor_library"],
+)
+
+cc_binary(
+    name = "executor_node",
+    srcs = ["src/executor_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":plansys2_executor_library"],
+)
+
+write_file(
+    name = "gen_eigen3_dense_h",
+    out = "_gen/include/eigen3/Eigen/Dense",
+    content = ["#include <Eigen/Dense>\n"],
+)
+
+pkg_files(
+    name = "pkg_files_shlib_0_bt_builder_plugins",
+    srcs = [":bt_builder_plugins"],
+    attributes = pkg_attributes(mode = "0755"),
+)
+
+pkg_files(
+    name = "pkg_files_share_7",
+    srcs = ["test/pddl/cooking_domain.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_8",
+    srcs = ["test/pddl/domain_charging.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_9",
+    srcs = ["test/pddl/domain_simple.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_10",
+    srcs = ["test/pddl/domain_simple_2.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_11",
+    srcs = ["test/pddl/elevator_domain.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_12",
+    srcs = ["test/pddl/elevator_problem.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_13",
+    srcs = ["test/pddl/factory.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_14",
+    srcs = ["test/pddl/factory2.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_15",
+    srcs = ["test/pddl/factory3.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_16",
+    srcs = ["test/pddl/factory4.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_17",
+    srcs = ["test/pddl/problem_factory_1.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_18",
+    srcs = ["test/pddl/problem_simple_1.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_19",
+    srcs = ["test/pddl/problem_simple_2.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_20",
+    srcs = ["test/pddl/problem_simple_3.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_21",
+    srcs = ["test/pddl/road_trip_domain.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_22",
+    srcs = ["test/pddl/road_trip_problem.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_23",
+    srcs = ["test/pddl/simple_example.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_24",
+    srcs = ["test/pddl/simple_move_example.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_25",
+    srcs = ["test/pddl/suave_domain.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_26",
+    srcs = ["test/pddl/suave_problem.pddl"],
+    prefix = "share/plansys2_executor/pddl",
+)
+
+pkg_files(
+    name = "pkg_files_share_27",
+    srcs = ["test/test_behavior_trees/test_action_timeout_bt.xml"],
+    prefix = "share/plansys2_executor/test_behavior_trees",
+)
+
+pkg_files(
+    name = "pkg_files_share_28",
+    srcs = ["test/test_behavior_trees/test_action_timeout_end_bt.xml"],
+    prefix = "share/plansys2_executor/test_behavior_trees",
+)
+
+pkg_files(
+    name = "pkg_files_share_29",
+    srcs = ["test/test_behavior_trees/test_action_timeout_start_bt.xml"],
+    prefix = "share/plansys2_executor/test_behavior_trees",
+)
+
+pkg_files(
+    name = "pkg_files_share_30",
+    srcs = ["test/test_data/elevator_graph.csv"],
+    prefix = "share/plansys2_executor/test_data",
+)
+
+pkg_files(
+    name = "pkg_files_share_31",
+    srcs = ["test/test_data/road_trip_graph.csv"],
+    prefix = "share/plansys2_executor/test_data",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "behavior_trees/plansys2_action_bt.xml",
+        "behavior_trees/plansys2_action_bt_with_undo.xml",
+        "behavior_trees/plansys2_end_action_bt.xml",
+        "behavior_trees/plansys2_start_action_bt.xml",
+        "launch/compute_bt_launch.py",
+        "launch/executor_launch.py",
+    ],
+    lib_data = [
+        ":compute_bt",
+        ":executor_node",
+    ],
+    libraries = [
+        ":bt_builder_plugins",
+        ":plansys2_executor",
+    ],
+    package_xml = "package.xml",
+    plugins = ["plugins.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@behaviortree_cpp//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@plansys2_core//:ament_package",
+        "@plansys2_domain_expert//:ament_package",
+        "@plansys2_msgs//:ament_package",
+        "@plansys2_pddl_parser//:ament_package",
+        "@plansys2_planner//:ament_package",
+        "@plansys2_problem_expert//:ament_package",
+        "@pluginlib//:ament_package",
+        "@popf//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclcpp_cascade_lifecycle//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "action_execution_test",
+    srcs = ["test/unit/action_execution_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":bt_builder_plugins",
+        ":plansys2_executor",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":plansys2_executor_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "bt_node_test",
+    srcs = ["test/unit/bt_node_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":bt_builder_plugins",
+        ":plansys2_executor",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":plansys2_executor_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "bt_node_test_charging",
+    srcs = ["test/unit/bt_node_test_charging.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":bt_builder_plugins",
+        ":plansys2_executor",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":plansys2_executor_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "execution_tree_test",
+    srcs = ["test/unit/execution_tree_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":bt_builder_plugins",
+        ":plansys2_executor",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":plansys2_executor_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "executor_test",
+    srcs = ["test/unit/executor_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":bt_builder_plugins",
+        ":plansys2_executor",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":plansys2_executor_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "sequential_bt_builder_test",
+    srcs = ["test/unit/sequential_bt_builder_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":bt_builder_plugins",
+        ":plansys2_executor",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":bt_builder_plugins_library",
+        ":plansys2_executor_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "simple_btbuilder_tests",
+    srcs = ["test/unit/simple_btbuilder_tests.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":bt_builder_plugins",
+        ":plansys2_executor",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/plansys2_executor",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":bt_builder_plugins_library",
+        ":plansys2_executor_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "lifecycle_msgs",
+        "rclcpp_cascade_lifecycle",
+        "rclcpp_action",
+        "plansys2_pddl_parser",
+        "ament_index_cpp",
+        "plansys2_core",
+        "plansys2_msgs",
+        "plansys2_domain_expert",
+        "plansys2_problem_expert",
+        "plansys2_planner",
+        "pluginlib",
+        "behaviortree_cpp",
+        "std_msgs",
+        "std_srvs",
+    ],
+    cmake_export_sets = {
+        "bt_builder_plugins": ["bt_builder_plugins"],
+        "export_plansys2_executor": ["plansys2_executor"],
+    },
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    install = [
+        ":pkg_files_shlib_0_bt_builder_plugins",
+        ":pkg_files_share_7",
+        ":pkg_files_share_8",
+        ":pkg_files_share_9",
+        ":pkg_files_share_10",
+        ":pkg_files_share_11",
+        ":pkg_files_share_12",
+        ":pkg_files_share_13",
+        ":pkg_files_share_14",
+        ":pkg_files_share_15",
+        ":pkg_files_share_16",
+        ":pkg_files_share_17",
+        ":pkg_files_share_18",
+        ":pkg_files_share_19",
+        ":pkg_files_share_20",
+        ":pkg_files_share_21",
+        ":pkg_files_share_22",
+        ":pkg_files_share_23",
+        ":pkg_files_share_24",
+        ":pkg_files_share_25",
+        ":pkg_files_share_26",
+        ":pkg_files_share_27",
+        ":pkg_files_share_28",
+        ":pkg_files_share_29",
+        ":pkg_files_share_30",
+        ":pkg_files_share_31",
+    ],
+    libraries = [
+        ":bt_builder_plugins",
+        ":plansys2_executor",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@behaviortree_cpp//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@plansys2_core//:ament_package",
+        "@plansys2_domain_expert//:ament_package",
+        "@plansys2_msgs//:ament_package",
+        "@plansys2_pddl_parser//:ament_package",
+        "@plansys2_planner//:ament_package",
+        "@plansys2_problem_expert//:ament_package",
+        "@pluginlib//:ament_package",
+        "@popf//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclcpp_cascade_lifecycle//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+    ],
+)
