@@ -1,0 +1,258 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_default_plugins//:rviz_default_plugins": "@rviz_default_plugins//:rviz_default_plugins_library",
+}
+
+CC_DEPS = [
+    ":_gen_textual_hdrs",
+    "@angles//:angles",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rcpputils//:dummy_shared_library_lib",
+    "@rosdistro//cc:eigen",
+    "@rules_qt//:qt_core",
+    "@rules_qt//:qt_gui",
+    "@rules_qt//:qt_svg",
+    "@rules_qt//:qt_widgets",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [
+        ":gen_qtcore_h",
+        ":gen_qtnetwork_h",
+        ":gen_qnetworkaccessmanager_h",
+        ":gen_qnetworkrequest_h",
+        ":gen_qnetworkreply_h",
+        ":gen_qnetworkdiskcache_h",
+    ],
+)
+
+qt_cc_library(
+    name = "rviz_satellite_library",
+    srcs = [
+        "src/aerialmap_display.cpp",
+        "src/field.cpp",
+        "src/tile.cpp",
+        "src/tile_client.cpp",
+        "src/tile_object.cpp",
+    ],
+    hdrs = [
+        "src/aerialmap_display.hpp",
+        "src/tile_client.hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "future",
+        "-include",
+        "QImage",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "src",
+    ],
+    local_defines = ros_local_defines() + [
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "RVIZ_SATELLITE_VERSION=\\\"\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    normal_hdrs = [
+        "src/field.hpp",
+        "src/tile.hpp",
+        "src/tile_object.hpp",
+        ":gen_proj_h",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rviz_satellite",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":rviz_satellite_library",
+        "//:__subpackages__",
+    ],
+    deps = [":rviz_satellite_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rviz_satellite"],
+)
+
+write_file(
+    name = "gen_proj_h",
+    out = "_gen/include/proj.h",
+    content = ["#ifndef RCR_PROJ_H_\n#define RCR_PROJ_H_\nstruct PJ_OBS {};\nusing PJ = PJ_OBS;\nusing PJ_CONTEXT = void;\n#define PJ_DEFAULT_CTX nullptr\nenum PJ_DIRECTION { PJ_FWD = 1, PJ_IDENT = 0, PJ_INV = -1 };\nstruct PJ_ENU { double e; double n; double u; };\nstruct PJ_LP { double lam; double phi; };\nstruct PJ_XY { double x; double y; };\nunion PJ_COORD {\n  double v[4];\n  PJ_ENU enu;\n  PJ_LP lp;\n  PJ_XY xy;\n};\ninline PJ_CONTEXT * proj_context_create() { return nullptr; }\ninline PJ_CONTEXT * proj_context_destroy(PJ_CONTEXT *) { return nullptr; }\ninline PJ_COORD proj_coord(double x, double y, double z, double t) {\n  PJ_COORD c;\n  c.v[0] = x; c.v[1] = y; c.v[2] = z; c.v[3] = t;\n  return c;\n}\ninline PJ * proj_create_crs_to_crs(PJ_CONTEXT *, const char *, const char *, void *) {\n  static PJ dummy;\n  return &dummy;\n}\ninline PJ * proj_normalize_for_visualization(PJ_CONTEXT *, const PJ * p) {\n  return const_cast<PJ *>(p);\n}\ninline PJ * proj_destroy(PJ *) { return nullptr; }\ninline PJ_COORD proj_trans(PJ *, PJ_DIRECTION, PJ_COORD coord) { return coord; }\n#endif\n"],
+)
+
+write_file(
+    name = "gen_qtcore_h",
+    out = "_gen/include/QtCore",
+    content = ["#ifndef RCR_QTCORE_H_\n#define RCR_QTCORE_H_\n#include <QDir>\n#include <QIODevice>\n#include <QMetaType>\n#include <QObject>\n#include <QStandardPaths>\n#include <QString>\n#include <QUrl>\n#include <QVariant>\n#endif\n"],
+)
+
+write_file(
+    name = "gen_qtnetwork_h",
+    out = "_gen/include/QtNetwork",
+    content = ["#ifndef RCR_QTNETWORK_H_\n#define RCR_QTNETWORK_H_\n#include <QtCore>\n#include <map>\nclass QAbstractNetworkCache : public QObject {\n public:\n  explicit QAbstractNetworkCache(QObject * parent = nullptr) : QObject(parent) {}\n};\nclass QNetworkDiskCache : public QAbstractNetworkCache {\n public:\n  explicit QNetworkDiskCache(QObject * parent = nullptr) : QAbstractNetworkCache(parent) {}\n  void setCacheDirectory(const QString &) {}\n};\nclass QNetworkRequest {\n public:\n  enum KnownHeaders { UserAgentHeader = 0 };\n  enum Attribute { CacheLoadControlAttribute = 0, SourceIsFromCacheAttribute = 1, User = 1000 };\n  enum CacheLoadControl { AlwaysNetwork = 0, PreferNetwork = 1, PreferCache = 2, AlwaysCache = 3 };\n  QNetworkRequest() = default;\n  explicit QNetworkRequest(const QUrl & url) : url_(url) {}\n  QUrl url() const { return url_; }\n  void setHeader(KnownHeaders, const QVariant &) {}\n  void setAttribute(Attribute code, const QVariant & value) { attrs_[static_cast<int>(code)] = value; }\n  QVariant attribute(Attribute code) const {\n    auto it = attrs_.find(static_cast<int>(code));\n    return it != attrs_.end() ? it->second : QVariant();\n  }\n private:\n  QUrl url_;\n  std::map<int, QVariant> attrs_;\n};\nclass QNetworkReply : public QIODevice {\n public:\n  enum NetworkError { NoError = 0, UnknownNetworkError = 99 };\n  explicit QNetworkReply(QObject * parent = nullptr) : QIODevice(parent) {}\n  QNetworkRequest request() const { return req_; }\n  QUrl url() const { return req_.url(); }\n  NetworkError error() const { return NoError; }\n  QVariant attribute(QNetworkRequest::Attribute code) const { return req_.attribute(code); }\n protected:\n  qint64 readData(char *, qint64) override { return -1; }\n  qint64 writeData(const char *, qint64) override { return -1; }\n private:\n  QNetworkRequest req_;\n};\nclass QNetworkAccessManager : public QObject {\n public:\n  explicit QNetworkAccessManager(QObject * parent = nullptr) : QObject(parent) {}\n  void setCache(QAbstractNetworkCache *) {}\n  QNetworkReply * get(const QNetworkRequest &) { return nullptr; }\n};\n#endif\n"],
+)
+
+write_file(
+    name = "gen_qnetworkaccessmanager_h",
+    out = "_gen/include/QNetworkAccessManager",
+    content = ["#pragma once\n#include <QtNetwork>\n"],
+)
+
+write_file(
+    name = "gen_qnetworkrequest_h",
+    out = "_gen/include/QNetworkRequest",
+    content = ["#pragma once\n#include <QtNetwork>\n"],
+)
+
+write_file(
+    name = "gen_qnetworkreply_h",
+    out = "_gen/include/QNetworkReply",
+    content = ["#pragma once\n#include <QtNetwork>\n"],
+)
+
+write_file(
+    name = "gen_qnetworkdiskcache_h",
+    out = "_gen/include/QNetworkDiskCache",
+    content = ["#pragma once\n#include <QtNetwork>\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = ["demo/publish_demo_data"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/rviz_satellite",
+)
+
+pkg_files(
+    name = "pkg_files_share_3",
+    srcs = ["demo/demo.launch.xml"],
+    prefix = "share/rviz_satellite/launch",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "demo/demo.rviz",
+        "icons/classes/AerialMap.svg",
+    ],
+    libraries = [":rviz_satellite"],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugin_description.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@angles//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_field",
+    srcs = ["test/test_field.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_proj_h"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "future",
+        "-include",
+        "QImage",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "src",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "RVIZ_SATELLITE_VERSION=\\\"\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rviz_satellite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "pluginlib",
+        "rviz_common",
+        "rviz_default_plugins",
+        "sensor_msgs",
+    ],
+    cmake_export_include_directories = False,
+    install = [
+        ":pkg_files_extra_0",
+        ":pkg_files_share_3",
+    ],
+    libraries = [":rviz_satellite"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@angles//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
