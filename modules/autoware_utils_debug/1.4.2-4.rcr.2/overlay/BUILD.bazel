@@ -1,0 +1,158 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@autoware_utils_system//:autoware_utils_system": "@autoware_utils_system//:autoware_utils_system_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+}
+
+CC_DEPS = [
+    "@@std_msgs+//:cc",
+    "@autoware_internal_debug_msgs//:cc",
+    "@autoware_internal_msgs//:cc",
+    "@diagnostic_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "autoware_utils_debug_library",
+    srcs = ["src/time_keeper.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/autoware_utils_debug",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "autoware_utils_debug",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":autoware_utils_debug_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":autoware_utils_debug"],
+)
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@autoware_cmake//:ament_package",
+        "@autoware_internal_debug_msgs//:ament_package",
+        "@autoware_internal_msgs//:ament_package",
+        "@autoware_lint_common//:ament_package",
+        "@autoware_utils_system//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_autoware_utils_debug",
+    srcs = [
+        "test/cases/debug_publisher.cpp",
+        "test/cases/debug_traits.cpp",
+        "test/cases/processing_time_publisher.cpp",
+        "test/cases/published_time_publisher.cpp",
+        "test/cases/time_keeper.cpp",
+        "test/main.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/autoware_utils_debug",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":autoware_utils_debug_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+genrule(
+    name = "tar",
+    srcs = [":raw_tar"],
+    outs = ["tar.tar.gz"],
+    cmd = "tmpdir=$$(mktemp -d) && tar -xzf $(location :raw_tar) -C $$tmpdir && rm -rf $$tmpdir/opt/ros/lyrical/autoware_utils_debug/share/autoware_utils_debug/hook && tar -czf $@ -C $$tmpdir opt && rm -rf $$tmpdir",
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install_package_xml = False,
+    package_xml = "package.xml",
+    tar_name = "raw_tar",
+    deps = [":ament_index"] + [
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@autoware_cmake//:ament_package",
+        "@autoware_internal_debug_msgs//:ament_package",
+        "@autoware_internal_msgs//:ament_package",
+        "@autoware_lint_common//:ament_package",
+        "@autoware_utils_system//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)
