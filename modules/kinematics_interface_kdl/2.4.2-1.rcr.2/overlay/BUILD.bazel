@@ -1,0 +1,176 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@kdl_parser//:kdl_parser": "@kdl_parser//:kdl_parser_library",
+    "@kinematics_interface//:kinematics_interface": "@kinematics_interface//:kinematics_interface_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2_eigen_kdl//:tf2_eigen_kdl": "@tf2_eigen_kdl//:tf2_eigen_kdl_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "kinematics_interface_kdl_library",
+    srcs = ["src/kinematics_interface_kdl.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_eigen3_core_h",
+        ":gen_eigen3_lu_h",
+    ],
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/kinematics_interface_kdl",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "kinematics_interface_kdl",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":kinematics_interface_kdl_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":kinematics_interface_kdl"],
+)
+
+write_file(
+    name = "gen_eigen3_core_h",
+    out = "_gen/include/eigen3/Eigen/Core",
+    content = ["#include <Eigen/Core>\n"],
+)
+
+write_file(
+    name = "gen_eigen3_lu_h",
+    out = "_gen/include/eigen3/Eigen/LU",
+    content = ["#include <Eigen/LU>\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":kinematics_interface_kdl"],
+    package_xml = "package.xml",
+    plugin_category = "kinematics_interface",
+    plugins = ["kinematics_interface_kdl.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@backward_ros//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@kdl_parser//:ament_package",
+        "@kinematics_interface//:ament_package",
+        "@pluginlib//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@tf2_eigen_kdl//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_kinematics_interface_kdl",
+    srcs = ["test/test_kinematics_interface_kdl.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_eigen3_core_h",
+        ":gen_eigen3_lu_h",
+    ],
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/kinematics_interface_kdl",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":kinematics_interface_kdl_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "kdl_parser",
+        "kinematics_interface",
+        "pluginlib",
+        "tf2_eigen_kdl",
+        "Eigen3",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_kinematics_interface_kdl",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":kinematics_interface_kdl"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@backward_ros//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@kdl_parser//:ament_package",
+        "@kinematics_interface//:ament_package",
+        "@pluginlib//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@tf2_eigen_kdl//:ament_package",
+    ],
+)
