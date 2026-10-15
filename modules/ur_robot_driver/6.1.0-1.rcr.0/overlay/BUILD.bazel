@@ -1,27 +1,547 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_python//python:defs.bzl", "py_library")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@ur_client_library//:urcl": "@ur_client_library//:urcl_library",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+}
 
-ament_package(
-    name = "ament_package",
-    data = glob(["config/**"]),
+CC_DEPS = [
+    "@backward_ros//:backward_library",
+    "@control_msgs//:cc",
+    "@controller_manager//:controller_manager_library",
+    "@controller_manager_msgs//:cc",
+    "@geometry_msgs//:cc",
+    "@hardware_interface//:hardware_interface_library",
+    "@motion_primitives_controllers//:motion_primitives_controllers_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@std_msgs//:cc",
+    "@std_srvs//:cc",
+    "@ur_dashboard_msgs//:cc",
+    "@ur_msgs//:cc",
+]
+
+cc_library(
+    name = "robot_state_helper_lib_library",
+    srcs = [":gen_ur_robot_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/ur_robot_driver",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "robot_state_helper_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":robot_state_helper_lib_library"],
+)
+
+cc_library(
+    name = "ur_robot_driver_log_handler_library",
+    srcs = [":gen_ur_robot_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/ur_robot_driver",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ur_robot_driver_log_handler",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":ur_robot_driver_log_handler_library"],
+)
+
+cc_library(
+    name = "ur_robot_driver_plugin_library",
+    srcs = [":gen_ur_robot_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/ur_robot_driver",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ur_robot_driver_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":ur_robot_driver_plugin_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "controller_stopper_node",
+    srcs = [":gen_ur_robot_driver_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/ur_robot_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_binary(
+    name = "dashboard_client",
+    srcs = [":gen_ur_robot_driver_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/ur_robot_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_binary(
+    name = "robot_state_helper",
+    srcs = [":gen_ur_robot_driver_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/ur_robot_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":robot_state_helper_lib_library"],
+)
+
+cc_binary(
+    name = "trajectory_until_node",
+    srcs = [":gen_ur_robot_driver_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/ur_robot_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_binary(
+    name = "urscript_interface",
+    srcs = [":gen_ur_robot_driver_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/ur_robot_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+py_library(
+    name = "ur_robot_driver_py",
+    srcs = glob(["ur_robot_driver/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@control_msgs//:py",
+        "@controller_manager//:controller_manager_py",
+        "@controller_manager_msgs//:py",
+        "@geometry_msgs//:py",
+        "@joint_state_publisher",
+        "@launch",
+        "@launch//:test_support",
+        "@launch_ros",
+        "@rclpy",
+        "@ros2_controllers_test_nodes",
+        "@ros2run",
+        "@std_msgs//:py",
+        "@std_srvs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@ur_dashboard_msgs//:py",
+        "@ur_msgs//:py",
+    ],
+)
+
+write_file(
+    name = "gen_ur_robot_driver_stub_cpp",
+    out = "_gen/ur_robot_driver_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_cmake_10",
+    out = "_gen/share/ur_robot_driver/cmake/export_ur_robot_driverExport-relwithdebinfo.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"RelWithDebInfo\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"ur_robot_driver::robot_state_helper_lib\" for configuration \"RelWithDebInfo\"\nset_property(TARGET ur_robot_driver::robot_state_helper_lib APPEND PROPERTY IMPORTED_CONFIGURATIONS RELWITHDEBINFO)\nset_target_properties(ur_robot_driver::robot_state_helper_lib PROPERTIES\n  IMPORTED_LOCATION_RELWITHDEBINFO \"${_IMPORT_PREFIX}/lib/librobot_state_helper_lib.so\"\n  IMPORTED_SONAME_RELWITHDEBINFO \"librobot_state_helper_lib.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets ur_robot_driver::robot_state_helper_lib )\nlist(APPEND _cmake_import_check_files_for_ur_robot_driver::robot_state_helper_lib \"${_IMPORT_PREFIX}/lib/librobot_state_helper_lib.so\" )\n\n# Import target \"ur_robot_driver::ur_robot_driver_log_handler\" for configuration \"RelWithDebInfo\"\nset_property(TARGET ur_robot_driver::ur_robot_driver_log_handler APPEND PROPERTY IMPORTED_CONFIGURATIONS RELWITHDEBINFO)\nset_target_properties(ur_robot_driver::ur_robot_driver_log_handler PROPERTIES\n  IMPORTED_LOCATION_RELWITHDEBINFO \"${_IMPORT_PREFIX}/lib/libur_robot_driver_log_handler.so\"\n  IMPORTED_SONAME_RELWITHDEBINFO \"libur_robot_driver_log_handler.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets ur_robot_driver::ur_robot_driver_log_handler )\nlist(APPEND _cmake_import_check_files_for_ur_robot_driver::ur_robot_driver_log_handler \"${_IMPORT_PREFIX}/lib/libur_robot_driver_log_handler.so\" )\n\n# Import target \"ur_robot_driver::ur_robot_driver_plugin\" for configuration \"RelWithDebInfo\"\nset_property(TARGET ur_robot_driver::ur_robot_driver_plugin APPEND PROPERTY IMPORTED_CONFIGURATIONS RELWITHDEBINFO)\nset_target_properties(ur_robot_driver::ur_robot_driver_plugin PROPERTIES\n  IMPORTED_LOCATION_RELWITHDEBINFO \"${_IMPORT_PREFIX}/lib/libur_robot_driver_plugin.so\"\n  IMPORTED_SONAME_RELWITHDEBINFO \"libur_robot_driver_plugin.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets ur_robot_driver::ur_robot_driver_plugin )\nlist(APPEND _cmake_import_check_files_for_ur_robot_driver::ur_robot_driver_plugin \"${_IMPORT_PREFIX}/lib/libur_robot_driver_plugin.so\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = ["scripts/wait_dashboard_server.sh"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "bin",
+)
+
+pkg_files(
+    name = "pkg_files_extra_1",
+    srcs = ["scripts/example_move.py"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/ur_robot_driver",
+)
+
+pkg_files(
+    name = "pkg_files_extra_2",
+    srcs = ["examples/examples.py"],
+    prefix = "lib/ur_robot_driver",
+)
+
+pkg_files(
+    name = "pkg_files_extra_3",
+    srcs = ["examples/force_mode.py"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/ur_robot_driver",
+)
+
+pkg_files(
+    name = "pkg_files_extra_4",
+    srcs = ["examples/move_until_example.py"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/ur_robot_driver",
+)
+
+pkg_files(
+    name = "pkg_files_extra_5",
+    srcs = ["examples/send_dummy_motion_primitives_ur10e.py"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/ur_robot_driver",
+)
+
+pkg_files(
+    name = "pkg_files_extra_6",
+    srcs = ["scripts/start_ursim.sh"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/ur_robot_driver",
+)
+
+pkg_files(
+    name = "pkg_files_extra_7",
+    srcs = ["scripts/tool_communication.py"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/ur_robot_driver",
+)
+
+pkg_files(
+    name = "pkg_files_extra_8",
+    srcs = ["scripts/wait_for_robot_description"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/ur_robot_driver",
+)
+
+pkg_files(
+    name = "pkg_files_extra_9",
+    srcs = ["scripts/wait_robot_booted.py"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/ur_robot_driver",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_10",
+    srcs = [":gen_cmake_10"],
+    prefix = "share/ur_robot_driver/cmake",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/test_goal_publishers_config.yaml",
+        "config/test_velocity_goal_publishers_config.yaml",
+        "config/ur10_update_rate.yaml",
+        "config/ur10e_update_rate.yaml",
+        "config/ur12e_update_rate.yaml",
+        "config/ur15_update_rate.yaml",
+        "config/ur16e_update_rate.yaml",
+        "config/ur18_update_rate.yaml",
+        "config/ur20_update_rate.yaml",
+        "config/ur30_update_rate.yaml",
+        "config/ur3_update_rate.yaml",
+        "config/ur3e_update_rate.yaml",
+        "config/ur5_update_rate.yaml",
+        "config/ur5e_update_rate.yaml",
+        "config/ur7e_update_rate.yaml",
+        "config/ur8long_update_rate.yaml",
+        "config/ur_controllers.yaml",
+        "launch/test_forward_velocity_controller.launch.py",
+        "launch/test_joint_trajectory_controller.launch.py",
+        "launch/ur10.launch.py",
+        "launch/ur10e.launch.py",
+        "launch/ur12e.launch.py",
+        "launch/ur15.launch.py",
+        "launch/ur16e.launch.py",
+        "launch/ur18.launch.py",
+        "launch/ur20.launch.py",
+        "launch/ur3.launch.py",
+        "launch/ur30.launch.py",
+        "launch/ur3e.launch.py",
+        "launch/ur5.launch.py",
+        "launch/ur5e.launch.py",
+        "launch/ur7e.launch.py",
+        "launch/ur8long.launch.py",
+        "launch/ur_control.launch.py",
+        "launch/ur_dashboard_client.launch.py",
+        "launch/ur_rsp.launch.py",
+        "resources/externalcontrol-1.0.5.urcap",
+        "resources/rs485-1.0.urcap",
+        "resources/rtde_input_recipe.txt",
+        "resources/rtde_output_recipe.txt",
+        "urdf/ur.ros2_control.xacro",
+        "urdf/ur.urdf.xacro",
+    ],
+    lib_data = [
+        ":controller_stopper_node",
+        ":dashboard_client",
+        ":robot_state_helper",
+        ":trajectory_until_node",
+        ":urscript_interface",
+    ],
+    libraries = [
+        ":robot_state_helper_lib",
+        ":ur_robot_driver_log_handler",
+        ":ur_robot_driver_plugin",
+    ],
     package_xml = "package.xml",
+    plugin_category = "hardware_interface",
+    plugins = ["hardware_interface_plugin.xml"],
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_python//:ament_package",
@@ -49,7 +569,227 @@ ament_package(
         "@robot_state_publisher//:ament_package",
         "@ros2_controllers_test_nodes//:ament_package",
         "@ros2run//:ament_package",
-        "@rosdistro//:ament_package",
+        "@rviz2//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@ur_client_library//:ament_package",
+        "@ur_controllers//:ament_package",
+        "@ur_dashboard_msgs//:ament_package",
+        "@ur_description//:ament_package",
+        "@ur_msgs//:ament_package",
+        "@urdf//:ament_package",
+        "@xacro//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_mode_compatibility_symmetry",
+    srcs = [":gen_ur_robot_driver_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":robot_state_helper_lib",
+        ":ur_robot_driver_log_handler",
+        ":ur_robot_driver_plugin",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/ur_robot_driver",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ur_robot_driver_plugin_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_robot_state_helper",
+    srcs = [":gen_ur_robot_driver_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":robot_state_helper_lib",
+        ":ur_robot_driver_log_handler",
+        ":ur_robot_driver_plugin",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/ur_robot_driver",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":robot_state_helper_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+py_pytest(
+    name = "test_test_mock_hardware.py",
+    srcs = ["test/test_mock_hardware.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+    ],
+    data = [
+        ":ament_index",
+        ":controller_stopper_node",
+        ":dashboard_client",
+        ":robot_state_helper",
+        ":trajectory_until_node",
+        ":urscript_interface",
+    ],
+    deps = [
+        ":ur_robot_driver_py",
+        "@control_msgs//:py",
+        "@controller_manager//:controller_manager_py",
+        "@controller_manager_msgs//:py",
+        "@geometry_msgs//:py",
+        "@joint_state_publisher",
+        "@launch",
+        "@launch//:test_support",
+        "@launch_ros",
+        "@rclpy",
+        "@ros2_controllers_test_nodes",
+        "@ros2run",
+        "@std_msgs//:py",
+        "@std_srvs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+        "@ur_dashboard_msgs//:py",
+        "@ur_msgs//:py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "hardware_interface",
+        "pluginlib",
+        "rclcpp",
+        "rclcpp_action",
+        "rclcpp_lifecycle",
+        "controller_manager",
+        "controller_manager_msgs",
+        "geometry_msgs",
+        "std_msgs",
+        "std_srvs",
+        "tf2_geometry_msgs",
+        "ur_client_library",
+        "ur_dashboard_msgs",
+        "ur_msgs",
+    ],
+    cmake_export_name = "export_ur_robot_driver",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    install = [
+        ":pkg_files_extra_0",
+        ":pkg_files_extra_1",
+        ":pkg_files_extra_2",
+        ":pkg_files_extra_3",
+        ":pkg_files_extra_4",
+        ":pkg_files_extra_5",
+        ":pkg_files_extra_6",
+        ":pkg_files_extra_7",
+        ":pkg_files_extra_8",
+        ":pkg_files_extra_9",
+        ":pkg_files_cmake_10",
+    ],
+    libraries = [
+        ":robot_state_helper_lib",
+        ":ur_robot_driver_log_handler",
+        ":ur_robot_driver_plugin",
+    ],
+    package_xml = "package.xml",
+    python = [":ur_robot_driver_py"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@backward_ros//:ament_package",
+        "@control_msgs//:ament_package",
+        "@controller_manager//:ament_package",
+        "@controller_manager_msgs//:ament_package",
+        "@force_torque_sensor_broadcaster//:ament_package",
+        "@forward_command_controller//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@joint_state_broadcaster//:ament_package",
+        "@joint_state_publisher//:ament_package",
+        "@joint_trajectory_controller//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@motion_primitives_controllers//:ament_package",
+        "@pluginlib//:ament_package",
+        "@pose_broadcaster//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rclpy//:ament_package",
+        "@robot_state_publisher//:ament_package",
+        "@ros2_controllers_test_nodes//:ament_package",
+        "@ros2run//:ament_package",
         "@rviz2//:ament_package",
         "@std_msgs//:ament_package",
         "@std_srvs//:ament_package",
