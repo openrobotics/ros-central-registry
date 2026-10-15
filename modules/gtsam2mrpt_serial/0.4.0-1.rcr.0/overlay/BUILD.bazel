@@ -1,29 +1,428 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@gtsam//:_gen_textual_hdrs",
+    "@gtsam//:cephes-gtsam_library",
+    "@gtsam//:gtsam_library",
+    "@gtsam//:metis-gtsam_library",
+    "@mrpt_containers//:mrpt_containers_library",
+    "@mrpt_io//:mrpt_io_library",
+    "@mrpt_math//:mrpt_math_library",
+    "@mrpt_poses//:mrpt_poses_library",
+    "@mrpt_random//:mrpt_random_library",
+    "@mrpt_rtti//:mrpt_rtti_library",
+    "@mrpt_serialization//:mrpt_serialization_library",
+    "@mrpt_system//:mrpt_system_library",
+    "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:boost.timer",
+]
+
+cc_library(
+    name = "gtsam2mrpt_serial_library",
+    srcs = [":gen_gtsam2mrpt_serial_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_unordered_map_hpp",
+        ":gen_boost_serialization_unordered_set_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/gtsam2mrpt_serial",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "gtsam2mrpt_serial",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":gtsam2mrpt_serial_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_gtsam2mrpt_serial_stub_cpp",
+    out = "_gen/gtsam2mrpt_serial_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_0",
+    out = "_gen/lib/gtsam2mrpt_serial/cmake/gtsam2mrpt_serial-config-version.cmake",
+    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"0.4.0\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
+)
+
+write_file(
+    name = "gen_extra_1",
+    out = "_gen/lib/gtsam2mrpt_serial/cmake/gtsam2mrpt_serial-config.cmake",
+    content = ["include(CMakeFindDependencyMacro)\n\n# Hints to help CMake finding my dependencies (and theirs own), as well as\n# other future calls to search for other mola modules from our parent scope:\n# 1: MOLA_DIR cmake var:\nif (NOT \"${MOLA_DIR}\" STREQUAL \"\")\n  list(APPEND CMAKE_PREFIX_PATH \"${MOLA_DIR}\")\n  # If the user defines MOLA_DIR, that path overrides whatever CMake on its own\n  # found (this file):\n  get_filename_component(this_dir \"${CMAKE_CURRENT_LIST_DIR}\" ABSOLUTE)\n  get_filename_component(user_mola_dir \"${MOLA_DIR}\" ABSOLUTE)\n  if ((EXISTS \"${MOLA_DIR}/gtsam2mrpt_serial-config.cmake\") AND (NOT \"${this_dir}\" STREQUAL \"${user_mola_dir}\"))\n    message(\"gtsam2mrpt_serial_DIR was: ${gtsam2mrpt_serial_DIR}\")\n    set(gtsam2mrpt_serial_DIR \"${MOLA_DIR}\" CACHE PATH \"Path to gtsam2mrpt_serial\" FORCE)\n    include(${MOLA_DIR}/gtsam2mrpt_serial-config.cmake)\n    return()\n  endif()\nendif()\n# 2) The current (and parent) path:\nlist(APPEND CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}\")\nlist(APPEND CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}/../\")\nlist(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\n\n# Search for dependencies first:\nset(_deps \"mola_common;mrpt_serialization;mrpt_io;mrpt_math;mrpt_random;mrpt_poses\")\nforeach(_dep ${_deps}) # NO quotes for the list to be a CMake list!\n  find_dependency(${_dep})\n  if(${_dep}_FOUND)\n    mark_as_advanced(${_dep}_DIR)\n  endif()\nendforeach()\n\n\n# Include targets for this library:\ninclude(${CMAKE_CURRENT_LIST_DIR}/gtsam2mrpt_serial-targets.cmake)\n"],
+)
+
+write_file(
+    name = "gen_extra_2",
+    out = "_gen/lib/gtsam2mrpt_serial/cmake/gtsam2mrpt_serial-targets-noconfig.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"mola::gtsam2mrpt_serial\" for configuration \"\"\nset_property(TARGET mola::gtsam2mrpt_serial APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)\nset_target_properties(mola::gtsam2mrpt_serial PROPERTIES\n  IMPORTED_LOCATION_NOCONFIG \"${_IMPORT_PREFIX}/lib/libgtsam2mrpt_serial.so.0.4.0\"\n  IMPORTED_SONAME_NOCONFIG \"libgtsam2mrpt_serial.so.0.4\"\n  )\n\nlist(APPEND _cmake_import_check_targets mola::gtsam2mrpt_serial )\nlist(APPEND _cmake_import_check_files_for_mola::gtsam2mrpt_serial \"${_IMPORT_PREFIX}/lib/libgtsam2mrpt_serial.so.0.4.0\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_extra_3",
+    out = "_gen/lib/gtsam2mrpt_serial/cmake/gtsam2mrpt_serial-targets.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS mola::gtsam2mrpt_serial)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target mola::gtsam2mrpt_serial\nadd_library(mola::gtsam2mrpt_serial SHARED IMPORTED)\n\nset_target_properties(mola::gtsam2mrpt_serial PROPERTIES\n  INTERFACE_COMPILE_FEATURES \"cxx_std_17\"\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include\"\n  INTERFACE_LINK_LIBRARIES \"gtsam;mrpt::mrpt_serialization;mrpt::mrpt_io;mrpt::mrpt_math;mrpt::mrpt_random;mrpt::mrpt_poses\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/gtsam2mrpt_serial-targets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_access_hpp",
+    out = "_gen/include/boost/serialization/access.hpp",
+    content = ["#ifndef RCR_BOOST_SERIALIZATION_ACCESS_HPP_\n#define RCR_BOOST_SERIALIZATION_ACCESS_HPP_\n#include <cstddef>\n#include <exception>\n#include <utility>\nnamespace boost {\nnamespace serialization {\nclass access {\n public:\n  template <class Archive, class T>\n  static void serialize(Archive & ar, T & t, const unsigned int version) {\n    t.serialize(ar, version);\n  }\n  template <class T>\n  static void destroy(const T * t) { delete t; }\n};\ntemplate <class T>\nstruct nvp {\n  const char * name;\n  T * value;\n  nvp(const char * n, T & v) : name(n), value(&v) {}\n};\ntemplate <class T>\ninline nvp<T> make_nvp(const char * name, T & v) { return nvp<T>(name, v); }\ntemplate <class Base, class Derived>\ninline Base & base_object(Derived & d) { return static_cast<Base &>(d); }\ntemplate <class Base, class Derived>\ninline const Base & base_object(const Derived & d) { return static_cast<const Base &>(d); }\ntemplate <class T>\nstruct array_wrapper {\n  T * data;\n  std::size_t size;\n};\ntemplate <class T>\ninline array_wrapper<T> make_array(T * data, std::size_t size) { return {data, size}; }\ntemplate <class Archive, class T>\ninline void split_free(Archive &, T &, const unsigned int) {}\ntemplate <class Archive, class T>\ninline void split_member(Archive &, T &, const unsigned int) {}\n}  // namespace serialization\nnamespace archive {\nenum archive_flags { no_header = 1, no_codecvt = 2, no_xml_tag_checking = 4, no_tracking = 8 };\nclass archive_exception : public std::exception {\n public:\n  const char * what() const noexcept override { return \"boost::archive::archive_exception\"; }\n};\nclass ArchiveStub {\n public:\n  template <typename... Args>\n  explicit ArchiveStub(Args &&...) {}\n  template <typename T>\n  ArchiveStub & operator<<(const T &) { return *this; }\n  template <typename T>\n  ArchiveStub & operator>>(T &&) { return *this; }\n  template <typename T>\n  ArchiveStub & operator&(T &&) { return *this; }\n  template <typename T>\n  void register_type() {}\n};\nusing ArchiveStubBase = ArchiveStub;\nstruct binary_iarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct binary_oarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct text_iarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct text_oarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\n}  // namespace archive\n}  // namespace boost\n#define BOOST_SERIALIZATION_NVP(v) ::boost::serialization::make_nvp(#v, v)\n#define BOOST_SERIALIZATION_BASE_OBJECT_NVP(...) ::boost::serialization::base_object<__VA_ARGS__>(*this)\n#define BOOST_SERIALIZATION_ASSUME_ABSTRACT(...)\n#define BOOST_CLASS_EXPORT(...)\n#define BOOST_CLASS_EXPORT_KEY(...)\n#define BOOST_CLASS_EXPORT_IMPLEMENT(...)\n#define BOOST_SERIALIZATION_SPLIT_MEMBER()\n#define BOOST_SERIALIZATION_SPLIT_FREE(...)\n#endif\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_nvp_hpp",
+    out = "_gen/include/boost/serialization/nvp.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_base_object_hpp",
+    out = "_gen/include/boost/serialization/base_object.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_utility_hpp",
+    out = "_gen/include/boost/serialization/utility.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_export_hpp",
+    out = "_gen/include/boost/serialization/export.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_map_hpp",
+    out = "_gen/include/boost/serialization/map.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_vector_hpp",
+    out = "_gen/include/boost/serialization/vector.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_string_hpp",
+    out = "_gen/include/boost/serialization/string.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_array_hpp",
+    out = "_gen/include/boost/serialization/array.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_shared_ptr_hpp",
+    out = "_gen/include/boost/serialization/shared_ptr.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_set_hpp",
+    out = "_gen/include/boost/serialization/set.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_split_free_hpp",
+    out = "_gen/include/boost/serialization/split_free.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_split_member_hpp",
+    out = "_gen/include/boost/serialization/split_member.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_list_hpp",
+    out = "_gen/include/boost/serialization/list.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_deque_hpp",
+    out = "_gen/include/boost/serialization/deque.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_optional_hpp",
+    out = "_gen/include/boost/serialization/optional.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_variant_hpp",
+    out = "_gen/include/boost/serialization/variant.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_assume_abstract_hpp",
+    out = "_gen/include/boost/serialization/assume_abstract.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_unordered_map_hpp",
+    out = "_gen/include/boost/serialization/unordered_map.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_unordered_set_hpp",
+    out = "_gen/include/boost/serialization/unordered_set.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_archive_binary_iarchive_hpp",
+    out = "_gen/include/boost/archive/binary_iarchive.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_archive_binary_oarchive_hpp",
+    out = "_gen/include/boost/archive/binary_oarchive.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_archive_text_iarchive_hpp",
+    out = "_gen/include/boost/archive/text_iarchive.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_archive_text_oarchive_hpp",
+    out = "_gen/include/boost/archive/text_oarchive.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_archive_archive_exception_hpp",
+    out = "_gen/include/boost/archive/archive_exception.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = [":gen_extra_0"],
+    prefix = "lib/gtsam2mrpt_serial/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_extra_1",
+    srcs = [":gen_extra_1"],
+    prefix = "lib/gtsam2mrpt_serial/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_extra_2",
+    srcs = [":gen_extra_2"],
+    prefix = "lib/gtsam2mrpt_serial/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_extra_3",
+    srcs = [":gen_extra_3"],
+    prefix = "lib/gtsam2mrpt_serial/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_soname_4",
+    srcs = [":gtsam2mrpt_serial"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":gtsam2mrpt_serial": "libgtsam2mrpt_serial.so.0.4"},
+)
+
+pkg_files(
+    name = "pkg_files_soname_5",
+    srcs = [":gtsam2mrpt_serial"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":gtsam2mrpt_serial": "libgtsam2mrpt_serial.so.0.4.0"},
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":gtsam2mrpt_serial"],
     package_xml = "package.xml",
     deps = [
         "@gtsam//:ament_package",
         "@mola_common//:ament_package",
-        "@rosdistro//:ament_package",
+        "@mrpt_containers//:ament_package",
+        "@mrpt_io//:ament_package",
+        "@mrpt_math//:ament_package",
+        "@mrpt_poses//:ament_package",
+        "@mrpt_random//:ament_package",
+        "@mrpt_rtti//:ament_package",
+        "@mrpt_serialization//:ament_package",
+        "@mrpt_system//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "gtsam2mrpt_serial_tests",
+    srcs = [":gen_gtsam2mrpt_serial_stub_cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":gtsam2mrpt_serial",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/gtsam2mrpt_serial",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":gtsam2mrpt_serial_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install = [
+        ":pkg_files_extra_0",
+        ":pkg_files_extra_1",
+        ":pkg_files_extra_2",
+        ":pkg_files_extra_3",
+        ":pkg_files_soname_4",
+        ":pkg_files_soname_5",
+    ],
+    install_package_xml = False,
+    libraries = [":gtsam2mrpt_serial"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@gtsam//:ament_package",
+        "@mola_common//:ament_package",
+        "@mrpt_containers//:ament_package",
+        "@mrpt_io//:ament_package",
+        "@mrpt_math//:ament_package",
+        "@mrpt_poses//:ament_package",
+        "@mrpt_random//:ament_package",
+        "@mrpt_rtti//:ament_package",
+        "@mrpt_serialization//:ament_package",
+        "@mrpt_system//:ament_package",
     ],
 )
