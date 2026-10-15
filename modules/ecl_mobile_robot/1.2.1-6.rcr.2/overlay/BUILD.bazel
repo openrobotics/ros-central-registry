@@ -1,0 +1,177 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@ecl_errors//:ecl_errors_library",
+    "@ecl_formatters//:ecl_formatters_library",
+    "@ecl_geometry//:ecl_geometry_library",
+    "@ecl_linear_algebra//:ecl_linear_algebra_library",
+    "@ecl_math//:ecl_math",
+    "@ecl_math//:ecl_math_library",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "ecl_mobile_robot_library",
+    srcs = ["src/lib/differential_drive.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+        "src/test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ecl_mobile_robot",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":ecl_mobile_robot_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+pkg_files(
+    name = "pkg_files_soname_0",
+    srcs = [":ecl_mobile_robot"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":ecl_mobile_robot": "libecl_mobile_robot.so.1.2.1"},
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":ecl_mobile_robot"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@ecl_build//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_formatters//:ament_package",
+        "@ecl_geometry//:ament_package",
+        "@ecl_license//:ament_package",
+        "@ecl_linear_algebra//:ament_package",
+        "@ecl_math//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "ecl_test_partial_inverse",
+    srcs = ["src/test/partial_inverse.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":ecl_mobile_robot",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "src/test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ecl_mobile_robot_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ecl_errors",
+        "ecl_formatters",
+        "ecl_geometry",
+        "ecl_linear_algebra",
+        "ecl_math",
+    ],
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install = [":pkg_files_soname_0"],
+    libraries = [":ecl_mobile_robot"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@ecl_build//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_formatters//:ament_package",
+        "@ecl_geometry//:ament_package",
+        "@ecl_license//:ament_package",
+        "@ecl_linear_algebra//:ament_package",
+        "@ecl_math//:ament_package",
+    ],
+)
