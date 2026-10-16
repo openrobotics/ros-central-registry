@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_license//rules:license.bzl", "license")
@@ -29,21 +30,12 @@ license(
     ],
 )
 
-### DATA
-
-ament_index(
-    name = "ament_index",
-    package_xml = "package.xml",
-)
-
 ### PYTHON MODULE
 
 py_library(
     name = "topic_monitor_lib",
     srcs = glob(["topic_monitor/**/*.py"]),
-    data = [
-        ":ament_index",
-    ] + glob(["launch/*"]),
+    data = glob(["launch/*"]),
     imports = ["."],
     deps = [
         "@example_interfaces//:py",
@@ -56,19 +48,44 @@ py_library(
 
 ### EXECUTABLES
 
+py_binary(
+    name = "data_publisher",
+    srcs = ["topic_monitor/scripts/data_publisher.py"],
+    main = "topic_monitor/scripts/data_publisher.py",
+    deps = [
+        ":topic_monitor_lib",
+    ],
+)
+
+py_binary(
+    name = "topic_monitor_cli",
+    srcs = ["topic_monitor/scripts/topic_monitor.py"],
+    main = "topic_monitor/scripts/topic_monitor.py",
+    deps = [
+        ":topic_monitor_lib",
+    ],
+)
+
+### DATA
+
+ament_index(
+    name = "ament_index",
+    data = glob(["launch/*_launch.py"]),
+    executables = [
+        ":data_publisher",
+        ":topic_monitor_cli",
+    ],
+    package_xml = "package.xml",
+)
+
 [
-    py_binary(
-        name = "{0}_cli".format(executable),
-        srcs = ["topic_monitor/scripts/{0}.py".format(executable)],
-        main = "topic_monitor/scripts/{0}.py".format(executable),
-        deps = [
-            ":topic_monitor_lib",
-        ],
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [":ament_index"],
+        deps = [":topic_monitor_lib"],
     )
-    for executable in [
-        "data_publisher",
-        "topic_monitor",
-    ]
+    for f in glob(["launch/*_launch.py"])
 ]
 
 [
