@@ -14,11 +14,12 @@
 
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@launch_testing//:defs.bzl", "launch_test")
 load("@pip_ros//:requirements.bzl", "requirement")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
-load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:defs.bzl", "py_library")
@@ -213,27 +214,6 @@ rclcpp_components_register_node(
     plugin = "ros_gz_sim::GzServer",
 )
 
-### LAUNCH FILES
-
-expand_template(
-    name = "gz_sim_launch",
-    out = "launch/gz_sim.launch.py",
-    substitutions = {"@GZ_SIM_VER@": GZ_SIM_VER},
-    template = "launch/gz_sim.launch.py.in",
-)
-
-ament_index(
-    name = "ament_index",
-    components = [":gzserver_record"],
-    data = glob(
-        ["launch/*"],
-        exclude = [
-            "launch/*.in",
-            "launch/ros_gz_spawn_model.launch",
-        ],
-    ) + [":gz_sim_launch"],
-)
-
 ### EXECUTABLES
 
 cc_binary(
@@ -271,6 +251,67 @@ cc_binary(
         "delete_entity",
         "spawn_entity",
         "set_entity_pose",
+    ]
+]
+
+### LAUNCH FILES
+
+expand_template(
+    name = "gz_sim_launch_py",
+    out = "launch/gz_sim.launch.py",
+    substitutions = {"@GZ_SIM_VER@": GZ_SIM_VER},
+    template = "launch/gz_sim.launch.py.in",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":gzserver_record"],
+    data = glob(
+        ["launch/*"],
+        exclude = [
+            "launch/*.in",
+            "launch/ros_gz_spawn_model.launch",
+        ],
+    ) + [":gz_sim_launch_py"],
+    executables = [
+        ":create",
+        ":delete_entity",
+        ":gzserver",
+        ":remove",
+        ":set_entity_pose",
+        ":spawn_entity",
+    ],
+    libraries = [
+        ":gzserver_component",
+        ":ros_gz_sim",
+        ":ros_gz_sim_delete_entity",
+        ":ros_gz_sim_set_entity_pose",
+        ":ros_gz_sim_spawn_entity",
+    ],
+    package_xml = "package.xml",
+)
+
+[
+    launch_ros_binary(
+        name = name,
+        src = src,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+            "@ros_gz_bridge//:ament_index",
+        ],
+        deps = [
+            ":ros_gz_sim_py",
+            "@ros_gz_bridge//:ros_gz_bridge_py",
+        ],
+    )
+    for name, src in [
+        ("gz_remove_model_launch", "launch/gz_remove_model.launch.py"),
+        ("gz_server_launch", "launch/gz_server.launch.py"),
+        ("gz_sim_launch", "launch/gz_sim.launch.py"),
+        ("gz_spawn_model_launch", "launch/gz_spawn_model.launch.py"),
+        ("ros_gz_sim_launch", "launch/ros_gz_sim.launch.py"),
+        ("ros_gz_spawn_model_launch", "launch/ros_gz_spawn_model.launch.py"),
     ]
 ]
 
@@ -340,29 +381,25 @@ cc_binary(
 # they need gz-transport discovery (UDP multicast) and a Gazebo server, so
 # they are manual.
 [
-    py_pytest(
+    launch_test(
         name = "test_" + f.split("/")[-1],
-        srcs = [f],
-        args = [
-            "-p",
-            "launch_testing.pytest.hooks",
-        ],
+        src = f,
         data = glob(["test/sdf/*.sdf"]) + [
             ":ament_index",
-            ":ament_package",
             ":create",
             ":gzserver",
             ":remove",
             ":test_create",
             ":test_remove",
-            "@ros_gz_bridge//:ament_package",
+            "@rclcpp_components//:ament_index",
+            "@ros_gz_bridge//:ament_index",
             "@ros_gz_bridge//:parameter_bridge",
         ],
         tags = ["manual"],
         deps = [
             ":ros_gz_sim_py",
-            "@launch_testing",
-            "@launch_testing_ros",
+            "@launch_ros",
+            "@ros_gz_bridge//:ros_gz_bridge_py",
             "@rules_python//python/runfiles",
             "@simulation_interfaces//:py",
         ],
