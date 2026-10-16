@@ -64,54 +64,6 @@ write_file(
     content = ["//\n// Copyright (c) 2016-2020 Kris Jusiak (kris at jusiak dot net)\n//\n// Distributed under the Boost Software License, Version 1.0.\n// (See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)\n//\n#ifndef BOOST_SML_UTILITY_DISPATCH_TABLE_HPP\n#define BOOST_SML_UTILITY_DISPATCH_TABLE_HPP\n\n#include \"boost/sml.hpp\"\n\nBOOST_SML_NAMESPACE_BEGIN\n\nnamespace utility {\nnamespace concepts {\n\ntemplate <class>\naux::false_type dispatchable_impl(...);\n\ntemplate <class, class TEvent>\nauto dispatchable_impl(TEvent &&) -> aux::always<decltype(TEvent::id), decltype(TEvent())>;\n\ntemplate <class T, class TEvent>\nauto dispatchable_impl(TEvent &&) -> aux::always<decltype(TEvent::id), decltype(TEvent(aux::declval<T>()))>;\n\ntemplate <class T, class TEvent>\nauto dispatchable_impl(TEvent &&) -> aux::always<decltype(TEvent::id), decltype(TEvent(aux::declval<T>(), TEvent::id))>;\n\ntemplate <class, class>\nstruct dispatchable;\n\ntemplate <class T, class TEvent>\nstruct is_dispatchable : decltype(dispatchable_impl<T>(aux::declval<TEvent>())) {};\n\ntemplate <class T, class... TEvents>\nstruct dispatchable<T, aux::type_list<TEvents...>>\n    : aux::is_same<aux::bool_list<aux::always<TEvents>::value...>, aux::bool_list<is_dispatchable<T, TEvents>::value...>> {};\n}  // namespace concepts\n\nnamespace detail {\n\ntemplate <int Id, class TEvent = void>\nstruct dispatch_event_impl {\n  template <class SM, class T, __BOOST_SML_REQUIRES(aux::is_constructible<TEvent>::value &&aux::always<T>::value)>\n  static bool execute(SM &sm, const T &) {\n    return sm.process_event(TEvent());\n  }\n\n  template <class SM, class T, __BOOST_SML_REQUIRES(aux::is_constructible<TEvent, T>::value)>\n  static bool execute(SM &sm, const T &data) {\n    return sm.process_event(TEvent(data));\n  }\n\n  template <class SM, class T, __BOOST_SML_REQUIRES(aux::is_constructible<TEvent, T, int>::value)>\n  static bool execute(SM &sm, const T &data) {\n    return sm.process_event(TEvent(data, Id));\n  }\n};\n\ntemplate <int N>\nstruct dispatch_event_impl<N, void> {\n  template <class SM, class T>\n  static bool execute(SM &, const T &) {\n    return false;\n  }\n};\n\ntemplate <int, class>\nstruct events_ids_impl {};\n\ntemplate <class, class>\nstruct inherit_events_ids_impl;\n\ntemplate <class T, class... Ts>\nstruct inherit_events_ids_impl<T, aux::type_list<Ts...>> : events_ids_impl<Ts::value, T>... {};\n\ntemplate <class T>\nstruct events_ids_impl<-1, T> : inherit_events_ids_impl<T, typename T::ids> {};\n\ntemplate <class... Ts>\nstruct event_id : events_ids_impl<Ts::id, Ts>... {};\n\ntemplate <int N>\ndispatch_event_impl<N> get_event_impl(...);\n\ntemplate <int N, class T>\ndispatch_event_impl<N, T> get_event_impl(events_ids_impl<N, T> *);\n\ntemplate <int N, class T>\nstruct get_event {\n  using type = decltype(get_event_impl<N>((T *)0));\n};\n\ntemplate <int N, class T>\nusing get_event_t = typename get_event<N, T>::type;\n\ntemplate <class TEvent, int EventRangeBegin, class SM, int... Ns>\nauto make_dispatch_table(SM &fsm, const aux::index_sequence<Ns...> &) {\n  using events_ids_t = aux::apply_t<event_id, typename SM::events>;\n  return [&](const TEvent &e, int id) -> bool {\n    using dispatch_table_t = bool (*)(SM &, const TEvent &);\n    const static dispatch_table_t dispatch_table[sizeof...(Ns) ? sizeof...(Ns) : 1] = {\n        &get_event_t<Ns + EventRangeBegin, events_ids_t>::template execute<SM, TEvent>...};\n    return dispatch_table[id - EventRangeBegin](fsm, e);\n  };\n}\n}  // namespace detail\n\ntemplate <int... Ids>\nstruct id_impl {\n  static constexpr auto id = -1 /*dynamic*/;\n  using ids = aux::type_list<aux::integral_constant<int, Ids>...>;\n};\n\ntemplate <int Id>\nstruct id_impl<Id> {\n  static constexpr auto id = Id;\n};\n\ntemplate <int... Ids>\nusing id = id_impl<Ids...>;\n\ntemplate <class TEvent, int EventRangeBegin, int EventRangeEnd, class SM,\n          __BOOST_SML_REQUIRES(concepts::dispatchable<TEvent, typename SM::events>::value)>\nauto make_dispatch_table(SM &fsm) {\n  static_assert(EventRangeEnd - EventRangeBegin > 0, \"Event ids range difference has to be greater than 0\");\n  return detail::make_dispatch_table<TEvent, EventRangeBegin>(fsm,\n                                                              aux::make_index_sequence<EventRangeEnd - EventRangeBegin + 1>{});\n}\n\nBOOST_SML_NAMESPACE_END\n\n}  // namespace utility\n\n#endif\n"],
 )
 
-write_file(
-    name = "gen_extra_2",
-    out = "_gen/opt/boost_sml_vendor/lib/cmake/sml/smlConfig.cmake",
-    content = ["\n####### Expanded from @PACKAGE_INIT@ by configure_package_config_file() #######\n####### Any changes to this file will be overwritten by the next CMake run ####\n####### The input file was smlConfig.cmake.in                            ########\n\nget_filename_component(PACKAGE_PREFIX_DIR \"${CMAKE_CURRENT_LIST_DIR}/../../../\" ABSOLUTE)\n\nmacro(set_and_check _var _file)\n  set(${_var} \"${_file}\")\n  if(NOT EXISTS \"${_file}\")\n    message(FATAL_ERROR \"File or directory ${_file} referenced by variable ${_var} does not exist !\")\n  endif()\nendmacro()\n\nmacro(check_required_components _NAME)\n  foreach(comp ${${_NAME}_FIND_COMPONENTS})\n    if(NOT ${_NAME}_${comp}_FOUND)\n      if(${_NAME}_FIND_REQUIRED_${comp})\n        set(${_NAME}_FOUND FALSE)\n      endif()\n    endif()\n  endforeach()\nendmacro()\n\n####################################################################################\n\ninclude(${CMAKE_CURRENT_LIST_DIR}/smlTargets.cmake)\ncheck_required_components(sml)\n"],
-)
-
-write_file(
-    name = "gen_extra_3",
-    out = "_gen/opt/boost_sml_vendor/lib/cmake/sml/smlConfigVersion.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version,\n# but only if the requested major version is the same as the current one.\n# The variable CVF_VERSION must be set before calling configure_file().\n\n\nset(PACKAGE_VERSION \"1.1.13\")\n\nif(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n  set(PACKAGE_VERSION_COMPATIBLE FALSE)\nelse()\n\n  if(\"1.1.13\" MATCHES \"^([0-9]+)\\\\.\")\n    set(CVF_VERSION_MAJOR \"${CMAKE_MATCH_1}\")\n    if(NOT CVF_VERSION_MAJOR VERSION_EQUAL 0)\n      string(REGEX REPLACE \"^0+\" \"\" CVF_VERSION_MAJOR \"${CVF_VERSION_MAJOR}\")\n    endif()\n  else()\n    set(CVF_VERSION_MAJOR \"1.1.13\")\n  endif()\n\n  if(PACKAGE_FIND_VERSION_RANGE)\n    # both endpoints of the range must have the expected major version\n    math (EXPR CVF_VERSION_MAJOR_NEXT \"${CVF_VERSION_MAJOR} + 1\")\n    if (NOT PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX_MAJOR STREQUAL CVF_VERSION_MAJOR)\n          OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX VERSION_LESS_EQUAL CVF_VERSION_MAJOR_NEXT)))\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    elseif(PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        AND ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS_EQUAL PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MAX)))\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n  else()\n    if(PACKAGE_FIND_VERSION_MAJOR STREQUAL CVF_VERSION_MAJOR)\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_4",
-    out = "_gen/opt/boost_sml_vendor/lib/cmake/sml/smlTargets.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"3.0.0\")\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 3.0.0...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS sml::sml)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target sml::sml\nadd_library(sml::sml INTERFACE IMPORTED)\n\nset_target_properties(sml::sml PROPERTIES\n  INTERFACE_COMPILE_FEATURES \"cxx_std_14\"\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include;${_IMPORT_PREFIX}/include\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/smlTargets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-write_file(
-    name = "gen_extra_5",
-    out = "_gen/share/ament_index/resource_index/vendor_packages/boost_sml_vendor",
-    content = ["opt/boost_sml_vendor"],
-)
-
-write_file(
-    name = "gen_cmake_7",
-    out = "_gen/share/boost_sml_vendor/cmake/vendor_package_cmake_prefix.cmake",
-    content = ["# generated from ament_cmake_vendor_package/cmake/templates/vendor_package_cmake_prefix.cmake.in\n\n# External project installation prefix relative to the installation directory of this file.\nlist(PREPEND CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}/../../../opt/boost_sml_vendor\")\n"],
-)
-
-write_file(
-    name = "gen_env_8",
-    out = "_gen/share/boost_sml_vendor/environment/vendor_package.bat",
-    content = [":: generated from ament_cmake_vendor_package/cmake/templates/vendor_package.bat.in\n@echo off\n\ncall:ament_prepend_unique_value PATH \"%AMENT_CURRENT_PREFIX%\\opt\\boost_sml_vendor\\bin\"\ncall:ament_prepend_unique_value LD_LIBRARY_PATH \"%AMENT_CURRENT_PREFIX%\\opt\\boost_sml_vendor\\lib\"\ncall:ament_prepend_unique_value LD_LIBRARY_PATH \"%AMENT_CURRENT_PREFIX%\\opt\\boost_sml_vendor\\lib64\"\n\ngoto:eof\n\n:: Prepend non-duplicate values to environment variables\n:: using semicolons as separators and avoiding trailing separators.\n:: first argument: the name of the result variable\n:: second argument: the value\n:ament_prepend_unique_value\n  setlocal enabledelayedexpansion\n  :: arguments\n  set \"listname=%~1\"\n  set \"value=%~2\"\n  :: skip if path doesn't exist\n  if NOT EXIST \"%value%\" (\n    goto:eof\n  )\n  :: expand the list variable\n  set \"list=!%listname%!\"\n  :: check if the list contains the value\n  set \"is_duplicate=\"\n  if \"%list%\" NEQ \"\" (\n    for %%v in (\"%list:;=\";\"%\") do (\n      if \"%%~v\" == \"%value%\" set \"is_duplicate=1\"\n    )\n  )\n  :: if it is not a duplicate prepend it\n  if \"%is_duplicate%\" == \"\" (\n    :: if not empty, prepend a semi-colon\n    if \"!list!\" NEQ \"\" set \"list=;!list!\"\n    :: prepend the value\n    set \"list=%value%!list!\"\n  )\n  endlocal & (\n    :: set result variable in parent scope\n    set \"%~1=%list%\"\n  )\ngoto:eof\n"],
-)
-
-write_file(
-    name = "gen_env_9",
-    out = "_gen/share/boost_sml_vendor/environment/vendor_package.dsv",
-    content = ["prepend-non-duplicate-if-exists;PATH;opt/boost_sml_vendor/bin\nprepend-non-duplicate-if-exists;LD_LIBRARY_PATH;opt/boost_sml_vendor/lib\nprepend-non-duplicate-if-exists;LD_LIBRARY_PATH;opt/boost_sml_vendor/lib64\n"],
-)
-
-write_file(
-    name = "gen_env_10",
-    out = "_gen/share/boost_sml_vendor/environment/vendor_package.sh",
-    content = ["# generated from ament_cmake_vendor_package/cmake/templates/vendor_package.sh.in\n\nif [ -d \"$AMENT_CURRENT_PREFIX/opt/boost_sml_vendor/bin\" ]; then\n  ament_prepend_unique_value PATH \"$AMENT_CURRENT_PREFIX/opt/boost_sml_vendor/bin\"\nfi\n\nif [ -d \"$AMENT_CURRENT_PREFIX/opt/boost_sml_vendor/lib\" ]; then\n  ament_prepend_unique_value LD_LIBRARY_PATH \"$AMENT_CURRENT_PREFIX/opt/boost_sml_vendor/lib\"\nfi\n\nif [ -d \"$AMENT_CURRENT_PREFIX/opt/boost_sml_vendor/lib64\" ]; then\n  ament_prepend_unique_value LD_LIBRARY_PATH \"$AMENT_CURRENT_PREFIX/opt/boost_sml_vendor/lib64\"\nfi\n"],
-)
-
 pkg_files(
     name = "pkg_files_extra_0",
     srcs = [":gen_extra_0"],
@@ -122,60 +74,6 @@ pkg_files(
     name = "pkg_files_extra_1",
     srcs = [":gen_extra_1"],
     prefix = "opt/boost_sml_vendor/include/boost/sml/utility",
-)
-
-pkg_files(
-    name = "pkg_files_extra_2",
-    srcs = [":gen_extra_2"],
-    prefix = "opt/boost_sml_vendor/lib/cmake/sml",
-)
-
-pkg_files(
-    name = "pkg_files_extra_3",
-    srcs = [":gen_extra_3"],
-    prefix = "opt/boost_sml_vendor/lib/cmake/sml",
-)
-
-pkg_files(
-    name = "pkg_files_extra_4",
-    srcs = [":gen_extra_4"],
-    prefix = "opt/boost_sml_vendor/lib/cmake/sml",
-)
-
-pkg_files(
-    name = "pkg_files_extra_5",
-    srcs = [":gen_extra_5"],
-    prefix = "share/ament_index/resource_index/vendor_packages",
-)
-
-pkg_files(
-    name = "pkg_files_cmake_6",
-    srcs = ["boost_sml_vendor-extras.cmake"],
-    prefix = "share/boost_sml_vendor/cmake",
-)
-
-pkg_files(
-    name = "pkg_files_cmake_7",
-    srcs = [":gen_cmake_7"],
-    prefix = "share/boost_sml_vendor/cmake",
-)
-
-pkg_files(
-    name = "pkg_files_env_8",
-    srcs = [":gen_env_8"],
-    prefix = "share/boost_sml_vendor/environment",
-)
-
-pkg_files(
-    name = "pkg_files_env_9",
-    srcs = [":gen_env_9"],
-    prefix = "share/boost_sml_vendor/environment",
-)
-
-pkg_files(
-    name = "pkg_files_env_10",
-    srcs = [":gen_env_10"],
-    prefix = "share/boost_sml_vendor/environment",
 )
 
 ament_index(
@@ -189,6 +87,9 @@ ament_index(
 )
 
 ament_package(
+    cmake = [
+        "boost_sml_vendor-extras.cmake",
+    ],
     cmake_export_dependencies = False,
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
@@ -197,18 +98,10 @@ ament_package(
         "boost_sml_vendor-extras.cmake",
         "vendor_package_cmake_prefix.cmake",
     ],
+    cmake_strip_prefix = "",
     install = [
         ":pkg_files_extra_0",
         ":pkg_files_extra_1",
-        ":pkg_files_extra_2",
-        ":pkg_files_extra_3",
-        ":pkg_files_extra_4",
-        ":pkg_files_extra_5",
-        ":pkg_files_cmake_6",
-        ":pkg_files_cmake_7",
-        ":pkg_files_env_8",
-        ":pkg_files_env_9",
-        ":pkg_files_env_10",
     ],
     package_xml = "package.xml",
     deps = [":ament_index"] + [

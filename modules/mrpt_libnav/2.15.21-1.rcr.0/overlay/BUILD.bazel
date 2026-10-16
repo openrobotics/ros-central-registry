@@ -3,7 +3,7 @@ load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -586,398 +586,6 @@ write_file(
     content = ["/* +------------------------------------------------------------------------+\n   |                     Mobile Robot Programming Toolkit (MRPT)            |\n   |                          https://www.mrpt.org/                         |\n   |                                                                        |\n   | Copyright (c) 2005-2026, Individual contributors, see AUTHORS file     |\n   | See: https://www.mrpt.org/Authors - All rights reserved.               |\n   | Released under BSD License. See: https://www.mrpt.org/License          |\n   +------------------------------------------------------------------------+ */\n#pragma once\n\n#include <mrpt/config/CConfigFileBase.h>\n#include <mrpt/config/CLoadableOptions.h>\n#include <mrpt/containers/yaml.h>\n#include <mrpt/core/round.h>\n#include <mrpt/kinematics/CVehicleVelCmd.h>\n#include <mrpt/math/CPolygon.h>\n#include <mrpt/math/TPose2D.h>\n#include <mrpt/math/TTwist2D.h>\n#include <mrpt/math/wrap2pi.h>\n#include <mrpt/nav/holonomic/ClearanceDiagram.h>\n#include <mrpt/poses/CPose2D.h>\n#include <mrpt/serialization/CSerializable.h>\n\n#include <cstdint>\n\nnamespace mrpt\n{\nnamespace opengl\n{\nclass CSetOfLines;\n}\n}  // namespace mrpt\n\nnamespace mrpt\n{\nnamespace nav\n{\n/** Defines behaviors for where there is an obstacle *inside* the robot shape\n *right at the beginning of a PTG trajectory.\n *\\ingroup nav_tpspace\n * \\sa Used in CParameterizedTrajectoryGenerator::COLLISION_BEHAVIOR\n */\nenum PTG_collision_behavior_t\n{\n  /** Favor getting back from too-close (almost collision) obstacles. */\n  COLL_BEH_BACK_AWAY = 0,\n  /** Totally dissallow any movement if there is any too-close (almost\n   collision) obstacles. */\n  COLL_BEH_STOP\n};\n\n/** \\defgroup nav_tpspace TP-Space and PTG classes\n * \\ingroup mrpt_nav_grp\n */\n\n/** This is the base class for any user-defined PTG.\n *  There is a class factory interface in\n *CParameterizedTrajectoryGenerator::CreatePTG.\n *\n * Papers:\n *  - J.L. Blanco, J. Gonzalez-Jimenez, J.A. Fernandez-Madrigal, \"Extending\n *Obstacle Avoidance Methods through Multiple Parameter-Space Transformations\",\n *Autonomous Robots, vol. 24, no. 1, 2008.\n *http://ingmec.ual.es/~jlblanco/papers/blanco2008eoa_DRAFT.pdf\n *\n * Changes history:\n *\t- 30/JUN/2004: Creation (JLBC)\n *\t- 16/SEP/2004: Totally redesigned.\n *\t- 15/SEP/2005: Totally rewritten again, for integration into MRPT\n *Applications Repository.\n *\t- 19/JUL/2009: Simplified to use only STL data types, and created the class\n *factory interface.\n *\t- MAY/2016: Refactored into CParameterizedTrajectoryGenerator,\n *CPTG_DiffDrive_CollisionGridBased, PTG classes renamed.\n *\t- 2016-2018: Many features added to support \"PTG continuation\", dynamic\n *paths depending on vehicle speeds, etc.\n *\n *  \\ingroup nav_tpspace\n */\nclass CParameterizedTrajectoryGenerator :\n    public mrpt::serialization::CSerializable,\n    public mrpt::config::CLoadableOptions\n{\n  DEFINE_VIRTUAL_SERIALIZABLE(CParameterizedTrajectoryGenerator, mrpt::nav)\n public:\n  /** Default ctor. Must call `loadFromConfigFile()` before initialization */\n  CParameterizedTrajectoryGenerator() = default;\n\n  /**  Destructor  */\n  ~CParameterizedTrajectoryGenerator() override = default;\n\n  /** The class factory for creating a PTG from a list of parameters in a\n   *section of a given config file (physical file or in memory).\n   *  Possible parameters are:\n   *\t  - Those explained in\n   *CParameterizedTrajectoryGenerator::loadFromConfigFile()\n   *\t  - Those explained in the specific PTG being created (see list of\n   *derived classes)\n   *\n   * `ptgClassName` can be any PTG class name which has been registered as\n   *any other\n   * mrpt::serialization::CSerializable class.\n   *\n   * \\exception std::logic_error On invalid or missing parameters.\n   */\n  static CParameterizedTrajectoryGenerator::Ptr CreatePTG(\n      const std::string& ptgClassName,\n      const mrpt::config::CConfigFileBase& cfg,\n      const std::string& sSection,\n      const std::string& sKeyPrefix);\n\n  /** @name Virtual interface of each PTG implementation\n   *  @{ */\n  /** Gets a short textual description of the PTG and its parameters */\n  virtual std::string getDescription() const = 0;\n\n protected:\n  /** Must be called after setting all PTG parameters and before requesting\n   * converting obstacles to TP-Space, inverseMap_WS2TP(), etc. */\n  virtual void internal_initialize(\n      const std::string& cacheFilename = std::string(), const bool verbose = true) = 0;\n  /** This must be called to de-initialize the PTG if some parameter is to be\n   * changed. After changing it, call initialize again */\n  virtual void internal_deinitialize() = 0;\n\n public:\n  /** Computes the closest (alpha,d) TP coordinates of the trajectory point\n   * closest to the Workspace (WS)\n   *   Cartesian coordinates (x,y), relative to the current robot frame.\n   * \\param[in] x X coordinate of the query point, relative to the robot\n   * frame.\n   * \\param[in] y Y coordinate of the query point, relative to the robot\n   * frame.\n   * \\param[out] out_k Trajectory parameter index (discretized alpha value,\n   * 0-based index).\n   * \\param[out] out_d Trajectory distance, normalized such that D_max\n   * becomes 1.\n   *\n   * \\return true if the distance between (x,y) and the actual trajectory\n   * point is below the given tolerance (in meters).\n   */\n  virtual bool inverseMap_WS2TP(\n      double x,\n      double y,\n      int& out_k,\n      double& out_normalized_d,\n      double tolerance_dist = 0.10) const = 0;\n\n  /** Returns the same than inverseMap_WS2TP() but without any additional\n   * cost. The default implementation\n   * just calls inverseMap_WS2TP() and discards (k,d). */\n  virtual bool PTG_IsIntoDomain(double x, double y) const\n  {\n    int k;\n    double d;\n    return inverseMap_WS2TP(x, y, k, d);\n  }\n\n  /** Returns true if a given TP-Space point maps to a unique point in\n   * Workspace, and viceversa. Default implementation returns `true`. */\n  virtual bool isBijectiveAt([[maybe_unused]] uint16_t k, [[maybe_unused]] uint32_t step) const\n  {\n    return true;\n  }\n  /** Converts a discretized \"alpha\" value into a feasible motion command or\n   * action. See derived classes for the meaning of these actions */\n  virtual mrpt::kinematics::CVehicleVelCmd::Ptr directionToMotionCommand(uint16_t k) const = 0;\n\n  /** Returns an empty kinematic velocity command object of the type supported\n   * by this PTG.\n   * Can be queried to determine the expected kinematic interface of the PTG.\n   */\n  virtual mrpt::kinematics::CVehicleVelCmd::Ptr getSupportedKinematicVelocityCommand() const = 0;\n\n  /** Dynamic state that may affect the PTG path parameterization. \\ingroup\n   * nav_reactive  */\n  struct TNavDynamicState\n  {\n    /** Current vehicle velocity (local frame of reference) */\n    mrpt::math::TTwist2D curVelLocal{0, 0, 0};\n    /** Current relative target location */\n    mrpt::math::TPose2D relTarget{20.0, .0, .0};\n    /** Desired relative speed [0,1] at target. Default=0 */\n    double targetRelSpeed{0};\n\n    /** Derived-class specific internal state variables */\n    mrpt::containers::yaml internalState;\n\n    TNavDynamicState() = default;\n    bool operator==(const TNavDynamicState& o) const;\n    inline bool operator!=(const TNavDynamicState& o) const { return !(*this == o); }\n    void writeToStream(mrpt::serialization::CArchive& out) const;\n    void readFromStream(mrpt::serialization::CArchive& in);\n  };\n\n protected:\n  /** Invoked when `m_nav_dyn_state` has changed; gives the PTG the\n   * opportunity to react and parameterize paths depending on the\n   * instantaneous conditions */\n  virtual void onNewNavDynamicState() = 0;\n\n public:\n  virtual void setRefDistance(const double refDist) { refDistance = refDist; }\n  /** Access path `k` ([0,N-1]=>[-pi,pi] in alpha): number of discrete \"steps\"\n   * along the trajectory.\n   * May be actual steps from a numerical integration or an arbitrary small\n   * length for analytical PTGs.\n   * \\sa getAlphaValuesCount() */\n  virtual size_t getPathStepCount(uint16_t k) const = 0;\n\n  /** Access path `k` ([0,N-1]=>[-pi,pi] in alpha): pose of the vehicle at\n   * discrete step `step`.\n   * \\sa getPathStepCount(), getAlphaValuesCount(), getPathTwist() */\n  virtual mrpt::math::TPose2D getPathPose(uint16_t k, uint32_t step) const = 0;\n\n  /** Gets velocity (\"twist\") for path `k` ([0,N-1]=>[-pi,pi] in alpha),\n   * at vehicle discrete step `step`. The default implementation in this base\n   * class uses numerical differentiation to estimate the twist (vx,vy,omega).\n   * Velocity is given in \"global\" coordinates, relative to the starting pose\n   * of the robot at t=0 for this PTG path.\n   * \\sa getPathStepCount(), getAlphaValuesCount(), getPathPose() */\n  virtual mrpt::math::TTwist2D getPathTwist(uint16_t k, uint32_t step) const;\n\n  /** Access path `k` ([0,N-1]=>[-pi,pi] in alpha): traversed distance at\n   * discrete step `step`.\n   * \\return Distance in pseudometers (real distance, NOT normalized to [0,1]\n   * for [0,refDist])\n   * \\sa getPathStepCount(), getAlphaValuesCount() */\n  virtual double getPathDist(uint16_t k, uint32_t step) const = 0;\n\n  /** Returns the duration (in seconds) of each \"step\"\n   * \\sa getPathStepCount() */\n  virtual double getPathStepDuration() const = 0;\n\n  /** Returns the maximum linear velocity expected from this PTG [m/s] */\n  virtual double getMaxLinVel() const = 0;\n  /** Returns the maximum angular velocity expected from this PTG [rad/s] */\n  virtual double getMaxAngVel() const = 0;\n\n  /** Access path `k` ([0,N-1]=>[-pi,pi] in alpha): largest step count for\n   * which the traversed distance is < `dist`\n   * \\param[in] dist Distance in pseudometers (real distance, NOT normalized\n   * to [0,1] for [0,refDist])\n   * \\return false if no step fulfills the condition for the given trajectory\n   * `k` (e.g. out of reference distance).\n   * Note that, anyway, the maximum distance (closest point) is returned in\n   * `out_step`.\n   * \\sa getPathStepCount(), getAlphaValuesCount() */\n  virtual bool getPathStepForDist(uint16_t k, double dist, uint32_t& out_step) const = 0;\n\n  /** Updates the radial map of closest TP-Obstacles given a single obstacle\n   * point at (ox,oy)\n   * \\param [in,out] tp_obstacles A vector of length `getAlphaValuesCount()`,\n   * initialized with `initTPObstacles()` (collision-free ranges, in\n   * \"pseudometers\", un-normalized).\n   * \\param [in] ox Obstacle point (X), relative coordinates wrt origin of\n   * the PTG.\n   * \\param [in] oy Obstacle point (Y), relative coordinates wrt origin of\n   * the PTG.\n   * \\note The length of tp_obstacles is not checked for efficiency since\n   * this method is potentially called thousands of times per\n   *  navigation timestap, so it is left to the user responsibility to\n   * provide a valid buffer.\n   * \\note `tp_obstacles` must be initialized with initTPObstacle() before\n   * call.\n   */\n  virtual void updateTPObstacle(double ox, double oy, std::vector<double>& tp_obstacles) const = 0;\n\n  /** Like updateTPObstacle() but for one direction only (`k`) in TP-Space.\n   * `tp_obstacle_k` must be initialized with initTPObstacleSingle() before\n   * call (collision-free ranges, in \"pseudometers\", un-normalized). */\n  virtual void updateTPObstacleSingle(\n      double ox, double oy, uint16_t k, double& tp_obstacle_k) const = 0;\n\n  /** Loads a set of default parameters into the PTG. Users normally will call\n   * `loadFromConfigFile()` instead, this method is provided\n   * exclusively for the PTG-configurator tool. */\n  virtual void loadDefaultParams();\n\n  /** Returns true if it is possible to stop sending velocity commands to the\n   * robot and, still, the\n   * robot controller will be able to keep following the last sent trajectory\n   * (\"NOP\" velocity commands).\n   * Default implementation returns \"false\". */\n  virtual bool supportVelCmdNOP() const;\n\n  /** Returns true if this PTG takes into account the desired velocity at\n   * target. \\sa updateNavDynamicState() */\n  virtual bool supportSpeedAtTarget() const { return false; }\n  /** Only for PTGs supporting supportVelCmdNOP(): this is the maximum time\n   * (in seconds) for which the path\n   * can be followed without re-issuing a new velcmd. Note that this is only\n   * an absolute maximum duration,\n   * navigation implementations will check for many other conditions. Default\n   * method in the base virtual class returns 0.\n   * \\param path_k Queried path `k` index  [0,N-1] */\n  virtual double maxTimeInVelCmdNOP(int path_k) const;\n\n  /** Returns the actual distance (in meters) of the path, discounting\n   * possible circular loops of the path (e.g. if it comes back to the\n   * origin).\n   * Default: refDistance */\n  virtual double getActualUnloopedPathLength(  //\n      [[maybe_unused]] uint16_t k) const\n  {\n    return this->refDistance;\n  }\n\n  /** Query the PTG for the relative priority factor (0,1) of this PTG, in\n   * comparison to others, if the k-th path is to be selected. */\n  virtual double evalPathRelativePriority(\n      [[maybe_unused]] uint16_t k, [[maybe_unused]] double target_distance) const\n  {\n    return 1.0;\n  }\n\n  /** Returns an approximation of the robot radius. */\n  virtual double getMaxRobotRadius() const = 0;\n  /** Returns true if the point lies within the robot shape. */\n  virtual bool isPointInsideRobotShape(const double x, const double y) const = 0;\n\n  /** Evals the clearance from an obstacle (ox,oy) in coordinates relative to\n   * the robot center. Zero or negative means collision. */\n  virtual double evalClearanceToRobotShape(const double ox, const double oy) const = 0;\n\n  /** @} */  // --- end of virtual methods\n\n  /** To be invoked by the navigator *before* each navigation step, to let the\n   * PTG to react to changing dynamic conditions. * \\sa\n   * onNewNavDynamicState(), m_nav_dyn_state  */\n  void updateNavDynamicState(const TNavDynamicState& newState, const bool force_update = false);\n  const TNavDynamicState& getCurrentNavDynamicState() const { return m_nav_dyn_state; }\n\n  /** The path used as default output in, for example, debugDumpInFiles.\n   * (Default=\"./reactivenav.logs/\") */\n  static std::string& OUTPUT_DEBUG_PATH_PREFIX();\n\n  /** Must be called after setting all PTG parameters and before requesting\n   * converting obstacles to TP-Space, inverseMap_WS2TP(), etc. */\n  void initialize(const std::string& cacheFilename = std::string(), const bool verbose = true);\n  /** This must be called to de-initialize the PTG if some parameter is to be\n   * changed. After changing it, call initialize again */\n  void deinitialize();\n  /** Returns true if `initialize()` has been called and there was no errors,\n   * so the PTG is ready to be queried for paths, obstacles, etc. */\n  bool isInitialized() const;\n\n  /** Get the number of different, discrete paths in this family */\n  uint16_t getAlphaValuesCount() const { return m_alphaValuesCount; }\n  /** Get the number of different, discrete paths in this family */\n  uint16_t getPathCount() const { return m_alphaValuesCount; }\n  /** Alpha value for the discrete corresponding value \\sa alpha2index */\n  double index2alpha(uint16_t k) const;\n  static double Index2alpha(uint16_t k, const unsigned int num_paths);\n\n  /** Discrete index value for the corresponding alpha value \\sa index2alpha\n   */\n  uint16_t alpha2index(double alpha) const;\n  static uint16_t Alpha2index(double alpha, const unsigned int num_paths);\n\n  inline double getRefDistance() const { return refDistance; }\n  /** Resizes and populates the initial appropriate contents in a vector of\n   * tp-obstacles (collision-free ranges, in \"pseudometers\", un-normalized).\n   * \\sa updateTPObstacle()  */\n  void initTPObstacles(std::vector<double>& TP_Obstacles) const;\n  void initTPObstacleSingle(uint16_t k, double& TP_Obstacle_k) const;\n\n  /** When used in path planning, a multiplying factor (default=1.0) for the\n   * scores for this PTG. Assign values <1 to PTGs with low priority. */\n  double getScorePriority() const { return m_score_priority; }\n  void setScorePriorty(double prior) { m_score_priority = prior; }\n  unsigned getClearanceStepCount() const { return m_clearance_num_points; }\n  void setClearanceStepCount(const unsigned res) { m_clearance_num_points = res; }\n\n  unsigned getClearanceDecimatedPaths() const { return m_clearance_decimated_paths; }\n  void setClearanceDecimatedPaths(const unsigned num) { m_clearance_decimated_paths = num; }\n\n  /** Returns the representation of one trajectory of this PTG as a 3D OpenGL\n   * object (a simple curved line).\n   * \\param[in] k The 0-based index of the selected trajectory (discrete\n   * \"alpha\" parameter).\n   * \\param[out] gl_obj Output object.\n   * \\param[in] decimate_distance Minimum distance between path points (in\n   * meters).\n   * \\param[in] max_path_distance If >=0, cut the path at this distance (in\n   * meters).\n   */\n  virtual void renderPathAsSimpleLine(\n      const uint16_t k,\n      mrpt::opengl::CSetOfLines& gl_obj,\n      const double decimate_distance = 0.1,\n      const double max_path_distance = -1.0) const;\n\n  /** Dump PTG trajectories in four text files:\n   * `./reactivenav.logs/PTGs/PTG%i_{x,y,phi,d}.txt`\n   * Text files are loadable from MATLAB/Octave, and can be visualized with\n   * the script `[MRPT_DIR]/scripts/viewPTG.m`\n   * \\note The directory \"./reactivenav.logs/PTGs\" will be created if doesn't\n   * exist.\n   * \\return false on any error writing to disk.\n   * \\sa OUTPUT_DEBUG_PATH_PREFIX\n   */\n  bool debugDumpInFiles(const std::string& ptg_name) const;\n\n  /** Parameters accepted by this base class:\n   *   - `${sKeyPrefix}num_paths`: The number of different paths in this\n   * family (number of discrete `alpha` values).\n   *   - `${sKeyPrefix}ref_distance`: The maximum distance in PTGs [meters]\n   *   - `${sKeyPrefix}score_priority`: When used in path planning, a\n   * multiplying factor (default=1.0) for the scores for this PTG. Assign\n   * values <1 to PTGs with low priority.\n   */\n  void loadFromConfigFile(\n      const mrpt::config::CConfigFileBase& cfg, const std::string& sSection) override;\n  void saveToConfigFile(\n      mrpt::config::CConfigFileBase& cfg, const std::string& sSection) const override;\n\n  /** Auxiliary function for rendering */\n  virtual void add_robotShape_to_setOfLines(\n      mrpt::opengl::CSetOfLines& gl_shape,\n      const mrpt::poses::CPose2D& origin = mrpt::poses::CPose2D()) const = 0;\n\n  /** Defines the behavior when there is an obstacle *inside* the robot shape\n   * right at the beginning of a PTG trajectory.\n   * Default value: COLL_BEH_BACK_AWAY\n   */\n  static PTG_collision_behavior_t& COLLISION_BEHAVIOR();\n\n  /** Must be called to resize a CD to its correct size, before calling\n   * updateClearance() */\n  void initClearanceDiagram(ClearanceDiagram& cd) const;\n\n  /** Updates the clearance diagram given one (ox,oy) obstacle point, in\n   * coordinates relative\n   * to the PTG path origin.\n   * \\param[in,out] cd The clearance will be updated here.\n   * \\sa m_clearance_dist_resolution\n   */\n  void updateClearance(const double ox, const double oy, ClearanceDiagram& cd) const;\n  void updateClearancePost(ClearanceDiagram& cd, const std::vector<double>& TP_obstacles) const;\n\n protected:\n  double refDistance{.0};\n\n  /** The number of discrete values for \"alpha\" between -PI and +PI. */\n  uint16_t m_alphaValuesCount{0};\n  double m_score_priority{1.0};\n\n  /** Number of steps for the piecewise-constant approximation of clearance\n   * from TPS distances [0,1] (Default=5) \\sa updateClearance() */\n  uint16_t m_clearance_num_points{5};\n\n  /** Number of paths for the decimated paths analysis of clearance */\n  uint16_t m_clearance_decimated_paths{15};\n\n  /** Updated before each nav step by  */\n  TNavDynamicState m_nav_dyn_state;\n\n  /** Updated in updateNavDynamicState(), contains the path index (k) for the\n   * target. */\n  uint16_t m_nav_dyn_state_target_k = INVALID_PTG_PATH_INDEX;\n\n  static const uint16_t INVALID_PTG_PATH_INDEX = static_cast<uint16_t>(-1);\n\n  bool m_is_initialized{false};\n\n  /** To be called by implementors of updateTPObstacle() and\n   * updateTPObstacleSingle() to\n   * honor the user settings regarding COLLISION_BEHAVIOR.\n   * \\param new_tp_obs_dist The newly determiend collision-free ranges, in\n   * \"pseudometers\", un-normalized, for some \"k\" direction.\n   * \\param inout_tp_obs The target where to store the new TP-Obs distance,\n   * if it fulfills the criteria determined by the collision behavior.\n   */\n  void internal_TPObsDistancePostprocess(\n      const double ox, const double oy, const double new_tp_obs_dist, double& inout_tp_obs) const;\n\n  virtual void internal_readFromStream(mrpt::serialization::CArchive& in);\n  virtual void internal_writeToStream(mrpt::serialization::CArchive& out) const;\n\n public:\n  /** Evals the robot clearance for each robot pose along path `k`, for the\n   * real distances in\n   * the key of the map<>, then keep in the map value the minimum of its\n   * current stored clearance,\n   * or the computed clearance. In case of collision, clearance is zero.\n   * \\param treat_as_obstacle true: normal use for obstacles; false: compute\n   * shortest distances to a target point (no collision)\n   */\n  virtual void evalClearanceSingleObstacle(\n      const double ox,\n      const double oy,\n      const uint16_t k,\n      ClearanceDiagram::dist2clearance_t& inout_realdist2clearance,\n      bool treat_as_obstacle = true) const;\n\n};  // end of class\n\n/** A list of PTGs (smart pointers) */\nusing TListPTGPtr = std::vector<mrpt::nav::CParameterizedTrajectoryGenerator::Ptr>;\n\n/** Base class for all PTGs using a 2D polygonal robot shape model.\n *  \\ingroup nav_tpspace\n */\nclass CPTG_RobotShape_Polygonal : public CParameterizedTrajectoryGenerator\n{\n public:\n  CPTG_RobotShape_Polygonal();\n  ~CPTG_RobotShape_Polygonal() override;\n\n  /** @name Robot shape\n   * @{ **/\n  /** Robot shape must be set before initialization, either from ctor params\n   * or via this method. */\n  void setRobotShape(const mrpt::math::CPolygon& robotShape);\n  const mrpt::math::CPolygon& getRobotShape() const { return m_robotShape; }\n  double getMaxRobotRadius() const override;\n  double evalClearanceToRobotShape(const double ox, const double oy) const override;\n  /** @} */\n  bool isPointInsideRobotShape(const double x, const double y) const override;\n  void add_robotShape_to_setOfLines(\n      mrpt::opengl::CSetOfLines& gl_shape,\n      const mrpt::poses::CPose2D& origin = mrpt::poses::CPose2D()) const override;\n\n  static void static_add_robotShape_to_setOfLines(\n      mrpt::opengl::CSetOfLines& gl_shape,\n      const mrpt::poses::CPose2D& origin,\n      const mrpt::math::CPolygon& robotShape);\n\n protected:\n  /** Will be called whenever the robot shape is set / updated */\n  virtual void internal_processNewRobotShape() = 0;\n  mrpt::math::CPolygon m_robotShape;\n  double m_robotMaxRadius{.01};\n  void loadShapeFromConfigFile(\n      const mrpt::config::CConfigFileBase& source, const std::string& section);\n  void saveToConfigFile(\n      mrpt::config::CConfigFileBase& cfg, const std::string& sSection) const override;\n  void internal_shape_loadFromStream(mrpt::serialization::CArchive& in);\n  void internal_shape_saveToStream(mrpt::serialization::CArchive& out) const;\n  /** Loads a set of default parameters; provided  exclusively for the\n   * PTG-configurator tool. */\n  void loadDefaultParams() override;\n};\n\n/** Base class for all PTGs using a 2D circular robot shape model.\n *  \\ingroup nav_tpspace\n */\nclass CPTG_RobotShape_Circular : public CParameterizedTrajectoryGenerator\n{\n public:\n  CPTG_RobotShape_Circular();\n  ~CPTG_RobotShape_Circular() override;\n\n  /** @name Robot shape\n   * @{ **/\n  /** Robot shape must be set before initialization, either from ctor params\n   * or via this method. */\n  void setRobotShapeRadius(const double robot_radius);\n  double getRobotShapeRadius() const { return m_robotRadius; }\n  double getMaxRobotRadius() const override;\n  double evalClearanceToRobotShape(const double ox, const double oy) const override;\n  /** @} */\n  void add_robotShape_to_setOfLines(\n      mrpt::opengl::CSetOfLines& gl_shape,\n      const mrpt::poses::CPose2D& origin = mrpt::poses::CPose2D()) const override;\n\n  static void static_add_robotShape_to_setOfLines(\n      mrpt::opengl::CSetOfLines& gl_shape,\n      const mrpt::poses::CPose2D& origin,\n      const double robotRadius);\n\n  bool isPointInsideRobotShape(const double x, const double y) const override;\n\n protected:\n  /** Will be called whenever the robot shape is set / updated */\n  virtual void internal_processNewRobotShape() = 0;\n  double m_robotRadius{.0};\n  void loadShapeFromConfigFile(\n      const mrpt::config::CConfigFileBase& source, const std::string& section);\n  void saveToConfigFile(\n      mrpt::config::CConfigFileBase& cfg, const std::string& sSection) const override;\n  void internal_shape_loadFromStream(mrpt::serialization::CArchive& in);\n  void internal_shape_saveToStream(mrpt::serialization::CArchive& out) const;\n  /** Loads a set of default parameters; provided  exclusively for the\n   * PTG-configurator tool. */\n  void loadDefaultParams() override;\n};\n}  // namespace nav\n}  // namespace mrpt\n"],
 )
 
-write_file(
-    name = "gen_extra_44",
-    out = "_gen/lib/cmake/mrpt-kinematics/mrpt-kinematics-config-version.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"2.15.21\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_45",
-    out = "_gen/lib/cmake/mrpt-kinematics/mrpt-kinematics-config.cmake",
-    content = ["include(CMakeFindDependencyMacro)\n\nif (TARGET mrpt::kinematics)\n    return()\nendif()\n\n# Hints to help CMake finding my dependencies (and theirs own), as well as\n# other future calls to search for other mrpt modules from our parent scope:\n# 1: MRPT_DIR cmake var:\nif (NOT \"${MRPT_DIR}\" STREQUAL \"\")\n  list(APPEND CMAKE_PREFIX_PATH \"${MRPT_DIR}\")\n  # If the user defines MRPT_DIR, that path overrides whatever CMake on its own\n  # found (this file):\n  get_filename_component(this_dir \"${CMAKE_CURRENT_LIST_DIR}\" ABSOLUTE)\n  get_filename_component(user_mrpt_dir \"${MRPT_DIR}\" ABSOLUTE)\n  if ((EXISTS \"${MRPT_DIR}/mrpt-kinematics-config.cmake\") AND (NOT \"${this_dir}\" STREQUAL \"${user_mrpt_dir}\"))\n    message(\"mrpt-kinematics_DIR was: ${mrpt-kinematics_DIR}\")\n    set(mrpt-kinematics_DIR \"${MRPT_DIR}\" CACHE PATH \"Path to mrpt-kinematics\" FORCE)\n    include(${MRPT_DIR}/mrpt-kinematics-config.cmake)\n    return()\n  endif()\nendif()\n# 2) The current (and parent) path:\ncmake_policy(PUSH)\ncmake_policy(SET CMP0057 NEW) # cmake>=3.3: Allow if(IN_LIST)\n\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}/../\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}/../\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\ncmake_policy(POP)\n\n# Prefer config instead of the old FindXXX() files\nset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)\n\n# Search for dependencies first:\nset(_deps \"mrpt-opengl\")\nforeach(_dep ${_deps}) # NO quotes for the list to be a CMake list!\n  if (${_dep}_FOUND)\n      continue() # already found\n  endif()\n  find_dependency(${_dep})\n  if(${_dep}_FOUND)\n    mark_as_advanced(${_dep}_DIR)\n  endif()\nendforeach()\n\n\n# Restore user's settings:\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG ${_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nunset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG)\n\n# Include targets for this library:\ninclude(${CMAKE_CURRENT_LIST_DIR}/mrpt-kinematics-targets.cmake)\n"],
-)
-
-write_file(
-    name = "gen_extra_46",
-    out = "_gen/lib/cmake/mrpt-kinematics/mrpt-kinematics-targets-release.cmake",
-    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"mrpt::kinematics\" for configuration \"Release\"\nset_property(TARGET mrpt::kinematics APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(mrpt::kinematics PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmrpt-kinematics.so.2.15.21\"\n  IMPORTED_SONAME_RELEASE \"libmrpt-kinematics.so.2.15\"\n  )\n\nlist(APPEND _cmake_import_check_targets mrpt::kinematics )\nlist(APPEND _cmake_import_check_files_for_mrpt::kinematics \"${_IMPORT_PREFIX}/lib/libmrpt-kinematics.so.2.15.21\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
-)
-
-write_file(
-    name = "gen_extra_47",
-    out = "_gen/lib/cmake/mrpt-kinematics/mrpt-kinematics-targets.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS mrpt::kinematics)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target mrpt::kinematics\nadd_library(mrpt::kinematics SHARED IMPORTED)\n\nset_target_properties(mrpt::kinematics PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/mrpt/kinematics/include\"\n  INTERFACE_LINK_LIBRARIES \"mrpt::opengl\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/mrpt-kinematics-targets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-write_file(
-    name = "gen_extra_48",
-    out = "_gen/lib/cmake/mrpt-nav/mrpt-nav-config-version.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"2.15.21\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_49",
-    out = "_gen/lib/cmake/mrpt-nav/mrpt-nav-config.cmake",
-    content = ["include(CMakeFindDependencyMacro)\n\nif (TARGET mrpt::nav)\n    return()\nendif()\n\n# Hints to help CMake finding my dependencies (and theirs own), as well as\n# other future calls to search for other mrpt modules from our parent scope:\n# 1: MRPT_DIR cmake var:\nif (NOT \"${MRPT_DIR}\" STREQUAL \"\")\n  list(APPEND CMAKE_PREFIX_PATH \"${MRPT_DIR}\")\n  # If the user defines MRPT_DIR, that path overrides whatever CMake on its own\n  # found (this file):\n  get_filename_component(this_dir \"${CMAKE_CURRENT_LIST_DIR}\" ABSOLUTE)\n  get_filename_component(user_mrpt_dir \"${MRPT_DIR}\" ABSOLUTE)\n  if ((EXISTS \"${MRPT_DIR}/mrpt-nav-config.cmake\") AND (NOT \"${this_dir}\" STREQUAL \"${user_mrpt_dir}\"))\n    message(\"mrpt-nav_DIR was: ${mrpt-nav_DIR}\")\n    set(mrpt-nav_DIR \"${MRPT_DIR}\" CACHE PATH \"Path to mrpt-nav\" FORCE)\n    include(${MRPT_DIR}/mrpt-nav-config.cmake)\n    return()\n  endif()\nendif()\n# 2) The current (and parent) path:\ncmake_policy(PUSH)\ncmake_policy(SET CMP0057 NEW) # cmake>=3.3: Allow if(IN_LIST)\n\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}/../\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}/../\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\ncmake_policy(POP)\n\n# Prefer config instead of the old FindXXX() files\nset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)\n\n# Search for dependencies first:\nset(_deps \"mrpt-maps;mrpt-kinematics\")\nforeach(_dep ${_deps}) # NO quotes for the list to be a CMake list!\n  if (${_dep}_FOUND)\n      continue() # already found\n  endif()\n  find_dependency(${_dep})\n  if(${_dep}_FOUND)\n    mark_as_advanced(${_dep}_DIR)\n  endif()\nendforeach()\n\n\n# Restore user's settings:\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG ${_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nunset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG)\n\n# Include targets for this library:\ninclude(${CMAKE_CURRENT_LIST_DIR}/mrpt-nav-targets.cmake)\n"],
-)
-
-write_file(
-    name = "gen_extra_50",
-    out = "_gen/lib/cmake/mrpt-nav/mrpt-nav-targets-release.cmake",
-    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"mrpt::nav\" for configuration \"Release\"\nset_property(TARGET mrpt::nav APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(mrpt::nav PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmrpt-nav.so.2.15.21\"\n  IMPORTED_SONAME_RELEASE \"libmrpt-nav.so.2.15\"\n  )\n\nlist(APPEND _cmake_import_check_targets mrpt::nav )\nlist(APPEND _cmake_import_check_files_for_mrpt::nav \"${_IMPORT_PREFIX}/lib/libmrpt-nav.so.2.15.21\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
-)
-
-write_file(
-    name = "gen_extra_51",
-    out = "_gen/lib/cmake/mrpt-nav/mrpt-nav-targets.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS mrpt::nav)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target mrpt::nav\nadd_library(mrpt::nav SHARED IMPORTED)\n\nset_target_properties(mrpt::nav PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/mrpt/nav/include\"\n  INTERFACE_LINK_LIBRARIES \"mrpt::maps;mrpt::kinematics\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/mrpt-nav-targets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# Make sure the targets which have been exported in some other\n# export set exist.\nunset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\nforeach(_target \"mrpt::kinematics\" )\n  if(NOT TARGET \"${_target}\" )\n    set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets \"${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets} ${_target}\")\n  endif()\nendforeach()\n\nif(DEFINED ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\n  if(CMAKE_FIND_PACKAGE_NAME)\n    set( ${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)\n    set( ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE \"The following imported targets are referenced, but are missing: ${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets}\")\n  else()\n    message(FATAL_ERROR \"The following imported targets are referenced, but are missing: ${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets}\")\n  endif()\nendif()\nunset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-pkg_files(
-    name = "pkg_files_extra_0",
-    srcs = [":gen_extra_0"],
-    prefix = "include/mrpt/kinematics/include/mrpt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_1",
-    srcs = [":gen_extra_1"],
-    prefix = "include/mrpt/kinematics/include/mrpt/kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_2",
-    srcs = [":gen_extra_2"],
-    prefix = "include/mrpt/kinematics/include/mrpt/kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_3",
-    srcs = [":gen_extra_3"],
-    prefix = "include/mrpt/kinematics/include/mrpt/kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_4",
-    srcs = [":gen_extra_4"],
-    prefix = "include/mrpt/kinematics/include/mrpt/kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_5",
-    srcs = [":gen_extra_5"],
-    prefix = "include/mrpt/kinematics/include/mrpt/kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_6",
-    srcs = [":gen_extra_6"],
-    prefix = "include/mrpt/kinematics/include/mrpt/kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_7",
-    srcs = [":gen_extra_7"],
-    prefix = "include/mrpt/kinematics/include/mrpt/kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_8",
-    srcs = [":gen_extra_8"],
-    prefix = "include/mrpt/kinematics/include/mrpt/kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_9",
-    srcs = [":gen_extra_9"],
-    prefix = "include/mrpt/nav/include/mrpt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_10",
-    srcs = [":gen_extra_10"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/holonomic",
-)
-
-pkg_files(
-    name = "pkg_files_extra_11",
-    srcs = [":gen_extra_11"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/holonomic",
-)
-
-pkg_files(
-    name = "pkg_files_extra_12",
-    srcs = [":gen_extra_12"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/holonomic",
-)
-
-pkg_files(
-    name = "pkg_files_extra_13",
-    srcs = [":gen_extra_13"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/holonomic",
-)
-
-pkg_files(
-    name = "pkg_files_extra_14",
-    srcs = [":gen_extra_14"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/holonomic",
-)
-
-pkg_files(
-    name = "pkg_files_extra_15",
-    srcs = [":gen_extra_15"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/holonomic",
-)
-
-pkg_files(
-    name = "pkg_files_extra_16",
-    srcs = [":gen_extra_16"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/planners",
-)
-
-pkg_files(
-    name = "pkg_files_extra_17",
-    srcs = [":gen_extra_17"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/planners",
-)
-
-pkg_files(
-    name = "pkg_files_extra_18",
-    srcs = [":gen_extra_18"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/planners",
-)
-
-pkg_files(
-    name = "pkg_files_extra_19",
-    srcs = [":gen_extra_19"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/planners",
-)
-
-pkg_files(
-    name = "pkg_files_extra_20",
-    srcs = [":gen_extra_20"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/planners",
-)
-
-pkg_files(
-    name = "pkg_files_extra_21",
-    srcs = [":gen_extra_21"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/planners",
-)
-
-pkg_files(
-    name = "pkg_files_extra_22",
-    srcs = [":gen_extra_22"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_23",
-    srcs = [":gen_extra_23"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_24",
-    srcs = [":gen_extra_24"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_25",
-    srcs = [":gen_extra_25"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_26",
-    srcs = [":gen_extra_26"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_27",
-    srcs = [":gen_extra_27"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_28",
-    srcs = [":gen_extra_28"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_29",
-    srcs = [":gen_extra_29"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_30",
-    srcs = [":gen_extra_30"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_31",
-    srcs = [":gen_extra_31"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_32",
-    srcs = [":gen_extra_32"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_33",
-    srcs = [":gen_extra_33"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_34",
-    srcs = [":gen_extra_34"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/reactive",
-)
-
-pkg_files(
-    name = "pkg_files_extra_35",
-    srcs = [":gen_extra_35"],
-    prefix = "include/mrpt/nav/include/mrpt/nav",
-)
-
-pkg_files(
-    name = "pkg_files_extra_36",
-    srcs = [":gen_extra_36"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/tpspace",
-)
-
-pkg_files(
-    name = "pkg_files_extra_37",
-    srcs = [":gen_extra_37"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/tpspace",
-)
-
-pkg_files(
-    name = "pkg_files_extra_38",
-    srcs = [":gen_extra_38"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/tpspace",
-)
-
-pkg_files(
-    name = "pkg_files_extra_39",
-    srcs = [":gen_extra_39"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/tpspace",
-)
-
-pkg_files(
-    name = "pkg_files_extra_40",
-    srcs = [":gen_extra_40"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/tpspace",
-)
-
-pkg_files(
-    name = "pkg_files_extra_41",
-    srcs = [":gen_extra_41"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/tpspace",
-)
-
-pkg_files(
-    name = "pkg_files_extra_42",
-    srcs = [":gen_extra_42"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/tpspace",
-)
-
-pkg_files(
-    name = "pkg_files_extra_43",
-    srcs = [":gen_extra_43"],
-    prefix = "include/mrpt/nav/include/mrpt/nav/tpspace",
-)
-
-pkg_files(
-    name = "pkg_files_extra_44",
-    srcs = [":gen_extra_44"],
-    prefix = "lib/cmake/mrpt-kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_45",
-    srcs = [":gen_extra_45"],
-    prefix = "lib/cmake/mrpt-kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_46",
-    srcs = [":gen_extra_46"],
-    prefix = "lib/cmake/mrpt-kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_47",
-    srcs = [":gen_extra_47"],
-    prefix = "lib/cmake/mrpt-kinematics",
-)
-
-pkg_files(
-    name = "pkg_files_extra_48",
-    srcs = [":gen_extra_48"],
-    prefix = "lib/cmake/mrpt-nav",
-)
-
-pkg_files(
-    name = "pkg_files_extra_49",
-    srcs = [":gen_extra_49"],
-    prefix = "lib/cmake/mrpt-nav",
-)
-
-pkg_files(
-    name = "pkg_files_extra_50",
-    srcs = [":gen_extra_50"],
-    prefix = "lib/cmake/mrpt-nav",
-)
-
-pkg_files(
-    name = "pkg_files_extra_51",
-    srcs = [":gen_extra_51"],
-    prefix = "lib/cmake/mrpt-nav",
-)
-
-pkg_files(
-    name = "pkg_files_soname_52",
-    srcs = [":mrpt-kinematics"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-kinematics": "libmrpt-kinematics.so.2.15"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_53",
-    srcs = [":mrpt-kinematics"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-kinematics": "libmrpt-kinematics.so.2.15.21"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_54",
-    srcs = [":mrpt-nav"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-nav": "libmrpt-nav.so.2.15"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_55",
-    srcs = [":mrpt-nav"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-nav": "libmrpt-nav.so.2.15.21"},
-)
-
 ament_index(
     name = "ament_index",
     libraries = [
@@ -985,7 +593,19 @@ ament_index(
         ":mrpt-nav",
     ],
     package_xml = "package.xml",
-    deps = ["@mrpt_libmaps//:ament_package"],
+    sonames = {
+        "mrpt-kinematics": [
+            "libmrpt-kinematics.so.2.15",
+            "libmrpt-kinematics.so.2.15.21",
+        ],
+        "mrpt-nav": [
+            "libmrpt-nav.so.2.15",
+            "libmrpt-nav.so.2.15.21",
+        ],
+    },
+    deps = [
+        "@mrpt_libmaps//:ament_package",
+    ],
 )
 
 cc_test(
@@ -1051,8 +671,6 @@ cc_test(
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     data = [
         ":ament_index",
-        ":mrpt-kinematics",
-        ":mrpt-nav",
     ],
     dynamic_deps = [":transitive_dynamic_deps"],
     includes = ["_gen/include"],
@@ -1073,70 +691,69 @@ ament_package(
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
     cmake_export_targets = False,
-    install = [
-        ":pkg_files_extra_0",
-        ":pkg_files_extra_1",
-        ":pkg_files_extra_2",
-        ":pkg_files_extra_3",
-        ":pkg_files_extra_4",
-        ":pkg_files_extra_5",
-        ":pkg_files_extra_6",
-        ":pkg_files_extra_7",
-        ":pkg_files_extra_8",
-        ":pkg_files_extra_9",
-        ":pkg_files_extra_10",
-        ":pkg_files_extra_11",
-        ":pkg_files_extra_12",
-        ":pkg_files_extra_13",
-        ":pkg_files_extra_14",
-        ":pkg_files_extra_15",
-        ":pkg_files_extra_16",
-        ":pkg_files_extra_17",
-        ":pkg_files_extra_18",
-        ":pkg_files_extra_19",
-        ":pkg_files_extra_20",
-        ":pkg_files_extra_21",
-        ":pkg_files_extra_22",
-        ":pkg_files_extra_23",
-        ":pkg_files_extra_24",
-        ":pkg_files_extra_25",
-        ":pkg_files_extra_26",
-        ":pkg_files_extra_27",
-        ":pkg_files_extra_28",
-        ":pkg_files_extra_29",
-        ":pkg_files_extra_30",
-        ":pkg_files_extra_31",
-        ":pkg_files_extra_32",
-        ":pkg_files_extra_33",
-        ":pkg_files_extra_34",
-        ":pkg_files_extra_35",
-        ":pkg_files_extra_36",
-        ":pkg_files_extra_37",
-        ":pkg_files_extra_38",
-        ":pkg_files_extra_39",
-        ":pkg_files_extra_40",
-        ":pkg_files_extra_41",
-        ":pkg_files_extra_42",
-        ":pkg_files_extra_43",
-        ":pkg_files_extra_44",
-        ":pkg_files_extra_45",
-        ":pkg_files_extra_46",
-        ":pkg_files_extra_47",
-        ":pkg_files_extra_48",
-        ":pkg_files_extra_49",
-        ":pkg_files_extra_50",
-        ":pkg_files_extra_51",
-        ":pkg_files_soname_52",
-        ":pkg_files_soname_53",
-        ":pkg_files_soname_54",
-        ":pkg_files_soname_55",
+    headers = [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_extra_5",
+        ":gen_extra_6",
+        ":gen_extra_7",
+        ":gen_extra_8",
+        ":gen_extra_9",
+        ":gen_extra_10",
+        ":gen_extra_11",
+        ":gen_extra_12",
+        ":gen_extra_13",
+        ":gen_extra_14",
+        ":gen_extra_15",
+        ":gen_extra_16",
+        ":gen_extra_17",
+        ":gen_extra_18",
+        ":gen_extra_19",
+        ":gen_extra_20",
+        ":gen_extra_21",
+        ":gen_extra_22",
+        ":gen_extra_23",
+        ":gen_extra_24",
+        ":gen_extra_25",
+        ":gen_extra_26",
+        ":gen_extra_27",
+        ":gen_extra_28",
+        ":gen_extra_29",
+        ":gen_extra_30",
+        ":gen_extra_31",
+        ":gen_extra_32",
+        ":gen_extra_33",
+        ":gen_extra_34",
+        ":gen_extra_35",
+        ":gen_extra_36",
+        ":gen_extra_37",
+        ":gen_extra_38",
+        ":gen_extra_39",
+        ":gen_extra_40",
+        ":gen_extra_41",
+        ":gen_extra_42",
+        ":gen_extra_43",
     ],
+    include_prefix = "",
     install_package_xml = False,
     libraries = [
         ":mrpt-kinematics",
         ":mrpt-nav",
     ],
     package_xml = "package.xml",
+    sonames = {
+        "mrpt-kinematics": [
+            "libmrpt-kinematics.so.2.15",
+            "libmrpt-kinematics.so.2.15.21",
+        ],
+        "mrpt-nav": [
+            "libmrpt-nav.so.2.15",
+            "libmrpt-nav.so.2.15.21",
+        ],
+    },
     deps = [":ament_index"] + [
         "@mrpt_libmaps//:ament_package",
     ],

@@ -1,9 +1,8 @@
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -17,6 +16,11 @@ license(
     ],
 )
 
+generate_parameter_library(
+    name = "ffw_robot_manager_parameters",
+    yaml_file = "src/ffw_robot_manager_parameters.yaml",
+)
+
 DEPENDENCIES = {
     "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
@@ -25,6 +29,7 @@ DEPENDENCIES = {
 }
 
 CC_DEPS = [
+    ":ffw_robot_manager_parameters",
     "@controller_interface//:controller_interface_library",
     "@dynamixel_hardware_interface//:dynamixel_hardware_interface_library",
     "@dynamixel_interfaces//:cc",
@@ -59,7 +64,7 @@ cc_library(
             "**/*.tcc",
         ],
         allow_empty = True,
-    ) + [":gen_extra_5"],
+    ) + [":ffw_robot_manager_parameters_gen"],
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
@@ -82,48 +87,6 @@ cc_shared_library(
         "-Wl,--unresolved-symbols=ignore-all",
     ],
     deps = [":ffw_robot_manager_library"],
-)
-
-write_file(
-    name = "gen_extra_5",
-    out = "_gen/include/ffw_robot_manager/ffw_robot_manager_parameters.hpp",
-    content = ["// auto-generated DO NOT EDIT\n\n#pragma once\n\n#include <algorithm>\n#include <array>\n#include <functional>\n#include <limits>\n#include <mutex>\n#include <rclcpp/node.hpp>\n#include <rclcpp_lifecycle/lifecycle_node.hpp>\n#include <rclcpp/logger.hpp>\n#include <set>\n#include <sstream>\n#include <string>\n#include <type_traits>\n#include <utility>\n#include <vector>\n\n#include <fmt/core.h>\n#include <fmt/format.h>\n#include <fmt/ranges.h>\n\n#include <rsl/static_string.hpp>\n#include <rsl/static_vector.hpp>\n#include <rsl/parameter_validators.hpp>\n\n\n\nnamespace ffw_robot_manager {\n\n// Use validators from RSL\nusing rsl::unique;\nusing rsl::subset_of;\nusing rsl::fixed_size;\nusing rsl::size_gt;\nusing rsl::size_lt;\nusing rsl::not_empty;\nusing rsl::element_bounds;\nusing rsl::lower_element_bounds;\nusing rsl::upper_element_bounds;\nusing rsl::bounds;\nusing rsl::lt;\nusing rsl::gt;\nusing rsl::lt_eq;\nusing rsl::gt_eq;\nusing rsl::one_of;\nusing rsl::to_parameter_result_msg;\n\ntemplate <typename T>\n[[nodiscard]] auto to_parameter_value(T value) {\n    return rclcpp::ParameterValue(value);\n}\n\ntemplate <size_t capacity>\n[[nodiscard]] auto to_parameter_value(rsl::StaticString<capacity> const& value) {\n    return rclcpp::ParameterValue(rsl::to_string(value));\n}\n\ntemplate <typename T, size_t capacity>\n[[nodiscard]] auto to_parameter_value(rsl::StaticVector<T, capacity> const& value) {\n    return rclcpp::ParameterValue(rsl::to_vector(value));\n}\n    struct Params {\n        bool disable_torque_on_error = true;\n        bool set_led_error_on_error = true;\n        std::string ffw_type = \"\";\n        // for detecting if the parameter struct has been updated\n        rclcpp::Time __stamp;\n    };\n    struct StackParams {\n        bool disable_torque_on_error = true;\n        bool set_led_error_on_error = true;\n    };\n\n  class ParamListener{\n  public:\n    // throws rclcpp::exceptions::InvalidParameterValueException on initialization if invalid parameter are loaded\n    template <typename NodeT>\n    ParamListener(NodeT node, std::string const& prefix = \"\")\n    : ParamListener(node->get_node_parameters_interface(), node->get_logger(), prefix) {}\n\n    ParamListener(const std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface>& parameters_interface,\n                  std::string const& prefix = \"\")\n    : ParamListener(parameters_interface, rclcpp::get_logger(\"ffw_robot_manager\"), prefix) {\n      RCLCPP_DEBUG(logger_, \"ParameterListener: Not using node logger, recommend using other constructors to use a node logger\");\n    }\n\n    ParamListener(const std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface>& parameters_interface,\n                  rclcpp::Logger logger, std::string const& prefix = \"\")\n    : prefix_{prefix},\n      logger_{std::move(logger)} {\n      if (!prefix_.empty() && prefix_.back() != '.') {\n        prefix_ += \".\";\n      }\n\n      parameters_interface_ = parameters_interface;\n      declare_params();\n      auto update_param_cb = [this](const std::vector<rclcpp::Parameter> &parameters){return this->update(parameters);};\n      handle_ = parameters_interface_->add_on_set_parameters_callback(update_param_cb);\n      clock_ = rclcpp::Clock();\n    }\n\n    Params get_params() const{\n      std::lock_guard<std::mutex> lock(mutex_);\n      return params_;\n    }\n\n    /**\n     * @brief Tries to update the parsed Params object\n     * @param params_in The Params object to update\n     * @return true if the Params object was updated, false if it was already up to date or the mutex could not be locked\n     * @note This function tries to lock the mutex without blocking, so it can be used in a RT loop\n     */\n    bool try_update_params(Params & params_in) const {\n      std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);\n      if (lock.owns_lock()) {\n        if (const bool is_old = params_in.__stamp != params_.__stamp; is_old) {\n          params_in = params_;\n          return true;\n        }\n      }\n      return false;\n    }\n\n    /**\n     * @brief Tries to get the current Params object\n     * @param params_in The Params object to fill with the current parameters\n     * @return true if mutex can be locked, false if mutex could not be locked\n     * @note The parameters are only filled, when the mutex can be locked and the params timestamp is different\n     * @note This function tries to lock the mutex without blocking, so it can be used in a RT loop\n     */\n    bool try_get_params(Params & params_in) const {\n      if (mutex_.try_lock()) {\n        if (const bool is_old = params_in.__stamp != params_.__stamp; is_old) {\n          params_in = params_;\n        }\n        mutex_.unlock();\n        return true;\n      }\n      return false;\n    }\n\n    bool is_old(Params const& other) const {\n      std::lock_guard<std::mutex> lock(mutex_);\n      return params_.__stamp != other.__stamp;\n    }\n\n    StackParams get_stack_params() {\n      Params params = get_params();\n      StackParams output;\n      output.disable_torque_on_error = params.disable_torque_on_error;\n      output.set_led_error_on_error = params.set_led_error_on_error;\n\n      return output;\n    }\n\n    void refresh_dynamic_parameters() {\n      auto updated_params = get_params();\n      // TODO remove any destroyed dynamic parameters\n\n      // declare any new dynamic parameters\n      rclcpp::Parameter param;\n\n    }\n\n    rcl_interfaces::msg::SetParametersResult update(const std::vector<rclcpp::Parameter> &parameters) {\n      auto updated_params = get_params();\n\n      for (const auto &param: parameters) {\n        if (param.get_name() == (prefix_ + \"disable_torque_on_error\")) {\n            updated_params.disable_torque_on_error = param.as_bool();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"set_led_error_on_error\")) {\n            updated_params.set_led_error_on_error = param.as_bool();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"ffw_type\")) {\n            updated_params.ffw_type = param.as_string();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n      }\n\n      updated_params.__stamp = clock_.now();\n      update_internal_params(updated_params);\n      if (user_callback_) {\n         user_callback_(updated_params);\n      }\n      return rsl::to_parameter_result_msg({});\n    }\n\n    void declare_params(){\n      auto updated_params = get_params();\n      // declare all parameters and give default values to non-required ones\n      if (!parameters_interface_->has_parameter(prefix_ + \"disable_torque_on_error\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Whether to disable Dynamixel torque when hardware errors are detected. If true, torque will be disabled for all Dynamixels when any error is detected. If false, torque will remain enabled even when errors occur.\";\n          descriptor.read_only = false;\n          auto parameter = to_parameter_value(updated_params.disable_torque_on_error);\n          parameters_interface_->declare_parameter(prefix_ + \"disable_torque_on_error\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"set_led_error_on_error\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Whether to set LED to red color when hardware errors are detected. If true, LED will be set to red blinking mode when any error is detected. If false, LED will remain unchanged.\";\n          descriptor.read_only = false;\n          auto parameter = to_parameter_value(updated_params.set_led_error_on_error);\n          parameters_interface_->declare_parameter(prefix_ + \"set_led_error_on_error\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"ffw_type\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"FFW robot type (e.g., 'ffw_sg2_rev1'). Used to determine battery monitoring configuration.\";\n          descriptor.read_only = false;\n          auto parameter = to_parameter_value(updated_params.ffw_type);\n          parameters_interface_->declare_parameter(prefix_ + \"ffw_type\", parameter, descriptor);\n      }\n      // get parameters and fill struct fields\n      rclcpp::Parameter param;\n      param = parameters_interface_->get_parameter(prefix_ + \"disable_torque_on_error\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"disable_torque_on_error\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.disable_torque_on_error = param.as_bool();\n      param = parameters_interface_->get_parameter(prefix_ + \"set_led_error_on_error\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"set_led_error_on_error\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.set_led_error_on_error = param.as_bool();\n      param = parameters_interface_->get_parameter(prefix_ + \"ffw_type\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"ffw_type\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.ffw_type = param.as_string();\n\n\n      updated_params.__stamp = clock_.now();\n      update_internal_params(updated_params);\n    }\n\n    using userParameterUpdateCB = std::function<void(const Params&)>;\n    void setUserCallback(const userParameterUpdateCB& callback){\n      user_callback_ = callback;\n    }\n\n    void clearUserCallback(){\n      user_callback_ = {};\n    }\n\n    private:\n      void update_internal_params(Params updated_params) {\n        std::lock_guard<std::mutex> lock(mutex_);\n        params_ = std::move(updated_params);\n      }\n\n      std::string prefix_;\n      Params params_;\n      rclcpp::Clock clock_;\n      std::shared_ptr<rclcpp::node_interfaces::OnSetParametersCallbackHandle> handle_;\n      std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface> parameters_interface_;\n      userParameterUpdateCB user_callback_;\n\n      rclcpp::Logger logger_;\n      std::mutex mutable mutex_;\n  };\n\n} // namespace ffw_robot_manager\n"],
-)
-
-pkg_files(
-    name = "pkg_files_inc_0",
-    srcs = ["include/ffw_robot_manager/battery_model.hpp"],
-    prefix = "include/ffw_robot_manager/ffw_robot_manager",
-)
-
-pkg_files(
-    name = "pkg_files_inc_1",
-    srcs = ["include/ffw_robot_manager/ffw_robot_manager.hpp"],
-    prefix = "include/ffw_robot_manager/ffw_robot_manager",
-)
-
-pkg_files(
-    name = "pkg_files_inc_2",
-    srcs = ["include/ffw_robot_manager/robot_type.hpp"],
-    prefix = "include/ffw_robot_manager/ffw_robot_manager",
-)
-
-pkg_files(
-    name = "pkg_files_inc_3",
-    srcs = ["include/ffw_robot_manager/topic_watchdog.hpp"],
-    prefix = "include/ffw_robot_manager/ffw_robot_manager",
-)
-
-pkg_files(
-    name = "pkg_files_inc_4",
-    srcs = ["include/ffw_robot_manager/ubetter_battery_model.hpp"],
-    prefix = "include/ffw_robot_manager/ffw_robot_manager",
-)
-
-pkg_files(
-    name = "pkg_files_extra_5",
-    srcs = [":gen_extra_5"],
-    prefix = "include/ffw_robot_manager",
 )
 
 ament_index(
@@ -171,14 +134,7 @@ ament_package(
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
     cmake_export_name = "export_ffw_robot_manager",
-    install = [
-        ":pkg_files_inc_0",
-        ":pkg_files_inc_1",
-        ":pkg_files_inc_2",
-        ":pkg_files_inc_3",
-        ":pkg_files_inc_4",
-        ":pkg_files_extra_5",
-    ],
+    headers = glob(["include/**"]),
     libraries = [":ffw_robot_manager"],
     package_xml = "package.xml",
     deps = [":ament_index"] + [

@@ -55,7 +55,6 @@ cc_library(
         ],
         allow_empty = True,
     ) + [
-        ":gen_atomic_shared_ptr_shim_hpp",
         ":gen_boost_archive_archive_exception_hpp",
         ":gen_boost_archive_binary_iarchive_hpp",
         ":gen_boost_archive_binary_oarchive_hpp",
@@ -108,8 +107,6 @@ cc_library(
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
         "-include",
         "rcr_ceres_rotation_shim.hpp",
     ],
@@ -156,7 +153,6 @@ cc_binary(
         ],
         allow_empty = True,
     ) + [
-        ":gen_atomic_shared_ptr_shim_hpp",
         ":gen_boost_archive_archive_exception_hpp",
         ":gen_boost_archive_binary_iarchive_hpp",
         ":gen_boost_archive_binary_oarchive_hpp",
@@ -209,8 +205,6 @@ cc_binary(
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
         "-include",
         "rcr_ceres_rotation_shim.hpp",
     ],
@@ -247,7 +241,6 @@ cc_binary(
         ],
         allow_empty = True,
     ) + [
-        ":gen_atomic_shared_ptr_shim_hpp",
         ":gen_boost_archive_archive_exception_hpp",
         ":gen_boost_archive_binary_iarchive_hpp",
         ":gen_boost_archive_binary_oarchive_hpp",
@@ -301,8 +294,6 @@ cc_binary(
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
         "-include",
-        "atomic_shared_ptr_shim.hpp",
-        "-include",
         "rcr_ceres_rotation_shim.hpp",
     ],
     dynamic_deps = [":transitive_dynamic_deps"],
@@ -327,12 +318,6 @@ write_file(
     name = "gen_fuse_optimizers_stub_cpp",
     out = "_gen/fuse_optimizers_stub.cpp",
     content = ["int main() { return 0; }\n"],
-)
-
-write_file(
-    name = "gen_atomic_shared_ptr_shim_hpp",
-    out = "_gen/include/atomic_shared_ptr_shim.hpp",
-    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
 )
 
 write_file(
@@ -629,7 +614,9 @@ ament_index(
         ":batch_optimizer_node",
         ":fixed_lag_smoother_node",
     ],
-    libraries = [":fuse_optimizers"],
+    libraries = [
+        ":fuse_optimizers",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -665,13 +652,10 @@ cc_test(
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
         "-include",
-        "atomic_shared_ptr_shim.hpp",
-        "-include",
         "rcr_ceres_rotation_shim.hpp",
     ],
     data = [
         ":ament_index",
-        ":fuse_optimizers",
     ] + glob(
         [
             "test/**",
@@ -714,8 +698,6 @@ py_pytest(
     ],
     data = [
         ":ament_index",
-        ":batch_optimizer_node",
-        ":fixed_lag_smoother_node",
     ],
     deps = [
         "@diagnostic_updater//:diagnostic_updater_py",
@@ -739,8 +721,6 @@ py_pytest(
     ],
     data = [
         ":ament_index",
-        ":batch_optimizer_node",
-        ":fixed_lag_smoother_node",
     ],
     deps = [
         "@diagnostic_updater//:diagnostic_updater_py",
@@ -764,8 +744,6 @@ py_pytest(
     ],
     data = [
         ":ament_index",
-        ":batch_optimizer_node",
-        ":fixed_lag_smoother_node",
     ],
     deps = [
         "@diagnostic_updater//:diagnostic_updater_py",
@@ -813,7 +791,9 @@ ament_package(
         ],
         allow_empty = True,
     ),
-    libraries = [":fuse_optimizers"],
+    libraries = [
+        ":fuse_optimizers",
+    ],
     package_xml = "package.xml",
     deps = [":ament_index"] + [
         "@ament_cmake//:ament_package",

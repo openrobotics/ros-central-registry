@@ -3,7 +3,7 @@ load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -900,582 +900,6 @@ write_file(
     content = ["/* +------------------------------------------------------------------------+\n   |                     Mobile Robot Programming Toolkit (MRPT)            |\n   |                          https://www.mrpt.org/                         |\n   |                                                                        |\n   | Copyright (c) 2005-2026, Individual contributors, see AUTHORS file     |\n   | See: https://www.mrpt.org/Authors - All rights reserved.               |\n   | Released under BSD License. See: https://www.mrpt.org/License          |\n   +------------------------------------------------------------------------+ */\n#pragma once\n\n#include <mrpt/math/CMatrixFixed.h>\n#include <mrpt/math/math_frwds.h>\n#include <mrpt/poses/CPose3DQuat.h>\n#include <mrpt/poses/poses_frwds.h>\n#include <mrpt/tfest/TMatchingPair.h>\n#include <mrpt/tfest/indiv-compat-decls.h>\n\nnamespace mrpt::tfest\n{\n/** \\addtogroup mrpt_tfest_grp\n * @{ */\n\n/** Least-squares (L2 norm) solution to finding the optimal SE(3) transform\n * between two reference frames using the \"quaternion\" or Horn's method\n * \\cite horn1987closed\n *\n *  The optimal transformation `q` fulfills \\f$ p_{this} = q \\oplus p_{other}\n * \\f$, that is, the\n *  transformation of frame `other` with respect to `this`.\n *\n *  \\image html tfest_frames.png\n *\n * \\param[in]  in_correspondences  The coordinates of the input points for the\n * two coordinate systems \"this\" and \"other\"\n * \\param[out] out_transform       The output transformation\n * \\param[out] out_scale           The computed scale of the optimal\n * transformation (will be 1.0 for a perfectly rigid translation + rotation).\n * \\param[in]  forceScaleToUnity   Whether or not force the scale employed to\n * rotate the coordinate systems to one (rigid transformation)\n * \\note [New in MRPT 1.3.0] This function replaces\n * mrpt::scanmatching::leastSquareErrorRigidTransformation6DRANSAC() and\n * mrpt::scanmatching::HornMethod()\n * \\sa se2_l2, se3_l2_robust\n */\nbool se3_l2(\n    const mrpt::tfest::TMatchingPairList& in_correspondences,\n    mrpt::poses::CPose3DQuat& out_transform,\n    double& out_scale,\n    bool forceScaleToUnity = false);\n\n/// \\overload (for double precision points)\nbool se3_l2(\n    const mrpt::tfest::TMatchingPairList_d& in_correspondences,\n    mrpt::poses::CPose3DQuat& out_transform,\n    double& out_scale,\n    bool forceScaleToUnity = false);\n\n/** \\overload\n *\n * This version accepts corresponding points as two vectors of TPoint3D (must\n * have identical length).\n */\nbool se3_l2(\n    const std::vector<mrpt::math::TPoint3D>& in_points_this,\n    const std::vector<mrpt::math::TPoint3D>& in_points_other,\n    mrpt::poses::CPose3DQuat& out_transform,\n    double& out_scale,\n    bool forceScaleToUnity = false);\n\n/** Parameters for se3_l2_robust(). See function for more details */\nstruct TSE3RobustParams\n{\n  /** (Default=5)  The minimum amount of points in a set to start a consensus\n   * set. \\sa ransac_maxSetSizePct */\n  unsigned int ransac_minSetSize{5};\n  /** (Default=50) The maximum number of iterations of the RANSAC algorithm */\n  unsigned int ransac_nmaxSimulations{50};\n  /** (Default=0.5) The minimum ratio (0.0 - 1.0) of the input set that is\n   * considered to be inliers. *Important*: The minimum size of a consensus\n   * set to be accepted will be \"INPUT_CORRESPONDENCES*ransac_maxSetSizePct\".\n   */\n  double ransac_maxSetSizePct{0.5};\n  /** (Default=0.05) The maximum distance in X,Y,Z for a solution to be\n   * considered as matching a candidate solution (In meters) */\n  double ransac_threshold_lin{0.05};\n  /** (Default=1 deg) The maximum angle (yaw,pitch,roll) for a solution to be\n   * considered as matching a candidate solution (In radians) */\n  double ransac_threshold_ang{mrpt::DEG2RAD(1.)};\n  /** (Default=0.03) The maximum difference in scale for a solution to be\n   * considered as matching a candidate solution (dimensionless) */\n  double ransac_threshold_scale{0.03};\n  /** (Default=true)  */\n  bool forceScaleToUnity{true};\n  /** (Default=false) */\n  bool verbose{false};\n\n  /** If provided, this user callback will be invoked to determine the\n   * individual compatibility between each potential pair\n   * of elements. Can check image descriptors, geometrical properties, etc.\n   * \\return Must return true if the pair is a potential match, false\n   * otherwise.\n   */\n  TFunctorCheckPotentialMatch user_individual_compat_callback;\n};\n\n/** Output placeholder for se3_l2_robust() */\nstruct TSE3RobustResult\n{\n  /** The best transformation found */\n  mrpt::poses::CPose3DQuat transformation;\n  /** The estimated scale of the rigid transformation (should be very close to\n   * 1.0) */\n  double scale{.0};\n  /** Indexes within the `in_correspondences` list which corresponds with\n   * inliers */\n  std::vector<uint32_t> inliers_idx;\n};\n\n/** Least-squares (L2 norm) solution to finding the optimal SE(3) transform\n * between two reference frames using RANSAC and the \"quaternion\" or Horn's\n * method \\cite horn1987closed\n *\n *  The optimal transformation `q` fulfills \\f$ p_{this} = q \\oplus p_{other}\n * \\f$, that is, the\n *  transformation of frame `other` with respect to `this`.\n *\n *  \\image html tfest_frames.png\n *\n * \\param[in] in_correspondences The set of correspondences.\n * \\param[in] in_params Method parameters (see docs for TSE3RobustParams)\n * \\param[out] out_results Results: transformation, scale, etc.\n *\n * \\return True if the minimum number of correspondences was found, false\n * otherwise.\n * \\note Implemented by FAMD, 2008. Re-factored by JLBC, 2015.\n * \\note [New in MRPT 1.3.0] This function replaces\n * mrpt::scanmatching::leastSquareErrorRigidTransformation6DRANSAC()\n * \\sa se2_l2, se3_l2\n */\nbool se3_l2_robust(\n    const mrpt::tfest::TMatchingPairList& in_correspondences,\n    const TSE3RobustParams& in_params,\n    TSE3RobustResult& out_results);\n\n/** @} */  // end of grouping\n}  // namespace mrpt::tfest\n"],
 )
 
-write_file(
-    name = "gen_extra_64",
-    out = "_gen/lib/cmake/mrpt-bayes/mrpt-bayes-config-version.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"2.15.21\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_65",
-    out = "_gen/lib/cmake/mrpt-bayes/mrpt-bayes-config.cmake",
-    content = ["include(CMakeFindDependencyMacro)\n\nif (TARGET mrpt::bayes)\n    return()\nendif()\n\n# Hints to help CMake finding my dependencies (and theirs own), as well as\n# other future calls to search for other mrpt modules from our parent scope:\n# 1: MRPT_DIR cmake var:\nif (NOT \"${MRPT_DIR}\" STREQUAL \"\")\n  list(APPEND CMAKE_PREFIX_PATH \"${MRPT_DIR}\")\n  # If the user defines MRPT_DIR, that path overrides whatever CMake on its own\n  # found (this file):\n  get_filename_component(this_dir \"${CMAKE_CURRENT_LIST_DIR}\" ABSOLUTE)\n  get_filename_component(user_mrpt_dir \"${MRPT_DIR}\" ABSOLUTE)\n  if ((EXISTS \"${MRPT_DIR}/mrpt-bayes-config.cmake\") AND (NOT \"${this_dir}\" STREQUAL \"${user_mrpt_dir}\"))\n    message(\"mrpt-bayes_DIR was: ${mrpt-bayes_DIR}\")\n    set(mrpt-bayes_DIR \"${MRPT_DIR}\" CACHE PATH \"Path to mrpt-bayes\" FORCE)\n    include(${MRPT_DIR}/mrpt-bayes-config.cmake)\n    return()\n  endif()\nendif()\n# 2) The current (and parent) path:\ncmake_policy(PUSH)\ncmake_policy(SET CMP0057 NEW) # cmake>=3.3: Allow if(IN_LIST)\n\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}/../\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}/../\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\ncmake_policy(POP)\n\n# Prefer config instead of the old FindXXX() files\nset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)\n\n# Search for dependencies first:\nset(_deps \"mrpt-math;mrpt-config\")\nforeach(_dep ${_deps}) # NO quotes for the list to be a CMake list!\n  if (${_dep}_FOUND)\n      continue() # already found\n  endif()\n  find_dependency(${_dep})\n  if(${_dep}_FOUND)\n    mark_as_advanced(${_dep}_DIR)\n  endif()\nendforeach()\n\n\n# Restore user's settings:\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG ${_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nunset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG)\n\n# Include targets for this library:\ninclude(${CMAKE_CURRENT_LIST_DIR}/mrpt-bayes-targets.cmake)\n"],
-)
-
-write_file(
-    name = "gen_extra_66",
-    out = "_gen/lib/cmake/mrpt-bayes/mrpt-bayes-targets-release.cmake",
-    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"mrpt::bayes\" for configuration \"Release\"\nset_property(TARGET mrpt::bayes APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(mrpt::bayes PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmrpt-bayes.so.2.15.21\"\n  IMPORTED_SONAME_RELEASE \"libmrpt-bayes.so.2.15\"\n  )\n\nlist(APPEND _cmake_import_check_targets mrpt::bayes )\nlist(APPEND _cmake_import_check_files_for_mrpt::bayes \"${_IMPORT_PREFIX}/lib/libmrpt-bayes.so.2.15.21\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
-)
-
-write_file(
-    name = "gen_extra_67",
-    out = "_gen/lib/cmake/mrpt-bayes/mrpt-bayes-targets.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS mrpt::bayes)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target mrpt::bayes\nadd_library(mrpt::bayes SHARED IMPORTED)\n\nset_target_properties(mrpt::bayes PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/mrpt/bayes/include\"\n  INTERFACE_LINK_LIBRARIES \"mrpt::math;mrpt::config\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/mrpt-bayes-targets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-write_file(
-    name = "gen_extra_68",
-    out = "_gen/lib/cmake/mrpt-poses/mrpt-poses-config-version.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"2.15.21\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_69",
-    out = "_gen/lib/cmake/mrpt-poses/mrpt-poses-config.cmake",
-    content = ["include(CMakeFindDependencyMacro)\n\nif (TARGET mrpt::poses)\n    return()\nendif()\n\n# Hints to help CMake finding my dependencies (and theirs own), as well as\n# other future calls to search for other mrpt modules from our parent scope:\n# 1: MRPT_DIR cmake var:\nif (NOT \"${MRPT_DIR}\" STREQUAL \"\")\n  list(APPEND CMAKE_PREFIX_PATH \"${MRPT_DIR}\")\n  # If the user defines MRPT_DIR, that path overrides whatever CMake on its own\n  # found (this file):\n  get_filename_component(this_dir \"${CMAKE_CURRENT_LIST_DIR}\" ABSOLUTE)\n  get_filename_component(user_mrpt_dir \"${MRPT_DIR}\" ABSOLUTE)\n  if ((EXISTS \"${MRPT_DIR}/mrpt-poses-config.cmake\") AND (NOT \"${this_dir}\" STREQUAL \"${user_mrpt_dir}\"))\n    message(\"mrpt-poses_DIR was: ${mrpt-poses_DIR}\")\n    set(mrpt-poses_DIR \"${MRPT_DIR}\" CACHE PATH \"Path to mrpt-poses\" FORCE)\n    include(${MRPT_DIR}/mrpt-poses-config.cmake)\n    return()\n  endif()\nendif()\n# 2) The current (and parent) path:\ncmake_policy(PUSH)\ncmake_policy(SET CMP0057 NEW) # cmake>=3.3: Allow if(IN_LIST)\n\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}/../\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}/../\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\ncmake_policy(POP)\n\n# Prefer config instead of the old FindXXX() files\nset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)\n\n# Search for dependencies first:\nset(_deps \"mrpt-bayes\")\nforeach(_dep ${_deps}) # NO quotes for the list to be a CMake list!\n  if (${_dep}_FOUND)\n      continue() # already found\n  endif()\n  find_dependency(${_dep})\n  if(${_dep}_FOUND)\n    mark_as_advanced(${_dep}_DIR)\n  endif()\nendforeach()\n\n\n# Restore user's settings:\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG ${_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nunset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG)\n\n# Include targets for this library:\ninclude(${CMAKE_CURRENT_LIST_DIR}/mrpt-poses-targets.cmake)\n"],
-)
-
-write_file(
-    name = "gen_extra_70",
-    out = "_gen/lib/cmake/mrpt-poses/mrpt-poses-targets-release.cmake",
-    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"mrpt::poses\" for configuration \"Release\"\nset_property(TARGET mrpt::poses APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(mrpt::poses PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmrpt-poses.so.2.15.21\"\n  IMPORTED_SONAME_RELEASE \"libmrpt-poses.so.2.15\"\n  )\n\nlist(APPEND _cmake_import_check_targets mrpt::poses )\nlist(APPEND _cmake_import_check_files_for_mrpt::poses \"${_IMPORT_PREFIX}/lib/libmrpt-poses.so.2.15.21\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
-)
-
-write_file(
-    name = "gen_extra_71",
-    out = "_gen/lib/cmake/mrpt-poses/mrpt-poses-targets.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS mrpt::poses)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target mrpt::poses\nadd_library(mrpt::poses SHARED IMPORTED)\n\nset_target_properties(mrpt::poses PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/mrpt/poses/include\"\n  INTERFACE_LINK_LIBRARIES \"mrpt::bayes\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/mrpt-poses-targets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# Make sure the targets which have been exported in some other\n# export set exist.\nunset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\nforeach(_target \"mrpt::bayes\" )\n  if(NOT TARGET \"${_target}\" )\n    set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets \"${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets} ${_target}\")\n  endif()\nendforeach()\n\nif(DEFINED ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\n  if(CMAKE_FIND_PACKAGE_NAME)\n    set( ${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)\n    set( ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE \"The following imported targets are referenced, but are missing: ${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets}\")\n  else()\n    message(FATAL_ERROR \"The following imported targets are referenced, but are missing: ${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets}\")\n  endif()\nendif()\nunset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-write_file(
-    name = "gen_extra_72",
-    out = "_gen/lib/cmake/mrpt-tfest/mrpt-tfest-config-version.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"2.15.21\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_73",
-    out = "_gen/lib/cmake/mrpt-tfest/mrpt-tfest-config.cmake",
-    content = ["include(CMakeFindDependencyMacro)\n\nif (TARGET mrpt::tfest)\n    return()\nendif()\n\n# Hints to help CMake finding my dependencies (and theirs own), as well as\n# other future calls to search for other mrpt modules from our parent scope:\n# 1: MRPT_DIR cmake var:\nif (NOT \"${MRPT_DIR}\" STREQUAL \"\")\n  list(APPEND CMAKE_PREFIX_PATH \"${MRPT_DIR}\")\n  # If the user defines MRPT_DIR, that path overrides whatever CMake on its own\n  # found (this file):\n  get_filename_component(this_dir \"${CMAKE_CURRENT_LIST_DIR}\" ABSOLUTE)\n  get_filename_component(user_mrpt_dir \"${MRPT_DIR}\" ABSOLUTE)\n  if ((EXISTS \"${MRPT_DIR}/mrpt-tfest-config.cmake\") AND (NOT \"${this_dir}\" STREQUAL \"${user_mrpt_dir}\"))\n    message(\"mrpt-tfest_DIR was: ${mrpt-tfest_DIR}\")\n    set(mrpt-tfest_DIR \"${MRPT_DIR}\" CACHE PATH \"Path to mrpt-tfest\" FORCE)\n    include(${MRPT_DIR}/mrpt-tfest-config.cmake)\n    return()\n  endif()\nendif()\n# 2) The current (and parent) path:\ncmake_policy(PUSH)\ncmake_policy(SET CMP0057 NEW) # cmake>=3.3: Allow if(IN_LIST)\n\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}/../\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}/../\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\ncmake_policy(POP)\n\n# Prefer config instead of the old FindXXX() files\nset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)\n\n# Search for dependencies first:\nset(_deps \"mrpt-poses\")\nforeach(_dep ${_deps}) # NO quotes for the list to be a CMake list!\n  if (${_dep}_FOUND)\n      continue() # already found\n  endif()\n  find_dependency(${_dep})\n  if(${_dep}_FOUND)\n    mark_as_advanced(${_dep}_DIR)\n  endif()\nendforeach()\n\n\n# Restore user's settings:\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG ${_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nunset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG)\n\n# Include targets for this library:\ninclude(${CMAKE_CURRENT_LIST_DIR}/mrpt-tfest-targets.cmake)\n"],
-)
-
-write_file(
-    name = "gen_extra_74",
-    out = "_gen/lib/cmake/mrpt-tfest/mrpt-tfest-targets-release.cmake",
-    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"mrpt::tfest\" for configuration \"Release\"\nset_property(TARGET mrpt::tfest APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(mrpt::tfest PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmrpt-tfest.so.2.15.21\"\n  IMPORTED_SONAME_RELEASE \"libmrpt-tfest.so.2.15\"\n  )\n\nlist(APPEND _cmake_import_check_targets mrpt::tfest )\nlist(APPEND _cmake_import_check_files_for_mrpt::tfest \"${_IMPORT_PREFIX}/lib/libmrpt-tfest.so.2.15.21\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
-)
-
-write_file(
-    name = "gen_extra_75",
-    out = "_gen/lib/cmake/mrpt-tfest/mrpt-tfest-targets.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS mrpt::tfest)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target mrpt::tfest\nadd_library(mrpt::tfest SHARED IMPORTED)\n\nset_target_properties(mrpt::tfest PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/mrpt/tfest/include\"\n  INTERFACE_LINK_LIBRARIES \"mrpt::poses\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/mrpt-tfest-targets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# Make sure the targets which have been exported in some other\n# export set exist.\nunset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\nforeach(_target \"mrpt::poses\" )\n  if(NOT TARGET \"${_target}\" )\n    set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets \"${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets} ${_target}\")\n  endif()\nendforeach()\n\nif(DEFINED ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\n  if(CMAKE_FIND_PACKAGE_NAME)\n    set( ${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)\n    set( ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE \"The following imported targets are referenced, but are missing: ${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets}\")\n  else()\n    message(FATAL_ERROR \"The following imported targets are referenced, but are missing: ${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets}\")\n  endif()\nendif()\nunset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-pkg_files(
-    name = "pkg_files_extra_0",
-    srcs = [":gen_extra_0"],
-    prefix = "include/mrpt/bayes/include/mrpt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_1",
-    srcs = [":gen_extra_1"],
-    prefix = "include/mrpt/bayes/include/mrpt/bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_2",
-    srcs = [":gen_extra_2"],
-    prefix = "include/mrpt/bayes/include/mrpt/bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_3",
-    srcs = [":gen_extra_3"],
-    prefix = "include/mrpt/bayes/include/mrpt/bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_4",
-    srcs = [":gen_extra_4"],
-    prefix = "include/mrpt/bayes/include/mrpt/bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_5",
-    srcs = [":gen_extra_5"],
-    prefix = "include/mrpt/bayes/include/mrpt/bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_6",
-    srcs = [":gen_extra_6"],
-    prefix = "include/mrpt/bayes/include/mrpt/bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_7",
-    srcs = [":gen_extra_7"],
-    prefix = "include/mrpt/bayes/include/mrpt/bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_8",
-    srcs = [":gen_extra_8"],
-    prefix = "include/mrpt/bayes/include/mrpt/bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_9",
-    srcs = [":gen_extra_9"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_10",
-    srcs = [":gen_extra_10"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_11",
-    srcs = [":gen_extra_11"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_12",
-    srcs = [":gen_extra_12"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_13",
-    srcs = [":gen_extra_13"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_14",
-    srcs = [":gen_extra_14"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_15",
-    srcs = [":gen_extra_15"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_16",
-    srcs = [":gen_extra_16"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_17",
-    srcs = [":gen_extra_17"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_18",
-    srcs = [":gen_extra_18"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_19",
-    srcs = [":gen_extra_19"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_20",
-    srcs = [":gen_extra_20"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_21",
-    srcs = [":gen_extra_21"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_22",
-    srcs = [":gen_extra_22"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_23",
-    srcs = [":gen_extra_23"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_24",
-    srcs = [":gen_extra_24"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_25",
-    srcs = [":gen_extra_25"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_26",
-    srcs = [":gen_extra_26"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_27",
-    srcs = [":gen_extra_27"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_28",
-    srcs = [":gen_extra_28"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_29",
-    srcs = [":gen_extra_29"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_30",
-    srcs = [":gen_extra_30"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_31",
-    srcs = [":gen_extra_31"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_32",
-    srcs = [":gen_extra_32"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_33",
-    srcs = [":gen_extra_33"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_34",
-    srcs = [":gen_extra_34"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_35",
-    srcs = [":gen_extra_35"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_36",
-    srcs = [":gen_extra_36"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_37",
-    srcs = [":gen_extra_37"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_38",
-    srcs = [":gen_extra_38"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_39",
-    srcs = [":gen_extra_39"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_40",
-    srcs = [":gen_extra_40"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_41",
-    srcs = [":gen_extra_41"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_42",
-    srcs = [":gen_extra_42"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_43",
-    srcs = [":gen_extra_43"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_44",
-    srcs = [":gen_extra_44"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_45",
-    srcs = [":gen_extra_45"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_46",
-    srcs = [":gen_extra_46"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_47",
-    srcs = [":gen_extra_47"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_48",
-    srcs = [":gen_extra_48"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_49",
-    srcs = [":gen_extra_49"],
-    prefix = "include/mrpt/poses/include/mrpt/poses/Lie",
-)
-
-pkg_files(
-    name = "pkg_files_extra_50",
-    srcs = [":gen_extra_50"],
-    prefix = "include/mrpt/poses/include/mrpt/poses/Lie",
-)
-
-pkg_files(
-    name = "pkg_files_extra_51",
-    srcs = [":gen_extra_51"],
-    prefix = "include/mrpt/poses/include/mrpt/poses/Lie",
-)
-
-pkg_files(
-    name = "pkg_files_extra_52",
-    srcs = [":gen_extra_52"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_53",
-    srcs = [":gen_extra_53"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_54",
-    srcs = [":gen_extra_54"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_55",
-    srcs = [":gen_extra_55"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_56",
-    srcs = [":gen_extra_56"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_57",
-    srcs = [":gen_extra_57"],
-    prefix = "include/mrpt/poses/include/mrpt/poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_58",
-    srcs = [":gen_extra_58"],
-    prefix = "include/mrpt/tfest/include/mrpt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_59",
-    srcs = [":gen_extra_59"],
-    prefix = "include/mrpt/tfest/include/mrpt/tfest",
-)
-
-pkg_files(
-    name = "pkg_files_extra_60",
-    srcs = [":gen_extra_60"],
-    prefix = "include/mrpt/tfest/include/mrpt/tfest",
-)
-
-pkg_files(
-    name = "pkg_files_extra_61",
-    srcs = [":gen_extra_61"],
-    prefix = "include/mrpt/tfest/include/mrpt/tfest",
-)
-
-pkg_files(
-    name = "pkg_files_extra_62",
-    srcs = [":gen_extra_62"],
-    prefix = "include/mrpt/tfest/include/mrpt/tfest",
-)
-
-pkg_files(
-    name = "pkg_files_extra_63",
-    srcs = [":gen_extra_63"],
-    prefix = "include/mrpt/tfest/include/mrpt/tfest",
-)
-
-pkg_files(
-    name = "pkg_files_extra_64",
-    srcs = [":gen_extra_64"],
-    prefix = "lib/cmake/mrpt-bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_65",
-    srcs = [":gen_extra_65"],
-    prefix = "lib/cmake/mrpt-bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_66",
-    srcs = [":gen_extra_66"],
-    prefix = "lib/cmake/mrpt-bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_67",
-    srcs = [":gen_extra_67"],
-    prefix = "lib/cmake/mrpt-bayes",
-)
-
-pkg_files(
-    name = "pkg_files_extra_68",
-    srcs = [":gen_extra_68"],
-    prefix = "lib/cmake/mrpt-poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_69",
-    srcs = [":gen_extra_69"],
-    prefix = "lib/cmake/mrpt-poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_70",
-    srcs = [":gen_extra_70"],
-    prefix = "lib/cmake/mrpt-poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_71",
-    srcs = [":gen_extra_71"],
-    prefix = "lib/cmake/mrpt-poses",
-)
-
-pkg_files(
-    name = "pkg_files_extra_72",
-    srcs = [":gen_extra_72"],
-    prefix = "lib/cmake/mrpt-tfest",
-)
-
-pkg_files(
-    name = "pkg_files_extra_73",
-    srcs = [":gen_extra_73"],
-    prefix = "lib/cmake/mrpt-tfest",
-)
-
-pkg_files(
-    name = "pkg_files_extra_74",
-    srcs = [":gen_extra_74"],
-    prefix = "lib/cmake/mrpt-tfest",
-)
-
-pkg_files(
-    name = "pkg_files_extra_75",
-    srcs = [":gen_extra_75"],
-    prefix = "lib/cmake/mrpt-tfest",
-)
-
-pkg_files(
-    name = "pkg_files_soname_76",
-    srcs = [":mrpt-bayes"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-bayes": "libmrpt-bayes.so.2.15"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_77",
-    srcs = [":mrpt-bayes"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-bayes": "libmrpt-bayes.so.2.15.21"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_78",
-    srcs = [":mrpt-poses"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-poses": "libmrpt-poses.so.2.15"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_79",
-    srcs = [":mrpt-poses"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-poses": "libmrpt-poses.so.2.15.21"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_80",
-    srcs = [":mrpt-tfest"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-tfest": "libmrpt-tfest.so.2.15"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_81",
-    srcs = [":mrpt-tfest"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-tfest": "libmrpt-tfest.so.2.15.21"},
-)
-
 ament_index(
     name = "ament_index",
     libraries = [
@@ -1484,6 +908,20 @@ ament_index(
         ":mrpt-tfest",
     ],
     package_xml = "package.xml",
+    sonames = {
+        "mrpt-bayes": [
+            "libmrpt-bayes.so.2.15",
+            "libmrpt-bayes.so.2.15.21",
+        ],
+        "mrpt-poses": [
+            "libmrpt-poses.so.2.15",
+            "libmrpt-poses.so.2.15.21",
+        ],
+        "mrpt-tfest": [
+            "libmrpt-tfest.so.2.15",
+            "libmrpt-tfest.so.2.15.21",
+        ],
+    },
     deps = [
         "@mrpt_libbase//:ament_package",
         "@mrpt_libmath//:ament_package",
@@ -1573,9 +1011,6 @@ cc_test(
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     data = [
         ":ament_index",
-        ":mrpt-bayes",
-        ":mrpt-poses",
-        ":mrpt-tfest",
     ],
     dynamic_deps = [":transitive_dynamic_deps"],
     includes = ["_gen/include"],
@@ -1596,90 +1031,73 @@ ament_package(
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
     cmake_export_targets = False,
-    install = [
-        ":pkg_files_extra_0",
-        ":pkg_files_extra_1",
-        ":pkg_files_extra_2",
-        ":pkg_files_extra_3",
-        ":pkg_files_extra_4",
-        ":pkg_files_extra_5",
-        ":pkg_files_extra_6",
-        ":pkg_files_extra_7",
-        ":pkg_files_extra_8",
-        ":pkg_files_extra_9",
-        ":pkg_files_extra_10",
-        ":pkg_files_extra_11",
-        ":pkg_files_extra_12",
-        ":pkg_files_extra_13",
-        ":pkg_files_extra_14",
-        ":pkg_files_extra_15",
-        ":pkg_files_extra_16",
-        ":pkg_files_extra_17",
-        ":pkg_files_extra_18",
-        ":pkg_files_extra_19",
-        ":pkg_files_extra_20",
-        ":pkg_files_extra_21",
-        ":pkg_files_extra_22",
-        ":pkg_files_extra_23",
-        ":pkg_files_extra_24",
-        ":pkg_files_extra_25",
-        ":pkg_files_extra_26",
-        ":pkg_files_extra_27",
-        ":pkg_files_extra_28",
-        ":pkg_files_extra_29",
-        ":pkg_files_extra_30",
-        ":pkg_files_extra_31",
-        ":pkg_files_extra_32",
-        ":pkg_files_extra_33",
-        ":pkg_files_extra_34",
-        ":pkg_files_extra_35",
-        ":pkg_files_extra_36",
-        ":pkg_files_extra_37",
-        ":pkg_files_extra_38",
-        ":pkg_files_extra_39",
-        ":pkg_files_extra_40",
-        ":pkg_files_extra_41",
-        ":pkg_files_extra_42",
-        ":pkg_files_extra_43",
-        ":pkg_files_extra_44",
-        ":pkg_files_extra_45",
-        ":pkg_files_extra_46",
-        ":pkg_files_extra_47",
-        ":pkg_files_extra_48",
-        ":pkg_files_extra_49",
-        ":pkg_files_extra_50",
-        ":pkg_files_extra_51",
-        ":pkg_files_extra_52",
-        ":pkg_files_extra_53",
-        ":pkg_files_extra_54",
-        ":pkg_files_extra_55",
-        ":pkg_files_extra_56",
-        ":pkg_files_extra_57",
-        ":pkg_files_extra_58",
-        ":pkg_files_extra_59",
-        ":pkg_files_extra_60",
-        ":pkg_files_extra_61",
-        ":pkg_files_extra_62",
-        ":pkg_files_extra_63",
-        ":pkg_files_extra_64",
-        ":pkg_files_extra_65",
-        ":pkg_files_extra_66",
-        ":pkg_files_extra_67",
-        ":pkg_files_extra_68",
-        ":pkg_files_extra_69",
-        ":pkg_files_extra_70",
-        ":pkg_files_extra_71",
-        ":pkg_files_extra_72",
-        ":pkg_files_extra_73",
-        ":pkg_files_extra_74",
-        ":pkg_files_extra_75",
-        ":pkg_files_soname_76",
-        ":pkg_files_soname_77",
-        ":pkg_files_soname_78",
-        ":pkg_files_soname_79",
-        ":pkg_files_soname_80",
-        ":pkg_files_soname_81",
+    headers = [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_extra_5",
+        ":gen_extra_6",
+        ":gen_extra_7",
+        ":gen_extra_8",
+        ":gen_extra_9",
+        ":gen_extra_10",
+        ":gen_extra_11",
+        ":gen_extra_12",
+        ":gen_extra_13",
+        ":gen_extra_14",
+        ":gen_extra_15",
+        ":gen_extra_16",
+        ":gen_extra_17",
+        ":gen_extra_18",
+        ":gen_extra_19",
+        ":gen_extra_20",
+        ":gen_extra_21",
+        ":gen_extra_22",
+        ":gen_extra_23",
+        ":gen_extra_24",
+        ":gen_extra_25",
+        ":gen_extra_26",
+        ":gen_extra_27",
+        ":gen_extra_28",
+        ":gen_extra_29",
+        ":gen_extra_30",
+        ":gen_extra_31",
+        ":gen_extra_32",
+        ":gen_extra_33",
+        ":gen_extra_34",
+        ":gen_extra_35",
+        ":gen_extra_36",
+        ":gen_extra_37",
+        ":gen_extra_38",
+        ":gen_extra_39",
+        ":gen_extra_40",
+        ":gen_extra_41",
+        ":gen_extra_42",
+        ":gen_extra_43",
+        ":gen_extra_44",
+        ":gen_extra_45",
+        ":gen_extra_46",
+        ":gen_extra_47",
+        ":gen_extra_48",
+        ":gen_extra_49",
+        ":gen_extra_50",
+        ":gen_extra_51",
+        ":gen_extra_52",
+        ":gen_extra_53",
+        ":gen_extra_54",
+        ":gen_extra_55",
+        ":gen_extra_56",
+        ":gen_extra_57",
+        ":gen_extra_58",
+        ":gen_extra_59",
+        ":gen_extra_60",
+        ":gen_extra_61",
+        ":gen_extra_62",
+        ":gen_extra_63",
     ],
+    include_prefix = "",
     install_package_xml = False,
     libraries = [
         ":mrpt-bayes",
@@ -1687,6 +1105,20 @@ ament_package(
         ":mrpt-tfest",
     ],
     package_xml = "package.xml",
+    sonames = {
+        "mrpt-bayes": [
+            "libmrpt-bayes.so.2.15",
+            "libmrpt-bayes.so.2.15.21",
+        ],
+        "mrpt-poses": [
+            "libmrpt-poses.so.2.15",
+            "libmrpt-poses.so.2.15.21",
+        ],
+        "mrpt-tfest": [
+            "libmrpt-tfest.so.2.15",
+            "libmrpt-tfest.so.2.15.21",
+        ],
+    },
     deps = [":ament_index"] + [
         "@mrpt_libbase//:ament_package",
         "@mrpt_libmath//:ament_package",

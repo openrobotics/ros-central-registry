@@ -13,12 +13,11 @@
 # limitations under the License.
 
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_resource")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(
@@ -109,22 +108,7 @@ genrule(
     cmd = "sed -e 's|@rosidl_typesupport_cpp_LIBRARY_TYPE@|SHARED|g' -e 's|@PROJECT_NAME@|rosidl_typesupport_cpp|g' -e 's|@PYTHON_INSTALL_DIR@|lib/python3.14/site-packages|g' $< > $@",
 )
 
-write_file(
-    name = "resource_index_rosidl_runtime_packages",
-    out = "_resource_index/rosidl_runtime_packages",
-    content = [""],
-)
-
 # ament_index_register_resource() registrations, as ament_cmake installs them.
-pkg_files(
-    name = "resource_index",
-    srcs = [
-        ":resource_index_rosidl_runtime_packages",
-    ],
-    renames = {
-        ":resource_index_rosidl_runtime_packages": "share/ament_index/resource_index/rosidl_runtime_packages/rosidl_typesupport_cpp",
-    },
-)
 
 ### TESTS
 
@@ -158,6 +142,12 @@ write_file(
     content = ["I'm not a shared library, why would you treat me like one?"],
 )
 
+register_ament_resource(
+    name = "res_rosidl_runtime_packages",
+    category = "rosidl_runtime_packages",
+    content = "",
+)
+
 ament_index(
     name = "test_ament_index",
     testonly = True,
@@ -167,6 +157,9 @@ ament_index(
         ":test_type_support3",
     ],
     package_xml = "package.xml",
+    deps = [
+        ":res_rosidl_runtime_packages",
+    ],
 )
 
 cc_test(
@@ -220,13 +213,17 @@ py_pytest(
 
 ament_package(
     name = "ament_package",
-    cmake = glob(["cmake/**"]) + [":extras_cmake"],
+    cmake = [
+        ":extras_cmake",
+    ] + glob(["cmake/**"]),
     cmake_extras = ["rosidl_typesupport_cpp-extras.cmake"],
     data = glob(["resource/**"]),
     headers = HEADERS,
-    install = [":resource_index"],
+    include_prefix = "",
     lib_data = ["bin/rosidl_typesupport_cpp"],
-    libraries = [":rosidl_typesupport_cpp"],
+    libraries = [
+        ":rosidl_typesupport_cpp",
+    ],
     package_xml = "package.xml",
     python = glob(["rosidl_typesupport_cpp/**"]),
     deps = [

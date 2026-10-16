@@ -4,7 +4,7 @@ load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_de
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 load("@rules_python//python:defs.bzl", "py_library")
 
 package(
@@ -40,12 +40,10 @@ cc_library(
             "include/**/*.tcc",
         ],
         allow_empty = True,
-    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    ),
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
     ],
     includes = [
         "_gen/include",
@@ -80,12 +78,10 @@ cc_library(
             "include/**/*.tcc",
         ],
         allow_empty = True,
-    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    ),
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
     ],
     includes = [
         "_gen/include",
@@ -120,12 +116,10 @@ cc_library(
             "include/**/*.tcc",
         ],
         allow_empty = True,
-    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    ),
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
     ],
     includes = [
         "_gen/include",
@@ -167,12 +161,10 @@ cc_binary(
             "include/**/*.tcc",
         ],
         allow_empty = True,
-    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    ),
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
     ],
     dynamic_deps = [":transitive_dynamic_deps"],
     includes = [
@@ -214,51 +206,6 @@ write_file(
     content = ["int main() { return 0; }\n"],
 )
 
-write_file(
-    name = "gen_atomic_shared_ptr_shim_hpp",
-    out = "_gen/include/atomic_shared_ptr_shim.hpp",
-    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
-)
-
-pkg_files(
-    name = "pkg_files_static_simulate",
-    srcs = [":static_simulate_a"],
-    prefix = "lib",
-)
-
-pkg_files(
-    name = "pkg_files_static_lodepng",
-    srcs = [":static_lodepng_a"],
-    prefix = "lib",
-)
-
-pkg_files(
-    name = "pkg_files_extra_0",
-    srcs = ["scripts/find_missing_inertias.py"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib/mujoco_ros2_control",
-)
-
-pkg_files(
-    name = "pkg_files_extra_1",
-    srcs = ["scripts/make_mjcf_from_robot_description.py"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib/mujoco_ros2_control",
-)
-
-pkg_files(
-    name = "pkg_files_extra_2",
-    srcs = ["scripts/robot_description_to_mjcf.sh"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib/mujoco_ros2_control",
-)
-
-pkg_files(
-    name = "pkg_files_share_3",
-    srcs = ["scripts/requirements.txt"],
-    prefix = "share/mujoco_ros2_control",
-)
-
 ament_index(
     name = "ament_index",
     data = [
@@ -269,8 +216,18 @@ ament_index(
         "scripts/requirements.txt",
         "scripts/robot_description_to_mjcf.sh",
     ],
-    lib_data = [":ros2_control_node"],
-    libraries = [":mujoco_ros2_control"],
+    data_strip_prefix = "scripts",
+    lib_data = [
+        ":ros2_control_node",
+        "scripts/find_missing_inertias.py",
+        "scripts/make_mjcf_from_robot_description.py",
+        "scripts/robot_description_to_mjcf.sh",
+    ],
+    libraries = [
+        ":mujoco_ros2_control",
+        ":static_simulate_a",
+        ":static_lodepng_a",
+    ],
     package_xml = "package.xml",
     plugin_category = "hardware_interface",
     plugins = ["mujoco_system_interface_plugin.xml"],
@@ -311,12 +268,9 @@ cc_test(
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
     ],
     data = [
         ":ament_index",
-        ":mujoco_ros2_control",
     ] + glob(
         [
             "test/**",
@@ -356,12 +310,9 @@ cc_test(
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
     ],
     data = [
         ":ament_index",
-        ":mujoco_ros2_control",
     ] + glob(
         [
             "test/**",
@@ -401,12 +352,9 @@ cc_test(
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
     ],
     data = [
         ":ament_index",
-        ":mujoco_ros2_control",
     ] + glob(
         [
             "test/**",
@@ -446,12 +394,9 @@ cc_test(
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
     ],
     data = [
         ":ament_index",
-        ":mujoco_ros2_control",
     ] + glob(
         [
             "test/**",
@@ -490,7 +435,6 @@ py_pytest(
     srcs = ["tests/test_urdf_to_mujoco_utils.py"],
     data = [
         ":ament_index",
-        ":ros2_control_node",
     ],
     deps = [
         ":mujoco_ros2_control_py",
@@ -544,15 +488,11 @@ ament_package(
         allow_empty = True,
     ),
     include_prefix = "",
-    install = [
-        ":pkg_files_static_simulate",
-        ":pkg_files_static_lodepng",
-        ":pkg_files_extra_0",
-        ":pkg_files_extra_1",
-        ":pkg_files_extra_2",
-        ":pkg_files_share_3",
+    libraries = [
+        ":mujoco_ros2_control",
+        ":static_simulate_a",
+        ":static_lodepng_a",
     ],
-    libraries = [":mujoco_ros2_control"],
     package_xml = "package.xml",
     python = [":mujoco_ros2_control_py"],
     deps = [":ament_index"] + [

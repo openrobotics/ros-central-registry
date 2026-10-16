@@ -1,9 +1,8 @@
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -109,29 +108,35 @@ write_file(
     content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
 )
 
-pkg_files(
-    name = "pkg_files_shlib_0_qml_ros2_plugin",
-    srcs = [":qml_ros2_plugin"],
-    attributes = pkg_attributes(mode = "0755"),
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        ":qml_ros2_plugin",
+    ],
     prefix = "lib/qml/Ros2",
+    strip_prefix = "*",
 )
 
-pkg_files(
-    name = "pkg_files_extra_1",
-    srcs = ["qmldir"],
+register_ament_files(
+    name = "ament_files_1",
+    files = [
+        "qmldir",
+    ],
     prefix = "lib/qml/Ros2",
-)
-
-pkg_files(
-    name = "pkg_files_env_2",
-    srcs = [":gen_env_2"],
-    prefix = "share/qml_ros2_plugin/environment",
+    strip_prefix = "*",
 )
 
 ament_index(
     name = "ament_index",
-    data = ["test/test_io/test.yaml"],
-    libraries = [":qml_ros2_plugin"],
+    data = [
+        "test/test_io/test.yaml",
+        ":ament_files_0",
+        ":ament_files_1",
+        ":gen_env_2",
+    ],
+    libraries = [
+        ":qml_ros2_plugin",
+    ],
     package_xml = "package.xml",
     deps = [
         "@action_msgs//:ament_package",
@@ -469,12 +474,9 @@ ament_package(
         allow_empty = True,
     ),
     include_prefix = "",
-    install = [
-        ":pkg_files_shlib_0_qml_ros2_plugin",
-        ":pkg_files_extra_1",
-        ":pkg_files_env_2",
+    libraries = [
+        ":qml_ros2_plugin",
     ],
-    libraries = [":qml_ros2_plugin"],
     package_xml = "package.xml",
     deps = [":ament_index"] + [
         "@action_msgs//:ament_package",

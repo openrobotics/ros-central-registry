@@ -1,9 +1,8 @@
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -456,356 +455,33 @@ write_file(
     content = ["// Copyright (C) 2015-2025 Jonathan Müller and foonathan/memory contributors\n// SPDX-License-Identifier: Zlib\n\n#ifndef FOONATHAN_MEMORY_VIRTUAL_MEMORY_HPP_INCLUDED\n#define FOONATHAN_MEMORY_VIRTUAL_MEMORY_HPP_INCLUDED\n\n/// \\file\n/// Virtual memory api and (low-level) allocator classes.\n\n#include <cstddef>\n#include <type_traits>\n\n#include \"detail/debug_helpers.hpp\"\n#include \"detail/utility.hpp\"\n#include \"config.hpp\"\n\n#if FOONATHAN_MEMORY_EXTERN_TEMPLATE\n#include \"allocator_traits.hpp\"\n#endif\n\nnamespace foonathan\n{\n    namespace memory\n    {\n        namespace detail\n        {\n            struct virtual_memory_allocator_leak_handler\n            {\n                void operator()(std::ptrdiff_t amount);\n            };\n\n            FOONATHAN_MEMORY_GLOBAL_LEAK_CHECKER(virtual_memory_allocator_leak_handler,\n                                                 virtual_memory_allocator_leak_checker)\n        } // namespace detail\n\n        /// The page size of the virtual memory.\n        /// All virtual memory allocations must be multiple of this size.\n        /// It is usually 4KiB.\n        /// \\ingroup allocator\n        /// \\deprecated use \\ref get_virtual_memory_page_size instead.\n        extern const std::size_t virtual_memory_page_size;\n\n        /// \\returns the page size of the virtual memory.\n        /// All virtual memory allocations must be multiple of this size.\n        /// It is usually 4KiB.\n        /// \\ingroup allocator\n        std::size_t get_virtual_memory_page_size() noexcept;\n\n        /// Reserves virtual memory.\n        /// \\effects Reserves the given number of pages.\n        /// Each page is \\ref virtual_memory_page_size big.\n        /// \\returns The address of the first reserved page,\n        /// or \\c nullptr in case of error.\n        /// \\note The memory may not be used, it must first be commited.\n        /// \\ingroup allocator\n        void* virtual_memory_reserve(std::size_t no_pages) noexcept;\n\n        /// Releases reserved virtual memory.\n        /// \\effects Returns previously reserved pages to the system.\n        /// \\requires \\c pages must come from a previous call to \\ref virtual_memory_reserve with the same \\c calc_no_pages,\n        /// it must not be \\c nullptr.\n        /// \\ingroup allocator\n        void virtual_memory_release(void* pages, std::size_t no_pages) noexcept;\n\n        /// Commits reserved virtual memory.\n        /// \\effects Marks \\c calc_no_pages pages starting at the given address available for use.\n        /// \\returns The beginning of the committed area, i.e. \\c memory, or \\c nullptr in case of error.\n        /// \\requires The memory must be previously reserved.\n        /// \\ingroup allocator\n        void* virtual_memory_commit(void* memory, std::size_t no_pages) noexcept;\n\n        /// Decommits commited virtual memory.\n        /// \\effects Puts commited memory back in the reserved state.\n        /// \\requires \\c memory must come from a previous call to \\ref virtual_memory_commit with the same \\c calc_no_pages\n        /// it must not be \\c nullptr.\n        /// \\ingroup allocator\n        void virtual_memory_decommit(void* memory, std::size_t no_pages) noexcept;\n\n        /// A stateless \\concept{concept_rawallocator,RawAllocator} that allocates memory using the virtual memory allocation functions.\n        /// It does not prereserve any memory and will always reserve and commit combined.\n        /// \\ingroup allocator\n        class virtual_memory_allocator\n        : FOONATHAN_EBO(detail::global_leak_checker<detail::virtual_memory_allocator_leak_handler>)\n        {\n        public:\n            using is_stateful = std::false_type;\n\n            virtual_memory_allocator() noexcept = default;\n            virtual_memory_allocator(virtual_memory_allocator&&) noexcept {}\n            ~virtual_memory_allocator() noexcept = default;\n\n            virtual_memory_allocator& operator=(virtual_memory_allocator&&) noexcept\n            {\n                return *this;\n            }\n\n            /// \\effects A \\concept{concept_rawallocator,RawAllocator} allocation function.\n            /// It uses \\ref virtual_memory_reserve followed by \\ref virtual_memory_commit for the allocation.\n            /// The number of pages allocated will be the minimum to hold \\c size continuous bytes,\n            /// i.e. \\c size will be rounded up to the next multiple.\n            /// If debug fences are activated, one additional page before and after the memory will be allocated.\n            /// \\returns A pointer to a \\concept{concept_node,node}, it will never be \\c nullptr.\n            /// It will always be aligned on a fence boundary, regardless of the alignment parameter.\n            /// \\throws An exception of type \\ref out_of_memory or whatever is thrown by its handler if the allocation fails.\n            void* allocate_node(std::size_t size, std::size_t alignment);\n\n            /// \\effects A \\concept{concept_rawallocator,RawAllocator} deallocation function.\n            /// It calls \\ref virtual_memory_decommit followed by \\ref virtual_memory_release for the deallocation.\n            void deallocate_node(void* node, std::size_t size, std::size_t alignment) noexcept;\n\n            /// \\returns The maximum node size by returning the maximum value.\n            std::size_t max_node_size() const noexcept;\n\n            /// \\returns The maximum alignment which is the same as the \\ref virtual_memory_page_size.\n            std::size_t max_alignment() const noexcept;\n        };\n\n#if FOONATHAN_MEMORY_EXTERN_TEMPLATE\n        extern template class allocator_traits<virtual_memory_allocator>;\n#endif\n\n        struct memory_block;\n        struct allocator_info;\n\n        /// A \\concept{concept_blockallocator,BlockAllocator} that reserves virtual memory and commits it part by part.\n        /// It is similar to \\ref memory_stack but does not support growing and uses virtual memory,\n        /// also meant for big blocks not small allocations.\n        /// \\ingroup allocator\n        class virtual_block_allocator\n        {\n        public:\n            /// \\effects Creates it giving it the block size and the total number of blocks it can allocate.\n            /// It reserves enough virtual memory for <tt>block_size * no_blocks</tt>.\n            /// \\requires \\c block_size must be non-zero and a multiple of the \\ref virtual_memory_page_size.\n            /// \\c no_blocks must be bigger than \\c 1.\n            /// \\throws \\ref out_of_memory if it cannot reserve the virtual memory.\n            explicit virtual_block_allocator(std::size_t block_size, std::size_t no_blocks);\n\n            /// \\effects Releases the reserved virtual memory.\n            /// \\requires All previously \\ref allocate_block() committed blocks must be decommitted via\n            /// \\ref deallocate_block(), otherwise the blocks that have not been deallocated are leaked.\n            ~virtual_block_allocator() noexcept;\n\n            /// @{\n            /// \\effects Moves the block allocator, it transfers ownership over the reserved area.\n            /// This does not invalidate any memory blocks.\n            virtual_block_allocator(virtual_block_allocator&& other) noexcept\n            : cur_(other.cur_), end_(other.end_), block_size_(other.block_size_)\n            {\n                other.cur_ = other.end_ = nullptr;\n                other.block_size_       = 0;\n            }\n\n            virtual_block_allocator& operator=(virtual_block_allocator&& other) noexcept\n            {\n                virtual_block_allocator tmp(detail::move(other));\n                swap(*this, tmp);\n                return *this;\n            }\n            /// @}\n\n            /// \\effects Swaps the ownership over the reserved memory.\n            /// This does not invalidate any memory blocks.\n            friend void swap(virtual_block_allocator& a, virtual_block_allocator& b) noexcept\n            {\n                detail::adl_swap(a.cur_, b.cur_);\n                detail::adl_swap(a.end_, b.end_);\n                detail::adl_swap(a.block_size_, b.block_size_);\n            }\n\n            /// \\effects Allocates a new memory block by committing the next \\ref next_block_size() number of bytes.\n            /// \\returns The \\ref memory_block committed.\n            /// \\throws \\ref out_of_memory if it cannot commit the memory or the \\ref capacity_left() is exhausted.\n            memory_block allocate_block();\n\n            /// \\effects Deallocates the last allocated memory block by decommitting it.\n            /// This block will be returned again on the next call to \\ref allocate_block().\n            /// \\requires \\c block must be the current top block of the memory,\n            /// this is guaranteed by \\ref memory_arena.\n            void deallocate_block(memory_block block) noexcept;\n\n            /// \\returns The next block size, this is the block size of the constructor.\n            std::size_t next_block_size() const noexcept\n            {\n                return block_size_;\n            }\n\n            /// \\returns The number of blocks that can be committed until it runs out of memory.\n            std::size_t capacity_left() const noexcept\n            {\n                return static_cast<std::size_t>(end_ - cur_) / block_size_;\n            }\n\n        private:\n            allocator_info info() noexcept;\n\n            char *      cur_, *end_;\n            std::size_t block_size_;\n        };\n    } // namespace memory\n} // namespace foonathan\n\n#endif //FOONATHAN_MEMORY_VIRTUAL_MEMORY_HPP_INCLUDED\n"],
 )
 
-write_file(
-    name = "gen_extra_45",
-    out = "_gen/lib/foonathan_memory/cmake/foonathan_memory-config-noconfig.cmake",
-    content = ["#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"foonathan_memory\" for configuration \"\"\nset_property(TARGET foonathan_memory APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)\nset_target_properties(foonathan_memory PROPERTIES\n  IMPORTED_LINK_INTERFACE_LANGUAGES_NOCONFIG \"CXX\"\n  IMPORTED_LOCATION_NOCONFIG \"${_IMPORT_PREFIX}/lib/libfoonathan_memory-0.7.4.a\"\n  )\n\nlist(APPEND _cmake_import_check_targets foonathan_memory )\nlist(APPEND _cmake_import_check_files_for_foonathan_memory \"${_IMPORT_PREFIX}/lib/libfoonathan_memory-0.7.4.a\" )\n\n# Import target \"foonathan_memory_node_size_debugger\" for configuration \"\"\nset_property(TARGET foonathan_memory_node_size_debugger APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)\nset_target_properties(foonathan_memory_node_size_debugger PROPERTIES\n  IMPORTED_LOCATION_NOCONFIG \"${_IMPORT_PREFIX}/bin/nodesize_dbg\"\n  )\n\nlist(APPEND _cmake_import_check_targets foonathan_memory_node_size_debugger )\nlist(APPEND _cmake_import_check_files_for_foonathan_memory_node_size_debugger \"${_IMPORT_PREFIX}/bin/nodesize_dbg\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
-)
-
-write_file(
-    name = "gen_extra_46",
-    out = "_gen/lib/foonathan_memory/cmake/foonathan_memory-config-version.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"0.7.4\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_47",
-    out = "_gen/lib/foonathan_memory/cmake/foonathan_memory-config.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.3 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.3\")\n   message(FATAL_ERROR \"CMake >= 2.8.3 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.3...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS foonathan_memory foonathan_memory_node_size_debugger)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target foonathan_memory\nadd_library(foonathan_memory STATIC IMPORTED)\n\nset_target_properties(foonathan_memory PROPERTIES\n  INTERFACE_COMPILE_DEFINITIONS \"FOONATHAN_MEMORY=1;FOONATHAN_MEMORY_VERSION_MAJOR=0;FOONATHAN_MEMORY_VERSION_MINOR=7;FOONATHAN_MEMORY_VERSION_PATCH=4\"\n  INTERFACE_COMPILE_FEATURES \"cxx_constexpr\"\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include\"\n)\n\n# Create imported target foonathan_memory_node_size_debugger\nadd_executable(foonathan_memory_node_size_debugger IMPORTED)\n\nset_target_properties(foonathan_memory_node_size_debugger PROPERTIES\n  INTERFACE_COMPILE_DEFINITIONS \"VERSION=\\\"0.7\\\"\"\n  INTERFACE_COMPILE_FEATURES \"cxx_constexpr\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/foonathan_memory-config-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-write_file(
-    name = "gen_cmake_50",
-    out = "_gen/share/foonathan_memory_vendor/cmake/foonathan_memory_vendorConfig-version.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"1.4.1\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_cmake_51",
-    out = "_gen/share/foonathan_memory_vendor/cmake/foonathan_memory_vendorConfig.cmake",
-    content = ["# prevent multiple inclusion\nif(_foonathan_memory_vendor_CONFIG_INCLUDED)\n  return()\nendif()\nset(_foonathan_memory_vendor_CONFIG_INCLUDED TRUE)\n\n# output package information\nif(NOT foonathan_memory_vendor_FIND_QUIETLY)\n  message(STATUS \"Found foonathan_memory_vendor:  (${foonathan_memory_vendor_DIR})\")\nendif()\n"],
-)
-
-pkg_files(
-    name = "pkg_files_static_foonathan_memory-0.7.4",
-    srcs = [":static_foonathan_memory-0.7.4_a"],
-    prefix = "lib",
-)
-
-pkg_files(
-    name = "pkg_files_extra_0",
-    srcs = [":gen_extra_0"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_1",
-    srcs = [":gen_extra_1"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_2",
-    srcs = [":gen_extra_2"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_3",
-    srcs = [":gen_extra_3"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_4",
-    srcs = [":gen_extra_4"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_5",
-    srcs = [":gen_extra_5"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_6",
-    srcs = [":gen_extra_6"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_7",
-    srcs = [":gen_extra_7"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_8",
-    srcs = [":gen_extra_8"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_9",
-    srcs = [":gen_extra_9"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_10",
-    srcs = [":gen_extra_10"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_11",
-    srcs = [":gen_extra_11"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_12",
-    srcs = [":gen_extra_12"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_13",
-    srcs = [":gen_extra_13"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_14",
-    srcs = [":gen_extra_14"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_15",
-    srcs = [":gen_extra_15"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_16",
-    srcs = [":gen_extra_16"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_17",
-    srcs = [":gen_extra_17"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_18",
-    srcs = [":gen_extra_18"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_19",
-    srcs = [":gen_extra_19"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_20",
-    srcs = [":gen_extra_20"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_21",
-    srcs = [":gen_extra_21"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_22",
-    srcs = [":gen_extra_22"],
-    prefix = "include/foonathan/memory/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_23",
-    srcs = [":gen_extra_23"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_24",
-    srcs = [":gen_extra_24"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_25",
-    srcs = [":gen_extra_25"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_26",
-    srcs = [":gen_extra_26"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_27",
-    srcs = [":gen_extra_27"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_28",
-    srcs = [":gen_extra_28"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_29",
-    srcs = [":gen_extra_29"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_30",
-    srcs = [":gen_extra_30"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_31",
-    srcs = [":gen_extra_31"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_32",
-    srcs = [":gen_extra_32"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_33",
-    srcs = [":gen_extra_33"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_34",
-    srcs = [":gen_extra_34"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_35",
-    srcs = [":gen_extra_35"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_36",
-    srcs = [":gen_extra_36"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_37",
-    srcs = [":gen_extra_37"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_38",
-    srcs = [":gen_extra_38"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_39",
-    srcs = [":gen_extra_39"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_40",
-    srcs = [":gen_extra_40"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_41",
-    srcs = [":gen_extra_41"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_42",
-    srcs = [":gen_extra_42"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_43",
-    srcs = [":gen_extra_43"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_44",
-    srcs = [":gen_extra_44"],
-    prefix = "include/foonathan/memory",
-)
-
-pkg_files(
-    name = "pkg_files_extra_45",
-    srcs = [":gen_extra_45"],
-    prefix = "lib/foonathan_memory/cmake",
-)
-
-pkg_files(
-    name = "pkg_files_extra_46",
-    srcs = [":gen_extra_46"],
-    prefix = "lib/foonathan_memory/cmake",
-)
-
-pkg_files(
-    name = "pkg_files_extra_47",
-    srcs = [":gen_extra_47"],
-    prefix = "lib/foonathan_memory/cmake",
-)
-
-pkg_files(
-    name = "pkg_files_extra_48",
-    srcs = ["LICENSE"],
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "LICENSE",
+    ],
     prefix = "share/foonathan_memory",
+    strip_prefix = "*",
 )
 
-pkg_files(
-    name = "pkg_files_extra_49",
-    srcs = ["README.md"],
+register_ament_files(
+    name = "ament_files_1",
+    files = [
+        "README.md",
+    ],
     prefix = "share/foonathan_memory",
-)
-
-pkg_files(
-    name = "pkg_files_cmake_50",
-    srcs = [":gen_cmake_50"],
-    prefix = "share/foonathan_memory_vendor/cmake",
-)
-
-pkg_files(
-    name = "pkg_files_cmake_51",
-    srcs = [":gen_cmake_51"],
-    prefix = "share/foonathan_memory_vendor/cmake",
+    strip_prefix = "*",
 )
 
 ament_index(
     name = "ament_index",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+    ],
+    libraries = [
+        ":static_foonathan_memory-0.7.4_a",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake_copyright//:ament_package",
@@ -821,63 +497,61 @@ ament_package(
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
     cmake_export_targets = False,
-    install = [
-        ":pkg_files_static_foonathan_memory-0.7.4",
-        ":pkg_files_extra_0",
-        ":pkg_files_extra_1",
-        ":pkg_files_extra_2",
-        ":pkg_files_extra_3",
-        ":pkg_files_extra_4",
-        ":pkg_files_extra_5",
-        ":pkg_files_extra_6",
-        ":pkg_files_extra_7",
-        ":pkg_files_extra_8",
-        ":pkg_files_extra_9",
-        ":pkg_files_extra_10",
-        ":pkg_files_extra_11",
-        ":pkg_files_extra_12",
-        ":pkg_files_extra_13",
-        ":pkg_files_extra_14",
-        ":pkg_files_extra_15",
-        ":pkg_files_extra_16",
-        ":pkg_files_extra_17",
-        ":pkg_files_extra_18",
-        ":pkg_files_extra_19",
-        ":pkg_files_extra_20",
-        ":pkg_files_extra_21",
-        ":pkg_files_extra_22",
-        ":pkg_files_extra_23",
-        ":pkg_files_extra_24",
-        ":pkg_files_extra_25",
-        ":pkg_files_extra_26",
-        ":pkg_files_extra_27",
-        ":pkg_files_extra_28",
-        ":pkg_files_extra_29",
-        ":pkg_files_extra_30",
-        ":pkg_files_extra_31",
-        ":pkg_files_extra_32",
-        ":pkg_files_extra_33",
-        ":pkg_files_extra_34",
-        ":pkg_files_extra_35",
-        ":pkg_files_extra_36",
-        ":pkg_files_extra_37",
-        ":pkg_files_extra_38",
-        ":pkg_files_extra_39",
-        ":pkg_files_extra_40",
-        ":pkg_files_extra_41",
-        ":pkg_files_extra_42",
-        ":pkg_files_extra_43",
-        ":pkg_files_extra_44",
-        ":pkg_files_extra_45",
-        ":pkg_files_extra_46",
-        ":pkg_files_extra_47",
-        ":pkg_files_extra_48",
-        ":pkg_files_extra_49",
-        ":pkg_files_cmake_50",
-        ":pkg_files_cmake_51",
+    headers = [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_extra_5",
+        ":gen_extra_6",
+        ":gen_extra_7",
+        ":gen_extra_8",
+        ":gen_extra_9",
+        ":gen_extra_10",
+        ":gen_extra_11",
+        ":gen_extra_12",
+        ":gen_extra_13",
+        ":gen_extra_14",
+        ":gen_extra_15",
+        ":gen_extra_16",
+        ":gen_extra_17",
+        ":gen_extra_18",
+        ":gen_extra_19",
+        ":gen_extra_20",
+        ":gen_extra_21",
+        ":gen_extra_22",
+        ":gen_extra_23",
+        ":gen_extra_24",
+        ":gen_extra_25",
+        ":gen_extra_26",
+        ":gen_extra_27",
+        ":gen_extra_28",
+        ":gen_extra_29",
+        ":gen_extra_30",
+        ":gen_extra_31",
+        ":gen_extra_32",
+        ":gen_extra_33",
+        ":gen_extra_34",
+        ":gen_extra_35",
+        ":gen_extra_36",
+        ":gen_extra_37",
+        ":gen_extra_38",
+        ":gen_extra_39",
+        ":gen_extra_40",
+        ":gen_extra_41",
+        ":gen_extra_42",
+        ":gen_extra_43",
+        ":gen_extra_44",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":static_foonathan_memory-0.7.4_a",
     ],
     package_xml = "package.xml",
-    programs = [":nodesize_dbg"],
+    programs = [
+        ":nodesize_dbg",
+    ],
     deps = [":ament_index"] + [
         "@ament_cmake_copyright//:ament_package",
         "@ament_cmake_lint_cmake//:ament_package",

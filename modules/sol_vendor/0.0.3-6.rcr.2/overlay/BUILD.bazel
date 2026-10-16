@@ -3,7 +3,6 @@ load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -874,768 +873,6 @@ write_file(
     content = ["// sol2\n\n// The MIT License (MIT)\n\n// Copyright (c) 2013-2022 Rapptz, ThePhD and contributors\n\n// Permission is hereby granted, free of charge, to any person obtaining a copy of\n// this software and associated documentation files (the \"Software\"), to deal in\n// the Software without restriction, including without limitation the rights to\n// use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\n// the Software, and to permit persons to whom the Software is furnished to do so,\n// subject to the following conditions:\n\n// The above copyright notice and this permission notice shall be included in all\n// copies or substantial portions of the Software.\n\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\n// FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\n// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\n// IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\n// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n\n#ifndef SOL_WRAPPER_HPP\n#define SOL_WRAPPER_HPP\n\n#include <sol/types.hpp>\n\nnamespace sol {\n\n\tnamespace detail {\n\t\ttemplate <typename T>\n\t\tusing array_return_type = meta::conditional_t<std::is_array<T>::value, std::add_lvalue_reference_t<T>, T>;\n\t}\n\n\ttemplate <typename F, typename = void>\n\tstruct wrapper {\n\t\ttypedef lua_bind_traits<meta::unqualified_t<F>> traits_type;\n\t\ttypedef typename traits_type::args_list args_list;\n\t\ttypedef typename traits_type::args_list free_args_list;\n\t\ttypedef typename traits_type::returns_list returns_list;\n\n\t\ttemplate <typename... Args>\n\t\tstatic decltype(auto) call(F& f, Args&&... args) {\n\t\t\treturn f(std::forward<Args>(args)...);\n\t\t}\n\n\t\tstruct caller {\n\t\t\ttemplate <typename... Args>\n\t\t\tdecltype(auto) operator()(F& fx, Args&&... args) const {\n\t\t\t\treturn call(fx, std::forward<Args>(args)...);\n\t\t\t}\n\t\t};\n\t};\n\n\ttemplate <typename F>\n\tstruct wrapper<F, std::enable_if_t<std::is_function<std::remove_pointer_t<meta::unqualified_t<F>>>::value>> {\n\t\ttypedef lua_bind_traits<std::remove_pointer_t<meta::unqualified_t<F>>> traits_type;\n\t\ttypedef typename traits_type::args_list args_list;\n\t\ttypedef typename traits_type::args_list free_args_list;\n\t\ttypedef typename traits_type::returns_list returns_list;\n\n\t\ttemplate <F fx, typename... Args>\n\t\tstatic decltype(auto) invoke(Args&&... args) {\n\t\t\treturn fx(std::forward<Args>(args)...);\n\t\t}\n\n\t\ttemplate <typename... Args>\n\t\tstatic decltype(auto) call(F& fx, Args&&... args) {\n\t\t\treturn fx(std::forward<Args>(args)...);\n\t\t}\n\n\t\tstruct caller {\n\t\t\ttemplate <typename... Args>\n\t\t\tdecltype(auto) operator()(F& fx, Args&&... args) const {\n\t\t\t\treturn call(fx, std::forward<Args>(args)...);\n\t\t\t}\n\t\t};\n\n\t\ttemplate <F fx>\n\t\tstruct invoker {\n\t\t\ttemplate <typename... Args>\n\t\t\tdecltype(auto) operator()(Args&&... args) const {\n\t\t\t\treturn invoke<fx>(std::forward<Args>(args)...);\n\t\t\t}\n\t\t};\n\t};\n\n\ttemplate <typename F>\n\tstruct wrapper<F, std::enable_if_t<std::is_member_object_pointer<meta::unqualified_t<F>>::value>> {\n\t\ttypedef lua_bind_traits<meta::unqualified_t<F>> traits_type;\n\t\ttypedef typename traits_type::object_type object_type;\n\t\ttypedef typename traits_type::return_type return_type;\n\t\ttypedef typename traits_type::args_list args_list;\n\t\ttypedef types<object_type&, return_type> free_args_list;\n\t\ttypedef typename traits_type::returns_list returns_list;\n\n\t\ttemplate <F fx>\n\t\tstatic auto call(object_type& mem) -> detail::array_return_type<decltype(mem.*fx)> {\n\t\t\treturn mem.*fx;\n\t\t}\n\n\t\ttemplate <F fx, typename Arg, typename... Args>\n\t\tstatic decltype(auto) invoke(object_type& mem, Arg&& arg, Args&&...) {\n\t\t\treturn mem.*fx = std::forward<Arg>(arg);\n\t\t}\n\n\t\ttemplate <typename Fx>\n\t\tstatic auto call(Fx&& fx, object_type& mem) -> detail::array_return_type<decltype(mem.*fx)> {\n\t\t\treturn mem.*fx;\n\t\t}\n\n\t\ttemplate <typename Fx, typename Arg, typename... Args>\n\t\tstatic void call(Fx&& fx, object_type& mem, Arg&& arg, Args&&...) {\n\t\t\tusing actual_type = meta::unqualified_t<detail::array_return_type<decltype(mem.*fx)>>;\n\t\t\tif constexpr (std::is_array_v<actual_type>) {\n\t\t\t\tusing std::cbegin;\n\t\t\t\tusing std::cend;\n\t\t\t\tauto first = cbegin(arg);\n\t\t\t\tauto last = cend(arg);\n\t\t\t\tfor (std::size_t i = 0; first != last; ++i, ++first) {\n\t\t\t\t\t(mem.*fx)[i] = *first;\n\t\t\t\t}\n\t\t\t}\n\t\t\telse {\n\t\t\t\t(mem.*fx) = std::forward<Arg>(arg);\n\t\t\t}\n\t\t}\n\n\t\tstruct caller {\n\t\t\ttemplate <typename Fx, typename... Args>\n\t\t\tdecltype(auto) operator()(Fx&& fx, object_type& mem, Args&&... args) const {\n\t\t\t\treturn call(std::forward<Fx>(fx), mem, std::forward<Args>(args)...);\n\t\t\t}\n\t\t};\n\n\t\ttemplate <F fx>\n\t\tstruct invoker {\n\t\t\ttemplate <typename... Args>\n\t\t\tdecltype(auto) operator()(Args&&... args) const {\n\t\t\t\treturn invoke<fx>(std::forward<Args>(args)...);\n\t\t\t}\n\t\t};\n\t};\n\n\ttemplate <typename F, typename R, typename O, typename... FArgs>\n\tstruct member_function_wrapper {\n\t\ttypedef O object_type;\n\t\ttypedef lua_bind_traits<F> traits_type;\n\t\ttypedef typename traits_type::args_list args_list;\n\t\ttypedef types<object_type&, FArgs...> free_args_list;\n\t\ttypedef meta::tuple_types<R> returns_list;\n\n\t\ttemplate <F fx, typename... Args>\n\t\tstatic R invoke(O& mem, Args&&... args) {\n\t\t\treturn (mem.*fx)(std::forward<Args>(args)...);\n\t\t}\n\n\t\ttemplate <typename Fx, typename... Args>\n\t\tstatic R call(Fx&& fx, O& mem, Args&&... args) {\n\t\t\treturn (mem.*fx)(std::forward<Args>(args)...);\n\t\t}\n\n\t\tstruct caller {\n\t\t\ttemplate <typename Fx, typename... Args>\n\t\t\tdecltype(auto) operator()(Fx&& fx, O& mem, Args&&... args) const {\n\t\t\t\treturn call(std::forward<Fx>(fx), mem, std::forward<Args>(args)...);\n\t\t\t}\n\t\t};\n\n\t\ttemplate <F fx>\n\t\tstruct invoker {\n\t\t\ttemplate <typename... Args>\n\t\t\tdecltype(auto) operator()(O& mem, Args&&... args) const {\n\t\t\t\treturn invoke<fx>(mem, std::forward<Args>(args)...);\n\t\t\t}\n\t\t};\n\t};\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...)> : public member_function_wrapper<R (O::*)(Args...), R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const> : public member_function_wrapper<R (O::*)(Args...) const, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const volatile> : public member_function_wrapper<R (O::*)(Args...) const volatile, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...)&> : public member_function_wrapper<R (O::*)(Args...)&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const&> : public member_function_wrapper<R (O::*)(Args...) const&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const volatile&> : public member_function_wrapper<R (O::*)(Args...) const volatile&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...)&> : public member_function_wrapper<R (O::*)(Args..., ...)&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...) const&> : public member_function_wrapper<R (O::*)(Args..., ...) const&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...) const volatile&> : public member_function_wrapper<R (O::*)(Args..., ...) const volatile&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) &&> : public member_function_wrapper<R (O::*)(Args...)&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const&&> : public member_function_wrapper<R (O::*)(Args...) const&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const volatile&&> : public member_function_wrapper<R (O::*)(Args...) const volatile&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...) &&> : public member_function_wrapper<R (O::*)(Args..., ...)&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...) const&&> : public member_function_wrapper<R (O::*)(Args..., ...) const&, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...) const volatile&&> : public member_function_wrapper<R (O::*)(Args..., ...) const volatile&, R, O, Args...> { };\n\n#if SOL_IS_ON(SOL_USE_NOEXCEPT_FUNCTION_TYPE)\n\t// noexcept has become a part of a function's type\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) noexcept> : public member_function_wrapper<R (O::*)(Args...) noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const noexcept> : public member_function_wrapper<R (O::*)(Args...) const noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const volatile noexcept> : public member_function_wrapper<R (O::*)(Args...) const volatile noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...)& noexcept> : public member_function_wrapper<R (O::*)(Args...)& noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const& noexcept> : public member_function_wrapper<R (O::*)(Args...) const& noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const volatile& noexcept> : public member_function_wrapper<R (O::*)(Args...) const volatile& noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...)& noexcept> : public member_function_wrapper<R (O::*)(Args..., ...)& noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...) const& noexcept> : public member_function_wrapper<R (O::*)(Args..., ...) const& noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...) const volatile& noexcept>\n\t: public member_function_wrapper<R (O::*)(Args..., ...) const volatile& noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...)&& noexcept> : public member_function_wrapper<R (O::*)(Args...)& noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const&& noexcept> : public member_function_wrapper<R (O::*)(Args...) const& noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args...) const volatile&& noexcept> : public member_function_wrapper<R (O::*)(Args...) const volatile& noexcept, R, O, Args...> {\n\t};\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...)&& noexcept> : public member_function_wrapper<R (O::*)(Args..., ...)& noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...) const&& noexcept> : public member_function_wrapper<R (O::*)(Args..., ...) const& noexcept, R, O, Args...> { };\n\n\ttemplate <typename R, typename O, typename... Args>\n\tstruct wrapper<R (O::*)(Args..., ...) const volatile&& noexcept>\n\t: public member_function_wrapper<R (O::*)(Args..., ...) const volatile& noexcept, R, O, Args...> { };\n\n#endif // noexcept is part of a function's type\n\n} // namespace sol\n\n#endif // SOL_WRAPPER_HPP\n"],
 )
 
-write_file(
-    name = "gen_extra_117",
-    out = "_gen/share/cmake/sol2/sol2-config-version.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"4.0.0\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_118",
-    out = "_gen/share/cmake/sol2/sol2-config.cmake",
-    content = ["# # # # sol2\n# The MIT License (MIT)\n# \n# Copyright (c) 2013-2022 Rapptz, ThePhD, and contributors\n# \n# Permission is hereby granted, free of charge, to any person obtaining a copy of\n# this software and associated documentation files (the \"Software\"), to deal in\n# the Software without restriction, including without limitation the rights to\n# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\n# the Software, and to permit persons to whom the Software is furnished to do so,\n# subject to the following conditions:\n# \n# The above copyright notice and this permission notice shall be included in all\n# copies or substantial portions of the Software.\n# \n# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\n# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\n# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\n# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\n# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n\n\n####### Expanded from @PACKAGE_INIT@ by configure_package_config_file() #######\n####### Any changes to this file will be overwritten by the next CMake run ####\n####### The input file was sol2-config.cmake.in                            ########\n\nget_filename_component(PACKAGE_PREFIX_DIR \"${CMAKE_CURRENT_LIST_DIR}/../../../\" ABSOLUTE)\n\nmacro(set_and_check _var _file)\n  set(${_var} \"${_file}\")\n  if(NOT EXISTS \"${_file}\")\n    message(FATAL_ERROR \"File or directory ${_file} referenced by variable ${_var} does not exist !\")\n  endif()\nendmacro()\n\n####################################################################################\n\ninclude(\"${CMAKE_CURRENT_LIST_DIR}/sol2-targets.cmake\")\n\nif (TARGET sol2)\n    get_target_property(SOL2_INCLUDE_DIRS\n        sol2 INTERFACE_INCLUDE_DIRECTORIES)\n    set_and_check(SOL2_INCLUDE_DIRS \"${SOL2_INCLUDE_DIRS}\")\n    set(SOL2_LIBRARIES sol2)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_119",
-    out = "_gen/share/cmake/sol2/sol2-targets.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"3.0.0\")\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 3.0.0...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS sol2::sol2)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target sol2::sol2\nadd_library(sol2::sol2 INTERFACE IMPORTED)\n\nset_target_properties(sol2::sol2 PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include\"\n  INTERFACE_SYSTEM_INCLUDE_DIRECTORIES \"include\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/sol2-targets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-write_file(
-    name = "gen_extra_120",
-    out = "_gen/share/pkgconfig/sol2.pc",
-    content = ["includedir=/usr/local/google/home/simmers/development/ros-central-registry/release/lyrical/2026-10-05/build/sol_vendor/sol_vendor_install/include\n\nName: sol2\nDescription: C++ <-> Lua Wrapper Library\nVersion: 4.0.0\nCflags: -I${includedir}\n"],
-)
-
-write_file(
-    name = "gen_cmake_121",
-    out = "_gen/share/sol_vendor/cmake/ament_cmake_export_include_directories-extras.cmake",
-    content = ["# generated from ament_cmake_export_include_directories/cmake/ament_cmake_export_include_directories-extras.cmake.in\n\nset(_exported_include_dirs \"${sol_vendor_DIR}/../../../include\")\n\n# append include directories to sol_vendor_INCLUDE_DIRS\n# warn about not existing paths\nif(NOT _exported_include_dirs STREQUAL \"\")\n  find_package(ament_cmake_core QUIET REQUIRED)\n  foreach(_exported_include_dir ${_exported_include_dirs})\n    if(NOT IS_DIRECTORY \"${_exported_include_dir}\")\n      message(WARNING \"Package 'sol_vendor' exports the include directory '${_exported_include_dir}' which doesn't exist\")\n    endif()\n    normalize_path(_exported_include_dir \"${_exported_include_dir}\")\n    list(APPEND sol_vendor_INCLUDE_DIRS \"${_exported_include_dir}\")\n  endforeach()\nendif()\n"],
-)
-
-pkg_files(
-    name = "pkg_files_extra_0",
-    srcs = [":gen_extra_0"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_1",
-    srcs = [":gen_extra_1"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_2",
-    srcs = [":gen_extra_2"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_3",
-    srcs = [":gen_extra_3"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_4",
-    srcs = [":gen_extra_4"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_5",
-    srcs = [":gen_extra_5"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_6",
-    srcs = [":gen_extra_6"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_7",
-    srcs = [":gen_extra_7"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_8",
-    srcs = [":gen_extra_8"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_9",
-    srcs = [":gen_extra_9"],
-    prefix = "include/sol/compatibility",
-)
-
-pkg_files(
-    name = "pkg_files_extra_10",
-    srcs = [":gen_extra_10"],
-    prefix = "include/sol/compatibility",
-)
-
-pkg_files(
-    name = "pkg_files_extra_11",
-    srcs = [":gen_extra_11"],
-    prefix = "include/sol/compatibility",
-)
-
-pkg_files(
-    name = "pkg_files_extra_12",
-    srcs = [":gen_extra_12"],
-    prefix = "include/sol/compatibility",
-)
-
-pkg_files(
-    name = "pkg_files_extra_13",
-    srcs = [":gen_extra_13"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_14",
-    srcs = [":gen_extra_14"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_15",
-    srcs = [":gen_extra_15"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_16",
-    srcs = [":gen_extra_16"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_17",
-    srcs = [":gen_extra_17"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_18",
-    srcs = [":gen_extra_18"],
-    prefix = "include/sol/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_19",
-    srcs = [":gen_extra_19"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_20",
-    srcs = [":gen_extra_20"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_21",
-    srcs = [":gen_extra_21"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_22",
-    srcs = [":gen_extra_22"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_23",
-    srcs = [":gen_extra_23"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_24",
-    srcs = [":gen_extra_24"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_25",
-    srcs = [":gen_extra_25"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_26",
-    srcs = [":gen_extra_26"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_27",
-    srcs = [":gen_extra_27"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_28",
-    srcs = [":gen_extra_28"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_29",
-    srcs = [":gen_extra_29"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_30",
-    srcs = [":gen_extra_30"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_31",
-    srcs = [":gen_extra_31"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_32",
-    srcs = [":gen_extra_32"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_33",
-    srcs = [":gen_extra_33"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_34",
-    srcs = [":gen_extra_34"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_35",
-    srcs = [":gen_extra_35"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_36",
-    srcs = [":gen_extra_36"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_37",
-    srcs = [":gen_extra_37"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_38",
-    srcs = [":gen_extra_38"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_39",
-    srcs = [":gen_extra_39"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_40",
-    srcs = [":gen_extra_40"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_41",
-    srcs = [":gen_extra_41"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_42",
-    srcs = [":gen_extra_42"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_43",
-    srcs = [":gen_extra_43"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_44",
-    srcs = [":gen_extra_44"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_45",
-    srcs = [":gen_extra_45"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_46",
-    srcs = [":gen_extra_46"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_47",
-    srcs = [":gen_extra_47"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_48",
-    srcs = [":gen_extra_48"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_49",
-    srcs = [":gen_extra_49"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_50",
-    srcs = [":gen_extra_50"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_51",
-    srcs = [":gen_extra_51"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_52",
-    srcs = [":gen_extra_52"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_53",
-    srcs = [":gen_extra_53"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_54",
-    srcs = [":gen_extra_54"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_55",
-    srcs = [":gen_extra_55"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_56",
-    srcs = [":gen_extra_56"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_57",
-    srcs = [":gen_extra_57"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_58",
-    srcs = [":gen_extra_58"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_59",
-    srcs = [":gen_extra_59"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_60",
-    srcs = [":gen_extra_60"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_61",
-    srcs = [":gen_extra_61"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_62",
-    srcs = [":gen_extra_62"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_63",
-    srcs = [":gen_extra_63"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_64",
-    srcs = [":gen_extra_64"],
-    prefix = "include/sol/stack/detail",
-)
-
-pkg_files(
-    name = "pkg_files_extra_65",
-    srcs = [":gen_extra_65"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_66",
-    srcs = [":gen_extra_66"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_67",
-    srcs = [":gen_extra_67"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_68",
-    srcs = [":gen_extra_68"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_69",
-    srcs = [":gen_extra_69"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_70",
-    srcs = [":gen_extra_70"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_71",
-    srcs = [":gen_extra_71"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_72",
-    srcs = [":gen_extra_72"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_73",
-    srcs = [":gen_extra_73"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_74",
-    srcs = [":gen_extra_74"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_75",
-    srcs = [":gen_extra_75"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_76",
-    srcs = [":gen_extra_76"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_77",
-    srcs = [":gen_extra_77"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_78",
-    srcs = [":gen_extra_78"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_79",
-    srcs = [":gen_extra_79"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_80",
-    srcs = [":gen_extra_80"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_81",
-    srcs = [":gen_extra_81"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_82",
-    srcs = [":gen_extra_82"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_83",
-    srcs = [":gen_extra_83"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_84",
-    srcs = [":gen_extra_84"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_85",
-    srcs = [":gen_extra_85"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_86",
-    srcs = [":gen_extra_86"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_87",
-    srcs = [":gen_extra_87"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_88",
-    srcs = [":gen_extra_88"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_89",
-    srcs = [":gen_extra_89"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_90",
-    srcs = [":gen_extra_90"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_91",
-    srcs = [":gen_extra_91"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_92",
-    srcs = [":gen_extra_92"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_93",
-    srcs = [":gen_extra_93"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_94",
-    srcs = [":gen_extra_94"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_95",
-    srcs = [":gen_extra_95"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_96",
-    srcs = [":gen_extra_96"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_97",
-    srcs = [":gen_extra_97"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_98",
-    srcs = [":gen_extra_98"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_99",
-    srcs = [":gen_extra_99"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_100",
-    srcs = [":gen_extra_100"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_101",
-    srcs = [":gen_extra_101"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_102",
-    srcs = [":gen_extra_102"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_103",
-    srcs = [":gen_extra_103"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_104",
-    srcs = [":gen_extra_104"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_105",
-    srcs = [":gen_extra_105"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_106",
-    srcs = [":gen_extra_106"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_107",
-    srcs = [":gen_extra_107"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_108",
-    srcs = [":gen_extra_108"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_109",
-    srcs = [":gen_extra_109"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_110",
-    srcs = [":gen_extra_110"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_111",
-    srcs = [":gen_extra_111"],
-    prefix = "include/sol/utility",
-)
-
-pkg_files(
-    name = "pkg_files_extra_112",
-    srcs = [":gen_extra_112"],
-    prefix = "include/sol/utility",
-)
-
-pkg_files(
-    name = "pkg_files_extra_113",
-    srcs = [":gen_extra_113"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_114",
-    srcs = [":gen_extra_114"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_115",
-    srcs = [":gen_extra_115"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_116",
-    srcs = [":gen_extra_116"],
-    prefix = "include/sol",
-)
-
-pkg_files(
-    name = "pkg_files_extra_117",
-    srcs = [":gen_extra_117"],
-    prefix = "share/cmake/sol2",
-)
-
-pkg_files(
-    name = "pkg_files_extra_118",
-    srcs = [":gen_extra_118"],
-    prefix = "share/cmake/sol2",
-)
-
-pkg_files(
-    name = "pkg_files_extra_119",
-    srcs = [":gen_extra_119"],
-    prefix = "share/cmake/sol2",
-)
-
-pkg_files(
-    name = "pkg_files_extra_120",
-    srcs = [":gen_extra_120"],
-    prefix = "share/pkgconfig",
-)
-
-pkg_files(
-    name = "pkg_files_cmake_121",
-    srcs = [":gen_cmake_121"],
-    prefix = "share/sol_vendor/cmake",
-)
-
 ament_index(
     name = "ament_index",
     package_xml = "package.xml",
@@ -1651,130 +888,126 @@ ament_package(
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
     cmake_export_targets = False,
-    install = [
-        ":pkg_files_extra_0",
-        ":pkg_files_extra_1",
-        ":pkg_files_extra_2",
-        ":pkg_files_extra_3",
-        ":pkg_files_extra_4",
-        ":pkg_files_extra_5",
-        ":pkg_files_extra_6",
-        ":pkg_files_extra_7",
-        ":pkg_files_extra_8",
-        ":pkg_files_extra_9",
-        ":pkg_files_extra_10",
-        ":pkg_files_extra_11",
-        ":pkg_files_extra_12",
-        ":pkg_files_extra_13",
-        ":pkg_files_extra_14",
-        ":pkg_files_extra_15",
-        ":pkg_files_extra_16",
-        ":pkg_files_extra_17",
-        ":pkg_files_extra_18",
-        ":pkg_files_extra_19",
-        ":pkg_files_extra_20",
-        ":pkg_files_extra_21",
-        ":pkg_files_extra_22",
-        ":pkg_files_extra_23",
-        ":pkg_files_extra_24",
-        ":pkg_files_extra_25",
-        ":pkg_files_extra_26",
-        ":pkg_files_extra_27",
-        ":pkg_files_extra_28",
-        ":pkg_files_extra_29",
-        ":pkg_files_extra_30",
-        ":pkg_files_extra_31",
-        ":pkg_files_extra_32",
-        ":pkg_files_extra_33",
-        ":pkg_files_extra_34",
-        ":pkg_files_extra_35",
-        ":pkg_files_extra_36",
-        ":pkg_files_extra_37",
-        ":pkg_files_extra_38",
-        ":pkg_files_extra_39",
-        ":pkg_files_extra_40",
-        ":pkg_files_extra_41",
-        ":pkg_files_extra_42",
-        ":pkg_files_extra_43",
-        ":pkg_files_extra_44",
-        ":pkg_files_extra_45",
-        ":pkg_files_extra_46",
-        ":pkg_files_extra_47",
-        ":pkg_files_extra_48",
-        ":pkg_files_extra_49",
-        ":pkg_files_extra_50",
-        ":pkg_files_extra_51",
-        ":pkg_files_extra_52",
-        ":pkg_files_extra_53",
-        ":pkg_files_extra_54",
-        ":pkg_files_extra_55",
-        ":pkg_files_extra_56",
-        ":pkg_files_extra_57",
-        ":pkg_files_extra_58",
-        ":pkg_files_extra_59",
-        ":pkg_files_extra_60",
-        ":pkg_files_extra_61",
-        ":pkg_files_extra_62",
-        ":pkg_files_extra_63",
-        ":pkg_files_extra_64",
-        ":pkg_files_extra_65",
-        ":pkg_files_extra_66",
-        ":pkg_files_extra_67",
-        ":pkg_files_extra_68",
-        ":pkg_files_extra_69",
-        ":pkg_files_extra_70",
-        ":pkg_files_extra_71",
-        ":pkg_files_extra_72",
-        ":pkg_files_extra_73",
-        ":pkg_files_extra_74",
-        ":pkg_files_extra_75",
-        ":pkg_files_extra_76",
-        ":pkg_files_extra_77",
-        ":pkg_files_extra_78",
-        ":pkg_files_extra_79",
-        ":pkg_files_extra_80",
-        ":pkg_files_extra_81",
-        ":pkg_files_extra_82",
-        ":pkg_files_extra_83",
-        ":pkg_files_extra_84",
-        ":pkg_files_extra_85",
-        ":pkg_files_extra_86",
-        ":pkg_files_extra_87",
-        ":pkg_files_extra_88",
-        ":pkg_files_extra_89",
-        ":pkg_files_extra_90",
-        ":pkg_files_extra_91",
-        ":pkg_files_extra_92",
-        ":pkg_files_extra_93",
-        ":pkg_files_extra_94",
-        ":pkg_files_extra_95",
-        ":pkg_files_extra_96",
-        ":pkg_files_extra_97",
-        ":pkg_files_extra_98",
-        ":pkg_files_extra_99",
-        ":pkg_files_extra_100",
-        ":pkg_files_extra_101",
-        ":pkg_files_extra_102",
-        ":pkg_files_extra_103",
-        ":pkg_files_extra_104",
-        ":pkg_files_extra_105",
-        ":pkg_files_extra_106",
-        ":pkg_files_extra_107",
-        ":pkg_files_extra_108",
-        ":pkg_files_extra_109",
-        ":pkg_files_extra_110",
-        ":pkg_files_extra_111",
-        ":pkg_files_extra_112",
-        ":pkg_files_extra_113",
-        ":pkg_files_extra_114",
-        ":pkg_files_extra_115",
-        ":pkg_files_extra_116",
-        ":pkg_files_extra_117",
-        ":pkg_files_extra_118",
-        ":pkg_files_extra_119",
-        ":pkg_files_extra_120",
-        ":pkg_files_cmake_121",
+    headers = [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_extra_5",
+        ":gen_extra_6",
+        ":gen_extra_7",
+        ":gen_extra_8",
+        ":gen_extra_9",
+        ":gen_extra_10",
+        ":gen_extra_11",
+        ":gen_extra_12",
+        ":gen_extra_13",
+        ":gen_extra_14",
+        ":gen_extra_15",
+        ":gen_extra_16",
+        ":gen_extra_17",
+        ":gen_extra_18",
+        ":gen_extra_19",
+        ":gen_extra_20",
+        ":gen_extra_21",
+        ":gen_extra_22",
+        ":gen_extra_23",
+        ":gen_extra_24",
+        ":gen_extra_25",
+        ":gen_extra_26",
+        ":gen_extra_27",
+        ":gen_extra_28",
+        ":gen_extra_29",
+        ":gen_extra_30",
+        ":gen_extra_31",
+        ":gen_extra_32",
+        ":gen_extra_33",
+        ":gen_extra_34",
+        ":gen_extra_35",
+        ":gen_extra_36",
+        ":gen_extra_37",
+        ":gen_extra_38",
+        ":gen_extra_39",
+        ":gen_extra_40",
+        ":gen_extra_41",
+        ":gen_extra_42",
+        ":gen_extra_43",
+        ":gen_extra_44",
+        ":gen_extra_45",
+        ":gen_extra_46",
+        ":gen_extra_47",
+        ":gen_extra_48",
+        ":gen_extra_49",
+        ":gen_extra_50",
+        ":gen_extra_51",
+        ":gen_extra_52",
+        ":gen_extra_53",
+        ":gen_extra_54",
+        ":gen_extra_55",
+        ":gen_extra_56",
+        ":gen_extra_57",
+        ":gen_extra_58",
+        ":gen_extra_59",
+        ":gen_extra_60",
+        ":gen_extra_61",
+        ":gen_extra_62",
+        ":gen_extra_63",
+        ":gen_extra_64",
+        ":gen_extra_65",
+        ":gen_extra_66",
+        ":gen_extra_67",
+        ":gen_extra_68",
+        ":gen_extra_69",
+        ":gen_extra_70",
+        ":gen_extra_71",
+        ":gen_extra_72",
+        ":gen_extra_73",
+        ":gen_extra_74",
+        ":gen_extra_75",
+        ":gen_extra_76",
+        ":gen_extra_77",
+        ":gen_extra_78",
+        ":gen_extra_79",
+        ":gen_extra_80",
+        ":gen_extra_81",
+        ":gen_extra_82",
+        ":gen_extra_83",
+        ":gen_extra_84",
+        ":gen_extra_85",
+        ":gen_extra_86",
+        ":gen_extra_87",
+        ":gen_extra_88",
+        ":gen_extra_89",
+        ":gen_extra_90",
+        ":gen_extra_91",
+        ":gen_extra_92",
+        ":gen_extra_93",
+        ":gen_extra_94",
+        ":gen_extra_95",
+        ":gen_extra_96",
+        ":gen_extra_97",
+        ":gen_extra_98",
+        ":gen_extra_99",
+        ":gen_extra_100",
+        ":gen_extra_101",
+        ":gen_extra_102",
+        ":gen_extra_103",
+        ":gen_extra_104",
+        ":gen_extra_105",
+        ":gen_extra_106",
+        ":gen_extra_107",
+        ":gen_extra_108",
+        ":gen_extra_109",
+        ":gen_extra_110",
+        ":gen_extra_111",
+        ":gen_extra_112",
+        ":gen_extra_113",
+        ":gen_extra_114",
+        ":gen_extra_115",
+        ":gen_extra_116",
     ],
+    include_prefix = "",
     package_xml = "package.xml",
     deps = [":ament_index"] + [
         "@ament_cmake//:ament_package",

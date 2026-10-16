@@ -5,7 +5,7 @@ load("@rosdistro//cc:defs.bzl", "ros_local_defines")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 load("@rules_python//python:defs.bzl", "py_library")
 
 package(
@@ -42,15 +42,12 @@ cc_library(
         ],
         allow_empty = True,
     ) + [
-        ":gen_atomic_shared_ptr_shim_hpp",
         ":gen_geocentric_h",
         ":gen_geographiclib_local_cartesian_hpp",
     ],
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
     ],
     includes = [
         "_gen/include",
@@ -87,15 +84,12 @@ cc_library(
         ],
         allow_empty = True,
     ) + [
-        ":gen_atomic_shared_ptr_shim_hpp",
         ":gen_geocentric_h",
         ":gen_geographiclib_local_cartesian_hpp",
     ],
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
-        "-include",
-        "atomic_shared_ptr_shim.hpp",
     ],
     includes = [
         "_gen/include",
@@ -153,12 +147,6 @@ write_file(
 )
 
 write_file(
-    name = "gen_atomic_shared_ptr_shim_hpp",
-    out = "_gen/include/atomic_shared_ptr_shim.hpp",
-    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
-)
-
-write_file(
     name = "gen_geographiclib_local_cartesian_hpp",
     out = "_gen/include/GeographicLib/LocalCartesian.hpp",
     content = ["#ifndef RCR_GEOGRAPHICLIB_LOCAL_CARTESIAN_HPP_\n#define RCR_GEOGRAPHICLIB_LOCAL_CARTESIAN_HPP_\n#include <cmath>\nnamespace GeographicLib {\nclass Geocentric {\npublic:\n  Geocentric() = default;\n  Geocentric(double, double) {}\n  static const Geocentric & WGS84() { static Geocentric g; return g; }\n  void Forward(double, double, double, double & X, double & Y, double & Z) const { X = 0; Y = 0; Z = 0; }\n  void Reverse(double, double, double, double & lat, double & lon, double & h) const { lat = 0; lon = 0; h = 0; }\n};\nclass LocalCartesian {\n public:\n  LocalCartesian() = default;\n  LocalCartesian(double lat0, double lon0, double h0 = 0.0, const Geocentric & = Geocentric::WGS84()) : lat0_(lat0), lon0_(lon0), h0_(h0) {}\n  explicit LocalCartesian(const Geocentric &) {}\n  void Reset(double lat0, double lon0, double h0 = 0.0) { lat0_ = lat0; lon0_ = lon0; h0_ = h0; }\n  double LatitudeOrigin() const { return lat0_; }\n  double LongitudeOrigin() const { return lon0_; }\n  double HeightOrigin() const { return h0_; }\n  void Forward(double lat, double lon, double h, double & x, double & y, double & z) const {\n    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;\n    constexpr double kR = 6378137.0;\n    x = (lon - lon0_) * kDegToRad * kR * std::cos(lat0_ * kDegToRad);\n    y = (lat - lat0_) * kDegToRad * kR;\n    z = h - h0_;\n  }\n  void Reverse(double x, double y, double z, double & lat, double & lon, double & h) const {\n    constexpr double kRadToDeg = 180.0 / 3.14159265358979323846;\n    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;\n    constexpr double kR = 6378137.0;\n    lat = lat0_ + (y / kR) * kRadToDeg;\n    lon = lon0_ + (x / (kR * std::cos(lat0_ * kDegToRad))) * kRadToDeg;\n    h = h0_ + z;\n  }\n private:\n  double lat0_{0.0}, lon0_{0.0}, h0_{0.0};\n};\n}  // namespace GeographicLib\n#endif\n"],
@@ -170,13 +158,6 @@ write_file(
     content = ["#pragma once\n#include \"GeographicLib/LocalCartesian.hpp\"\n"],
 )
 
-pkg_files(
-    name = "pkg_files_extra_0",
-    srcs = ["scripts/terrain_server"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib/mavros_extras",
-)
-
 ament_index(
     name = "ament_index",
     components = [":servo_state_publisher_record"],
@@ -186,7 +167,10 @@ ament_index(
         "launch/px4flow_pluginlists.yaml",
         "launch/servo_state_publisher.yaml",
     ],
-    lib_data = [":servo_state_publisher"],
+    lib_data = [
+        ":servo_state_publisher",
+        "scripts/terrain_server",
+    ],
     libraries = [
         ":mavros_extras",
         ":mavros_extras_plugins",
@@ -238,7 +222,6 @@ py_pytest(
     srcs = ["test/test_srtm.py"],
     data = [
         ":ament_index",
-        ":servo_state_publisher",
     ],
     deps = [
         ":mavros_extras_py",
@@ -280,7 +263,6 @@ ament_package(
         allow_empty = True,
     ),
     include_prefix = "",
-    install = [":pkg_files_extra_0"],
     libraries = [
         ":mavros_extras",
         ":mavros_extras_plugins",

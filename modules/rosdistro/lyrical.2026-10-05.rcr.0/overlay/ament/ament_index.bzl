@@ -56,6 +56,8 @@ makes it easy to transitively collect ament index layers into something that loo
 like an underlay (getting it to this point requires more work, though).
 """
 
+load("@rules_pkg//pkg:providers.bzl", "PackageFilesInfo")
+
 # Shared library suffixes across the platforms we build for: ELF (.so, .so.1.2.3),
 # Mach-O (.dylib), and PE (.dll).
 def is_shared_library(basename):
@@ -67,6 +69,25 @@ def is_shared_library(basename):
     )
 
 _is_shared_library = is_shared_library
+
+def strip_gen_prefix(path):
+    """Strip a leading generated-file directory segment (_gen/, _meta/, _gen_*/, _meta_*/).
+
+    Args:
+      path: Package-relative file path.
+
+    Returns:
+      A tuple of (stripped_path, was_generated).
+    """
+    slash = path.find("/")
+    if slash > 0:
+        first = path[:slash]
+        if first == "_gen" or first == "_meta" or first.startswith("_gen_") or first.startswith("_meta_"):
+            return path[slash + 1:], True
+    return path, False
+
+def _prefix_sort_key(p):
+    return len(p.split("->", 1)[0])
 
 def _package_relative(ctx, f):
     """Path of a file relative to the root of the repository that owns this target."""
@@ -107,29 +128,67 @@ def ament_index_symlinks(ctx):
     # Make sure that we have at lease
     symlinks = {}
 
+    # Absorb any same-package AmentIndexInfo targets in deps (e.g. from
+    # register_ament_resource or register_ament_files).
+    for dep in ctx.attr.deps:
+        if AmentIndexInfo in dep and dep[AmentIndexInfo].package_name == package_name:
+            symlinks.update(dep[AmentIndexInfo].symlinks)
+
     # FILE: package.xml
     if ctx.file.package_xml:
         symlinks["share/" + package_name + "/package.xml"] = ctx.file.package_xml
 
     # SHARED DATA
     rosidl_interfaces = []
+    ament_index_path = "share/ament_index/resource_index/packages/{0}".format(package_name)
+    symlinks[ament_index_path] = ament_index_file
     if ctx.attr.data:
+        sorted_data_prefixes = sorted(getattr(ctx.attr, "data_strip_prefixes", []), key = _prefix_sort_key, reverse = True)
         for target in ctx.attr.data:
+            if AmentIndexInfo in target and target[AmentIndexInfo].package_name == package_name:
+                symlinks.update(target[AmentIndexInfo].symlinks)
+                continue
+            if PackageFilesInfo in target:
+                for dest, file in target[PackageFilesInfo].dest_src_map.items():
+                    dest = dest.lstrip("/")
+                    if dest.startswith("share/") or dest.startswith("lib/") or dest.startswith("bin/"):
+                        symlinks[dest] = file
+                    else:
+                        symlinks["share/" + package_name + "/" + dest] = file
+                continue
             for file in target.files.to_list():
                 file_path = _package_relative(ctx, file)
-                if ctx.attr.data_strip_prefix:
+                stripped, was_gen = strip_gen_prefix(file_path)
+                if was_gen:
+                    file_path = stripped
+                    if file_path.startswith("share/" + package_name + "/"):
+                        file_path = file_path[len("share/" + package_name + "/"):]
+                matched_prefix = False
+                for p in sorted_data_prefixes:
+                    if not p:
+                        continue
+                    if "->" in p:
+                        src_p, dst_p = p.split("->", 1)
+                        sp = (src_p if src_p.endswith("/") else src_p + "/") if src_p else ""
+                        if not sp or file_path.startswith(sp):
+                            rem = file_path[len(sp):]
+                            file_path = (dst_p.rstrip("/") + "/" + rem) if dst_p else rem
+                            matched_prefix = True
+                            break
+                        continue
+                    sp = p if p.endswith("/") else p + "/"
+                    if file_path.startswith(sp):
+                        file_path = file_path[len(sp):]
+                        matched_prefix = True
+                        break
+                if not matched_prefix and ctx.attr.data_strip_prefix:
                     prefix = ctx.attr.data_strip_prefix
                     if not prefix.endswith("/"):
                         prefix += "/"
                     file_path = file_path.removeprefix(prefix)
                 symlinks["share/" + package_name + "/" + file_path] = file
-                ament_index_path = "share/ament_index/resource_index/packages/{0}".format(package_name)
-                symlinks[ament_index_path] = ament_index_file
                 if file_path.endswith(".msg") or file_path.endswith(".srv") or file_path.endswith(".action") or file_path.endswith(".idl"):
                     rosidl_interfaces.append(file_path)
-    else:
-        ament_index_path = "share/ament_index/resource_index/packages/{0}".format(package_name)
-        symlinks[ament_index_path] = ament_index_file
 
     if rosidl_interfaces:
         rosidl_file = ctx.actions.declare_file(package_name + "_rosidl_interfaces")
@@ -142,15 +201,33 @@ def ament_index_symlinks(ctx):
             symlinks["bin/" + file.basename] = file
 
     # LIBRARIES
+    sonames = getattr(ctx.attr, "sonames", {})
     for target in ctx.attr.libraries:
         for file in target.files.to_list():
             symlinks["lib/" + file.basename] = file
+            for key in (target.label.name, file.basename):
+                for alias in sonames.get(key, []):
+                    if not alias.endswith("."):
+                        symlinks["lib/" + alias] = file
 
     # LIB_DATA
     if hasattr(ctx.attr, "lib_data"):
         for target in ctx.attr.lib_data:
+            if PackageFilesInfo in target:
+                for dest, file in target[PackageFilesInfo].dest_src_map.items():
+                    dest = dest.lstrip("/")
+                    if dest.startswith("lib/"):
+                        symlinks[dest] = file
+                    else:
+                        symlinks["lib/" + package_name + "/" + dest] = file
+                continue
             for file in target.files.to_list():
-                symlinks["lib/" + package_name + "/" + file.basename] = file
+                rel_path = _package_relative(ctx, file)
+                stripped, was_gen = strip_gen_prefix(rel_path)
+                if was_gen and stripped.startswith("lib/" + package_name + "/"):
+                    symlinks[stripped] = file
+                else:
+                    symlinks["lib/" + package_name + "/" + file.basename] = file
 
     # COMPONENTS
     if ctx.attr.components:
@@ -182,23 +259,33 @@ def ament_index_symlinks(ctx):
             symlinks["share/ament_index/resource_index/rclcpp_components/" + package_name] = out_comp_file
 
     # PLUGINS
+    plugins_by_cat = {}
     if ctx.files.plugins:
+        default_cat = ctx.attr.plugin_category if ctx.attr.plugin_category else package_name
+        plugins_by_cat[default_cat] = list(ctx.files.plugins)
+    if hasattr(ctx.attr, "plugin_categories") and ctx.attr.plugin_categories:
+        for target, cat in ctx.attr.plugin_categories.items():
+            resolved_cat = cat if cat else package_name
+            plugins_by_cat.setdefault(resolved_cat, []).extend(target.files.to_list())
+
+    for plugin_category, cat_files in plugins_by_cat.items():
         desc_paths = []
-        for f in ctx.files.plugins:
+        for f in cat_files:
             # pluginlib_export_plugin_description_file() installs the xml at its
             # path relative to the package root (e.g. share/<pkg>/test/<pkg>/x.xml).
             rel_path = _package_relative(ctx, f)
+            stripped, was_gen = strip_gen_prefix(rel_path)
+            if was_gen:
+                rel_path = stripped
+                if rel_path.startswith("share/" + package_name + "/"):
+                    rel_path = rel_path[len("share/" + package_name + "/"):]
             target_path = "share/" + package_name + "/" + rel_path
             symlinks[target_path] = f
-            desc_paths.append(target_path)
-        resource_file = ctx.actions.declare_file(package_name + "_resource")
+            if target_path not in desc_paths:
+                desc_paths.append(target_path)
+        suffix = "_resource" if len(plugins_by_cat) == 1 else ("_" + plugin_category + "_resource")
+        resource_file = ctx.actions.declare_file(ctx.label.name + "_" + package_name + suffix)
         ctx.actions.write(output = resource_file, content = "\n".join(desc_paths))
-
-        # plugin_category is the interface package name that owns the class loader
-        # (e.g. "rosbag2_storage" for plugins that implement rosbag2_storage interfaces).
-        # Pluginlib discovers plugins by searching resource_index/<category>__pluginlib__plugin/.
-        # If not specified, fall back to the current package name (self-registration).
-        plugin_category = ctx.attr.plugin_category if ctx.attr.plugin_category else package_name
         symlinks["share/ament_index/resource_index/" + plugin_category + "__pluginlib__plugin/" + package_name] = resource_file
 
     return symlinks
@@ -240,12 +327,15 @@ AMENT_INDEX_ATTRS = {
     "executables": attr.label_list(allow_files = True),
     "headers": attr.label_list(allow_files = True),
     "libraries": attr.label_list(allow_files = True),
+    "sonames": attr.string_list_dict(doc = "Optional mapping of library target/basename to versioned SONAME filenames in lib/."),
     "data": attr.label_list(allow_files = True),
     "data_strip_prefix": attr.string(),
+    "data_strip_prefixes": attr.string_list(),
     "lib_data": attr.label_list(allow_files = True),
     "components": attr.label_list(allow_files = True),
     "plugins": attr.label_list(allow_files = True),
     "plugin_category": attr.string(),
+    "plugin_categories": attr.label_keyed_string_dict(allow_files = True, doc = "Mapping of plugin XML label to pluginlib category when a package exports multiple categories."),
 }
 
 ament_index_rule = rule(

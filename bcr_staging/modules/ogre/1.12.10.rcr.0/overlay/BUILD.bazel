@@ -27,90 +27,6 @@ licenses(["notice"])
 
 exports_files(["LICENSE"])
 
-# Public header sets, grouped the way OGRE's own `make install` lays them out
-# under include/OGRE/ (OgreMain at the top level, components/render systems/
-# plugins in subdirectories). Vendor packages use these to reproduce that
-# install tree.
-filegroup(
-    name = "OgreMain_headers",
-    srcs = glob(
-        [
-            "OgreMain/include/*.h",
-            "OgreMain/include/*.i",
-            "OgreMain/include/Threading/*.h",
-        ],
-        allow_empty = True,
-        exclude = ["OgreMain/include/OgrePVRTCCodec.h"],
-    ) + [
-        ":OgreBuildSettings_h",
-        ":OgreComponents_h",
-        ":OgreExports_h",
-    ],
-)
-
-[
-    filegroup(
-        name = name + "_headers",
-        srcs = glob(
-            [
-                "Components/" + component + "/include/**/*.h",
-                "Components/" + component + "/include/**/*.i",
-            ],
-            allow_empty = True,
-        ) + extra,
-    )
-    for name, component, extra in [
-        ("OgreMeshLodGenerator", "MeshLodGenerator", []),
-        (
-            "OgreOverlay",
-            "Overlay",
-            [":OgreOverlayPrerequisites_h"],
-        ),
-        ("OgrePaging", "Paging", []),
-        (
-            "OgreProperty",
-            "Property",
-            [":OgrePropertyPrerequisites_h"],
-        ),
-        (
-            "OgreRTShaderSystem",
-            "RTShaderSystem",
-            [
-                ":OgreRTShaderConfig_h",
-                ":OgreRTShaderExports_h",
-            ],
-        ),
-        ("OgreTerrain", "Terrain", []),
-        (
-            "OgreVolume",
-            "Volume",
-            [":OgreVolumePrerequisites_h"],
-        ),
-    ]
-]
-
-filegroup(
-    name = "RenderSystem_GL_headers",
-    srcs = glob(["RenderSystems/GL/include/**/*.h"]),
-)
-
-filegroup(
-    name = "RenderSystem_GL3Plus_headers",
-    srcs = glob(["RenderSystems/GL3Plus/include/**/*.h"]),
-)
-
-filegroup(
-    name = "RenderSystem_GLSupport_headers",
-    srcs = glob([
-        "RenderSystems/GLSupport/include/*.h",
-    ]) + [":OgreGLSupportPrerequisites_h"],
-)
-
-filegroup(
-    name = "Codec_STBI_headers",
-    srcs = glob(["PlugIns/STBICodec/include/*.h"]) + [":OgreSTBICodecExports_h"],
-)
-
 expand_template(
     name = "OgreBuildSettings_h",
     out = "OgreMain/include/OgreBuildSettings.h",
@@ -577,15 +493,6 @@ genrule(
           "echo '#endif' >> $@",
 )
 
-# OGRE bundles its own GLEW (RenderSystems/GL/src/glew.c + include/GL/glew.h),
-# which upstream compiles statically into RenderSystem_GL. GLEW_NO_GLU keeps
-# that header from including <GL/glu.h> (nothing in OGRE calls GLU), so no
-# system GLU headers are needed.
-OGRE_GLEW_DEFINES = [
-    "GLEW_NO_GLU",
-    "GLEW_STATIC",
-]
-
 cc_library(
     name = "RenderSystems",
     hdrs = glob([
@@ -598,7 +505,9 @@ cc_library(
         "@platforms//os:windows": ["/FIgl_types_patch.h"],
         "//conditions:default": ["-include gl_types_patch.h"],
     }),
-    defines = OGRE_GLEW_DEFINES,
+    implementation_deps = [
+        "@glew",
+    ],
     includes = [
         "RenderSystems/GL/include",
         "RenderSystems/GL/include/GL",
@@ -607,13 +516,7 @@ cc_library(
     deps = [
         "@egl-registry//:EGL_headers",
         "@opengl-registry//:OpenGL_headers",
-    ] + select({
-        "@platforms//os:linux": [
-            ":glx_headers",
-            "@libx11",
-        ],
-        "//conditions:default": [],
-    }),
+    ],
 )
 
 ### RenderSystem: GLSupport
@@ -638,6 +541,7 @@ cc_library(
     name = "glx_headers",
     hdrs = ["glx.h"],
     include_prefix = "GL",
+    linkopts = ["-lGL"],
     target_compatible_with = ["@platforms//os:linux"],
 )
 
@@ -738,7 +642,6 @@ cc_library(
     hdrs = glob(
         ["RenderSystems/GL/include/**/*.h"],
     ),
-    defines = OGRE_GLEW_DEFINES,
     includes = [
         "RenderSystems/GL/include",
         "RenderSystems/GL/include/GL",
@@ -747,9 +650,9 @@ cc_library(
         "RenderSystems/GL/src/atifs/include",
         "RenderSystems/GL/src/nvparse",
     ],
-    local_defines = ["YY_NEVER_INTERACTIVE"],
     deps = OGRE_RENDERSYSTEM_GL_DEPS.values() + [
         ":RenderSystem_GLSupport",
+        "@glew",
     ],
 )
 
@@ -759,6 +662,7 @@ cc_shared_library(
     exports_filter = [
         ":RenderSystem_GL_library",
         ":RenderSystem_GLSupport",
+        "@glew//:glew",
     ],
     deps = [":RenderSystem_GL_library"],
 )

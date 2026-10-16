@@ -34,7 +34,7 @@ attributes, so the result is a drop-in replacement for a colcon install.
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_pkg//pkg:providers.bzl", "PackageFilesInfo")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
-load(":ament_index.bzl", "AMENT_INDEX_ATTRS", "AmentIndexInfo", "ament_index_package_name", "ament_index_providers", "ament_index_symlinks", "is_shared_library")
+load(":ament_index.bzl", "AMENT_INDEX_ATTRS", "AmentIndexInfo", "ament_index_package_name", "ament_index_providers", "ament_index_symlinks", "is_shared_library", "strip_gen_prefix")
 load(":providers.bzl", "AmentCMakeExportsInfo", "AmentPackageInfo")
 
 _PY_TOOLCHAIN = "@rules_python//python:toolchain_type"
@@ -45,6 +45,25 @@ def _strip(path, prefix):
     if not prefix.endswith("/"):
         prefix += "/"
     return path.removeprefix(prefix)
+
+def _prefix_sort_key(p):
+    return len(p.split("->", 1)[0])
+
+def _strip_any(path, prefix, prefixes):
+    for p in prefixes:
+        if not p:
+            continue
+        if "->" in p:
+            src_p, dst_p = p.split("->", 1)
+            sp = (src_p if src_p.endswith("/") else src_p + "/") if src_p else ""
+            if not sp or path.startswith(sp):
+                rem = path[len(sp):]
+                return (dst_p.rstrip("/") + "/" + rem) if dst_p else rem
+            continue
+        sp = p if p.endswith("/") else p + "/"
+        if path.startswith(sp):
+            return path[len(sp):]
+    return _strip(path, prefix)
 
 def _package_relative(ctx, f):
     """Path of a file relative to the root of the repository that owns this target."""
@@ -142,10 +161,24 @@ def _ament_package_impl(ctx):
     # set include_prefix = "".
     include_prefix = ctx.attr.include_prefix if ctx.attr.include_prefix_set else package_name
     include_dirs = []
+    sorted_hdr_prefixes = sorted(ctx.attr.headers_strip_prefixes, key = _prefix_sort_key, reverse = True)
     for target in ctx.attr.headers:
+        if PackageFilesInfo in target:
+            for dest, f in target[PackageFilesInfo].dest_src_map.items():
+                dest = dest.lstrip("/")
+                if dest.startswith("include/"):
+                    files[dest] = f
+                else:
+                    files["include/" + (include_prefix + "/" if include_prefix else "") + dest] = f
+            continue
         for f in target.files.to_list():
-            rel = _strip(_package_relative(ctx, f), ctx.attr.headers_strip_prefix)
-            dest = "include/" + (include_prefix + "/" if include_prefix else "") + rel
+            rel_path = _package_relative(ctx, f)
+            stripped, was_gen = strip_gen_prefix(rel_path)
+            if was_gen and stripped.startswith("include/"):
+                dest = stripped
+            else:
+                rel = _strip_any(stripped if was_gen else rel_path, ctx.attr.headers_strip_prefix, sorted_hdr_prefixes)
+                dest = "include/" + (include_prefix + "/" if include_prefix else "") + rel
             files[dest] = f
     if ctx.attr.headers:
         include_dirs.append("include/" + include_prefix if include_prefix else "include")
@@ -270,9 +303,22 @@ def _ament_package_impl(ctx):
     # terms): installed under share/<pkg>/cmake/ preserving their layout
     # relative to `cmake_strip_prefix`.
     for target in ctx.attr.cmake:
+        if PackageFilesInfo in target:
+            for dest, f in target[PackageFilesInfo].dest_src_map.items():
+                dest = dest.lstrip("/")
+                if dest.startswith("share/"):
+                    files[dest] = f
+                else:
+                    files["share/" + package_name + "/cmake/" + dest] = f
+            continue
         for f in target.files.to_list():
-            rel = _strip(_package_relative(ctx, f), ctx.attr.cmake_strip_prefix)
-            files["share/" + package_name + "/cmake/" + rel] = f
+            rel_path = _package_relative(ctx, f)
+            stripped, was_gen = strip_gen_prefix(rel_path)
+            if was_gen and stripped.startswith("share/" + package_name + "/cmake/"):
+                files[stripped] = f
+            else:
+                rel = _strip(stripped if was_gen else rel_path, ctx.attr.cmake_strip_prefix)
+                files["share/" + package_name + "/cmake/" + rel] = f
 
     spec_file = ctx.actions.declare_file(ctx.label.name + "_install_spec.json")
     ctx.actions.write(spec_file, json.encode(spec))
@@ -354,6 +400,7 @@ AMENT_PACKAGE_ATTRS.update({
     ),
     "python_strip_prefix": attr.string(doc = "Prefix stripped from python files before installing to site-packages."),
     "headers_strip_prefix": attr.string(default = "include", doc = "Prefix stripped from header paths."),
+    "headers_strip_prefixes": attr.string_list(doc = "Optional list of prefixes stripped from header paths (for multi-subdirectory packages)."),
     "include_prefix": attr.string(doc = "Directory under include/ to install headers to; defaults to the package name."),
     "include_prefix_set": attr.bool(default = False),
     "cmake": attr.label_list(allow_files = True, doc = "The package's own CMake modules/files, installed under share/<pkg>/cmake/ (layout preserved relative to cmake_strip_prefix)."),

@@ -3,7 +3,7 @@ load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -607,410 +607,6 @@ write_file(
     content = ["/* +------------------------------------------------------------------------+\n   |                     Mobile Robot Programming Toolkit (MRPT)            |\n   |                          https://www.mrpt.org/                         |\n   |                                                                        |\n   | Copyright (c) 2005-2026, Individual contributors, see AUTHORS file     |\n   | See: https://www.mrpt.org/Authors - All rights reserved.               |\n   | Released under BSD License. See: https://www.mrpt.org/License          |\n   +------------------------------------------------------------------------+ */\n\n#pragma once\n\n#include <mrpt/config/CLoadableOptions.h>\n#include <mrpt/img/CImage.h>\n#include <mrpt/img/TStereoCamera.h>\n#include <mrpt/math/CMatrixDynamic.h>\n#include <mrpt/obs/obs_frwds.h>\n#include <mrpt/poses/CPose3D.h>\n#include <mrpt/tfest/TMatchingPair.h>\n#include <mrpt/vision/CFeature.h>\n#include <mrpt/vision/chessboard_camera_calib.h>\n#include <mrpt/vision/types.h>\n\nnamespace mrpt\n{\nnamespace maps\n{\nclass CLandmarksMap;\n}\nnamespace obs\n{\nclass CObservationVisualLandmarks;\n}\n\n/** Classes for computer vision, detectors, features, etc.  \\ingroup\n * mrpt_vision_grp\n */\nnamespace vision\n{\n/** \\addtogroup mrpt_vision_grp\n *  @{ */\n\n/**\tComputes the correlation between this image and another one, encapsulating\n * the openCV function cvMatchTemplate\n *   This implementation reduced computation time.\n * \\param img            [IN]    The imput image. This function supports\n * gray-scale (1 channel only) images.\n * \\param patch_img      [IN]    The \"patch\" image, which must be equal, or\n * smaller than \"this\" image. This function supports gray-scale (1 channel only)\n * images.\n * \\param x_max          [OUT]   The x coordinate where it was found the maximun\n * cross correlation value.\n * \\param y_max          [OUT]   The y coordinate where it was found the maximun\n * cross correlation value.\n * \\param max_val        [OUT]   The maximun value of cross correlation which we\n * can find\n * \\param x_search_ini   [IN]    The \"x\" coordinate of the search window.\n * \\param y_search_ini   [IN]    The \"y\" coordinate of the search window.\n * \\param x_search_size  [IN]    The width of the search window.\n * \\param y_search_size  [IN]    The height of the search window.\n *  Note: By default, the search area is the whole (this) image.\n * \\sa cross_correlation\n */\nvoid openCV_cross_correlation(\n    const mrpt::img::CImage& img,\n    const mrpt::img::CImage& patch_img,\n    size_t& x_max,\n    size_t& y_max,\n    double& max_val,\n    int x_search_ini = -1,\n    int y_search_ini = -1,\n    int x_search_size = -1,\n    int y_search_size = -1);\n\n/** Extract a UNITARY 3D vector in the direction of a 3D point, given from its\n * (x,y) pixels coordinates, and the camera intrinsic coordinates.\n *  \\param xy  [IN]   Pixels coordinates, from the top-left corner of the\n * image.\n *  \\param A   [IN]   The 3x3 intrinsic parameters matrix for the camera.\n *  \\return The mrpt::math::TPoint3D containing the output unitary vector.\n * \\sa buildIntrinsicParamsMatrix, TPixelCoordf\n */\nmrpt::math::TPoint3D pixelTo3D(\n    const mrpt::img::TPixelCoordf& xy, const mrpt::math::CMatrixDouble33& A);\n\n/** Builds the intrinsic parameters matrix A from parameters:\n  * \\param focalLengthX [IN]   The focal length, in X (horizontal) pixels\n  * \\param focalLengthY [IN]   The focal length, in Y (vertical) pixels\n  * \\param centerX      [IN]   The image center, horizontal, in pixels\n  * \\param centerY      [IN]   The image center, vertical, in pixels\n  *\n  * <br>This method returns the matrix:\n  <table>\n  <tr><td>f_x</td><td>0</td><td>cX</td> </tr>\n  <tr><td>0</td><td>f_y</td><td>cY</td> </tr>\n  <tr><td>0</td><td>0</td><td>1</td> </tr>\n  </table>\n  *  See also the tutorial discussing the <a\n  rhref=\"http://www.mrpt.org/Camera_Parameters\">camera model parameters</a>.\n  * \\sa pixelTo3D\n  */\nmrpt::math::CMatrixDouble33 buildIntrinsicParamsMatrix(\n    const double focalLengthX,\n    const double focalLengthY,\n    const double centerX,\n    const double centerY);\n\n/** Computes the mean squared distance between a set of 3D correspondences\n * ...\n */\ndouble computeMsd(const mrpt::tfest::TMatchingPairList& list, const poses::CPose3D& Rt);\n\n/** Transform two clouds of 3D points into a matched list of points\n * ...\n */\nvoid cloudsToMatchedList(\n    const mrpt::obs::CObservationVisualLandmarks& cloud1,\n    const mrpt::obs::CObservationVisualLandmarks& cloud2,\n    mrpt::tfest::TMatchingPairList& outList);\n\n/** Computes the main orientation of a set of points with an image (for using in\n * SIFT-based algorithms)\n * \\param image    [IN] The input image.\n * \\param x        [IN] A vector containing the 'x' coordinates of the image\n * points.\n * \\param y        [IN] A vector containing the 'y' coordinates of the image\n * points.\n * \\return The main orientation of the image point.\n */\nfloat computeMainOrientation(const mrpt::img::CImage& image, unsigned int x, unsigned int y);\n\n/** Normalizes the brigthness and contrast of an image by setting its mean value\n * to zero and its standard deviation to unit.\n * \\param image        [IN]        The input image.\n * \\param nimage       [OUTPUT]    The new normalized image.\n */\nvoid normalizeImage(const mrpt::img::CImage& image, mrpt::img::CImage& nimage);\n\n/** Find the matches between two lists of features which must be of the same\n * type.\n * \\param list1    [IN]    One list.\n * \\param list2    [IN]    Other list.\n * \\param matches  [OUT]   A vector of pairs of correspondences.\n * \\param options  [IN]    A struct containing matching options\n * \\return Returns the number of matched pairs of features.\n */\nsize_t matchFeatures(\n    const CFeatureList& list1,\n    const CFeatureList& list2,\n    CMatchedFeatureList& matches,\n    const TMatchingOptions& options = TMatchingOptions(),\n    const TStereoSystemParams& params = TStereoSystemParams());\n\n/** Calculates the Sum of Absolutes Differences (range [0,1]) between two\n * patches. Both patches must have the same size.\n * \\param mList    [IN]  The list of matched features.\n * \\param mask1    [OUT] The output mask for left features.\n * \\param mask2    [OUT] The output mask for right features.\n * \\param wSize    [IN] The value of the masking window for each features.\n * \\exception if mList.size() = 0\n */\nvoid generateMask(\n    const CMatchedFeatureList& mList,\n    mrpt::math::CMatrixBool& mask1,\n    mrpt::math::CMatrixBool& mask2,\n    int wSize = 10);\n\n/** Calculates the Sum of Absolutes Differences (range [0,1]) between two\n * patches. Both patches must have the same size.\n * \\param patch1 [IN]  One patch.\n * \\param patch2 [IN]  The other patch.\n * \\return The value of computed SAD normalized to [0,1]\n */\ndouble computeSAD(const mrpt::img::CImage& patch1, const mrpt::img::CImage& patch2);\n\n/** Draw rectangles around each of the features on a copy of the input image.\n * \\param inImg    [IN]    The input image where to draw the features.\n * \\param theList  [IN]    The list of features.\n * \\param outImg   [OUT]   The copy of the input image with the marked\n * features.\n */\nvoid addFeaturesToImage(\n    const mrpt::img::CImage& inImg, const CFeatureList& theList, mrpt::img::CImage& outImg);\n\nvoid projectMatchedFeatures(\n    const CMatchedFeatureList& matches,\n    const mrpt::img::TStereoCamera& stereo_camera,\n    std::vector<mrpt::math::TPoint3D>& out_points);\n\n/** Computes the 3D position of a set of matched features from their coordinates\n * in the images. The list have to be matched in order, e.g.\n * leftList[0]<->rightList[0]\n * \\param leftList     [IN]    The left list of features.\n * \\param rightList    [IN]    The right list of features.\n * \\param vP3D         [OUT]   A vector of mrpt::math::TPoint3D containing the\n * 3D positions of the projected points.\n * \\param params       [IN]    The intrinsic and extrinsic parameters of the\n * stereo pair.\n */\nvoid projectMatchedFeatures(\n    const CFeatureList& leftList,\n    const CFeatureList& rightList,\n    std::vector<mrpt::math::TPoint3D>& vP3D,\n    const TStereoSystemParams& params = TStereoSystemParams());\n\n/** Computes the 3D position of a particular matched feature.\n * \\param leftList     [IN]    The left feature.\n * \\param rightList    [IN]    The right feature.\n * \\param vP3D         [OUT]   The 3D position of the projected point.\n * \\param params       [IN]    The intrinsic and extrinsic parameters of the\n * stereo pair.\n */\nvoid projectMatchedFeature(\n    const CFeature& leftFeat,\n    const CFeature& rightFeat,\n    mrpt::math::TPoint3D& p3D,\n    const TStereoSystemParams& params = TStereoSystemParams());\n\n/** Project a list of matched features into the 3D space, using the provided\n * parameters of the stereo system\n * \\param mfList       [IN/OUT]    The list of matched features. Features which\n * yields a 3D point outside the area defined in TStereoSystemParams are removed\n * from the lists.\n * \\param param        [IN]        The parameters of the stereo system.\n * \\param landmarks    [OUT]       A map containing the projected landmarks.\n * \\sa TStereoSystemParams, CLandmarksMap\n */\nvoid projectMatchedFeatures(\n    CMatchedFeatureList& mfList,\n    const TStereoSystemParams& param,\n    mrpt::maps::CLandmarksMap& landmarks);\n\n/** Project a pair of feature lists into the 3D space, using the provided\n *options for the stereo system. The matches must be in order,\n *\ti.e. leftList[0] corresponds to rightList[0] and so on. Features which\n *yields a 3D point outside the area defined in TStereoSystemParams are removed\n *from the lists.\n * \\param leftList     [IN/OUT]    The left list of matched features.\n * \\param rightList    [IN/OUT]    The right list of matched features.\n * \\param param        [IN]        The options of the stereo system.\n * \\param landmarks    (OUT]       A map containing the projected landmarks.\n * \\sa TStereoSystemParams, CLandmarksMap\n */\nvoid projectMatchedFeatures(\n    CFeatureList& leftList,\n    CFeatureList& rightList,\n    const TStereoSystemParams& param,\n    mrpt::maps::CLandmarksMap& landmarks);\n\n/** Converts a stereo images observation into a bearing and range observation.\n  \\param inObs\t[IN]\tThe input stereo images observation.\n  \\param sg\t\t[IN]\tThe sigma of the row, col, and disparity variables\n   involved in the feature detection.\n  \\param outObs\t[OUT]\tThe output bearing and range observation\n   (including covariances).\n*/\nvoid StereoObs2BRObs(\n    const mrpt::obs::CObservationStereoImages& inObs,\n    const std::vector<double>& sg,\n    mrpt::obs::CObservationBearingRange& outObs);\n\n/** Converts a matched feature list into a bearing and range observation (some\n   of the stereo camera system must be provided).\n  \\param inMatches\t\t[IN]\tThe input list of matched features.\n  \\param intrinsicParams\t[IN]\tThe intrisic params of the reference\n   (left) camera of the stereo system.\n  \\param baseline\t\t\t[IN]\tThe distance among the X axis of the\n   right camera wrt the reference (left) camera.\n  \\param sg\t\t\t\t[IN]\tThe sigma of the row, col, and disparity\n   variables involved in the feature detection.\n  \\param outObs\t\t\t[OUT]\tThe output bearing and range observation\n   (including covariances).\n*/\nvoid StereoObs2BRObs(\n    const CMatchedFeatureList& inMatches,\n    const mrpt::math::CMatrixDouble33& intrinsicParams,\n    double baseline,\n    const mrpt::poses::CPose3D& sensorPose,\n    const std::vector<double>& sg,\n    mrpt::obs::CObservationBearingRange& outObs);\n\n/** Converts a CObservationVisualLandmarks into a bearing and range observation\n   (without any covariances). Fields of view are not computed.\n  \\param inObs\t\t\t[IN]\tThe input observation.\n  \\param sg\t\t\t\t[IN]\tThe sigma of the row, col, and disparity\n   variables involved in the feature detection.\n  \\param outObs\t\t\t[OUT]\tThe output bearing and range observation.\n*/\nvoid StereoObs2BRObs(\n    const mrpt::obs::CObservationStereoImages& inObs,\n    const std::vector<double>& sg,\n    mrpt::obs::CObservationBearingRange& outObs);\n\n/** Converts a CObservationVisualLandmarks into a bearing and range observation\n   (without any covariances). Fields of view are not computed.\n  \\param inObs\t\t\t[IN]\tThe input observation.\n  \\param outObs\t\t\t[OUT]\tThe output bearing and range observation.\n*/\nvoid StereoObs2BRObs(\n    const mrpt::obs::CObservationVisualLandmarks& inObs,\n    mrpt::obs::CObservationBearingRange& outObs);\n\n/** Computes a pair of x-and-y maps for stereo rectification from a pair of\ncameras and the relative pose of the second one wrt the first one.\n  \\param cam1, cam2           [IN]    The pair of involved cameras\n  \\param rightCameraPose      [IN]    The change in pose of the second camera\nwrt the first one\n  \\param outMap1x,outMap1y    [OUT]   The x-and-y maps corresponding to cam1\n(should be converted to *cv::Mat)\n  \\param outMap2x,outMap2y    [OUT]   The x-and-y maps corresponding to cam2\n(should be converted to *cv::Mat)\n* \\sa An easier to use class for stereo rectification\nmrpt::vision::CStereoRectifyMap\n*/\nvoid computeStereoRectificationMaps(\n    const mrpt::img::TCamera& cam1,\n    const mrpt::img::TCamera& cam2,\n    const mrpt::poses::CPose3D& rightCameraPose,\n    void* outMap1x,\n    void* outMap1y,\n    void* outMap2x,\n    void* outMap2y);\n\n/** @} */  // end of grouping\n\n}  // namespace vision\n}  // namespace mrpt\n"],
 )
 
-write_file(
-    name = "gen_extra_46",
-    out = "_gen/lib/cmake/mrpt-slam/mrpt-slam-config-version.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"2.15.21\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_47",
-    out = "_gen/lib/cmake/mrpt-slam/mrpt-slam-config.cmake",
-    content = ["include(CMakeFindDependencyMacro)\n\nif (TARGET mrpt::slam)\n    return()\nendif()\n\n# Hints to help CMake finding my dependencies (and theirs own), as well as\n# other future calls to search for other mrpt modules from our parent scope:\n# 1: MRPT_DIR cmake var:\nif (NOT \"${MRPT_DIR}\" STREQUAL \"\")\n  list(APPEND CMAKE_PREFIX_PATH \"${MRPT_DIR}\")\n  # If the user defines MRPT_DIR, that path overrides whatever CMake on its own\n  # found (this file):\n  get_filename_component(this_dir \"${CMAKE_CURRENT_LIST_DIR}\" ABSOLUTE)\n  get_filename_component(user_mrpt_dir \"${MRPT_DIR}\" ABSOLUTE)\n  if ((EXISTS \"${MRPT_DIR}/mrpt-slam-config.cmake\") AND (NOT \"${this_dir}\" STREQUAL \"${user_mrpt_dir}\"))\n    message(\"mrpt-slam_DIR was: ${mrpt-slam_DIR}\")\n    set(mrpt-slam_DIR \"${MRPT_DIR}\" CACHE PATH \"Path to mrpt-slam\" FORCE)\n    include(${MRPT_DIR}/mrpt-slam-config.cmake)\n    return()\n  endif()\nendif()\n# 2) The current (and parent) path:\ncmake_policy(PUSH)\ncmake_policy(SET CMP0057 NEW) # cmake>=3.3: Allow if(IN_LIST)\n\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}/../\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}/../\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\ncmake_policy(POP)\n\n# Prefer config instead of the old FindXXX() files\nset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)\n\n# Search for dependencies first:\nset(_deps \"mrpt-vision;mrpt-maps\")\nforeach(_dep ${_deps}) # NO quotes for the list to be a CMake list!\n  if (${_dep}_FOUND)\n      continue() # already found\n  endif()\n  find_dependency(${_dep})\n  if(${_dep}_FOUND)\n    mark_as_advanced(${_dep}_DIR)\n  endif()\nendforeach()\nfind_dependency(TBB CONFIG)\n\n# Restore user's settings:\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG ${_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nunset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG)\n\n# Include targets for this library:\ninclude(${CMAKE_CURRENT_LIST_DIR}/mrpt-slam-targets.cmake)\n"],
-)
-
-write_file(
-    name = "gen_extra_48",
-    out = "_gen/lib/cmake/mrpt-slam/mrpt-slam-targets-release.cmake",
-    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"mrpt::slam\" for configuration \"Release\"\nset_property(TARGET mrpt::slam APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(mrpt::slam PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmrpt-slam.so.2.15.21\"\n  IMPORTED_SONAME_RELEASE \"libmrpt-slam.so.2.15\"\n  )\n\nlist(APPEND _cmake_import_check_targets mrpt::slam )\nlist(APPEND _cmake_import_check_files_for_mrpt::slam \"${_IMPORT_PREFIX}/lib/libmrpt-slam.so.2.15.21\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
-)
-
-write_file(
-    name = "gen_extra_49",
-    out = "_gen/lib/cmake/mrpt-slam/mrpt-slam-targets.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS mrpt::slam)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target mrpt::slam\nadd_library(mrpt::slam SHARED IMPORTED)\n\nset_target_properties(mrpt::slam PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/mrpt/slam/include\"\n  INTERFACE_LINK_LIBRARIES \"mrpt::vision;mrpt::maps;TBB::tbb\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/mrpt-slam-targets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# Make sure the targets which have been exported in some other\n# export set exist.\nunset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\nforeach(_target \"mrpt::vision\" )\n  if(NOT TARGET \"${_target}\" )\n    set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets \"${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets} ${_target}\")\n  endif()\nendforeach()\n\nif(DEFINED ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\n  if(CMAKE_FIND_PACKAGE_NAME)\n    set( ${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)\n    set( ${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE \"The following imported targets are referenced, but are missing: ${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets}\")\n  else()\n    message(FATAL_ERROR \"The following imported targets are referenced, but are missing: ${${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets}\")\n  endif()\nendif()\nunset(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE_targets)\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-write_file(
-    name = "gen_extra_50",
-    out = "_gen/lib/cmake/mrpt-vision/mrpt-vision-config-version.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version.\n# The variable CVF_VERSION must be set before calling configure_file().\n\nset(PACKAGE_VERSION \"2.15.21\")\n\nif (PACKAGE_FIND_VERSION_RANGE)\n  # Package version must be in the requested version range\n  if ((PACKAGE_FIND_VERSION_RANGE_MIN STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MIN)\n      OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_GREATER PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_GREATER_EQUAL PACKAGE_FIND_VERSION_MAX)))\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n  endif()\nelse()\n  if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n    set(PACKAGE_VERSION_COMPATIBLE FALSE)\n  else()\n    set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_51",
-    out = "_gen/lib/cmake/mrpt-vision/mrpt-vision-config.cmake",
-    content = ["include(CMakeFindDependencyMacro)\n\nif (TARGET mrpt::vision)\n    return()\nendif()\n\n# Hints to help CMake finding my dependencies (and theirs own), as well as\n# other future calls to search for other mrpt modules from our parent scope:\n# 1: MRPT_DIR cmake var:\nif (NOT \"${MRPT_DIR}\" STREQUAL \"\")\n  list(APPEND CMAKE_PREFIX_PATH \"${MRPT_DIR}\")\n  # If the user defines MRPT_DIR, that path overrides whatever CMake on its own\n  # found (this file):\n  get_filename_component(this_dir \"${CMAKE_CURRENT_LIST_DIR}\" ABSOLUTE)\n  get_filename_component(user_mrpt_dir \"${MRPT_DIR}\" ABSOLUTE)\n  if ((EXISTS \"${MRPT_DIR}/mrpt-vision-config.cmake\") AND (NOT \"${this_dir}\" STREQUAL \"${user_mrpt_dir}\"))\n    message(\"mrpt-vision_DIR was: ${mrpt-vision_DIR}\")\n    set(mrpt-vision_DIR \"${MRPT_DIR}\" CACHE PATH \"Path to mrpt-vision\" FORCE)\n    include(${MRPT_DIR}/mrpt-vision-config.cmake)\n    return()\n  endif()\nendif()\n# 2) The current (and parent) path:\ncmake_policy(PUSH)\ncmake_policy(SET CMP0057 NEW) # cmake>=3.3: Allow if(IN_LIST)\n\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\nif(NOT \"${CMAKE_CURRENT_LIST_DIR}/../\" IN_LIST CMAKE_PREFIX_PATH)\n    list(APPEND  CMAKE_PREFIX_PATH \"${CMAKE_CURRENT_LIST_DIR}/../\")\n    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)\nendif()\ncmake_policy(POP)\n\n# Prefer config instead of the old FindXXX() files\nset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG ${CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)\n\n# Search for dependencies first:\nset(_deps \"mrpt-obs\")\nforeach(_dep ${_deps}) # NO quotes for the list to be a CMake list!\n  if (${_dep}_FOUND)\n      continue() # already found\n  endif()\n  find_dependency(${_dep})\n  if(${_dep}_FOUND)\n    mark_as_advanced(${_dep}_DIR)\n  endif()\nendforeach()\n\n\n# Restore user's settings:\nset(CMAKE_FIND_PACKAGE_PREFER_CONFIG ${_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG})\nunset(_BCK_CMAKE_FIND_PACKAGE_PREFER_CONFIG)\n\n# Include targets for this library:\ninclude(${CMAKE_CURRENT_LIST_DIR}/mrpt-vision-targets.cmake)\n"],
-)
-
-write_file(
-    name = "gen_extra_52",
-    out = "_gen/lib/cmake/mrpt-vision/mrpt-vision-targets-release.cmake",
-    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"mrpt::vision\" for configuration \"Release\"\nset_property(TARGET mrpt::vision APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(mrpt::vision PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmrpt-vision.so.2.15.21\"\n  IMPORTED_SONAME_RELEASE \"libmrpt-vision.so.2.15\"\n  )\n\nlist(APPEND _cmake_import_check_targets mrpt::vision )\nlist(APPEND _cmake_import_check_files_for_mrpt::vision \"${_IMPORT_PREFIX}/lib/libmrpt-vision.so.2.15.21\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
-)
-
-write_file(
-    name = "gen_extra_53",
-    out = "_gen/lib/cmake/mrpt-vision/mrpt-vision-targets.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS mrpt::vision)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target mrpt::vision\nadd_library(mrpt::vision SHARED IMPORTED)\n\nset_target_properties(mrpt::vision PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/mrpt/vision/include\"\n  INTERFACE_LINK_LIBRARIES \"mrpt::obs\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/mrpt-vision-targets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-pkg_files(
-    name = "pkg_files_extra_0",
-    srcs = [":gen_extra_0"],
-    prefix = "include/mrpt/slam/include/mrpt/maps",
-)
-
-pkg_files(
-    name = "pkg_files_extra_1",
-    srcs = [":gen_extra_1"],
-    prefix = "include/mrpt/slam/include/mrpt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_2",
-    srcs = [":gen_extra_2"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_3",
-    srcs = [":gen_extra_3"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_4",
-    srcs = [":gen_extra_4"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_5",
-    srcs = [":gen_extra_5"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_6",
-    srcs = [":gen_extra_6"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_7",
-    srcs = [":gen_extra_7"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_8",
-    srcs = [":gen_extra_8"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_9",
-    srcs = [":gen_extra_9"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_10",
-    srcs = [":gen_extra_10"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_11",
-    srcs = [":gen_extra_11"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_12",
-    srcs = [":gen_extra_12"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_13",
-    srcs = [":gen_extra_13"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_14",
-    srcs = [":gen_extra_14"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_15",
-    srcs = [":gen_extra_15"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_16",
-    srcs = [":gen_extra_16"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_17",
-    srcs = [":gen_extra_17"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_18",
-    srcs = [":gen_extra_18"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_19",
-    srcs = [":gen_extra_19"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_20",
-    srcs = [":gen_extra_20"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_21",
-    srcs = [":gen_extra_21"],
-    prefix = "include/mrpt/slam/include/mrpt/slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_22",
-    srcs = [":gen_extra_22"],
-    prefix = "include/mrpt/vision/include/mrpt/maps",
-)
-
-pkg_files(
-    name = "pkg_files_extra_23",
-    srcs = [":gen_extra_23"],
-    prefix = "include/mrpt/vision/include/mrpt/maps",
-)
-
-pkg_files(
-    name = "pkg_files_extra_24",
-    srcs = [":gen_extra_24"],
-    prefix = "include/mrpt/vision/include/mrpt/obs",
-)
-
-pkg_files(
-    name = "pkg_files_extra_25",
-    srcs = [":gen_extra_25"],
-    prefix = "include/mrpt/vision/include/mrpt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_26",
-    srcs = [":gen_extra_26"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_27",
-    srcs = [":gen_extra_27"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_28",
-    srcs = [":gen_extra_28"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_29",
-    srcs = [":gen_extra_29"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_30",
-    srcs = [":gen_extra_30"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_31",
-    srcs = [":gen_extra_31"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_32",
-    srcs = [":gen_extra_32"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_33",
-    srcs = [":gen_extra_33"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_34",
-    srcs = [":gen_extra_34"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_35",
-    srcs = [":gen_extra_35"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_36",
-    srcs = [":gen_extra_36"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_37",
-    srcs = [":gen_extra_37"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_38",
-    srcs = [":gen_extra_38"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_39",
-    srcs = [":gen_extra_39"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_40",
-    srcs = [":gen_extra_40"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_41",
-    srcs = [":gen_extra_41"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_42",
-    srcs = [":gen_extra_42"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_43",
-    srcs = [":gen_extra_43"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_44",
-    srcs = [":gen_extra_44"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_45",
-    srcs = [":gen_extra_45"],
-    prefix = "include/mrpt/vision/include/mrpt/vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_46",
-    srcs = [":gen_extra_46"],
-    prefix = "lib/cmake/mrpt-slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_47",
-    srcs = [":gen_extra_47"],
-    prefix = "lib/cmake/mrpt-slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_48",
-    srcs = [":gen_extra_48"],
-    prefix = "lib/cmake/mrpt-slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_49",
-    srcs = [":gen_extra_49"],
-    prefix = "lib/cmake/mrpt-slam",
-)
-
-pkg_files(
-    name = "pkg_files_extra_50",
-    srcs = [":gen_extra_50"],
-    prefix = "lib/cmake/mrpt-vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_51",
-    srcs = [":gen_extra_51"],
-    prefix = "lib/cmake/mrpt-vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_52",
-    srcs = [":gen_extra_52"],
-    prefix = "lib/cmake/mrpt-vision",
-)
-
-pkg_files(
-    name = "pkg_files_extra_53",
-    srcs = [":gen_extra_53"],
-    prefix = "lib/cmake/mrpt-vision",
-)
-
-pkg_files(
-    name = "pkg_files_soname_54",
-    srcs = [":mrpt-slam"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-slam": "libmrpt-slam.so.2.15"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_55",
-    srcs = [":mrpt-slam"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-slam": "libmrpt-slam.so.2.15.21"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_56",
-    srcs = [":mrpt-vision"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-vision": "libmrpt-vision.so.2.15"},
-)
-
-pkg_files(
-    name = "pkg_files_soname_57",
-    srcs = [":mrpt-vision"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "lib",
-    renames = {":mrpt-vision": "libmrpt-vision.so.2.15.21"},
-)
-
 ament_index(
     name = "ament_index",
     libraries = [
@@ -1018,7 +614,19 @@ ament_index(
         ":mrpt-slam",
     ],
     package_xml = "package.xml",
-    deps = ["@mrpt_libmaps//:ament_package"],
+    sonames = {
+        "mrpt-slam": [
+            "libmrpt-slam.so.2.15",
+            "libmrpt-slam.so.2.15.21",
+        ],
+        "mrpt-vision": [
+            "libmrpt-vision.so.2.15",
+            "libmrpt-vision.so.2.15.21",
+        ],
+    },
+    deps = [
+        "@mrpt_libmaps//:ament_package",
+    ],
 )
 
 cc_test(
@@ -1086,8 +694,6 @@ cc_test(
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     data = [
         ":ament_index",
-        ":mrpt-slam",
-        ":mrpt-vision",
     ],
     dynamic_deps = [":transitive_dynamic_deps"],
     includes = ["_gen/include"],
@@ -1108,72 +714,71 @@ ament_package(
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
     cmake_export_targets = False,
-    install = [
-        ":pkg_files_extra_0",
-        ":pkg_files_extra_1",
-        ":pkg_files_extra_2",
-        ":pkg_files_extra_3",
-        ":pkg_files_extra_4",
-        ":pkg_files_extra_5",
-        ":pkg_files_extra_6",
-        ":pkg_files_extra_7",
-        ":pkg_files_extra_8",
-        ":pkg_files_extra_9",
-        ":pkg_files_extra_10",
-        ":pkg_files_extra_11",
-        ":pkg_files_extra_12",
-        ":pkg_files_extra_13",
-        ":pkg_files_extra_14",
-        ":pkg_files_extra_15",
-        ":pkg_files_extra_16",
-        ":pkg_files_extra_17",
-        ":pkg_files_extra_18",
-        ":pkg_files_extra_19",
-        ":pkg_files_extra_20",
-        ":pkg_files_extra_21",
-        ":pkg_files_extra_22",
-        ":pkg_files_extra_23",
-        ":pkg_files_extra_24",
-        ":pkg_files_extra_25",
-        ":pkg_files_extra_26",
-        ":pkg_files_extra_27",
-        ":pkg_files_extra_28",
-        ":pkg_files_extra_29",
-        ":pkg_files_extra_30",
-        ":pkg_files_extra_31",
-        ":pkg_files_extra_32",
-        ":pkg_files_extra_33",
-        ":pkg_files_extra_34",
-        ":pkg_files_extra_35",
-        ":pkg_files_extra_36",
-        ":pkg_files_extra_37",
-        ":pkg_files_extra_38",
-        ":pkg_files_extra_39",
-        ":pkg_files_extra_40",
-        ":pkg_files_extra_41",
-        ":pkg_files_extra_42",
-        ":pkg_files_extra_43",
-        ":pkg_files_extra_44",
-        ":pkg_files_extra_45",
-        ":pkg_files_extra_46",
-        ":pkg_files_extra_47",
-        ":pkg_files_extra_48",
-        ":pkg_files_extra_49",
-        ":pkg_files_extra_50",
-        ":pkg_files_extra_51",
-        ":pkg_files_extra_52",
-        ":pkg_files_extra_53",
-        ":pkg_files_soname_54",
-        ":pkg_files_soname_55",
-        ":pkg_files_soname_56",
-        ":pkg_files_soname_57",
+    headers = [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_extra_5",
+        ":gen_extra_6",
+        ":gen_extra_7",
+        ":gen_extra_8",
+        ":gen_extra_9",
+        ":gen_extra_10",
+        ":gen_extra_11",
+        ":gen_extra_12",
+        ":gen_extra_13",
+        ":gen_extra_14",
+        ":gen_extra_15",
+        ":gen_extra_16",
+        ":gen_extra_17",
+        ":gen_extra_18",
+        ":gen_extra_19",
+        ":gen_extra_20",
+        ":gen_extra_21",
+        ":gen_extra_22",
+        ":gen_extra_23",
+        ":gen_extra_24",
+        ":gen_extra_25",
+        ":gen_extra_26",
+        ":gen_extra_27",
+        ":gen_extra_28",
+        ":gen_extra_29",
+        ":gen_extra_30",
+        ":gen_extra_31",
+        ":gen_extra_32",
+        ":gen_extra_33",
+        ":gen_extra_34",
+        ":gen_extra_35",
+        ":gen_extra_36",
+        ":gen_extra_37",
+        ":gen_extra_38",
+        ":gen_extra_39",
+        ":gen_extra_40",
+        ":gen_extra_41",
+        ":gen_extra_42",
+        ":gen_extra_43",
+        ":gen_extra_44",
+        ":gen_extra_45",
     ],
+    include_prefix = "",
     install_package_xml = False,
     libraries = [
         ":mrpt-vision",
         ":mrpt-slam",
     ],
     package_xml = "package.xml",
+    sonames = {
+        "mrpt-slam": [
+            "libmrpt-slam.so.2.15",
+            "libmrpt-slam.so.2.15.21",
+        ],
+        "mrpt-vision": [
+            "libmrpt-vision.so.2.15",
+            "libmrpt-vision.so.2.15.21",
+        ],
+    },
     deps = [":ament_index"] + [
         "@mrpt_libmaps//:ament_package",
     ],

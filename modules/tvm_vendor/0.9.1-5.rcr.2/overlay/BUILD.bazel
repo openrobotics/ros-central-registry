@@ -3,7 +3,7 @@ load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -933,552 +933,12 @@ write_file(
     content = ["/*\n * Licensed to the Apache Software Foundation (ASF) under one\n * or more contributor license agreements.  See the NOTICE file\n * distributed with this work for additional information\n * regarding copyright ownership.  The ASF licenses this file\n * to you under the Apache License, Version 2.0 (the\n * \"License\"); you may not use this file except in compliance\n * with the License.  You may obtain a copy of the License at\n *\n *   http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing,\n * software distributed under the License is distributed on an\n * \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY\n * KIND, either express or implied.  See the License for the\n * specific language governing permissions and limitations\n * under the License.\n */\n\n/*!\n * \\file tvm/runtime/vm/vm.h\n * \\brief The Relay virtual machine runtime.\n */\n#ifndef TVM_RUNTIME_VM_VM_H_\n#define TVM_RUNTIME_VM_VM_H_\n\n#include <tvm/runtime/container/closure.h>\n#include <tvm/runtime/module.h>\n#include <tvm/runtime/object.h>\n#include <tvm/runtime/packed_func.h>\n#include <tvm/runtime/registry.h>\n#include <tvm/runtime/vm/bytecode.h>\n#include <tvm/runtime/vm/executable.h>\n#include <tvm/runtime/vm/memory_manager.h>\n\n#include <memory>\n#include <string>\n#include <unordered_map>\n#include <utility>\n#include <vector>\n\nnamespace tvm {\nnamespace runtime {\nnamespace vm {\n\n/*!\n * \\brief An object representing a vm closure.\n */\nclass VMClosureObj : public ClosureObj {\n public:\n  /*!\n   * \\brief The index into the function list. The function could be any\n   * function object that is compatible to the VM runtime.\n   */\n  size_t func_index;\n  /*! \\brief The free variables of the closure. */\n  std::vector<ObjectRef> free_vars;\n\n  static constexpr const uint32_t _type_index = TypeIndex::kDynamic;\n  static constexpr const char* _type_key = \"vm.Closure\";\n  TVM_DECLARE_FINAL_OBJECT_INFO(VMClosureObj, ClosureObj);\n};\n\n/*! \\brief reference to closure. */\nclass VMClosure : public Closure {\n public:\n  VMClosure(size_t func_index, std::vector<ObjectRef> free_vars);\n  TVM_DEFINE_OBJECT_REF_METHODS(VMClosure, Closure, VMClosureObj);\n};\n\n/*!\n * \\brief A representation of a Relay function in the VM.\n *\n * Contains metadata about the compiled function, as\n * well as the compiled VM instructions.\n */\nstruct VMFunction {\n  /*! \\brief The function's name. */\n  std::string name;\n  /*! \\brief The function parameter names. */\n  std::vector<std::string> params;\n  /*! \\brief The instructions representing the function. */\n  std::vector<Instruction> instructions;\n  /*! \\brief The size of the frame for this function */\n  Index register_file_size = 0;\n  /*! \\brief The indexes for the device holding each function parameter. */\n  std::vector<Index> param_device_indexes;\n\n  VMFunction(std::string name, std::vector<std::string> params,\n             std::vector<Instruction> instructions, Index register_file_size,\n             std::vector<Index> param_device_indexes)\n      : name(std::move(name)),\n        params(std::move(params)),\n        instructions(std::move(instructions)),\n        register_file_size(register_file_size),\n        param_device_indexes(std::move(param_device_indexes)) {\n    ICHECK_EQ(params.size(), param_device_indexes.size());\n  }\n\n  VMFunction() = default;\n\n  friend std::ostream& operator<<(std::ostream& os, const VMFunction&);\n};\n\n/*!\n * \\brief A representation of a stack frame.\n *\n * A stack frame is a record containing the information needed\n * to restore the caller's virtual machine state after returning\n * from a function call.\n */\nstruct VMFrame {\n  /*! \\brief The return program counter. */\n  Index pc;\n  /*! \\brief The index into the function table, points to the caller. */\n  Index func_index;\n  /*! \\brief The number of arguments. */\n  Index args;\n  /*! \\brief A pointer into the caller function's instructions. */\n  const Instruction* code;\n\n  /*! \\brief Statically allocated space for objects */\n  std::vector<ObjectRef> register_file;\n\n  /*! \\brief Register in caller's frame to put return value */\n  RegName caller_return_register;\n\n  VMFrame(Index pc, Index func_index, Index args, const Instruction* code, Index register_file_size)\n      : pc(pc),\n        func_index(func_index),\n        args(args),\n        code(code),\n        register_file(register_file_size),\n        caller_return_register(0) {}\n};\n\n/*!\n * \\brief The virtual machine.\n *\n * The virtual machine contains all the current execution state,\n * as well as the executable.\n *\n * The goal is to have a single self-contained object,\n * enabling one to easily pass around VMs, execute them on\n * multiple threads, or serialize them to disk or over the\n * wire.\n */\nclass VirtualMachine : public runtime::ModuleNode {\n public:\n  /*!\n   * \\brief Get a PackedFunc from module.\n   *\n   *  The PackedFunc may not be fully initialized,\n   *  there might still be first time running overhead when\n   *  executing the function on certain devices.\n   *  For benchmarking, use prepare to eliminate\n   *\n   * \\param name the name of the function.\n   * \\param sptr_to_self The shared_ptr that points to this module node.\n   *\n   * \\return PackedFunc(nullptr) when it is not available.\n   *\n   * \\note The function will always remain valid.\n   *   If the function needs resource from the module(e.g. late linking),\n   *   it should capture sptr_to_self.\n   */\n  virtual PackedFunc GetFunction(const std::string& name, const ObjectPtr<Object>& sptr_to_self);\n\n  virtual ~VirtualMachine() {}\n\n  const char* type_key() const final { return \"VirtualMachine\"; }\n\n  VirtualMachine() : frames_(), func_index_(0), code_(nullptr), pc_(0), exec_(nullptr) {}\n\n  /*!\n   * \\brief load the executable for the virtual machine.\n   * \\param exec The executable.\n   */\n  virtual void LoadExecutable(const ObjectPtr<Executable>& exec);\n\n protected:\n  /*! \\brief Push a call frame on to the call stack. */\n  void PushFrame(Index arg_count, Index ret_pc, const VMFunction& vm_func);\n\n  /*!\n   * \\brief Pop a frame off the call stack.\n   * \\return The number of frames left.\n   */\n  Index PopFrame();\n\n  /*!\n   * \\brief Write to a VM register.\n   * \\param reg The register to write to.\n   * \\param obj The object to write to.\n   */\n  inline void WriteRegister(RegName reg, const ObjectRef& obj);\n\n  /*!\n   * \\brief Read a VM register.\n   * \\param reg The register to read from.\n   * \\return The read object.\n   */\n  ObjectRef ReadRegister(RegName reg) const;\n\n  /*!\n   * \\brief Read a VM register and cast it to int32_t\n   * \\param reg The register to read from.\n   * \\return The read scalar.\n   */\n  int64_t LoadScalarInt(RegName reg) const;\n\n  /*!\n   * \\brief Invoke a VM function.\n   * \\param func The function.\n   * \\param args The arguments to the function.\n   * \\return The object representing the result.\n   */\n  ObjectRef Invoke(const VMFunction& func, const std::vector<ObjectRef>& args);\n\n  // TODO(@jroesch): I really would like this to be a global variable.\n  /*!\n   * \\brief Invoke a VM function by name.\n   * \\param name The function's name.\n   * \\param args The arguments to the function.\n   * \\return The object representing the result.\n   */\n  ObjectRef Invoke(const std::string& name, const std::vector<ObjectRef>& args);\n\n  /*!\n   * \\brief Invoke a PackedFunction\n   *\n   * \\param packed_index The offset of the PackedFunction in all functions.\n   * \\param func The PackedFunction to be invoked.\n   * \\param arg_count The number of arguments to the PackedFunction.\n   * \\param output_size The number of outputs of the PackedFunction.\n   * \\param args Arguments to the PackedFunction.\n   *\n   * \\note The return value will be stored in the last output_size slots of args.\n   */\n  virtual void InvokePacked(Index packed_index, const PackedFunc& func, Index arg_count,\n                            Index output_size, const std::vector<ObjectRef>& args);\n\n  /*!\n   * \\brief Initialize the virtual machine for a set of (physical) devices.\n   * \\param physical_devices The set of TVM devices.\n   * \\param alloc_types The allocator types for each device.\n   */\n  void Init(const std::vector<Device>& physical_devices,\n            const std::vector<AllocatorType>& alloc_types);\n\n  /*! \\brief Run VM dispatch loop. */\n  void RunLoop();\n\n  /*! \\brief Get device from the device list based on a given device index. */\n  Device GetDevice(Index device_index) const;\n  Allocator* GetAllocator(Index device_index) const;\n\n  /*!\n   * \\brief Invoke a global setting up the VM state to execute.\n   *\n   * This does not begin execution of the VM.\n   */\n  void InvokeGlobal(const VMFunction& func, const std::vector<ObjectRef>& args);\n\n  /*!\n   * \\brief Set inputs to a function.\n   * \\param name The function name\n   * \\param args args[offset:] are arguments to the\n   * function. If the arguments are not of the correct device for the function,\n   * they will be copied to the device.\n   * \\param offset Starting offset of the arguments in `args`.\n   */\n  void SetInput(std::string name, TVMArgs args, int offset);\n\n  /*!\n   * \\brief Set one input tensor with index or name to a function.\n   * \\param name The function name.\n   * \\param tag index or name of the input tensor .\n   * \\param tensor the input tensor. If the tensor is not of the correct device for the function,\n   * they will be copied to the device.\n   */\n  void SetOneInput(std::string name, const TVMArgValue& tag, const TVMArgValue& tensor);\n\n  /*!\n   * \\brief Internal hook for profiling the start of an op.\n   *\n   * This hook is only called on certain ops that are likely to take a\n   * significant amount of runtime (normally because they alloc or transfer to\n   * device).\n   *\n   * \\param instr Instruction that will be executed after this hook fires\n   */\n  virtual void OpStartHook(Instruction instr);\n\n  /*!\n   * \\brief Internal hook for profiling the end of an op.\n   */\n  virtual void OpStopHook();\n\n private:\n  /*!\n   * \\brief Get index of input tensor from its name.\n   * \\param func_name The function's name.\n   * \\param input_name The input tensor name.\n   * \\return The input tensor index.\n   */\n  int64_t GetInputIndexFromVMFunction(const std::string& func_name,\n                                      const std::string& input_name) const;\n\n  /*!\n   * \\brief Get index of input tensor from its name.\n   * \\param params parameter names.\n   * \\param input_name The input tensor name.\n   * \\return The input tensor index.\n   */\n  int64_t GetInputIndexFromName(const std::vector<std::string>& params,\n                                const std::string& input_name) const;\n\n  /*!\n   * \\brief Check executable exists and get VM function from it.\n   * \\param func_name The function's name.\n   * \\return VM function.\n   */\n  const VMFunction& CheckAndGetVMFunction(const std::string& func_name) const;\n\n  /*!\n   * \\brief Creats inputs_ field, if it exists check its size.\n   * \\param func_name The function's name.\n   * \\param size inputs_ field size.\n   * \\return VM function.\n   */\n  void CreateInputsOrCheckSize(const std::string& func_name, size_t size);\n\n  /*!\n   * \\brief Set one input tensor with given index to set of input tensors if need copy to given\n   * device. \\param tensors the input tensors set (destination) \\param tensor some tensor (not\n   * neccessary DLTensor). \\param index The input tensor index. \\param dev device to copy if need.\n   */\n  void SetInputTensorWithIndex(std::vector<ObjectRef>& tensors,  // NOLINT(*)\n                               const TVMArgValue& tensor, int index, Device dev);\n\n protected:\n  /*! \\brief The virtual machine's packed function table. */\n  std::vector<PackedFunc> packed_funcs_;\n  /*! \\brief The current stack of call frames. */\n  std::vector<VMFrame> frames_;\n  /*! \\brief The fuction table index of the current function. */\n  Index func_index_;\n  /*! \\brief The current pointer to the code section. */\n  const Instruction* code_;\n  /*! \\brief The virtual machine PC. */\n  Index pc_;\n  /*! \\brief The special return register. */\n  ObjectRef return_register_;\n  /*! \\brief The executable the VM will operate on. */\n  ObjectPtr<Executable> exec_;\n  /*! \\brief The function name to inputs mapping. */\n  std::unordered_map<std::string, std::vector<ObjectRef>> inputs_;\n  /*!\n   * \\brief The \"physical\" devices the VM can execute primitives on. All \"device indexes\"\n   * are w.r.t. this vector. Each entry in this vector must match the corresponding entry\n   * in the executable's \"virtual\" devices vector.\n   */\n  std::vector<Device> devices_;\n  /*! \\brief The cached memory allocators, one per device. */\n  std::vector<Allocator*> allocators_;\n  /*!\n   * \\brief The constant pool for runtime. It caches the device dependent\n   * object to avoid rellocation of constants during inference.\n   */\n  std::vector<ObjectRef> const_pool_;\n};\n\n}  // namespace vm\n}  // namespace runtime\n}  // namespace tvm\n\n#endif  // TVM_RUNTIME_VM_VM_H_\n"],
 )
 
-write_file(
-    name = "gen_cmake_87",
-    out = "_gen/share/tvm_vendor/cmake/ament_cmake_export_include_directories-extras.cmake",
-    content = ["# generated from ament_cmake_export_include_directories/cmake/ament_cmake_export_include_directories-extras.cmake.in\n\nset(_exported_include_dirs \"${tvm_vendor_DIR}/../../../include;${tvm_vendor_DIR}/../../../include/tvm_vendor\")\n\n# append include directories to tvm_vendor_INCLUDE_DIRS\n# warn about not existing paths\nif(NOT _exported_include_dirs STREQUAL \"\")\n  find_package(ament_cmake_core QUIET REQUIRED)\n  foreach(_exported_include_dir ${_exported_include_dirs})\n    if(NOT IS_DIRECTORY \"${_exported_include_dir}\")\n      message(WARNING \"Package 'tvm_vendor' exports the include directory '${_exported_include_dir}' which doesn't exist\")\n    endif()\n    normalize_path(_exported_include_dir \"${_exported_include_dir}\")\n    list(APPEND tvm_vendor_INCLUDE_DIRS \"${_exported_include_dir}\")\n  endforeach()\nendif()\n"],
-)
-
-pkg_files(
-    name = "pkg_files_static_dmlc",
-    srcs = [":static_dmlc_a"],
-    prefix = "lib",
-)
-
-pkg_files(
-    name = "pkg_files_extra_0",
-    srcs = [":gen_extra_0"],
-    prefix = "include/tvm_vendor/dlpack",
-)
-
-pkg_files(
-    name = "pkg_files_extra_1",
-    srcs = [":gen_extra_1"],
-    prefix = "include/tvm_vendor/dlpack",
-)
-
-pkg_files(
-    name = "pkg_files_extra_2",
-    srcs = [":gen_extra_2"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_3",
-    srcs = [":gen_extra_3"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_4",
-    srcs = [":gen_extra_4"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_5",
-    srcs = [":gen_extra_5"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_6",
-    srcs = [":gen_extra_6"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_7",
-    srcs = [":gen_extra_7"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_8",
-    srcs = [":gen_extra_8"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_9",
-    srcs = [":gen_extra_9"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_10",
-    srcs = [":gen_extra_10"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_11",
-    srcs = [":gen_extra_11"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_12",
-    srcs = [":gen_extra_12"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_13",
-    srcs = [":gen_extra_13"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_14",
-    srcs = [":gen_extra_14"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_15",
-    srcs = [":gen_extra_15"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_16",
-    srcs = [":gen_extra_16"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_17",
-    srcs = [":gen_extra_17"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_18",
-    srcs = [":gen_extra_18"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_19",
-    srcs = [":gen_extra_19"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_20",
-    srcs = [":gen_extra_20"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_21",
-    srcs = [":gen_extra_21"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_22",
-    srcs = [":gen_extra_22"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_23",
-    srcs = [":gen_extra_23"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_24",
-    srcs = [":gen_extra_24"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_25",
-    srcs = [":gen_extra_25"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_26",
-    srcs = [":gen_extra_26"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_27",
-    srcs = [":gen_extra_27"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_28",
-    srcs = [":gen_extra_28"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_29",
-    srcs = [":gen_extra_29"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_30",
-    srcs = [":gen_extra_30"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_31",
-    srcs = [":gen_extra_31"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_32",
-    srcs = [":gen_extra_32"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_33",
-    srcs = [":gen_extra_33"],
-    prefix = "include/tvm_vendor/dmlc",
-)
-
-pkg_files(
-    name = "pkg_files_extra_34",
-    srcs = [":gen_extra_34"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_35",
-    srcs = [":gen_extra_35"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_36",
-    srcs = [":gen_extra_36"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_37",
-    srcs = [":gen_extra_37"],
-    prefix = "include/tvm_vendor/tvm/runtime/container",
-)
-
-pkg_files(
-    name = "pkg_files_extra_38",
-    srcs = [":gen_extra_38"],
-    prefix = "include/tvm_vendor/tvm/runtime/container",
-)
-
-pkg_files(
-    name = "pkg_files_extra_39",
-    srcs = [":gen_extra_39"],
-    prefix = "include/tvm_vendor/tvm/runtime/container",
-)
-
-pkg_files(
-    name = "pkg_files_extra_40",
-    srcs = [":gen_extra_40"],
-    prefix = "include/tvm_vendor/tvm/runtime/container",
-)
-
-pkg_files(
-    name = "pkg_files_extra_41",
-    srcs = [":gen_extra_41"],
-    prefix = "include/tvm_vendor/tvm/runtime/container",
-)
-
-pkg_files(
-    name = "pkg_files_extra_42",
-    srcs = [":gen_extra_42"],
-    prefix = "include/tvm_vendor/tvm/runtime/container",
-)
-
-pkg_files(
-    name = "pkg_files_extra_43",
-    srcs = [":gen_extra_43"],
-    prefix = "include/tvm_vendor/tvm/runtime/container",
-)
-
-pkg_files(
-    name = "pkg_files_extra_44",
-    srcs = [":gen_extra_44"],
-    prefix = "include/tvm_vendor/tvm/runtime/container",
-)
-
-pkg_files(
-    name = "pkg_files_extra_45",
-    srcs = [":gen_extra_45"],
-    prefix = "include/tvm_vendor/tvm/runtime/contrib",
-)
-
-pkg_files(
-    name = "pkg_files_extra_46",
-    srcs = [":gen_extra_46"],
-    prefix = "include/tvm_vendor/tvm/runtime/contrib",
-)
-
-pkg_files(
-    name = "pkg_files_extra_47",
-    srcs = [":gen_extra_47"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_48",
-    srcs = [":gen_extra_48"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_49",
-    srcs = [":gen_extra_49"],
-    attributes = pkg_attributes(mode = "0755"),
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_50",
-    srcs = [":gen_extra_50"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_51",
-    srcs = [":gen_extra_51"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_52",
-    srcs = [":gen_extra_52"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_53",
-    srcs = [":gen_extra_53"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_54",
-    srcs = [":gen_extra_54"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_55",
-    srcs = [":gen_extra_55"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_56",
-    srcs = [":gen_extra_56"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_57",
-    srcs = [":gen_extra_57"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_58",
-    srcs = [":gen_extra_58"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_59",
-    srcs = [":gen_extra_59"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_60",
-    srcs = [":gen_extra_60"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt/rpc_common",
-)
-
-pkg_files(
-    name = "pkg_files_extra_61",
-    srcs = [":gen_extra_61"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt/rpc_common",
-)
-
-pkg_files(
-    name = "pkg_files_extra_62",
-    srcs = [":gen_extra_62"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt/rpc_common",
-)
-
-pkg_files(
-    name = "pkg_files_extra_63",
-    srcs = [":gen_extra_63"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt/rpc_common",
-)
-
-pkg_files(
-    name = "pkg_files_extra_64",
-    srcs = [":gen_extra_64"],
-    prefix = "include/tvm_vendor/tvm/runtime/crt",
-)
-
-pkg_files(
-    name = "pkg_files_extra_65",
-    srcs = [":gen_extra_65"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_66",
-    srcs = [":gen_extra_66"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_67",
-    srcs = [":gen_extra_67"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_68",
-    srcs = [":gen_extra_68"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_69",
-    srcs = [":gen_extra_69"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_70",
-    srcs = [":gen_extra_70"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_71",
-    srcs = [":gen_extra_71"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_72",
-    srcs = [":gen_extra_72"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_73",
-    srcs = [":gen_extra_73"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_74",
-    srcs = [":gen_extra_74"],
-    prefix = "include/tvm_vendor/tvm/runtime/micro/standalone",
-)
-
-pkg_files(
-    name = "pkg_files_extra_75",
-    srcs = [":gen_extra_75"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_76",
-    srcs = [":gen_extra_76"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_77",
-    srcs = [":gen_extra_77"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_78",
-    srcs = [":gen_extra_78"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_79",
-    srcs = [":gen_extra_79"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_80",
-    srcs = [":gen_extra_80"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_81",
-    srcs = [":gen_extra_81"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_82",
-    srcs = [":gen_extra_82"],
-    prefix = "include/tvm_vendor/tvm/runtime",
-)
-
-pkg_files(
-    name = "pkg_files_extra_83",
-    srcs = [":gen_extra_83"],
-    prefix = "include/tvm_vendor/tvm/runtime/vm",
-)
-
-pkg_files(
-    name = "pkg_files_extra_84",
-    srcs = [":gen_extra_84"],
-    prefix = "include/tvm_vendor/tvm/runtime/vm",
-)
-
-pkg_files(
-    name = "pkg_files_extra_85",
-    srcs = [":gen_extra_85"],
-    prefix = "include/tvm_vendor/tvm/runtime/vm",
-)
-
-pkg_files(
-    name = "pkg_files_extra_86",
-    srcs = [":gen_extra_86"],
-    prefix = "include/tvm_vendor/tvm/runtime/vm",
-)
-
-pkg_files(
-    name = "pkg_files_cmake_87",
-    srcs = [":gen_cmake_87"],
-    prefix = "share/tvm_vendor/cmake",
-)
-
 ament_index(
     name = "ament_index",
     libraries = [
         ":tvm",
         ":tvm_runtime",
+        ":static_dmlc_a",
     ],
     package_xml = "package.xml",
     deps = [
@@ -1495,100 +955,100 @@ ament_package(
     cmake_export_dependencies = False,
     cmake_export_include_directories = False,
     cmake_export_targets = False,
-    install = [
-        ":pkg_files_static_dmlc",
-        ":pkg_files_extra_0",
-        ":pkg_files_extra_1",
-        ":pkg_files_extra_2",
-        ":pkg_files_extra_3",
-        ":pkg_files_extra_4",
-        ":pkg_files_extra_5",
-        ":pkg_files_extra_6",
-        ":pkg_files_extra_7",
-        ":pkg_files_extra_8",
-        ":pkg_files_extra_9",
-        ":pkg_files_extra_10",
-        ":pkg_files_extra_11",
-        ":pkg_files_extra_12",
-        ":pkg_files_extra_13",
-        ":pkg_files_extra_14",
-        ":pkg_files_extra_15",
-        ":pkg_files_extra_16",
-        ":pkg_files_extra_17",
-        ":pkg_files_extra_18",
-        ":pkg_files_extra_19",
-        ":pkg_files_extra_20",
-        ":pkg_files_extra_21",
-        ":pkg_files_extra_22",
-        ":pkg_files_extra_23",
-        ":pkg_files_extra_24",
-        ":pkg_files_extra_25",
-        ":pkg_files_extra_26",
-        ":pkg_files_extra_27",
-        ":pkg_files_extra_28",
-        ":pkg_files_extra_29",
-        ":pkg_files_extra_30",
-        ":pkg_files_extra_31",
-        ":pkg_files_extra_32",
-        ":pkg_files_extra_33",
-        ":pkg_files_extra_34",
-        ":pkg_files_extra_35",
-        ":pkg_files_extra_36",
-        ":pkg_files_extra_37",
-        ":pkg_files_extra_38",
-        ":pkg_files_extra_39",
-        ":pkg_files_extra_40",
-        ":pkg_files_extra_41",
-        ":pkg_files_extra_42",
-        ":pkg_files_extra_43",
-        ":pkg_files_extra_44",
-        ":pkg_files_extra_45",
-        ":pkg_files_extra_46",
-        ":pkg_files_extra_47",
-        ":pkg_files_extra_48",
-        ":pkg_files_extra_49",
-        ":pkg_files_extra_50",
-        ":pkg_files_extra_51",
-        ":pkg_files_extra_52",
-        ":pkg_files_extra_53",
-        ":pkg_files_extra_54",
-        ":pkg_files_extra_55",
-        ":pkg_files_extra_56",
-        ":pkg_files_extra_57",
-        ":pkg_files_extra_58",
-        ":pkg_files_extra_59",
-        ":pkg_files_extra_60",
-        ":pkg_files_extra_61",
-        ":pkg_files_extra_62",
-        ":pkg_files_extra_63",
-        ":pkg_files_extra_64",
-        ":pkg_files_extra_65",
-        ":pkg_files_extra_66",
-        ":pkg_files_extra_67",
-        ":pkg_files_extra_68",
-        ":pkg_files_extra_69",
-        ":pkg_files_extra_70",
-        ":pkg_files_extra_71",
-        ":pkg_files_extra_72",
-        ":pkg_files_extra_73",
-        ":pkg_files_extra_74",
-        ":pkg_files_extra_75",
-        ":pkg_files_extra_76",
-        ":pkg_files_extra_77",
-        ":pkg_files_extra_78",
-        ":pkg_files_extra_79",
-        ":pkg_files_extra_80",
-        ":pkg_files_extra_81",
-        ":pkg_files_extra_82",
-        ":pkg_files_extra_83",
-        ":pkg_files_extra_84",
-        ":pkg_files_extra_85",
-        ":pkg_files_extra_86",
-        ":pkg_files_cmake_87",
+    headers = [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_extra_5",
+        ":gen_extra_6",
+        ":gen_extra_7",
+        ":gen_extra_8",
+        ":gen_extra_9",
+        ":gen_extra_10",
+        ":gen_extra_11",
+        ":gen_extra_12",
+        ":gen_extra_13",
+        ":gen_extra_14",
+        ":gen_extra_15",
+        ":gen_extra_16",
+        ":gen_extra_17",
+        ":gen_extra_18",
+        ":gen_extra_19",
+        ":gen_extra_20",
+        ":gen_extra_21",
+        ":gen_extra_22",
+        ":gen_extra_23",
+        ":gen_extra_24",
+        ":gen_extra_25",
+        ":gen_extra_26",
+        ":gen_extra_27",
+        ":gen_extra_28",
+        ":gen_extra_29",
+        ":gen_extra_30",
+        ":gen_extra_31",
+        ":gen_extra_32",
+        ":gen_extra_33",
+        ":gen_extra_34",
+        ":gen_extra_35",
+        ":gen_extra_36",
+        ":gen_extra_37",
+        ":gen_extra_38",
+        ":gen_extra_39",
+        ":gen_extra_40",
+        ":gen_extra_41",
+        ":gen_extra_42",
+        ":gen_extra_43",
+        ":gen_extra_44",
+        ":gen_extra_45",
+        ":gen_extra_46",
+        ":gen_extra_47",
+        ":gen_extra_48",
+        ":gen_extra_49",
+        ":gen_extra_50",
+        ":gen_extra_51",
+        ":gen_extra_52",
+        ":gen_extra_53",
+        ":gen_extra_54",
+        ":gen_extra_55",
+        ":gen_extra_56",
+        ":gen_extra_57",
+        ":gen_extra_58",
+        ":gen_extra_59",
+        ":gen_extra_60",
+        ":gen_extra_61",
+        ":gen_extra_62",
+        ":gen_extra_63",
+        ":gen_extra_64",
+        ":gen_extra_65",
+        ":gen_extra_66",
+        ":gen_extra_67",
+        ":gen_extra_68",
+        ":gen_extra_69",
+        ":gen_extra_70",
+        ":gen_extra_71",
+        ":gen_extra_72",
+        ":gen_extra_73",
+        ":gen_extra_74",
+        ":gen_extra_75",
+        ":gen_extra_76",
+        ":gen_extra_77",
+        ":gen_extra_78",
+        ":gen_extra_79",
+        ":gen_extra_80",
+        ":gen_extra_81",
+        ":gen_extra_82",
+        ":gen_extra_83",
+        ":gen_extra_84",
+        ":gen_extra_85",
+        ":gen_extra_86",
     ],
+    include_prefix = "",
     libraries = [
         ":tvm",
         ":tvm_runtime",
+        ":static_dmlc_a",
     ],
     package_xml = "package.xml",
     deps = [":ament_index"] + [

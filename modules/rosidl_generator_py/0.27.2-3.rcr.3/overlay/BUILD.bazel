@@ -14,11 +14,10 @@
 
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@pip_ros//:requirements.bzl", "requirement", "whl_requirement")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_package", "register_ament_resource")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("@rules_python//python:pip.bzl", "whl_filegroup")
 load(":defs.bzl", "py_ros_library")
@@ -140,22 +139,7 @@ write_file(
     ],
 )
 
-write_file(
-    name = "resource_index_rosidl_generator_packages",
-    out = "_resource_index/rosidl_generator_packages",
-    content = [""],
-)
-
 # ament_index_register_resource() registrations, as ament_cmake installs them.
-pkg_files(
-    name = "resource_index",
-    srcs = [
-        ":resource_index_rosidl_generator_packages",
-    ],
-    renames = {
-        ":resource_index_rosidl_generator_packages": "share/ament_index/resource_index/rosidl_generator_packages/rosidl_generator_py",
-    },
-)
 
 ### TESTING
 
@@ -210,13 +194,19 @@ py_pytest(
 
 ### PACKAGING
 
+register_ament_resource(
+    name = "res_rosidl_generator_packages",
+    category = "rosidl_generator_packages",
+    content = "",
+)
+
 ament_package(
     name = "ament_package",
-    cmake = glob(["cmake/**"]) + [
+    cmake = [
         ":extras_cmake",
         ":rosidl_cmake_aggregate_target_extras",
         ":rosidl_cmake_extras",
-    ],
+    ] + glob(["cmake/**"]),
     cmake_export_dependencies_list = [
         "ament_cmake",
         "rmw",
@@ -228,8 +218,9 @@ ament_package(
         "rosidl_cmake-extras.cmake",
         "rosidl_cmake_aggregate_target-extras.cmake",
     ],
-    data = glob(["resource/**"]),
-    install = [":resource_index"],
+    data = [
+        ":res_rosidl_generator_packages",
+    ] + glob(["resource/**"]),
     lib_data = ["bin/rosidl_generator_py"],
     package_xml = "package.xml",
     python = glob(["rosidl_generator_py/**"]),

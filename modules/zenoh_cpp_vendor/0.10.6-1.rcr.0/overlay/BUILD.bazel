@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 # Copyright 2026 Open Source Robotics Foundation, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_package", "register_ament_resource")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 load(":vendor_install.bzl", "vendor_install_tree")
@@ -62,33 +62,7 @@ genrule(
     cmd = "sed -e 's|@PROJECT_NAME@|zenoh_cpp_vendor|g' $< > $@",
 )
 
-pkg_files(
-    name = "environment_hooks",
-    srcs = [
-        "environment/vendor_package.bat",
-        "environment/vendor_package.dsv",
-        "environment/vendor_package.sh",
-    ],
-    prefix = "share/zenoh_cpp_vendor",
-    strip_prefix = strip_prefix.from_pkg(),
-)
-
-write_file(
-    name = "resource_index_vendor_packages",
-    out = "_resource_index/vendor_packages",
-    content = ["opt/zenoh_cpp_vendor"],
-)
-
 # ament_index_register_resource() registrations, as ament_cmake installs them.
-pkg_files(
-    name = "resource_index",
-    srcs = [
-        ":resource_index_vendor_packages",
-    ],
-    renames = {
-        ":resource_index_vendor_packages": "share/ament_index/resource_index/vendor_packages/zenoh_cpp_vendor",
-    },
-)
 
 [
     write_file(
@@ -123,20 +97,32 @@ pkg_files(
 
 ### PACKAGING
 
+register_ament_resource(
+    name = "res_vendor_packages",
+    category = "vendor_packages",
+    content = "opt/zenoh_cpp_vendor\n",
+)
+
 ament_package(
     name = "ament_package",
-    cmake = [":vendor_package_cmake_prefix"],
+    cmake = [
+        ":vendor_package_cmake_prefix",
+    ],
     cmake_export_dependencies_list = [
         "zenohc",
         "zenohcxx",
     ],
     cmake_extras = ["vendor_package_cmake_prefix.cmake"],
+    data = [
+        "environment/vendor_package.bat",
+        "environment/vendor_package.dsv",
+        "environment/vendor_package.sh",
+        ":res_vendor_packages",
+    ],
     env_hooks = ["environment/vendor_package.dsv"],
     install = [
-        ":environment_hooks",
         ":opt_files",
         ":zenoh_meta_files",
-        ":resource_index",
     ],
     package_xml = "package.xml",
     deps = [

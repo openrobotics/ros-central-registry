@@ -16,7 +16,6 @@ load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 
 package(
     default_applicable_licenses = [":license"],
@@ -179,32 +178,11 @@ cc_binary(
     deps = [":rc_dynamics_api_library"],
 )
 
-pkg_files(
-    name = "install_hdrs_api",
-    srcs = API_HDRS,
-    prefix = "include/rc_dynamics_api",
-    strip_prefix = strip_prefix.from_pkg("rc_dynamics_api"),
-)
-
-pkg_files(
-    name = "install_hdrs_proto",
-    srcs = PROTO_HDRS,
-    prefix = "include",
-    strip_prefix = strip_prefix.from_pkg(""),
-)
-
 genrule(
     name = "gen_so_versioned",
     srcs = [":rc_dynamics_api"],
     outs = ["lib_versioned/librc_dynamics_api.so.0.0"],
     cmd = "cp $(location :rc_dynamics_api) $@",
-)
-
-pkg_files(
-    name = "install_so_versioned",
-    srcs = [":gen_so_versioned"],
-    prefix = "lib",
-    strip_prefix = strip_prefix.from_pkg("lib_versioned"),
 )
 
 genrule(
@@ -261,31 +239,31 @@ EOF
     """,
 )
 
-pkg_files(
-    name = "install_cmake",
-    srcs = [":gen_cmake_files"],
-    prefix = "lib/rc_dynamics_api",
-    strip_prefix = strip_prefix.from_pkg("cmake_out"),
-)
-
 ament_index(
     name = "ament_index",
-    libraries = [":rc_dynamics_api"],
+    lib_data = [
+        ":gen_cmake_files",
+    ],
+    libraries = [
+        ":rc_dynamics_api",
+        ":gen_so_versioned",
+    ],
     package_xml = "package.xml",
 )
 
 ament_package(
     name = "ament_package",
     build_type = "cmake",
-    install = [
-        ":install_cmake",
-        ":install_hdrs_api",
-        ":install_hdrs_proto",
-        ":install_so_versioned",
+    headers = API_HDRS + PROTO_HDRS,
+    include_prefix = "",
+    libraries = [
+        ":rc_dynamics_api",
+        ":gen_so_versioned",
     ],
-    libraries = [":rc_dynamics_api"],
     package_xml = "package.xml",
-    programs = [":rcdynamics_stream"],
+    programs = [
+        ":rcdynamics_stream",
+    ],
     deps = [
         ":ament_index",
         "@rosdistro//:ament_package",

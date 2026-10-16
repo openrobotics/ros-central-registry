@@ -36,7 +36,7 @@ def _generate_parameter_library_impl(ctx):
 
     ctx.actions.run(
         inputs = inputs,
-        outputs = outputs,
+        outputs = [output_hpp],
         executable = ctx.executable._generator,
         arguments = [args],
     )

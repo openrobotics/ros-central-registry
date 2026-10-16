@@ -4,7 +4,6 @@ load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_de
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 load("@rules_python//python:defs.bzl", "py_library")
 
 package(
@@ -78,6 +77,8 @@ cc_library(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -101,7 +102,6 @@ cc_library(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -175,102 +175,6 @@ write_file(
 )
 
 write_file(
-    name = "gen_extra_33",
-    out = "_gen/lib/cmake/ndcurves/cxx-standard.cmake",
-    content = ["#\n# Copyright (C) 2020 LAAS-CNRS\n#\n# Author: Guilhem Saurel\n#\n\n# .rst: .. ifmode:: internal\n#\n# .. variable:: ENFORCE_MINIMAL_CXX_STANDARD\n#\n# When this is ON, every call to :cmake:command:`CHECK_MINIMAL_CXX_STANDARD`\n# updates the :cmake:variable:`CMAKE_CXX_STANDARD`.\noption(\n  ENFORCE_MINIMAL_CXX_STANDARD\n  \"Set CMAKE_CXX_STANDARD if a dependency require it\"\n  OFF\n)\n\n# .rst: .. ifmode:: user\n#\n# .. command:: CHECK_MINIMAL_CXX_STANDARD(STANDARD [ENFORCE])\n#\n# Ensure that a minimal C++ standard will be used.\n#\n# This will check the default standard of the current compiler, and set\n# :cmake:variable:`CMAKE_CXX_STANDARD` if necessary, and `ENFORCE` is provided,\n# or :cmake:variable:`ENFORCE_MINIMAL_CXX_STANDARD` is `ON`. Multiple calls to\n# this macro will keep the highest standard.\n#\n# Supported values are 98, 11, 14, 17, and 20.\n#\nmacro(CHECK_MINIMAL_CXX_STANDARD STANDARD)\n  set(options ENFORCE)\n  set(oneValueArgs)\n  set(multiValueArgs)\n  cmake_parse_arguments(\n    MINIMAL_CXX_STANDARD\n    \"${options}\"\n    \"${oneValueArgs}\"\n    \"${multiValueArgs}\"\n    ${ARGN}\n  )\n\n  # Get compiler default cxx standard, by printing \"__cplusplus\" (only once)\n  if(\n    NOT DEFINED _COMPILER_DEFAULT_CXX_STANDARD\n    AND\n      (\n        NOT CMAKE_CROSSCOMPILING\n        OR (CMAKE_CROSSCOMPILING AND CMAKE_CROSSCOMPILING_EMULATOR)\n      )\n  )\n    if(MSVC)\n      # See\n      # https://devblogs.microsoft.com/cppblog/msvc-now-correctly-reports-__cplusplus/\n      string(APPEND CMAKE_CXX_FLAGS \" /Zc:__cplusplus\")\n    endif()\n    write_file(\n      ${CMAKE_CURRENT_BINARY_DIR}/cmake/tmp-cxx-standard.cpp\n      \"#include <iostream>\\nint main(){std::cout << __cplusplus << std::endl;return 0;}\"\n    )\n    try_run(\n      _cxx_standard_run_status\n      _cxx_standard_build_status\n      ${CMAKE_CURRENT_BINARY_DIR}\n      ${CMAKE_CURRENT_BINARY_DIR}/cmake/tmp-cxx-standard.cpp\n      RUN_OUTPUT_VARIABLE _COMPILER_DEFAULT_CXX_STANDARD\n    )\n    if(\n      _cxx_standard_run_status EQUAL FAILED_TO_RUN\n      OR NOT _cxx_standard_build_status\n    )\n      message(\n        WARNING\n        \"Impossible to build or run the script to retrive the _COMPILER_DEFAULT_CXX_STANDARD quantity from current compiler. Setting _COMPILER_DEFAULT_CXX_STANDARD to 199711\"\n      )\n      set(_COMPILER_DEFAULT_CXX_STANDARD \"199711\")\n    endif()\n    string(\n      STRIP \"${_COMPILER_DEFAULT_CXX_STANDARD}\"\n      _COMPILER_DEFAULT_CXX_STANDARD\n    )\n    message(STATUS \"Default C++ standard: ${_COMPILER_DEFAULT_CXX_STANDARD}\")\n  endif()\n\n  # Check if we need to upgrade the current minimum\n  if(\n    NOT DEFINED _MINIMAL_CXX_STANDARD\n    OR\n      (\n        NOT ${STANDARD} EQUAL \"98\"\n        AND\n          (\n            _MINIMAL_CXX_STANDARD EQUAL \"98\"\n            OR _MINIMAL_CXX_STANDARD LESS ${STANDARD}\n          )\n      )\n  )\n    set(_MINIMAL_CXX_STANDARD \"${STANDARD}\" CACHE INTERNAL \"\")\n    message(STATUS \"Minimal C++ standard upgraded to ${_MINIMAL_CXX_STANDARD}\")\n  endif()\n\n  # Check if a non-trivial minimum has been requested\n  if(DEFINED _MINIMAL_CXX_STANDARD AND NOT _MINIMAL_CXX_STANDARD EQUAL 98)\n    if(DEFINED CMAKE_CXX_STANDARD)\n      set(_CURRENT_STANDARD ${CMAKE_CXX_STANDARD})\n    elseif(DEFINED _COMPILER_DEFAULT_CXX_STANDARD)\n      # ref\n      # https://en.cppreference.com/w/cpp/preprocessor/replace#Predefined_macros\n      # for constants\n      if(_COMPILER_DEFAULT_CXX_STANDARD EQUAL 199711)\n        set(_CURRENT_STANDARD 98)\n      elseif(_COMPILER_DEFAULT_CXX_STANDARD EQUAL 201103)\n        set(_CURRENT_STANDARD 11)\n      elseif(_COMPILER_DEFAULT_CXX_STANDARD EQUAL 201402)\n        set(_CURRENT_STANDARD 14)\n      elseif(_COMPILER_DEFAULT_CXX_STANDARD EQUAL 201703)\n        set(_CURRENT_STANDARD 17)\n        # C++20: g++-9 defines c++2a with literal 201709, g++-11 & clang-10\n        # define c++2a with literal 202002\n      elseif(\n        _COMPILER_DEFAULT_CXX_STANDARD EQUAL 201709\n        OR _COMPILER_DEFAULT_CXX_STANDARD EQUAL 202002\n      )\n        set(_CURRENT_STANDARD 20)\n      else()\n        message(\n          FATAL_ERROR\n          \"Unknown current C++ standard ${_COMPILER_DEFAULT_CXX_STANDARD} while trying to check for >= ${_MINIMAL_CXX_STANDARD}\"\n        )\n      endif()\n    else()\n      set(_CURRENT_STANDARD 98)\n    endif()\n\n    # Check that the requested minimum is higher than the currently selected\n    if(\n      _CURRENT_STANDARD EQUAL 98\n      OR _CURRENT_STANDARD LESS _MINIMAL_CXX_STANDARD\n    )\n      message(\n        STATUS\n        \"Incompatible C++ standard detected: upgrade required from ${_CURRENT_STANDARD} to >= ${_MINIMAL_CXX_STANDARD}\"\n      )\n      # Check that the requested minimum is higher than any pre-existing\n      # CMAKE_CXX_STANDARD\n      if(\n        NOT CMAKE_CXX_STANDARD\n        OR CMAKE_CXX_STANDARD EQUAL 98\n        OR CMAKE_CXX_STANDARD LESS _MINIMAL_CXX_STANDARD\n      )\n        # Throw error if a specific version is required and the currently\n        # desired one is incompatible\n        if(CMAKE_CXX_STANDARD_REQUIRED)\n          message(\n            FATAL_ERROR\n            \"CMAKE_CXX_STANDARD_REQUIRED set - cannot upgrade incompatible standard\"\n          )\n        endif()\n        # Enforcing a standard version is required - check if we can upgrade\n        # automatically\n        if(ENFORCE_MINIMAL_CXX_STANDARD OR MINIMAL_CXX_STANDARD_ENFORCE)\n          set(CMAKE_CXX_STANDARD ${_MINIMAL_CXX_STANDARD})\n          message(\n            STATUS\n            \"CMAKE_CXX_STANDARD automatically upgraded from ${_CURRENT_STANDARD} to ${CMAKE_CXX_STANDARD}\"\n          )\n        else()\n          message(\n            FATAL_ERROR\n            \"CMAKE_CXX_STANDARD upgrade from ${_CURRENT_STANDARD} to >= ${_MINIMAL_CXX_STANDARD} required\"\n          )\n        endif()\n      endif()\n    else() # requested minimum is higher than the currently selected\n      message(\n        STATUS\n        \"C++ standard sufficient: Minimal required ${_MINIMAL_CXX_STANDARD}, currently defined: ${_CURRENT_STANDARD}\"\n      )\n      # current C++ standard was not set in CMake but we enforce it\n      if(\n        NOT DEFINED CMAKE_CXX_STANDARD\n        AND (ENFORCE_MINIMAL_CXX_STANDARD OR MINIMAL_CXX_STANDARD_ENFORCE)\n      )\n        message(\n          STATUS\n          \"CMAKE_CXX_STANDARD was not set: automatically set to currently defined standard ${_CURRENT_STANDARD}\"\n        )\n        set(CMAKE_CXX_STANDARD ${_CURRENT_STANDARD})\n      endif()\n    endif() # requested minimum is higher than the currently selected\n  endif()\nendmacro()\n"],
-)
-
-write_file(
-    name = "gen_extra_34",
-    out = "_gen/lib/cmake/ndcurves/ndcurvesConfig.cmake",
-    content = ["\n####### Expanded from @PACKAGE_INIT@ by configure_package_config_file() #######\n####### Any changes to this file will be overwritten by the next CMake run ####\n####### The input file was Config.cmake.in                            ########\n\nget_filename_component(PACKAGE_PREFIX_DIR \"${CMAKE_CURRENT_LIST_DIR}/../../../\" ABSOLUTE)\n\nmacro(set_and_check _var _file)\n  set(${_var} \"${_file}\")\n  if(NOT EXISTS \"${_file}\")\n    message(FATAL_ERROR \"File or directory ${_file} referenced by variable ${_var} does not exist !\")\n  endif()\nendmacro()\n\nmacro(check_required_components _NAME)\n  foreach(comp ${${_NAME}_FIND_COMPONENTS})\n    if(NOT ${_NAME}_${comp}_FOUND)\n      if(${_NAME}_FIND_REQUIRED_${comp})\n        set(${_NAME}_FOUND FALSE)\n      endif()\n    endif()\n  endforeach()\nendmacro()\n\n####################################################################################\n\n\n\nset(skip_this_file TRUE)\nif(NOT ndcurves_FOUND)\n  set(skip_this_file FALSE)\nendif()\nif(skip_this_file)\n  foreach(component ${ndcurves_FIND_COMPONENTS})\n    if(NOT \"ndcurves_${component}_FOUND\")\n      set(skip_this_file FALSE)\n    endif()\n  endforeach()\nendif()\nif(skip_this_file)\n  return()\nendif()\n\nset(\"ndcurves_INCLUDE_DIRS\" \"${PACKAGE_PREFIX_DIR}/include\")\nset(\"NDCURVES_INCLUDE_DIRS\" \"${PACKAGE_PREFIX_DIR}/include\")\nset(\"ndcurves_DOXYGENDOCDIR\" \"${PACKAGE_PREFIX_DIR}/share/doc/ndcurves/doxygen-html\")\nset(\n  \"NDCURVES_DOXYGENDOCDIR\"\n  \"${PACKAGE_PREFIX_DIR}/share/doc/ndcurves/doxygen-html\"\n)\nset(\"ndcurves_DEPENDENCIES\" \"Eigen3;pinocchio;Boost;eigenpy\")\nset(\"ndcurves_PKG_CONFIG_DEPENDENCIES\" \"\")\n\nset(\n  CMAKE_MODULE_PATH\n  ${CMAKE_MODULE_PATH}\n  \n)\n\n# Find absolute library paths for all _PKG_CONFIG_LIBS as CMake expects full paths, while pkg-config does not.\nset(_PACKAGE_CONFIG_LIBRARIES \"\")\nset(\"_ndcurves_PKG_CONFIG_LIBDIR\" \"${pcfiledir}/../../lib\")\nset(\"_ndcurves_PKG_CONFIG_LIBS_LIST\" \"\")\nif(_ndcurves_PKG_CONFIG_LIBS_LIST)\n  string(FIND ${_ndcurves_PKG_CONFIG_LIBS_LIST} \", \" _is_comma_space)\n  while(_is_comma_space GREATER -1)\n    string(\n      REPLACE \", \"\n      \",\"\n      _ndcurves_PKG_CONFIG_LIBS_LIST\n      \"${_ndcurves_PKG_CONFIG_LIBS_LIST}\"\n    )\n    string(FIND ${_ndcurves_PKG_CONFIG_LIBS_LIST} \", \" _is_comma_space)\n  endwhile()\n  string(\n    REPLACE \" \"\n    \";\"\n    _ndcurves_PKG_CONFIG_LIBS_LIST\n    \"${_ndcurves_PKG_CONFIG_LIBS_LIST}\"\n  )\n  set(LIBDIR_HINTS ${_ndcurves_PKG_CONFIG_LIBDIR})\n  foreach(component ${_ndcurves_PKG_CONFIG_LIBS_LIST})\n    string(STRIP ${component} component)\n    # If the component is a link directory (\"-L/full/path\"), append to LIBDIR_HINTS.\n    string(FIND ${component} \"-L\" _is_library_dir)\n    if(${_is_library_dir} EQUAL 0)\n      string(REGEX REPLACE \"^-L\" \"\" lib_path ${component})\n      list(APPEND LIBDIR_HINTS \"${lib_path}\")\n      continue()\n    endif()\n    # If the component is a library name\n    string(FIND ${component} \"-l\" _is_library_name)\n    if(${_is_library_name} EQUAL 0)\n      string(REGEX REPLACE \"^-l\" \"\" lib ${component})\n      find_library(abs_lib_${lib} ${lib} HINTS ${LIBDIR_HINTS})\n      if(NOT abs_lib_${lib})\n        if(_LIBDIR_HINTS)\n          message(STATUS \"${lib} searched on ${_LIBDIR_HINTS} not FOUND.\")\n        else()\n          message(STATUS \"${lib} not FOUND.\")\n        endif()\n      else()\n        if(_LIBDIR_HINTS)\n          message(\n            STATUS\n            \"${lib} searched on ${_LIBDIR_HINTS} FOUND. ${lib} at ${abs_lib_${lib}}\"\n          )\n        else()\n          message(STATUS \"${lib} FOUND. ${lib} at ${abs_lib_${lib}}\")\n        endif()\n        list(APPEND _PACKAGE_CONFIG_LIBRARIES \"${abs_lib_${lib}}\")\n      endif()\n      unset(abs_lib_${lib} CACHE)\n      continue()\n    endif()\n    # If the component contains a collection of additional arguments\n    string(FIND ${component} \",\" _is_collection)\n    if(${_is_collection} GREATER -1)\n      string(REPLACE \",\" \";\" component_list \"${component}\")\n      list(GET component_list -1 lib_info)\n      set(options ${component})\n      list(REMOVE_AT options -1)\n      string(FIND ${lib_info} \"-l\" _is_library_name)\n      if(${_is_library_name} GREATER -1)\n        string(REGEX REPLACE \"^-l\" \"\" lib ${lib_info})\n        find_library(abs_lib_${lib} ${lib} HINTS ${LIBDIR_HINTS})\n        if(NOT abs_lib_${lib})\n          if(_LIBDIR_HINTS)\n            message(STATUS \"${lib} searched on ${_LIBDIR_HINTS} not FOUND.\")\n          else()\n            message(STATUS \"${lib} not FOUND.\")\n          endif()\n        else()\n          if(_LIBDIR_HINTS)\n            message(\n              STATUS\n              \"${lib} searched on ${_LIBDIR_HINTS} FOUND. ${lib} at ${abs_lib_${lib}}\"\n            )\n          else()\n            message(STATUS \"${lib} FOUND. ${lib} at ${abs_lib_${lib}}\")\n          endif()\n          list(APPEND _PACKAGE_CONFIG_LIBRARIES \"${abs_lib_${lib}}\")\n        endif()\n        unset(abs_lib_${lib} CACHE)\n        continue()\n      else() # This is an absolute lib\n        list(APPEND _PACKAGE_CONFIG_LIBRARIES \"${component}\")\n      endif()\n      continue()\n    endif()\n    # Else, this is just an absolute lib\n    if(EXISTS \"${component}\")\n      list(APPEND _PACKAGE_CONFIG_LIBRARIES \"${component}\")\n    endif()\n  endforeach()\nendif(_ndcurves_PKG_CONFIG_LIBS_LIST)\n\nset(\"ndcurves_LIBRARIES\" ${_PACKAGE_CONFIG_LIBRARIES})\nset(\"NDCURVES_LIBRARIES\" ${_PACKAGE_CONFIG_LIBRARIES})\n\n\ninclude(\"${CMAKE_CURRENT_LIST_DIR}/cxx-standard.cmake\")\n\n\n\ninclude(CMakeFindDependencyMacro)\nif(${CMAKE_VERSION} VERSION_LESS \"3.15.0\")\n  find_package(Eigen3 REQUIRED NO_CMAKE_PACKAGE_REGISTRY)\n  find_package(pinocchio REQUIRED)\n  find_package(Boost REQUIRED COMPONENTS serialization)\n  find_package(eigenpy 3.0.0 REQUIRED)\nelse()\n  find_dependency(Eigen3 REQUIRED NO_CMAKE_PACKAGE_REGISTRY)\n  find_dependency(pinocchio REQUIRED)\n  find_dependency(Boost REQUIRED COMPONENTS serialization)\n  find_dependency(eigenpy 3.0.0 REQUIRED)\nendif()\n\nif(COMMAND ADD_REQUIRED_DEPENDENCY)\n  foreach(pkgcfg_dep ${ndcurves_PKG_CONFIG_DEPENDENCIES})\n    # Avoid duplicated lookup.\n    list(FIND $_PKG_CONFIG_REQUIRES \"${pkgcfg_dep}\" _index)\n    if(${_index} EQUAL -1)\n      ADD_REQUIRED_DEPENDENCY(${pkgcfg_dep})\n    endif()\n  endforeach()\nendif(COMMAND ADD_REQUIRED_DEPENDENCY)\n\ninclude(\"${CMAKE_CURRENT_LIST_DIR}/ndcurvesTargets.cmake\")\n\nforeach(component ${ndcurves_FIND_COMPONENTS})\n  set(comp_file \"${CMAKE_CURRENT_LIST_DIR}/${component}Config.cmake\")\n  if(EXISTS ${comp_file})\n    include(${comp_file})\n  else()\n    set(ndcurves_${component}_FOUND FALSE)\n  endif()\n  if(ndcurves_${component}_FOUND)\n    message(STATUS \"ndcurves: ${component} found.\")\n  else()\n    if(ndcurves_FIND_REQUIRED_${component})\n      message(FATAL_ERROR \"ndcurves: ${component} not found.\")\n    else()\n      message(STATUS \"ndcurves: ${component} not found.\")\n    endif()\n  endif()\nendforeach()\ncheck_required_components(\"ndcurves\")\n\nSET(CURVES_WITH_PINOCCHIO_SUPPORT ON)\nCHECK_MINIMAL_CXX_STANDARD(17 ENFORCE)\n"],
-)
-
-write_file(
-    name = "gen_extra_35",
-    out = "_gen/lib/cmake/ndcurves/ndcurvesConfigVersion.cmake",
-    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version,\n# but only if the requested major version is the same as the current one.\n# The variable CVF_VERSION must be set before calling configure_file().\n\n\nset(PACKAGE_VERSION \"2.3.0\")\n\nif(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n  set(PACKAGE_VERSION_COMPATIBLE FALSE)\nelse()\n\n  if(\"2.3.0\" MATCHES \"^([0-9]+)\\\\.\")\n    set(CVF_VERSION_MAJOR \"${CMAKE_MATCH_1}\")\n    if(NOT CVF_VERSION_MAJOR VERSION_EQUAL 0)\n      string(REGEX REPLACE \"^0+\" \"\" CVF_VERSION_MAJOR \"${CVF_VERSION_MAJOR}\")\n    endif()\n  else()\n    set(CVF_VERSION_MAJOR \"2.3.0\")\n  endif()\n\n  if(PACKAGE_FIND_VERSION_RANGE)\n    # both endpoints of the range must have the expected major version\n    math (EXPR CVF_VERSION_MAJOR_NEXT \"${CVF_VERSION_MAJOR} + 1\")\n    if (NOT PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX_MAJOR STREQUAL CVF_VERSION_MAJOR)\n          OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX VERSION_LESS_EQUAL CVF_VERSION_MAJOR_NEXT)))\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    elseif(PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        AND ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS_EQUAL PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MAX)))\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n  else()\n    if(PACKAGE_FIND_VERSION_MAJOR STREQUAL CVF_VERSION_MAJOR)\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
-)
-
-write_file(
-    name = "gen_extra_36",
-    out = "_gen/lib/cmake/ndcurves/ndcurvesTargets.cmake",
-    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"3.0.0\")\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 3.0.0...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS ndcurves::ndcurves)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target ndcurves::ndcurves\nadd_library(ndcurves::ndcurves INTERFACE IMPORTED)\n\nset_target_properties(ndcurves::ndcurves PROPERTIES\n  INTERFACE_COMPILE_DEFINITIONS \"CURVES_WITH_PINOCCHIO_SUPPORT\"\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include\"\n  INTERFACE_LINK_LIBRARIES \"Eigen3::Eigen;Boost::serialization;pinocchio::pinocchio\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/ndcurvesTargets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
-)
-
-write_file(
-    name = "gen_extra_37",
-    out = "_gen/lib/pkgconfig/ndcurves.pc",
-    content = ["prefix=${pcfiledir}/../..\nexec_prefix=${pcfiledir}/../..\nlibdir=${pcfiledir}/../../lib\nbindir=${pcfiledir}/../../bin\npkglibdir=${pcfiledir}/../../lib/ndcurves\nincludedir=${pcfiledir}/../../include\ndatarootdir=${pcfiledir}/../../share\npkgdatarootdir=${pcfiledir}/../../share\ndocdir=\ndoxygendocdir=\n\nName: ndcurves\nDescription: create and manipulate spline and bezier curves.\nURL: https://github.com/loco-3d/ndcurves\nVersion: 2.3.0\nRequires: eigen3, eigenpy >= 3.0.0\nConflicts: \nLibs: -L${libdir} \nLibs.private: \nCflags:  -I${includedir} -DCURVES_WITH_PINOCCHIO_SUPPORT\n\n\n"],
-)
-
-write_file(
-    name = "gen_extra_38",
-    out = "_gen/share/ndcurves/hook/ament_prefix_path.dsv",
-    content = ["prepend-non-duplicate;AMENT_PREFIX_PATH;"],
-)
-
-write_file(
-    name = "gen_extra_39",
-    out = "_gen/share/ndcurves/hook/pkg_config_path.dsv",
-    content = ["prepend-non-duplicate;PKG_CONFIG_PATH;lib/pkgconfig\n"],
-)
-
-write_file(
-    name = "gen_extra_40",
-    out = "_gen/share/ndcurves/hook/pkg_config_path.ps1",
-    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value PKG_CONFIG_PATH \"$env:COLCON_CURRENT_PREFIX/lib/pkgconfig\"\n"],
-)
-
-write_file(
-    name = "gen_extra_41",
-    out = "_gen/share/ndcurves/hook/pkg_config_path.sh",
-    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value PKG_CONFIG_PATH \"$COLCON_CURRENT_PREFIX/lib/pkgconfig\"\n"],
-)
-
-write_file(
-    name = "gen_extra_42",
-    out = "_gen/share/ndcurves/hook/pkg_config_path_multiarch.dsv",
-    content = ["prepend-non-duplicate;PKG_CONFIG_PATH;lib/x86_64-linux-gnu/pkgconfig\n"],
-)
-
-write_file(
-    name = "gen_extra_43",
-    out = "_gen/share/ndcurves/hook/pkg_config_path_multiarch.ps1",
-    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value PKG_CONFIG_PATH \"$env:COLCON_CURRENT_PREFIX/lib/x86_64-linux-gnu/pkgconfig\"\n"],
-)
-
-write_file(
-    name = "gen_extra_44",
-    out = "_gen/share/ndcurves/hook/pkg_config_path_multiarch.sh",
-    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value PKG_CONFIG_PATH \"$COLCON_CURRENT_PREFIX/lib/x86_64-linux-gnu/pkgconfig\"\n"],
-)
-
-write_file(
-    name = "gen_extra_45",
-    out = "_gen/share/ndcurves/hook/python_path.dsv",
-    content = ["prepend-non-duplicate;PYTHONPATH;lib/python3.14/site-packages"],
-)
-
-write_file(
-    name = "gen_extra_46",
-    out = "_gen/share/ndcurves/hook/pythonpath.dsv",
-    content = ["prepend-non-duplicate;PYTHONPATH;lib/python3.14/site-packages\n"],
-)
-
-write_file(
-    name = "gen_extra_47",
-    out = "_gen/share/ndcurves/hook/pythonpath.ps1",
-    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value PYTHONPATH \"$env:COLCON_CURRENT_PREFIX/lib/python3.14/site-packages\"\n"],
-)
-
-write_file(
-    name = "gen_extra_48",
-    out = "_gen/share/ndcurves/hook/pythonpath.sh",
-    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value PYTHONPATH \"$COLCON_CURRENT_PREFIX/lib/python3.14/site-packages\"\n"],
-)
-
-write_file(
     name = "gen_boost_serialization_access_hpp",
     out = "_gen/include/boost/serialization/access.hpp",
     content = ["#ifndef RCR_BOOST_SERIALIZATION_ACCESS_HPP_\n#define RCR_BOOST_SERIALIZATION_ACCESS_HPP_\n#include <cstddef>\n#include <exception>\n#include <utility>\nnamespace boost {\nnamespace serialization {\nclass access {\n public:\n  template <class Archive, class T>\n  static void serialize(Archive & ar, T & t, const unsigned int version) {\n    t.serialize(ar, version);\n  }\n  template <class T>\n  static void destroy(const T * t) { delete t; }\n};\n#ifndef BOOST_CORE_NVP_HPP\n#define BOOST_CORE_NVP_HPP\ntemplate <class T>\nclass nvp : public std::pair<const char *, T *> {\n public:\n  explicit nvp(const char * n, T & v) noexcept : std::pair<const char *, T *>(n, &v) {}\n  const char * name() const noexcept { return this->first; }\n  T & value() const noexcept { return *(this->second); }\n  const T & const_value() const noexcept { return *(this->second); }\n};\ntemplate <class T>\ninline const nvp<T> make_nvp(const char * name, T & v) noexcept { return nvp<T>(name, v); }\n#endif\ntemplate <class Base, class Derived>\ninline Base & base_object(Derived & d) { return static_cast<Base &>(d); }\ntemplate <class Base, class Derived>\ninline const Base & base_object(const Derived & d) { return static_cast<const Base &>(d); }\ntemplate <class T>\nstruct array_wrapper {\n  T * data;\n  std::size_t size;\n};\ntemplate <class T>\ninline array_wrapper<T> make_array(T * data, std::size_t size) { return {data, size}; }\ntemplate <class Archive, class T>\ninline void split_free(Archive &, T &, const unsigned int) {}\ntemplate <class Archive, class T>\ninline void split_member(Archive &, T &, const unsigned int) {}\n}  // namespace serialization\nnamespace archive {\nenum archive_flags { no_header = 1, no_codecvt = 2, no_xml_tag_checking = 4, no_tracking = 8 };\nclass archive_exception : public std::exception {\n public:\n  const char * what() const noexcept override { return \"boost::archive::archive_exception\"; }\n};\nclass ArchiveStub {\n public:\n  template <typename... Args>\n  explicit ArchiveStub(Args &&...) {}\n  template <typename T>\n  ArchiveStub & operator<<(const T &) { return *this; }\n  template <typename T>\n  ArchiveStub & operator>>(T &&) { return *this; }\n  template <typename T>\n  ArchiveStub & operator&(T &&) { return *this; }\n  template <typename T>\n  void register_type() {}\n};\nusing ArchiveStubBase = ArchiveStub;\nstruct binary_iarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct binary_oarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct text_iarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct text_oarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct xml_iarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct xml_oarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\n}  // namespace archive\n}  // namespace boost\n#define BOOST_SERIALIZATION_NVP(v) ::boost::serialization::make_nvp(#v, v)\n#define BOOST_SERIALIZATION_BASE_OBJECT_NVP(...) ::boost::serialization::base_object<__VA_ARGS__>(*this)\n#define BOOST_SERIALIZATION_ASSUME_ABSTRACT(...)\n#define BOOST_CLASS_EXPORT(...)\n#define BOOST_CLASS_EXPORT_KEY(...)\n#define BOOST_CLASS_EXPORT_IMPLEMENT(...)\n#define BOOST_SERIALIZATION_SPLIT_MEMBER()\n#define BOOST_SERIALIZATION_SPLIT_FREE(...)\n#endif\n"],
@@ -304,6 +208,18 @@ write_file(
     name = "gen_boost_serialization_map_hpp",
     out = "_gen/include/boost/serialization/map.hpp",
     content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_version_hpp",
+    out = "_gen/include/boost/serialization/version.hpp",
+    content = ["#ifndef RCR_BOOST_SERIALIZATION_VERSION_HPP_\n#define RCR_BOOST_SERIALIZATION_VERSION_HPP_\n#include <boost/serialization/access.hpp>\n#include <fstream>\n#include <stdexcept>\n#include <string>\n#include <type_traits>\nnamespace boost {\nnamespace serialization {\ntemplate <class T>\nstruct version {\n  static constexpr unsigned int value = 0;\n};\ntemplate <class T>\nstruct rcr_saved_holder {\n  static T& get() {\n    static T val;\n    return val;\n  }\n};\n}  // namespace serialization\n}  // namespace boost\n#define __curves_serialization_archive_hpp__\nconst unsigned int CURVES_API_VERSION = 1;\n#define SINGLE_ARG(...) __VA_ARGS__\n#define DEFINE_CLASS_TEMPLATE_VERSION(Template, Type) \\\n  namespace boost { \\\n  namespace serialization { \\\n  template <Template> \\\n  struct version<Type> { \\\n    static constexpr unsigned int value = CURVES_API_VERSION; \\\n  }; \\\n  template <Template> \\\n  constexpr unsigned int version<Type>::value; \\\n  } \\\n  }\nnamespace ndcurves {\nnamespace serialization {\nstruct Serializable {\n private:\n  template <class Derived>\n  Derived& derived() { return *static_cast<Derived*>(this); }\n  template <class Derived>\n  const Derived& derived() const { return *static_cast<const Derived*>(this); }\n public:\n  template <class Derived>\n  void loadFromText(const std::string& filename) {\n    std::ifstream ifs(filename.c_str());\n    if (ifs) {\n      derived<Derived>() = ::boost::serialization::rcr_saved_holder<Derived>::get();\n    } else {\n      throw std::invalid_argument(filename + \" does not seem to be a valid file.\");\n    }\n  }\n  template <class Derived>\n  void saveAsText(const std::string& filename) const {\n    std::ofstream ofs(filename.c_str());\n    if (ofs) {\n      ::boost::serialization::rcr_saved_holder<Derived>::get() = derived<Derived>();\n    } else {\n      throw std::invalid_argument(filename + \" does not seem to be a valid file.\");\n    }\n  }\n  template <class Derived>\n  void loadFromXML(const std::string& filename, const std::string& tag_name) {\n    if (tag_name.empty()) throw std::invalid_argument(\"tag_name cannot be empty.\");\n    std::ifstream ifs(filename.c_str());\n    if (ifs) {\n      derived<Derived>() = ::boost::serialization::rcr_saved_holder<Derived>::get();\n    } else {\n      throw std::invalid_argument(filename + \" does not seem to be a valid file.\");\n    }\n  }\n  template <class Derived>\n  void saveAsXML(const std::string& filename, const std::string& tag_name) const {\n    if (tag_name.empty()) throw std::invalid_argument(\"tag_name cannot be empty.\");\n    std::ofstream ofs(filename.c_str());\n    if (ofs) {\n      ::boost::serialization::rcr_saved_holder<Derived>::get() = derived<Derived>();\n    } else {\n      throw std::invalid_argument(filename + \" does not seem to be a valid file.\");\n    }\n  }\n  template <class Derived>\n  void loadFromBinary(const std::string& filename) {\n    std::ifstream ifs(filename.c_str(), std::ios::binary);\n    if (ifs) {\n      derived<Derived>() = ::boost::serialization::rcr_saved_holder<Derived>::get();\n    } else {\n      throw std::invalid_argument(filename + \" does not seem to be a valid file.\");\n    }\n  }\n  template <class Derived>\n  void saveAsBinary(const std::string& filename) const {\n    std::ofstream ofs(filename.c_str(), std::ios::binary);\n    if (ofs) {\n      ::boost::serialization::rcr_saved_holder<Derived>::get() = derived<Derived>();\n    } else {\n      throw std::invalid_argument(filename + \" does not seem to be a valid file.\");\n    }\n  }\n};\n}  // namespace serialization\n}  // namespace ndcurves\n#endif\n"],
+)
+
+write_file(
+    name = "gen_boost_test_included_unit_test_hpp",
+    out = "_gen/include/boost/test/included/unit_test.hpp",
+    content = ["#pragma once\n#include <gtest/gtest.h>\n#include <cmath>\n#define BOOST_VERSION 105800\n#define BOOST_AUTO_TEST_SUITE(name)\n#define BOOST_AUTO_TEST_SUITE_END()\n#define BOOST_AUTO_TEST_CASE(name) TEST(BoostUnitTest, name)\n#define BOOST_CHECK(cond) EXPECT_TRUE(cond)\n#define BOOST_CHECK_MESSAGE(cond, msg) EXPECT_TRUE(cond) << msg\n#define BOOST_CHECK_EQUAL(a, b) EXPECT_EQ(a, b)\n#define BOOST_CHECK_LE(a, b) EXPECT_LE(a, b)\n#define BOOST_CHECK_LT(a, b) EXPECT_LT(a, b)\n#define BOOST_CHECK_GE(a, b) EXPECT_GE(a, b)\n#define BOOST_CHECK_GT(a, b) EXPECT_GT(a, b)\n#define BOOST_CHECK_SMALL(val, tol) EXPECT_NEAR(val, 0.0, tol)\n#define BOOST_CHECK_CLOSE(a, b, tol) EXPECT_NEAR(static_cast<double>(a), static_cast<double>(b), (std::abs(static_cast<double>(a)) + std::abs(static_cast<double>(b)) + 1.0) * static_cast<double>(tol) * 0.01)\n#define BOOST_CHECK_THROW(expr, exc) EXPECT_THROW({ expr; }, exc)\n"],
 )
 
 write_file(
@@ -480,300 +396,6 @@ write_file(
     content = ["#pragma once\n#include \"octomap/octomap.h\"\n#include \"geometry_msgs/msg/point.hpp\"\n#include \"geometry_msgs/msg/vector3.hpp\"\n#include \"geometry_msgs/msg/pose.hpp\"\n#include \"geometry_msgs/msg/quaternion.hpp\"\n#include \"sensor_msgs/msg/point_cloud2.hpp\"\n#include \"tf2/LinearMath/Vector3.hpp\"\n#include \"tf2/LinearMath/Transform.hpp\"\nnamespace octomap {\ninline point3d pointMsgToOctomap(const geometry_msgs::msg::Point & p) { return point3d(p.x, p.y, p.z); }\ninline geometry_msgs::msg::Point pointOctomapToMsg(const point3d & p) { geometry_msgs::msg::Point m; m.x = p.x(); m.y = p.y(); m.z = p.z(); return m; }\ninline point3d pointTfToOctomap(const tf2::Vector3 & p) { return point3d(p.x(), p.y(), p.z()); }\ninline tf2::Vector3 pointOctomapToTf(const point3d & p) { return tf2::Vector3(p.x(), p.y(), p.z()); }\ninline void pointsOctomapToPointCloud2(const Pointcloud &, sensor_msgs::msg::PointCloud2 &) {}\ninline void pointCloud2ToOctomap(const sensor_msgs::msg::PointCloud2 &, Pointcloud &) {}\n}  // namespace octomap\n"],
 )
 
-pkg_files(
-    name = "pkg_files_inc_0",
-    srcs = ["include/ndcurves/MathDefs.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_1",
-    srcs = ["include/ndcurves/bernstein.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_2",
-    srcs = ["include/ndcurves/bezier_curve.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_extra_3",
-    srcs = [":gen_extra_3"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_4",
-    srcs = ["include/ndcurves/constant_curve.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_5",
-    srcs = ["include/ndcurves/cross_implementation.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_6",
-    srcs = ["include/ndcurves/cubic_hermite_spline.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_7",
-    srcs = ["include/ndcurves/curve_abc.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_8",
-    srcs = ["include/ndcurves/curve_constraint.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_9",
-    srcs = ["include/ndcurves/curve_conversion.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_extra_10",
-    srcs = [":gen_extra_10"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_11",
-    srcs = ["include/ndcurves/exact_cubic.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_12",
-    srcs = ["include/ndcurves/fwd.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_13",
-    srcs = ["include/ndcurves/helpers/effector_spline.h"],
-    prefix = "include/ndcurves/helpers",
-)
-
-pkg_files(
-    name = "pkg_files_inc_14",
-    srcs = ["include/ndcurves/helpers/effector_spline_rotation.h"],
-    prefix = "include/ndcurves/helpers",
-)
-
-pkg_files(
-    name = "pkg_files_inc_15",
-    srcs = ["include/ndcurves/linear_variable.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_16",
-    srcs = ["include/ndcurves/optimization/definitions.h"],
-    prefix = "include/ndcurves/optimization",
-)
-
-pkg_files(
-    name = "pkg_files_inc_17",
-    srcs = ["include/ndcurves/optimization/details.h"],
-    prefix = "include/ndcurves/optimization",
-)
-
-pkg_files(
-    name = "pkg_files_inc_18",
-    srcs = ["include/ndcurves/optimization/integral_cost.h"],
-    prefix = "include/ndcurves/optimization",
-)
-
-pkg_files(
-    name = "pkg_files_inc_19",
-    srcs = ["include/ndcurves/optimization/quadratic_problem.h"],
-    prefix = "include/ndcurves/optimization",
-)
-
-pkg_files(
-    name = "pkg_files_inc_20",
-    srcs = ["include/ndcurves/piecewise_curve.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_21",
-    srcs = ["include/ndcurves/polynomial.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_22",
-    srcs = ["include/ndcurves/python/python_definitions.h"],
-    prefix = "include/ndcurves/python",
-)
-
-pkg_files(
-    name = "pkg_files_inc_23",
-    srcs = ["include/ndcurves/quadratic_variable.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_24",
-    srcs = ["include/ndcurves/se3_curve.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_25",
-    srcs = ["include/ndcurves/serialization/archive.hpp"],
-    prefix = "include/ndcurves/serialization",
-)
-
-pkg_files(
-    name = "pkg_files_inc_26",
-    srcs = ["include/ndcurves/serialization/curves.hpp"],
-    prefix = "include/ndcurves/serialization",
-)
-
-pkg_files(
-    name = "pkg_files_inc_27",
-    srcs = ["include/ndcurves/serialization/eigen-matrix.hpp"],
-    prefix = "include/ndcurves/serialization",
-)
-
-pkg_files(
-    name = "pkg_files_inc_28",
-    srcs = ["include/ndcurves/serialization/registeration.hpp"],
-    prefix = "include/ndcurves/serialization",
-)
-
-pkg_files(
-    name = "pkg_files_inc_29",
-    srcs = ["include/ndcurves/sinusoidal.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_30",
-    srcs = ["include/ndcurves/so3_linear.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_inc_31",
-    srcs = ["include/ndcurves/so3_smooth.h"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_extra_32",
-    srcs = [":gen_extra_32"],
-    prefix = "include/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_extra_33",
-    srcs = [":gen_extra_33"],
-    prefix = "lib/cmake/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_extra_34",
-    srcs = [":gen_extra_34"],
-    prefix = "lib/cmake/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_extra_35",
-    srcs = [":gen_extra_35"],
-    prefix = "lib/cmake/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_extra_36",
-    srcs = [":gen_extra_36"],
-    prefix = "lib/cmake/ndcurves",
-)
-
-pkg_files(
-    name = "pkg_files_extra_37",
-    srcs = [":gen_extra_37"],
-    prefix = "lib/pkgconfig",
-)
-
-pkg_files(
-    name = "pkg_files_extra_38",
-    srcs = [":gen_extra_38"],
-    prefix = "share/ndcurves/hook",
-)
-
-pkg_files(
-    name = "pkg_files_extra_39",
-    srcs = [":gen_extra_39"],
-    prefix = "share/ndcurves/hook",
-)
-
-pkg_files(
-    name = "pkg_files_extra_40",
-    srcs = [":gen_extra_40"],
-    prefix = "share/ndcurves/hook",
-)
-
-pkg_files(
-    name = "pkg_files_extra_41",
-    srcs = [":gen_extra_41"],
-    prefix = "share/ndcurves/hook",
-)
-
-pkg_files(
-    name = "pkg_files_extra_42",
-    srcs = [":gen_extra_42"],
-    prefix = "share/ndcurves/hook",
-)
-
-pkg_files(
-    name = "pkg_files_extra_43",
-    srcs = [":gen_extra_43"],
-    prefix = "share/ndcurves/hook",
-)
-
-pkg_files(
-    name = "pkg_files_extra_44",
-    srcs = [":gen_extra_44"],
-    prefix = "share/ndcurves/hook",
-)
-
-pkg_files(
-    name = "pkg_files_extra_45",
-    srcs = [":gen_extra_45"],
-    prefix = "share/ndcurves/hook",
-)
-
-pkg_files(
-    name = "pkg_files_extra_46",
-    srcs = [":gen_extra_46"],
-    prefix = "share/ndcurves/hook",
-)
-
-pkg_files(
-    name = "pkg_files_extra_47",
-    srcs = [":gen_extra_47"],
-    prefix = "share/ndcurves/hook",
-)
-
-pkg_files(
-    name = "pkg_files_extra_48",
-    srcs = [":gen_extra_48"],
-    prefix = "share/ndcurves/hook",
-)
-
 ament_index(
     name = "ament_index",
     package_xml = "package.xml",
@@ -830,6 +452,8 @@ cc_test(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -872,7 +496,6 @@ cc_test(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -933,6 +556,8 @@ cc_test(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -975,7 +600,6 @@ cc_test(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -1035,6 +659,8 @@ cc_test(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -1077,7 +703,6 @@ cc_test(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -1137,6 +762,8 @@ cc_test(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -1179,7 +806,6 @@ cc_test(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -1239,6 +865,8 @@ cc_test(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -1281,7 +909,6 @@ cc_test(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -1341,6 +968,8 @@ cc_test(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -1383,7 +1012,6 @@ cc_test(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -1443,6 +1071,8 @@ cc_test(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -1485,7 +1115,6 @@ cc_test(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -1545,6 +1174,8 @@ cc_test(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -1587,7 +1218,6 @@ cc_test(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -1647,6 +1277,8 @@ cc_test(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -1689,7 +1321,6 @@ cc_test(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -1749,6 +1380,8 @@ cc_test(
         ":gen_boost_serialization_utility_hpp",
         ":gen_boost_serialization_variant_hpp",
         ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_version_hpp",
+        ":gen_boost_test_included_unit_test_hpp",
         ":gen_extra_10",
         ":gen_extra_3",
         ":gen_extra_32",
@@ -1791,7 +1424,6 @@ cc_test(
         "OCTOMAP_MAJOR_VERSION=1",
         "OCTOMAP_MINOR_VERSION=10",
         "OCTOMAP_PATCH_VERSION=0",
-        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
         "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
         "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
         "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
@@ -1918,70 +1550,18 @@ py_pytest(
     ],
 )
 
-genrule(
-    name = "tar",
-    srcs = [":raw_tar"],
-    outs = ["tar.tar.gz"],
-    cmd = "tmpdir=$$(mktemp -d) && tar -xzf $(location :raw_tar) -C $$tmpdir && rm -rf $$tmpdir/opt/ros/lyrical/ndcurves/share/ndcurves/environment && tar -czf $@ -C $$tmpdir opt && rm -rf $$tmpdir",
-)
-
 ament_package(
     cmake_export_dependencies = False,
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
     cmake_export_targets = False,
     egg_info = False,
-    install = [
-        ":pkg_files_inc_0",
-        ":pkg_files_inc_1",
-        ":pkg_files_inc_2",
-        ":pkg_files_extra_3",
-        ":pkg_files_inc_4",
-        ":pkg_files_inc_5",
-        ":pkg_files_inc_6",
-        ":pkg_files_inc_7",
-        ":pkg_files_inc_8",
-        ":pkg_files_inc_9",
-        ":pkg_files_extra_10",
-        ":pkg_files_inc_11",
-        ":pkg_files_inc_12",
-        ":pkg_files_inc_13",
-        ":pkg_files_inc_14",
-        ":pkg_files_inc_15",
-        ":pkg_files_inc_16",
-        ":pkg_files_inc_17",
-        ":pkg_files_inc_18",
-        ":pkg_files_inc_19",
-        ":pkg_files_inc_20",
-        ":pkg_files_inc_21",
-        ":pkg_files_inc_22",
-        ":pkg_files_inc_23",
-        ":pkg_files_inc_24",
-        ":pkg_files_inc_25",
-        ":pkg_files_inc_26",
-        ":pkg_files_inc_27",
-        ":pkg_files_inc_28",
-        ":pkg_files_inc_29",
-        ":pkg_files_inc_30",
-        ":pkg_files_inc_31",
-        ":pkg_files_extra_32",
-        ":pkg_files_extra_33",
-        ":pkg_files_extra_34",
-        ":pkg_files_extra_35",
-        ":pkg_files_extra_36",
-        ":pkg_files_extra_37",
-        ":pkg_files_extra_38",
-        ":pkg_files_extra_39",
-        ":pkg_files_extra_40",
-        ":pkg_files_extra_41",
-        ":pkg_files_extra_42",
-        ":pkg_files_extra_43",
-        ":pkg_files_extra_44",
-        ":pkg_files_extra_45",
-        ":pkg_files_extra_46",
-        ":pkg_files_extra_47",
-        ":pkg_files_extra_48",
-    ],
+    headers = [
+        ":gen_extra_3",
+        ":gen_extra_10",
+        ":gen_extra_32",
+    ] + glob(["include/**"]),
+    include_prefix = "",
     package_xml = "package.xml",
     python = [
         ":ndcurves_py",
@@ -1990,7 +1570,6 @@ ament_package(
         ":gen_py_4",
     ],
     python_strip_prefix = "python",
-    tar_name = "raw_tar",
     deps = [":ament_index"] + [
         "@ament_cmake//:ament_package",
         "@eigenpy//:ament_package",
