@@ -1,26 +1,453 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-2-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@control_toolbox//:control_toolbox": "@control_toolbox//:control_toolbox_library",
+    "@control_toolbox//:exponential_filter": "@control_toolbox//:exponential_filter_library",
+    "@control_toolbox//:gravity_compensation": "@control_toolbox//:gravity_compensation_library",
+    "@control_toolbox//:low_pass_filter": "@control_toolbox//:low_pass_filter_library",
+    "@control_toolbox//:rate_limiter": "@control_toolbox//:rate_limiter_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@pal_statistics//:pal_statistics": "@pal_statistics//:pal_statistics_library",
+    "@pinocchio//:pinocchio_collision": "@pinocchio//:pinocchio_collision_library",
+    "@pinocchio//:pinocchio_default": "@pinocchio//:pinocchio_default_library",
+    "@pinocchio//:pinocchio_parsers": "@pinocchio//:pinocchio_parsers_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcl//:rcl": "@rcl//:rcl_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
+    "@realtime_tools//:thread_priority": "@realtime_tools//:thread_priority_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosidl_dynamic_typesupport//:rosidl_dynamic_typesupport": "@rosidl_dynamic_typesupport//:rosidl_dynamic_typesupport_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@@std_msgs+//:cc",
+    "@controller_interface//:controller_interface_library",
+    "@generate_parameter_library//:generate_parameter_library",
+    "@hardware_interface//:hardware_interface_library",
+    "@hardware_interface//:mock_components_library",
+    "@linear_feedback_controller_msgs//:cc",
+    "@linear_feedback_controller_msgs//:linear_feedback_controller_msgs_conversion",
+    "@nav_msgs//:cc",
+    "@rcl//:wait_for_entity_helpers",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "linear_feedback_controller_library",
+    srcs = [
+        "src/joint_state_estimator.cpp",
+        "src/lf_controller.cpp",
+        "src/linear_feedback_controller.cpp",
+        "src/linear_feedback_controller_ros.cpp",
+        "src/passthrough_controller.cpp",
+        "src/pd_controller.cpp",
+        "src/robot_model_builder.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_15",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/linear_feedback_controller",
+        "include",
+        "include/linear_feedback_controller",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "CONTROLLER_INTERFACE_MAJOR_VERSION=6",
+        "CONTROLLER_INTERFACE_MINOR_VERSION=10",
+        "CONTROLLER_INTERFACE_PATCH_VERSION=1",
+        "LINEAR_FEEDBACK_CONTROLLER_DO_EXPORT",
+        "LINEAR_FEEDBACK_CONTROLLER_IS_SHARED",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "linear_feedback_controller",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":linear_feedback_controller_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_extra_0",
+    out = "_gen/include/linear/feedback/controller/config.hh",
+    content = ["/*\n * This file has been automatically generated by the jrl-cmakemodules.\n * Please see https://github.com/jrl-umi3218/jrl-cmakemodules/blob/master/config.hh.cmake for details.\n*/\n\n#ifndef LINEAR_FEEDBACK_CONTROLLER_CONFIG_HH\n# define LINEAR_FEEDBACK_CONTROLLER_CONFIG_HH\n\n// Package version (header).\n# define LINEAR_FEEDBACK_CONTROLLER_VERSION_UNKNOWN_TAG 0 // Used to mention that the current version is unknown.\n# define LINEAR_FEEDBACK_CONTROLLER_VERSION \"4.0.1\"\n# define LINEAR_FEEDBACK_CONTROLLER_MAJOR_VERSION 4\n# define LINEAR_FEEDBACK_CONTROLLER_MINOR_VERSION 0\n# define LINEAR_FEEDBACK_CONTROLLER_PATCH_VERSION 1\n\n#define LINEAR_FEEDBACK_CONTROLLER_VERSION_AT_LEAST(major, minor, patch) (LINEAR_FEEDBACK_CONTROLLER_MAJOR_VERSION>major || (LINEAR_FEEDBACK_CONTROLLER_MAJOR_VERSION>=major && \\\n                                                             (LINEAR_FEEDBACK_CONTROLLER_MINOR_VERSION>minor || (LINEAR_FEEDBACK_CONTROLLER_MINOR_VERSION>=minor && \\\n                                                                                                     LINEAR_FEEDBACK_CONTROLLER_PATCH_VERSION>=patch))))\n\n#define LINEAR_FEEDBACK_CONTROLLER_VERSION_AT_MOST(major, minor, patch) (LINEAR_FEEDBACK_CONTROLLER_MAJOR_VERSION<major || (LINEAR_FEEDBACK_CONTROLLER_MAJOR_VERSION<=major && \\\n                                                            (LINEAR_FEEDBACK_CONTROLLER_MINOR_VERSION<minor || (LINEAR_FEEDBACK_CONTROLLER_MINOR_VERSION<=minor && \\\n                                                                                                     LINEAR_FEEDBACK_CONTROLLER_PATCH_VERSION<=patch))))\n\n// Handle portable symbol export.\n// Defining manually which symbol should be exported is required\n// under Windows whether MinGW or MSVC is used.\n//\n// The headers then have to be able to work in two different modes:\n// - dllexport when one is building the library,\n// - dllimport for clients using the library.\n//\n// On Linux, set the visibility accordingly. If C++ symbol visibility\n// is handled by the compiler, see: http://gcc.gnu.org/wiki/Visibility\n//\n// Explicit template instantiation on Windows need to add\n// dllexport on the definition and dllimport on the declaration.\n// The XXX_EXPLICIT_INSTANTIATION_DECLARATION_DLLAPI macro\n// should be set on the declaration while\n// the XXX_EXPLICIT_INSTANTIATION_DEFINITION_DLLAPI macro\n// should be set on the definition.\n# if defined _WIN32 || defined __CYGWIN__\n// On Microsoft Windows, use dllimport and dllexport to tag symbols.\n#  define LINEAR_FEEDBACK_CONTROLLER_DLLIMPORT __declspec(dllimport)\n#  define LINEAR_FEEDBACK_CONTROLLER_DLLEXPORT __declspec(dllexport)\n#  define LINEAR_FEEDBACK_CONTROLLER_DLLLOCAL\n#  define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION_DLLIMPORT __declspec(dllimport)\n#  define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION_DLLEXPORT\n#  define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DEFINITION_DLLIMPORT __declspec(dllimport)\n#  define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DEFINITION_DLLEXPORT __declspec(dllexport)\n# else\n// On Linux, for GCC >= 4, tag symbols using GCC extension.\n#  if __GNUC__ >= 4\n#   define LINEAR_FEEDBACK_CONTROLLER_DLLIMPORT __attribute__ ((visibility(\"default\")))\n#   define LINEAR_FEEDBACK_CONTROLLER_DLLEXPORT __attribute__ ((visibility(\"default\")))\n#   define LINEAR_FEEDBACK_CONTROLLER_DLLLOCAL  __attribute__ ((visibility(\"hidden\")))\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION_DLLIMPORT __attribute__ ((visibility(\"default\")))\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION_DLLEXPORT __attribute__ ((visibility(\"default\")))\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DEFINITION_DLLIMPORT\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DEFINITION_DLLEXPORT\n#  else\n// Otherwise (GCC < 4 or another compiler is used), export everything.\n#   define LINEAR_FEEDBACK_CONTROLLER_DLLIMPORT\n#   define LINEAR_FEEDBACK_CONTROLLER_DLLEXPORT\n#   define LINEAR_FEEDBACK_CONTROLLER_DLLLOCAL\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION_DLLIMPORT\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION_DLLEXPORT\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DEFINITION_DLLIMPORT\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DEFINITION_DLLEXPORT\n#  endif // __GNUC__ >= 4\n# endif // defined _WIN32 || defined __CYGWIN__\n\n# ifdef LINEAR_FEEDBACK_CONTROLLER_STATIC\n// If one is using the library statically, get rid of\n// extra information and use standard explicit template\n// instantiation keyword.\n#  define LINEAR_FEEDBACK_CONTROLLER_DLLAPI\n#  define LINEAR_FEEDBACK_CONTROLLER_LOCAL\n#  define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION extern template\n# else\n// Depending on whether one is building or using the\n// library define DLLAPI to import or export and\n// define the right explicit template instantiation keyword.\n#  ifdef linear_feedback_controller_EXPORTS\n#   define LINEAR_FEEDBACK_CONTROLLER_DLLAPI LINEAR_FEEDBACK_CONTROLLER_DLLEXPORT\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION_DLLAPI LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION_DLLEXPORT\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DEFINITION_DLLAPI LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DEFINITION_DLLEXPORT\n#  else\n#   define LINEAR_FEEDBACK_CONTROLLER_DLLAPI LINEAR_FEEDBACK_CONTROLLER_DLLIMPORT\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION_DLLAPI LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DECLARATION_DLLIMPORT\n#   define LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DEFINITION_DLLAPI LINEAR_FEEDBACK_CONTROLLER_EXPLICIT_INSTANTIATION_DEFINITION_DLLIMPORT\n#  endif // LINEAR_FEEDBACK_CONTROLLER_EXPORTS\n#  define LINEAR_FEEDBACK_CONTROLLER_LOCAL LINEAR_FEEDBACK_CONTROLLER_DLLLOCAL\n# endif // LINEAR_FEEDBACK_CONTROLLER_STATIC\n#endif //! LINEAR_FEEDBACK_CONTROLLER_CONFIG_HH\n"],
+)
+
+write_file(
+    name = "gen_extra_1",
+    out = "_gen/include/linear/feedback/controller/deprecated.hh",
+    content = ["/*\n * This file has been automatically generated by the jrl-cmakemodules.\n * Please see https://github.com/jrl-umi3218/jrl-cmakemodules/blob/master/deprecated.hh.cmake for details.\n*/\n\n#ifndef LINEAR_FEEDBACK_CONTROLLER_DEPRECATED_HH\n# define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED_HH\n\n// Define a suffix which can be used to tag a type, a function or a a\n// variable as deprecated (i.e. it will emit a warning when using it).\n//\n// Tagging a function as deprecated:\n//  void foo () LINEAR_FEEDBACK_CONTROLLER_DEPRECATED;\n//\n// Tagging a type as deprecated:\n//  class Foo {};\n//  typedef Foo Bar LINEAR_FEEDBACK_CONTROLLER_DEPRECATED;\n//\n// Tagging a variable as deprecated:\n//  int a LINEAR_FEEDBACK_CONTROLLER_DEPRECATED = 0;\n//\n// The use of a macro is required as this is /not/ a standardized\n// feature of C++ language or preprocessor, even if most of the\n// compilers support it.\n# if defined(__cplusplus) && (__cplusplus >= 201402L)\n#  define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED [[deprecated]]\n#  define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED_MESSAGE(message) [[deprecated(#message)]]\n# elif defined(__GNUC__) || defined(__clang__)\n#  define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED __attribute__ ((deprecated))\n#  define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED_MESSAGE(message) __attribute__ (( deprecated(#message) ))\n# else\n#  if defined(_MSC_VER) && !defined(__INTEL_COMPILER)\n#   define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED __declspec (deprecated)\n#   define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED_MESSAGE(message) __declspec ( deprecated(#message) )\n#  else\n// If the compiler is not recognized, drop the feature.\n#   define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED /* nothing */\n#   define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED_MESSAGE(message)\n#  endif // __MSVC__\n# endif // __cplusplus\n\n# if defined(__GNUC__) || defined(__clang__)\n#  ifndef LINEAR_FEEDBACK_CONTROLLER_PRAGMA\n#   define LINEAR_FEEDBACK_CONTROLLER_PRAGMA(X) _Pragma(#X)\n#  endif\n#  define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED_HEADER(MSG) LINEAR_FEEDBACK_CONTROLLER_PRAGMA(GCC warning MSG)\n# elif defined(_MSC_VER) && !defined(__INTEL_COMPILER)\n#  define LINEAR_FEEDBACK_CONTROLLER_STRINGIZE_(MSG) #MSG\n#  define LINEAR_FEEDBACK_CONTROLLER_STRINGIZE(MSG) LINEAR_FEEDBACK_CONTROLLER_STRINGIZE_(MSG)\n#  define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED_HEADER(MSG) \\\n    __pragma(message(__FILE__ \"(\" LINEAR_FEEDBACK_CONTROLLER_STRINGIZE(__LINE__) \") : Warning: \" MSG))\n# else\n#  define LINEAR_FEEDBACK_CONTROLLER_DEPRECATED_HEADER(MSG)\n# endif\n\n#endif //! LINEAR_FEEDBACK_CONTROLLER_DEPRECATED_HH\n"],
+)
+
+write_file(
+    name = "gen_extra_2",
+    out = "_gen/include/linear/feedback/controller/warning.hh",
+    content = ["/*\n * This file has been automatically generated by the jrl-cmakemodules.\n * Please see https://github.com/jrl-umi3218/jrl-cmakemodules/blob/master/warning.hh.cmake for details.\n*/\n\n#ifndef LINEAR_FEEDBACK_CONTROLLER_WARNING_HH\n# define LINEAR_FEEDBACK_CONTROLLER_WARNING_HH\n\n// Emits a warning in a portable way.\n//\n// To emit a warning, one can insert:\n//\n// #pragma message LINEAR_FEEDBACK_CONTROLLER_WARN(\"your warning message here\")\n//\n// The use of this syntax is required as this is /not/ a standardized\n// feature of C++ language or preprocessor, even if most of the\n// compilers support it.\n\n# define LINEAR_FEEDBACK_CONTROLLER_WARN_STRINGISE_IMPL(x) #x\n# define LINEAR_FEEDBACK_CONTROLLER_WARN_STRINGISE(x) \\\n         LINEAR_FEEDBACK_CONTROLLER_WARN_STRINGISE_IMPL(x)\n# ifdef __GNUC__\n#   define LINEAR_FEEDBACK_CONTROLLER_WARN(exp) (\"WARNING: \" exp)\n# else\n#  ifdef _MSC_VER\n#   define FILE_LINE_LINK __FILE__ \"(\" \\\n           LINEAR_FEEDBACK_CONTROLLER_WARN_STRINGISE(__LINE__) \") : \"\n#   define LINEAR_FEEDBACK_CONTROLLER_WARN(exp) (FILE_LINE_LINK \"WARNING: \" exp)\n#  else\n// If the compiler is not recognized, drop the feature.\n#   define LINEAR_FEEDBACK_CONTROLLER_WARN(MSG) /* nothing */\n#  endif // __MSVC__\n# endif // __GNUC__\n\n#endif //! LINEAR_FEEDBACK_CONTROLLER_WARNING_HH\n"],
+)
+
+write_file(
+    name = "gen_extra_3",
+    out = "_gen/include/linear_feedback_controller/generated_parameters.hpp",
+    content = ["// auto-generated DO NOT EDIT\n\n#pragma once\n\n#include <algorithm>\n#include <array>\n#include <functional>\n#include <limits>\n#include <mutex>\n#include <rclcpp/node.hpp>\n#include <rclcpp_lifecycle/lifecycle_node.hpp>\n#include <rclcpp/logger.hpp>\n#include <set>\n#include <sstream>\n#include <string>\n#include <type_traits>\n#include <utility>\n#include <vector>\n\n#include <fmt/core.h>\n#include <fmt/format.h>\n#include <fmt/ranges.h>\n\n#include <rsl/static_string.hpp>\n#include <rsl/static_vector.hpp>\n#include <rsl/parameter_validators.hpp>\n\n\n\nnamespace linear_feedback_controller {\n\n// Use validators from RSL\nusing rsl::unique;\nusing rsl::subset_of;\nusing rsl::fixed_size;\nusing rsl::size_gt;\nusing rsl::size_lt;\nusing rsl::not_empty;\nusing rsl::element_bounds;\nusing rsl::lower_element_bounds;\nusing rsl::upper_element_bounds;\nusing rsl::bounds;\nusing rsl::lt;\nusing rsl::gt;\nusing rsl::lt_eq;\nusing rsl::gt_eq;\nusing rsl::one_of;\nusing rsl::to_parameter_result_msg;\n\ntemplate <typename T>\n[[nodiscard]] auto to_parameter_value(T value) {\n    return rclcpp::ParameterValue(value);\n}\n\ntemplate <size_t capacity>\n[[nodiscard]] auto to_parameter_value(rsl::StaticString<capacity> const& value) {\n    return rclcpp::ParameterValue(rsl::to_string(value));\n}\n\ntemplate <typename T, size_t capacity>\n[[nodiscard]] auto to_parameter_value(rsl::StaticVector<T, capacity> const& value) {\n    return rclcpp::ParameterValue(rsl::to_vector(value));\n}\n    struct Params {\n        bool remove_gravity_compensation_effort;\n        double joint_velocity_filter_coefficient = 0.9;\n        std::vector<std::string> moving_joint_names;\n        bool robot_has_free_flyer;\n        double pd_to_lf_transition_duration;\n        struct ChainableController {\n            std::vector<std::string> command_interfaces;\n            std::string reference_prefix = \"\";\n        } chainable_controller;\n        struct MapMovingJointNames {\n            double p;\n            double d;\n        };\n        std::map<std::string, MapMovingJointNames> moving_joint_names_map;\n        // for detecting if the parameter struct has been updated\n        rclcpp::Time __stamp;\n    };\n    struct StackParams {\n        bool remove_gravity_compensation_effort;\n        double joint_velocity_filter_coefficient = 0.9;\n        bool robot_has_free_flyer;\n        double pd_to_lf_transition_duration;\n    };\n\n  class ParamListener{\n  public:\n    // throws rclcpp::exceptions::InvalidParameterValueException on initialization if invalid parameter are loaded\n    template <typename NodeT>\n    ParamListener(NodeT node, std::string const& prefix = \"\")\n    : ParamListener(node->get_node_parameters_interface(), node->get_logger(), prefix) {}\n\n    ParamListener(const std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface>& parameters_interface,\n                  std::string const& prefix = \"\")\n    : ParamListener(parameters_interface, rclcpp::get_logger(\"linear_feedback_controller\"), prefix) {\n      RCLCPP_DEBUG(logger_, \"ParameterListener: Not using node logger, recommend using other constructors to use a node logger\");\n    }\n\n    ParamListener(const std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface>& parameters_interface,\n                  rclcpp::Logger logger, std::string const& prefix = \"\")\n    : prefix_{prefix},\n      logger_{std::move(logger)} {\n      if (!prefix_.empty() && prefix_.back() != '.') {\n        prefix_ += \".\";\n      }\n\n      parameters_interface_ = parameters_interface;\n      declare_params();\n      auto update_param_cb = [this](const std::vector<rclcpp::Parameter> &parameters){return this->update(parameters);};\n      handle_ = parameters_interface_->add_on_set_parameters_callback(update_param_cb);\n      clock_ = rclcpp::Clock();\n    }\n\n    Params get_params() const{\n      std::lock_guard<std::mutex> lock(mutex_);\n      return params_;\n    }\n\n    /**\n     * @brief Tries to update the parsed Params object\n     * @param params_in The Params object to update\n     * @return true if the Params object was updated, false if it was already up to date or the mutex could not be locked\n     * @note This function tries to lock the mutex without blocking, so it can be used in a RT loop\n     */\n    bool try_update_params(Params & params_in) const {\n      std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);\n      if (lock.owns_lock()) {\n        if (const bool is_old = params_in.__stamp != params_.__stamp; is_old) {\n          params_in = params_;\n          return true;\n        }\n      }\n      return false;\n    }\n\n    /**\n     * @brief Tries to get the current Params object\n     * @param params_in The Params object to fill with the current parameters\n     * @return true if mutex can be locked, false if mutex could not be locked\n     * @note The parameters are only filled, when the mutex can be locked and the params timestamp is different\n     * @note This function tries to lock the mutex without blocking, so it can be used in a RT loop\n     */\n    bool try_get_params(Params & params_in) const {\n      if (mutex_.try_lock()) {\n        if (const bool is_old = params_in.__stamp != params_.__stamp; is_old) {\n          params_in = params_;\n        }\n        mutex_.unlock();\n        return true;\n      }\n      return false;\n    }\n\n    bool is_old(Params const& other) const {\n      std::lock_guard<std::mutex> lock(mutex_);\n      return params_.__stamp != other.__stamp;\n    }\n\n    StackParams get_stack_params() {\n      Params params = get_params();\n      StackParams output;\n      output.remove_gravity_compensation_effort = params.remove_gravity_compensation_effort;\n      output.joint_velocity_filter_coefficient = params.joint_velocity_filter_coefficient;\n      output.robot_has_free_flyer = params.robot_has_free_flyer;\n      output.pd_to_lf_transition_duration = params.pd_to_lf_transition_duration;\n\n      return output;\n    }\n\n    void refresh_dynamic_parameters() {\n      auto updated_params = get_params();\n      // TODO remove any destroyed dynamic parameters\n\n      // declare any new dynamic parameters\n      rclcpp::Parameter param;\n      for (const auto & value_1 : updated_params.moving_joint_names) {\n\n          auto& entry = updated_params.moving_joint_names_map[value_1];\n          std::string value = fmt::format(\"{}\", value_1);\n\n          auto param_name = fmt::format(\"{}{}.{}\", prefix_, value, \"p\");\n          if (!parameters_interface_->has_parameter(param_name)) {\n              rcl_interfaces::msg::ParameterDescriptor descriptor;\n              descriptor.description = \"Proportional gains for the PD controller.\";\n              descriptor.read_only = false;\n              descriptor.floating_point_range.resize(1);\n              descriptor.floating_point_range.at(0).from_value = 0.0;\n              descriptor.floating_point_range.at(0).to_value = std::numeric_limits<double>::max();\n              auto parameter = rclcpp::ParameterType::PARAMETER_DOUBLE;\n              parameters_interface_->declare_parameter(param_name, parameter, descriptor);\n          }\n          param = parameters_interface_->get_parameter(param_name);\n          RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n          if(auto validation_result = gt_eq<double>(param, 0.0);\n            !validation_result) {\n              throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter '__map_moving_joint_names.p': {}\", validation_result.error()));\n          }\n          entry.p = param.as_double();}\n\n      for (const auto & value_1 : updated_params.moving_joint_names) {\n\n          auto& entry = updated_params.moving_joint_names_map[value_1];\n          std::string value = fmt::format(\"{}\", value_1);\n\n          auto param_name = fmt::format(\"{}{}.{}\", prefix_, value, \"d\");\n          if (!parameters_interface_->has_parameter(param_name)) {\n              rcl_interfaces::msg::ParameterDescriptor descriptor;\n              descriptor.description = \"Derivation gains for the PD controller.\";\n              descriptor.read_only = false;\n              descriptor.floating_point_range.resize(1);\n              descriptor.floating_point_range.at(0).from_value = 0.0;\n              descriptor.floating_point_range.at(0).to_value = std::numeric_limits<double>::max();\n              auto parameter = rclcpp::ParameterType::PARAMETER_DOUBLE;\n              parameters_interface_->declare_parameter(param_name, parameter, descriptor);\n          }\n          param = parameters_interface_->get_parameter(param_name);\n          RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n          if(auto validation_result = gt_eq<double>(param, 0.0);\n            !validation_result) {\n              throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter '__map_moving_joint_names.d': {}\", validation_result.error()));\n          }\n          entry.d = param.as_double();}\n\n    }\n\n    rcl_interfaces::msg::SetParametersResult update(const std::vector<rclcpp::Parameter> &parameters) {\n      auto updated_params = get_params();\n\n      for (const auto &param: parameters) {\n        if (param.get_name() == (prefix_ + \"chainable_controller.command_interfaces\")) {\n            updated_params.chainable_controller.command_interfaces = param.as_string_array();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"chainable_controller.reference_prefix\")) {\n            updated_params.chainable_controller.reference_prefix = param.as_string();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"remove_gravity_compensation_effort\")) {\n            updated_params.remove_gravity_compensation_effort = param.as_bool();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"joint_velocity_filter_coefficient\")) {\n            if(auto validation_result = bounds<double>(param, 0.0, 1.0);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            updated_params.joint_velocity_filter_coefficient = param.as_double();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"moving_joint_names\")) {\n            if(auto validation_result = not_empty<std::string>(param);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            updated_params.moving_joint_names = param.as_string_array();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"robot_has_free_flyer\")) {\n            updated_params.robot_has_free_flyer = param.as_bool();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"pd_to_lf_transition_duration\")) {\n            if(auto validation_result = gt_eq<double>(param, 0.0);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            updated_params.pd_to_lf_transition_duration = param.as_double();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n      }\n\n      // update dynamic parameters\n      for (const auto &param: parameters) {\n        for (const auto & value_1 : updated_params.moving_joint_names) {\n        std::string value = fmt::format(\"{}\", value_1);\n\n            auto param_name = fmt::format(\"{}{}.{}\", prefix_, value, \"p\");\n            if (param.get_name() == param_name) {\n                if(auto validation_result = gt_eq<double>(param, 0.0);\n                  !validation_result) {\n                    return rsl::to_parameter_result_msg(validation_result);\n                }\n\n                updated_params.moving_joint_names_map[value_1].p = param.as_double();\n                RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n            }\n        }\n\n        for (const auto & value_1 : updated_params.moving_joint_names) {\n        std::string value = fmt::format(\"{}\", value_1);\n\n            auto param_name = fmt::format(\"{}{}.{}\", prefix_, value, \"d\");\n            if (param.get_name() == param_name) {\n                if(auto validation_result = gt_eq<double>(param, 0.0);\n                  !validation_result) {\n                    return rsl::to_parameter_result_msg(validation_result);\n                }\n\n                updated_params.moving_joint_names_map[value_1].d = param.as_double();\n                RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n            }\n        }\n\n      }\n      updated_params.__stamp = clock_.now();\n      update_internal_params(updated_params);\n      if (user_callback_) {\n         user_callback_(updated_params);\n      }\n      return rsl::to_parameter_result_msg({});\n    }\n\n    void declare_params(){\n      auto updated_params = get_params();\n      // declare all parameters and give default values to non-required ones\n      if (!parameters_interface_->has_parameter(prefix_ + \"chainable_controller.command_interfaces\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Names of the downstream controller that takes the robot state as references.\";\n          descriptor.read_only = false;\n          auto parameter = rclcpp::ParameterType::PARAMETER_STRING_ARRAY;\n          parameters_interface_->declare_parameter(prefix_ + \"chainable_controller.command_interfaces\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"chainable_controller.reference_prefix\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Names of the downstream controller that takes the robot state as references.\";\n          descriptor.read_only = false;\n          auto parameter = to_parameter_value(updated_params.chainable_controller.reference_prefix);\n          parameters_interface_->declare_parameter(prefix_ + \"chainable_controller.reference_prefix\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"remove_gravity_compensation_effort\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Do we need to remove the gravity compensation effort? In practice some robot (like the Panda robot) drivers take as input effort and sum them with the gravity compensation effort. So we need to remove this component to our computed effort in our controller.\";\n          descriptor.read_only = false;\n          auto parameter = rclcpp::ParameterType::PARAMETER_BOOL;\n          parameters_interface_->declare_parameter(prefix_ + \"remove_gravity_compensation_effort\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"joint_velocity_filter_coefficient\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Specifies the filter coefficient for the sensor's exponential filter. If equal to 1 the filter is inactive. I equal to zero the filter crash the signal into a constant being the initial value of the signal.\";\n          descriptor.read_only = false;\n          descriptor.floating_point_range.resize(1);\n          descriptor.floating_point_range.at(0).from_value = 0.0;\n          descriptor.floating_point_range.at(0).to_value = 1.0;\n          auto parameter = to_parameter_value(updated_params.joint_velocity_filter_coefficient);\n          parameters_interface_->declare_parameter(prefix_ + \"joint_velocity_filter_coefficient\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"moving_joint_names\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"list of active joint names used by the controller.\";\n          descriptor.read_only = false;\n          auto parameter = rclcpp::ParameterType::PARAMETER_STRING_ARRAY;\n          parameters_interface_->declare_parameter(prefix_ + \"moving_joint_names\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"robot_has_free_flyer\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Has the robot a freeflyer or not?\";\n          descriptor.read_only = false;\n          auto parameter = rclcpp::ParameterType::PARAMETER_BOOL;\n          parameters_interface_->declare_parameter(prefix_ + \"robot_has_free_flyer\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"pd_to_lf_transition_duration\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Duration **in seconds** of transition between the PD and the LF controllers.\";\n          descriptor.read_only = false;\n          descriptor.floating_point_range.resize(1);\n          descriptor.floating_point_range.at(0).from_value = 0.0;\n          descriptor.floating_point_range.at(0).to_value = std::numeric_limits<double>::max();\n          auto parameter = rclcpp::ParameterType::PARAMETER_DOUBLE;\n          parameters_interface_->declare_parameter(prefix_ + \"pd_to_lf_transition_duration\", parameter, descriptor);\n      }\n      // get parameters and fill struct fields\n      rclcpp::Parameter param;\n      param = parameters_interface_->get_parameter(prefix_ + \"chainable_controller.command_interfaces\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"chainable_controller.command_interfaces\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.chainable_controller.command_interfaces = param.as_string_array();\n      param = parameters_interface_->get_parameter(prefix_ + \"chainable_controller.reference_prefix\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"chainable_controller.reference_prefix\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.chainable_controller.reference_prefix = param.as_string();\n      param = parameters_interface_->get_parameter(prefix_ + \"remove_gravity_compensation_effort\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"remove_gravity_compensation_effort\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.remove_gravity_compensation_effort = param.as_bool();\n      param = parameters_interface_->get_parameter(prefix_ + \"joint_velocity_filter_coefficient\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"joint_velocity_filter_coefficient\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      if(auto validation_result = bounds<double>(param, 0.0, 1.0);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'joint_velocity_filter_coefficient': {}\", validation_result.error()));\n      }\n      updated_params.joint_velocity_filter_coefficient = param.as_double();\n      param = parameters_interface_->get_parameter(prefix_ + \"moving_joint_names\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"moving_joint_names\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      if(auto validation_result = not_empty<std::string>(param);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'moving_joint_names': {}\", validation_result.error()));\n      }\n      updated_params.moving_joint_names = param.as_string_array();\n      param = parameters_interface_->get_parameter(prefix_ + \"robot_has_free_flyer\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"robot_has_free_flyer\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      updated_params.robot_has_free_flyer = param.as_bool();\n      param = parameters_interface_->get_parameter(prefix_ + \"pd_to_lf_transition_duration\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"pd_to_lf_transition_duration\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      if(auto validation_result = gt_eq<double>(param, 0.0);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'pd_to_lf_transition_duration': {}\", validation_result.error()));\n      }\n      updated_params.pd_to_lf_transition_duration = param.as_double();\n\n\n      // declare and set all dynamic parameters\n      for (const auto & value_1 : updated_params.moving_joint_names) {\n\n          auto& entry = updated_params.moving_joint_names_map[value_1];\n          std::string value = fmt::format(\"{}\", value_1);\n\n          auto param_name = fmt::format(\"{}{}.{}\", prefix_, value, \"p\");\n          if (!parameters_interface_->has_parameter(param_name)) {\n              rcl_interfaces::msg::ParameterDescriptor descriptor;\n              descriptor.description = \"Proportional gains for the PD controller.\";\n              descriptor.read_only = false;\n              descriptor.floating_point_range.resize(1);\n              descriptor.floating_point_range.at(0).from_value = 0.0;\n              descriptor.floating_point_range.at(0).to_value = std::numeric_limits<double>::max();\n              auto parameter = rclcpp::ParameterType::PARAMETER_DOUBLE;\n              parameters_interface_->declare_parameter(param_name, parameter, descriptor);\n          }\n          param = parameters_interface_->get_parameter(param_name);\n          RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n          if(auto validation_result = gt_eq<double>(param, 0.0);\n            !validation_result) {\n              throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter '__map_moving_joint_names.p': {}\", validation_result.error()));\n          }\n          entry.p = param.as_double();}\n\n      for (const auto & value_1 : updated_params.moving_joint_names) {\n\n          auto& entry = updated_params.moving_joint_names_map[value_1];\n          std::string value = fmt::format(\"{}\", value_1);\n\n          auto param_name = fmt::format(\"{}{}.{}\", prefix_, value, \"d\");\n          if (!parameters_interface_->has_parameter(param_name)) {\n              rcl_interfaces::msg::ParameterDescriptor descriptor;\n              descriptor.description = \"Derivation gains for the PD controller.\";\n              descriptor.read_only = false;\n              descriptor.floating_point_range.resize(1);\n              descriptor.floating_point_range.at(0).from_value = 0.0;\n              descriptor.floating_point_range.at(0).to_value = std::numeric_limits<double>::max();\n              auto parameter = rclcpp::ParameterType::PARAMETER_DOUBLE;\n              parameters_interface_->declare_parameter(param_name, parameter, descriptor);\n          }\n          param = parameters_interface_->get_parameter(param_name);\n          RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n          if(auto validation_result = gt_eq<double>(param, 0.0);\n            !validation_result) {\n              throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter '__map_moving_joint_names.d': {}\", validation_result.error()));\n          }\n          entry.d = param.as_double();}\n\n\n      updated_params.__stamp = clock_.now();\n      update_internal_params(updated_params);\n    }\n\n    using userParameterUpdateCB = std::function<void(const Params&)>;\n    void setUserCallback(const userParameterUpdateCB& callback){\n      user_callback_ = callback;\n    }\n\n    void clearUserCallback(){\n      user_callback_ = {};\n    }\n\n    private:\n      void update_internal_params(Params updated_params) {\n        std::lock_guard<std::mutex> lock(mutex_);\n        params_ = std::move(updated_params);\n      }\n\n      std::string prefix_;\n      Params params_;\n      rclcpp::Clock clock_;\n      std::shared_ptr<rclcpp::node_interfaces::OnSetParametersCallbackHandle> handle_;\n      std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface> parameters_interface_;\n      userParameterUpdateCB user_callback_;\n\n      rclcpp::Logger logger_;\n      std::mutex mutable mutex_;\n  };\n\n} // namespace linear_feedback_controller\n"],
+)
+
+write_file(
+    name = "gen_extra_4",
+    out = "_gen/include/linear_feedback_controller/joint_state_estimator_generated_parameters.hpp",
+    content = ["// auto-generated DO NOT EDIT\n\n#pragma once\n\n#include <algorithm>\n#include <array>\n#include <functional>\n#include <limits>\n#include <mutex>\n#include <rclcpp/node.hpp>\n#include <rclcpp_lifecycle/lifecycle_node.hpp>\n#include <rclcpp/logger.hpp>\n#include <set>\n#include <sstream>\n#include <string>\n#include <type_traits>\n#include <utility>\n#include <vector>\n\n#include <fmt/core.h>\n#include <fmt/format.h>\n#include <fmt/ranges.h>\n\n#include <rsl/static_string.hpp>\n#include <rsl/static_vector.hpp>\n#include <rsl/parameter_validators.hpp>\n\n\n\nnamespace joint_state_estimator {\n\n// Use validators from RSL\nusing rsl::unique;\nusing rsl::subset_of;\nusing rsl::fixed_size;\nusing rsl::size_gt;\nusing rsl::size_lt;\nusing rsl::not_empty;\nusing rsl::element_bounds;\nusing rsl::lower_element_bounds;\nusing rsl::upper_element_bounds;\nusing rsl::bounds;\nusing rsl::lt;\nusing rsl::gt;\nusing rsl::lt_eq;\nusing rsl::gt_eq;\nusing rsl::one_of;\nusing rsl::to_parameter_result_msg;\n\ntemplate <typename T>\n[[nodiscard]] auto to_parameter_value(T value) {\n    return rclcpp::ParameterValue(value);\n}\n\ntemplate <size_t capacity>\n[[nodiscard]] auto to_parameter_value(rsl::StaticString<capacity> const& value) {\n    return rclcpp::ParameterValue(rsl::to_string(value));\n}\n\ntemplate <typename T, size_t capacity>\n[[nodiscard]] auto to_parameter_value(rsl::StaticVector<T, capacity> const& value) {\n    return rclcpp::ParameterValue(rsl::to_vector(value));\n}\n    struct Params {\n        std::vector<std::string> state_interfaces = {};\n        std::vector<std::string> command_interfaces = {};\n        // for detecting if the parameter struct has been updated\n        rclcpp::Time __stamp;\n    };\n    struct StackParams {\n    };\n\n  class ParamListener{\n  public:\n    // throws rclcpp::exceptions::InvalidParameterValueException on initialization if invalid parameter are loaded\n    template <typename NodeT>\n    ParamListener(NodeT node, std::string const& prefix = \"\")\n    : ParamListener(node->get_node_parameters_interface(), node->get_logger(), prefix) {}\n\n    ParamListener(const std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface>& parameters_interface,\n                  std::string const& prefix = \"\")\n    : ParamListener(parameters_interface, rclcpp::get_logger(\"joint_state_estimator\"), prefix) {\n      RCLCPP_DEBUG(logger_, \"ParameterListener: Not using node logger, recommend using other constructors to use a node logger\");\n    }\n\n    ParamListener(const std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface>& parameters_interface,\n                  rclcpp::Logger logger, std::string const& prefix = \"\")\n    : prefix_{prefix},\n      logger_{std::move(logger)} {\n      if (!prefix_.empty() && prefix_.back() != '.') {\n        prefix_ += \".\";\n      }\n\n      parameters_interface_ = parameters_interface;\n      declare_params();\n      auto update_param_cb = [this](const std::vector<rclcpp::Parameter> &parameters){return this->update(parameters);};\n      handle_ = parameters_interface_->add_on_set_parameters_callback(update_param_cb);\n      clock_ = rclcpp::Clock();\n    }\n\n    Params get_params() const{\n      std::lock_guard<std::mutex> lock(mutex_);\n      return params_;\n    }\n\n    /**\n     * @brief Tries to update the parsed Params object\n     * @param params_in The Params object to update\n     * @return true if the Params object was updated, false if it was already up to date or the mutex could not be locked\n     * @note This function tries to lock the mutex without blocking, so it can be used in a RT loop\n     */\n    bool try_update_params(Params & params_in) const {\n      std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);\n      if (lock.owns_lock()) {\n        if (const bool is_old = params_in.__stamp != params_.__stamp; is_old) {\n          params_in = params_;\n          return true;\n        }\n      }\n      return false;\n    }\n\n    /**\n     * @brief Tries to get the current Params object\n     * @param params_in The Params object to fill with the current parameters\n     * @return true if mutex can be locked, false if mutex could not be locked\n     * @note The parameters are only filled, when the mutex can be locked and the params timestamp is different\n     * @note This function tries to lock the mutex without blocking, so it can be used in a RT loop\n     */\n    bool try_get_params(Params & params_in) const {\n      if (mutex_.try_lock()) {\n        if (const bool is_old = params_in.__stamp != params_.__stamp; is_old) {\n          params_in = params_;\n        }\n        mutex_.unlock();\n        return true;\n      }\n      return false;\n    }\n\n    bool is_old(Params const& other) const {\n      std::lock_guard<std::mutex> lock(mutex_);\n      return params_.__stamp != other.__stamp;\n    }\n\n    StackParams get_stack_params() {\n      Params params = get_params();\n      StackParams output;\n\n\n      return output;\n    }\n\n    void refresh_dynamic_parameters() {\n      auto updated_params = get_params();\n      // TODO remove any destroyed dynamic parameters\n\n      // declare any new dynamic parameters\n      rclcpp::Parameter param;\n\n    }\n\n    rcl_interfaces::msg::SetParametersResult update(const std::vector<rclcpp::Parameter> &parameters) {\n      auto updated_params = get_params();\n\n      for (const auto &param: parameters) {\n        if (param.get_name() == (prefix_ + \"state_interfaces\")) {\n            if(auto validation_result = not_empty<std::string>(param);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            if(auto validation_result = unique<std::string>(param);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            updated_params.state_interfaces = param.as_string_array();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"command_interfaces\")) {\n            if(auto validation_result = not_empty<std::string>(param);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            if(auto validation_result = unique<std::string>(param);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            updated_params.command_interfaces = param.as_string_array();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n      }\n\n      updated_params.__stamp = clock_.now();\n      update_internal_params(updated_params);\n      if (user_callback_) {\n         user_callback_(updated_params);\n      }\n      return rsl::to_parameter_result_msg({});\n    }\n\n    void declare_params(){\n      auto updated_params = get_params();\n      // declare all parameters and give default values to non-required ones\n      if (!parameters_interface_->has_parameter(prefix_ + \"state_interfaces\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Names of the interfaces to be forwarded\";\n          descriptor.read_only = false;\n          auto parameter = to_parameter_value(updated_params.state_interfaces);\n          parameters_interface_->declare_parameter(prefix_ + \"state_interfaces\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"command_interfaces\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Names of the interfaces to be forwarded\";\n          descriptor.read_only = false;\n          auto parameter = to_parameter_value(updated_params.command_interfaces);\n          parameters_interface_->declare_parameter(prefix_ + \"command_interfaces\", parameter, descriptor);\n      }\n      // get parameters and fill struct fields\n      rclcpp::Parameter param;\n      param = parameters_interface_->get_parameter(prefix_ + \"state_interfaces\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"state_interfaces\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      if(auto validation_result = not_empty<std::string>(param);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'state_interfaces': {}\", validation_result.error()));\n      }\n      if(auto validation_result = unique<std::string>(param);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'state_interfaces': {}\", validation_result.error()));\n      }\n      updated_params.state_interfaces = param.as_string_array();\n      param = parameters_interface_->get_parameter(prefix_ + \"command_interfaces\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"command_interfaces\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      if(auto validation_result = not_empty<std::string>(param);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'command_interfaces': {}\", validation_result.error()));\n      }\n      if(auto validation_result = unique<std::string>(param);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'command_interfaces': {}\", validation_result.error()));\n      }\n      updated_params.command_interfaces = param.as_string_array();\n\n\n      updated_params.__stamp = clock_.now();\n      update_internal_params(updated_params);\n    }\n\n    using userParameterUpdateCB = std::function<void(const Params&)>;\n    void setUserCallback(const userParameterUpdateCB& callback){\n      user_callback_ = callback;\n    }\n\n    void clearUserCallback(){\n      user_callback_ = {};\n    }\n\n    private:\n      void update_internal_params(Params updated_params) {\n        std::lock_guard<std::mutex> lock(mutex_);\n        params_ = std::move(updated_params);\n      }\n\n      std::string prefix_;\n      Params params_;\n      rclcpp::Clock clock_;\n      std::shared_ptr<rclcpp::node_interfaces::OnSetParametersCallbackHandle> handle_;\n      std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface> parameters_interface_;\n      userParameterUpdateCB user_callback_;\n\n      rclcpp::Logger logger_;\n      std::mutex mutable mutex_;\n  };\n\n} // namespace joint_state_estimator\n"],
+)
+
+write_file(
+    name = "gen_extra_15",
+    out = "_gen/include/linear_feedback_controller/passthrough_controller_generated_parameters.hpp",
+    content = ["// auto-generated DO NOT EDIT\n\n#pragma once\n\n#include <algorithm>\n#include <array>\n#include <functional>\n#include <limits>\n#include <mutex>\n#include <rclcpp/node.hpp>\n#include <rclcpp_lifecycle/lifecycle_node.hpp>\n#include <rclcpp/logger.hpp>\n#include <set>\n#include <sstream>\n#include <string>\n#include <type_traits>\n#include <utility>\n#include <vector>\n\n#include <fmt/core.h>\n#include <fmt/format.h>\n#include <fmt/ranges.h>\n\n#include <rsl/static_string.hpp>\n#include <rsl/static_vector.hpp>\n#include <rsl/parameter_validators.hpp>\n\n\n\nnamespace passthrough_controller {\n\n// Use validators from RSL\nusing rsl::unique;\nusing rsl::subset_of;\nusing rsl::fixed_size;\nusing rsl::size_gt;\nusing rsl::size_lt;\nusing rsl::not_empty;\nusing rsl::element_bounds;\nusing rsl::lower_element_bounds;\nusing rsl::upper_element_bounds;\nusing rsl::bounds;\nusing rsl::lt;\nusing rsl::gt;\nusing rsl::lt_eq;\nusing rsl::gt_eq;\nusing rsl::one_of;\nusing rsl::to_parameter_result_msg;\n\ntemplate <typename T>\n[[nodiscard]] auto to_parameter_value(T value) {\n    return rclcpp::ParameterValue(value);\n}\n\ntemplate <size_t capacity>\n[[nodiscard]] auto to_parameter_value(rsl::StaticString<capacity> const& value) {\n    return rclcpp::ParameterValue(rsl::to_string(value));\n}\n\ntemplate <typename T, size_t capacity>\n[[nodiscard]] auto to_parameter_value(rsl::StaticVector<T, capacity> const& value) {\n    return rclcpp::ParameterValue(rsl::to_vector(value));\n}\n    struct Params {\n        std::vector<std::string> reference_interfaces;\n        std::vector<std::string> command_interfaces;\n        // for detecting if the parameter struct has been updated\n        rclcpp::Time __stamp;\n    };\n    struct StackParams {\n    };\n\n  class ParamListener{\n  public:\n    // throws rclcpp::exceptions::InvalidParameterValueException on initialization if invalid parameter are loaded\n    template <typename NodeT>\n    ParamListener(NodeT node, std::string const& prefix = \"\")\n    : ParamListener(node->get_node_parameters_interface(), node->get_logger(), prefix) {}\n\n    ParamListener(const std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface>& parameters_interface,\n                  std::string const& prefix = \"\")\n    : ParamListener(parameters_interface, rclcpp::get_logger(\"passthrough_controller\"), prefix) {\n      RCLCPP_DEBUG(logger_, \"ParameterListener: Not using node logger, recommend using other constructors to use a node logger\");\n    }\n\n    ParamListener(const std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface>& parameters_interface,\n                  rclcpp::Logger logger, std::string const& prefix = \"\")\n    : prefix_{prefix},\n      logger_{std::move(logger)} {\n      if (!prefix_.empty() && prefix_.back() != '.') {\n        prefix_ += \".\";\n      }\n\n      parameters_interface_ = parameters_interface;\n      declare_params();\n      auto update_param_cb = [this](const std::vector<rclcpp::Parameter> &parameters){return this->update(parameters);};\n      handle_ = parameters_interface_->add_on_set_parameters_callback(update_param_cb);\n      clock_ = rclcpp::Clock();\n    }\n\n    Params get_params() const{\n      std::lock_guard<std::mutex> lock(mutex_);\n      return params_;\n    }\n\n    /**\n     * @brief Tries to update the parsed Params object\n     * @param params_in The Params object to update\n     * @return true if the Params object was updated, false if it was already up to date or the mutex could not be locked\n     * @note This function tries to lock the mutex without blocking, so it can be used in a RT loop\n     */\n    bool try_update_params(Params & params_in) const {\n      std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);\n      if (lock.owns_lock()) {\n        if (const bool is_old = params_in.__stamp != params_.__stamp; is_old) {\n          params_in = params_;\n          return true;\n        }\n      }\n      return false;\n    }\n\n    /**\n     * @brief Tries to get the current Params object\n     * @param params_in The Params object to fill with the current parameters\n     * @return true if mutex can be locked, false if mutex could not be locked\n     * @note The parameters are only filled, when the mutex can be locked and the params timestamp is different\n     * @note This function tries to lock the mutex without blocking, so it can be used in a RT loop\n     */\n    bool try_get_params(Params & params_in) const {\n      if (mutex_.try_lock()) {\n        if (const bool is_old = params_in.__stamp != params_.__stamp; is_old) {\n          params_in = params_;\n        }\n        mutex_.unlock();\n        return true;\n      }\n      return false;\n    }\n\n    bool is_old(Params const& other) const {\n      std::lock_guard<std::mutex> lock(mutex_);\n      return params_.__stamp != other.__stamp;\n    }\n\n    StackParams get_stack_params() {\n      Params params = get_params();\n      StackParams output;\n\n\n      return output;\n    }\n\n    void refresh_dynamic_parameters() {\n      auto updated_params = get_params();\n      // TODO remove any destroyed dynamic parameters\n\n      // declare any new dynamic parameters\n      rclcpp::Parameter param;\n\n    }\n\n    rcl_interfaces::msg::SetParametersResult update(const std::vector<rclcpp::Parameter> &parameters) {\n      auto updated_params = get_params();\n\n      for (const auto &param: parameters) {\n        if (param.get_name() == (prefix_ + \"reference_interfaces\")) {\n            if(auto validation_result = not_empty<std::string>(param);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            if(auto validation_result = unique<std::string>(param);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            updated_params.reference_interfaces = param.as_string_array();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n        if (param.get_name() == (prefix_ + \"command_interfaces\")) {\n            if(auto validation_result = not_empty<std::string>(param);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            if(auto validation_result = unique<std::string>(param);\n              !validation_result) {\n                return rsl::to_parameter_result_msg(validation_result);\n            }\n            updated_params.command_interfaces = param.as_string_array();\n            RCLCPP_DEBUG_STREAM(logger_, param.get_name() << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n        }\n      }\n\n      updated_params.__stamp = clock_.now();\n      update_internal_params(updated_params);\n      if (user_callback_) {\n         user_callback_(updated_params);\n      }\n      return rsl::to_parameter_result_msg({});\n    }\n\n    void declare_params(){\n      auto updated_params = get_params();\n      // declare all parameters and give default values to non-required ones\n      if (!parameters_interface_->has_parameter(prefix_ + \"reference_interfaces\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Names of the interfaces to be forwarded\";\n          descriptor.read_only = false;\n          auto parameter = rclcpp::ParameterType::PARAMETER_STRING_ARRAY;\n          parameters_interface_->declare_parameter(prefix_ + \"reference_interfaces\", parameter, descriptor);\n      }\n      if (!parameters_interface_->has_parameter(prefix_ + \"command_interfaces\")) {\n          rcl_interfaces::msg::ParameterDescriptor descriptor;\n          descriptor.description = \"Names of the interfaces to forward to.\";\n          descriptor.read_only = false;\n          auto parameter = rclcpp::ParameterType::PARAMETER_STRING_ARRAY;\n          parameters_interface_->declare_parameter(prefix_ + \"command_interfaces\", parameter, descriptor);\n      }\n      // get parameters and fill struct fields\n      rclcpp::Parameter param;\n      param = parameters_interface_->get_parameter(prefix_ + \"reference_interfaces\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"reference_interfaces\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      if(auto validation_result = not_empty<std::string>(param);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'reference_interfaces': {}\", validation_result.error()));\n      }\n      if(auto validation_result = unique<std::string>(param);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'reference_interfaces': {}\", validation_result.error()));\n      }\n      updated_params.reference_interfaces = param.as_string_array();\n      param = parameters_interface_->get_parameter(prefix_ + \"command_interfaces\");\n      RCLCPP_DEBUG_STREAM(logger_, (prefix_ + \"command_interfaces\") << \": \" << param.get_type_name() << \" = \" << param.value_to_string());\n      if(auto validation_result = not_empty<std::string>(param);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'command_interfaces': {}\", validation_result.error()));\n      }\n      if(auto validation_result = unique<std::string>(param);\n        !validation_result) {\n          throw rclcpp::exceptions::InvalidParameterValueException(fmt::format(\"Invalid value set during initialization for parameter 'command_interfaces': {}\", validation_result.error()));\n      }\n      updated_params.command_interfaces = param.as_string_array();\n\n\n      updated_params.__stamp = clock_.now();\n      update_internal_params(updated_params);\n    }\n\n    using userParameterUpdateCB = std::function<void(const Params&)>;\n    void setUserCallback(const userParameterUpdateCB& callback){\n      user_callback_ = callback;\n    }\n\n    void clearUserCallback(){\n      user_callback_ = {};\n    }\n\n    private:\n      void update_internal_params(Params updated_params) {\n        std::lock_guard<std::mutex> lock(mutex_);\n        params_ = std::move(updated_params);\n      }\n\n      std::string prefix_;\n      Params params_;\n      rclcpp::Clock clock_;\n      std::shared_ptr<rclcpp::node_interfaces::OnSetParametersCallbackHandle> handle_;\n      std::shared_ptr<rclcpp::node_interfaces::NodeParametersInterface> parameters_interface_;\n      userParameterUpdateCB user_callback_;\n\n      rclcpp::Logger logger_;\n      std::mutex mutable mutex_;\n  };\n\n} // namespace passthrough_controller\n"],
+)
+
+write_file(
+    name = "gen_extra_16",
+    out = "_gen/lib/linear_feedback_controller/pd_plus_controller",
+    content = ["#!/usr/bin/env python\n\n\"\"\"\nTest PD+gravity tracking sinusoidal joint trajectory for Panda robot (7Dof).\n\"\"\"\n\nimport numpy as np\nimport pinocchio as pin\nimport rclpy\nimport rclpy.duration\nfrom rclpy.node import Node\nfrom rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy\nfrom rclpy.qos_overriding_options import QoSOverridingOptions\nimport rclpy.time\n\nfrom std_msgs.msg import String\n\nfrom linear_feedback_controller_msgs.msg import Sensor, Control\nfrom linear_feedback_controller_msgs_py.numpy_conversions import (\n    sensor_msg_to_numpy,\n    control_numpy_to_msg,\n)\nimport linear_feedback_controller_msgs_py.lfc_py_types as lfc_py_types\n\n\nclass PDPlusController(Node):\n    def __init__(self):\n        super().__init__(\"pd_plus_controller\")\n\n        # Moving joint names.\n        self.declare_parameter(\"moving_joint_names\", [\"\"])\n        # Amplitude of the sinus per joints.\n        self.declare_parameter(\"amplitudes\", [0.0])\n        # Periods of the sinus per joints.\n        self.declare_parameter(\"periods\", [0.0])\n        # P gains.\n        self.declare_parameter(\"p_gains\", [0.0])\n        # D gains.\n        self.declare_parameter(\"d_gains\", [0.0])\n        # Controller period.\n        self.declare_parameter(\"controller_period\", 0.01)\n        # Do we use the Ricatti gains or not.\n        self.declare_parameter(\"with_ricatti_gains\", True)\n\n        # Obtain the parameter value\n        self.moving_joint_names = (\n            self.get_parameter(\"moving_joint_names\")\n            .get_parameter_value()\n            .string_array_value\n        )\n        self.amplitudes = np.array(\n            self.get_parameter(\"amplitudes\").get_parameter_value().double_array_value\n        )\n        self.periods = np.array(\n            self.get_parameter(\"periods\").get_parameter_value().double_array_value\n        )\n        self.p_gains = np.array(\n            self.get_parameter(\"p_gains\").get_parameter_value().double_array_value\n        )\n        self.d_gains = np.array(\n            self.get_parameter(\"d_gains\").get_parameter_value().double_array_value\n        )\n        self.controller_period = (\n            self.get_parameter(\"controller_period\").get_parameter_value().double_value\n        )\n        self.with_ricatti_gains = (\n            self.get_parameter(\"with_ricatti_gains\").get_parameter_value().bool_value\n        )\n\n        self.get_logger().info(\"\\tmoving_joint_names = \" + str(self.moving_joint_names))\n        self.get_logger().info(\"\\tamplitudes = \" + str(self.amplitudes))\n        self.get_logger().info(\"\\tperiods = \" + str(self.periods))\n        self.get_logger().info(\"\\tp_gains = \" + str(self.p_gains))\n        self.get_logger().info(\"\\td_gains = \" + str(self.d_gains))\n        self.get_logger().info(\"\\tcontroller_period = \" + str(self.controller_period))\n\n        # Load publisher and subscriber for LFC communication.\n        self.publisher_control_ = self.create_publisher(\n            Control,\n            \"/control\",\n            qos_profile=QoSProfile(\n                depth=10,\n                reliability=ReliabilityPolicy.BEST_EFFORT,\n            ),\n            qos_overriding_options=QoSOverridingOptions.with_default_policies(),\n        )\n        self.subscriber_sensor_ = self.create_subscription(\n            Sensor,\n            \"sensor\",\n            self.sensor_callback,\n            qos_profile=QoSProfile(\n                depth=10,\n                reliability=ReliabilityPolicy.BEST_EFFORT,\n            ),\n            qos_overriding_options=QoSOverridingOptions.with_default_policies(),\n        )\n\n        # Get the robot model.\n        self.subscriber_robot_description_ = self.create_subscription(\n            String,\n            \"/robot_description\",\n            self.robot_description_callback,\n            qos_profile=QoSProfile(\n                depth=1,\n                durability=DurabilityPolicy.TRANSIENT_LOCAL,\n                reliability=ReliabilityPolicy.RELIABLE,\n            ),\n        )\n        self.timer = self.create_timer(self.controller_period, self.timer_callback)\n\n        # Shared between subscriber and timer callbacks\n        self.t0_sensor = None\n        self.q0 = None\n        self.q_m = None\n        self.dq_m = None\n        self.pin_model = None\n        self.pin_data = None\n        self.sensor_received = False\n\n        self.get_logger().info(\"Controller stated.\")\n\n    def compute_sinusoid_q_delta_reference(self, amp, period, dt):\n        w = np.zeros(period.shape)\n        for i in range(period.shape[0]):\n            if period[i] >= 1e-5:\n                w[i] = 2 * np.pi / period[i]\n        a = -amp\n        c = amp\n        delta_q = c + a * np.cos(w * dt)\n        dq = -w * a * np.sin(w * dt)\n        return delta_q, dq\n\n    def joint_positions_to_configuration(self, q_joint: np.ndarray) -> np.ndarray:\n        if q_joint.shape[0] != len(self.moving_joint_names):\n            raise ValueError(\n                f\"joint_positions_to_configuration: expected {len(self.moving_joint_names)} \"\n                f\"joint positions, got {q_joint.shape[0]}\"\n            )\n\n        q = np.zeros(self.pin_model.nq)\n\n        for k, joint_name in enumerate(self.moving_joint_names):\n            joint_id = self.pin_model.getJointId(joint_name)\n            jmodel = self.pin_model.joints[joint_id]\n            idx_q = jmodel.idx_q\n            nq_j = jmodel.nq\n\n            if nq_j == 1:\n                q[idx_q] = q_joint[k]\n            elif nq_j == 2:\n                theta = q_joint[k]\n                q[idx_q] = np.cos(theta)\n                q[idx_q + 1] = np.sin(theta)\n            else:\n                raise ValueError(\n                    f\"Unsupported joint nq={nq_j} for joint '{joint_name}' \"\n                    f\"(id={joint_id})\"\n                )\n\n        return q\n\n    def robot_description_callback(self, msg: String):\n        pin_model_complete = pin.buildModelFromXML(msg.data)\n        locked_joint_names = [\n            name\n            for name in pin_model_complete.names\n            if name not in self.moving_joint_names and name != \"universe\"\n        ]\n        locked_joint_ids = [\n            pin_model_complete.getJointId(name) for name in locked_joint_names\n        ]\n        self.pin_model = pin.buildReducedModel(\n            pin_model_complete,\n            list_of_geom_models=[],\n            list_of_joints_to_lock=locked_joint_ids,\n            reference_configuration=np.zeros(pin_model_complete.nq),\n        )[0]\n        self.pin_data = self.pin_model.createData()\n        self.get_logger().info(\"robot_description_callback\")\n        self.get_logger().info(f\"pin_model.nq {self.pin_model.nq}\")\n\n    def sensor_callback(self, sensor_msg: Sensor):\n        sensor: lfc_py_types.Sensor = sensor_msg_to_numpy(sensor_msg)\n        self.q_m = sensor.joint_state.position\n        self.dq_m = sensor.joint_state.velocity\n\n        if not self.sensor_received:\n            self.t0_sensor = self.get_clock().now()\n            self.q0 = self.q_m\n            self.sensor_received = True\n\n    def timer_callback(self):\n        t_now = self.get_clock().now()\n        if self.pin_model is None:\n            self.get_logger().info(\n                \"Waiting for the Robot model...\", throttle_duration_sec=2.0\n            )\n            return\n        if self.t0_sensor is None:\n            self.get_logger().info(\n                \"Waiting for the first sensor message...\", throttle_duration_sec=2.0\n            )\n            return\n\n        dt_sec = (t_now - self.t0_sensor).nanoseconds / 1e9\n        delta_q, dq_ref = self.compute_sinusoid_q_delta_reference(\n            self.amplitudes, self.periods, dt_sec\n        )\n        q_ref = self.q0 + delta_q\n\n        q_pin = self.joint_positions_to_configuration(self.q_m)\n        tau_g = pin.computeGeneralizedGravity(self.pin_model, self.pin_data, q_pin)\n        tau = (\n            tau_g\n            - self.p_gains * (self.q_m - q_ref)\n            + -self.d_gains * (self.dq_m - dq_ref)\n        ).reshape(self.pin_model.nv, 1)\n\n        K_ricattti = np.zeros((self.pin_model.nv, 2 * self.pin_model.nv))\n        if self.with_ricatti_gains:\n            K_ricattti[:, : self.pin_model.nv] = np.diag(self.p_gains)\n            K_ricattti[:, self.pin_model.nv :] = np.diag(self.d_gains)\n\n        sensor = lfc_py_types.Sensor(\n            base_pose=np.zeros(7),\n            base_twist=np.zeros(6),\n            joint_state=lfc_py_types.JointState(\n                name=self.moving_joint_names,\n                position=self.q_m,\n                velocity=np.zeros((self.pin_model.nv, 1)),\n                effort=np.zeros((self.pin_model.nv, 1)),\n            ),\n            contacts=[],\n        )\n\n        ctrl_msg = lfc_py_types.Control(\n            feedback_gain=K_ricattti,\n            feedforward=tau,\n            initial_state=sensor,\n        )\n        self.publisher_control_.publish(control_numpy_to_msg(ctrl_msg))\n\n\ndef main(args=None):\n    rclpy.init(args=args)\n    pd_plus_controller = PDPlusController()\n\n    try:\n        rclpy.spin(pd_plus_controller)\n    except KeyboardInterrupt:\n        pass\n\n    pd_plus_controller.destroy_node()\n    if rclpy.ok():\n        rclpy.shutdown()\n\n\nif __name__ == \"__main__\":\n    main()\n"],
+    is_executable = True,
+)
+
+write_file(
+    name = "gen_extra_17",
+    out = "_gen/lib/pkgconfig/linear_feedback_controller.pc",
+    content = ["prefix=${pcfiledir}/../..\nexec_prefix=${pcfiledir}/../..\nlibdir=${pcfiledir}/../../lib\nbindir=${pcfiledir}/../../bin\npkglibdir=${pcfiledir}/../../lib/linear_feedback_controller\nincludedir=${pcfiledir}/../../include\ndatarootdir=${pcfiledir}/../../share\npkgdatarootdir=${pcfiledir}/../../share\ndocdir=\ndoxygendocdir=\n\nName: linear_feedback_controller\nDescription: ROS2 control with Ricatti gains\nURL: http://github.com/loco-3d/linear-feedback-controller\nVersion: 4.0.1\nRequires: \nConflicts: \nLibs: -L${libdir} \nLibs.private: \nCflags:  -I${includedir}\n\n\n"],
+)
+
+write_file(
+    name = "gen_cmake_18",
+    out = "_gen/share/linear_feedback_controller/cmake/ament_cmake_export_include_directories-extras.cmake",
+    content = ["# generated from ament_cmake_export_include_directories/cmake/ament_cmake_export_include_directories-extras.cmake.in\n\nset(_exported_include_dirs \"${linear_feedback_controller_DIR}/../../../include/linear_feedback_controller\")\n\n# append include directories to linear_feedback_controller_INCLUDE_DIRS\n# warn about not existing paths\nif(NOT _exported_include_dirs STREQUAL \"\")\n  find_package(ament_cmake_core QUIET REQUIRED)\n  foreach(_exported_include_dir ${_exported_include_dirs})\n    if(NOT IS_DIRECTORY \"${_exported_include_dir}\")\n      message(WARNING \"Package 'linear_feedback_controller' exports the include directory '${_exported_include_dir}' which doesn't exist\")\n    endif()\n    normalize_path(_exported_include_dir \"${_exported_include_dir}\")\n    list(APPEND linear_feedback_controller_INCLUDE_DIRS \"${_exported_include_dir}\")\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_extra_20",
+    out = "_gen/share/linear_feedback_controller/doc/joint_state_estimator.md",
+    content = ["# Joint State Estimator Parameters\n\nDefault Config\n```yaml\njoint_state_estimator:\n  ros__parameters:\n    command_interfaces: '{}'\n    state_interfaces: '{}'\n\n```\n\n## state_interfaces\n\nNames of the interfaces to be forwarded\n\n\n* Type: `string_array`\n\n* Default Value: {}\n\n*Constraints:*\n - parameter is not empty\n - contains no duplicates\n\n*Additional Constraints:*\n\n\n\n## command_interfaces\n\nNames of the interfaces to be forwarded\n\n\n* Type: `string_array`\n\n* Default Value: {}\n\n*Constraints:*\n - parameter is not empty\n - contains no duplicates\n\n*Additional Constraints:*\n\n\n\n"],
+)
+
+write_file(
+    name = "gen_extra_21",
+    out = "_gen/share/linear_feedback_controller/doc/linear_feedback_controller.md",
+    content = ["# Linear Feedback Controller Parameters\n\nDefault Config\n```yaml\nlinear_feedback_controller:\n  ros__parameters:\n    <moving_joint_names>:\n      d: ''\n      p: ''\n    chainable_controller:\n      command_interfaces: ''\n      reference_prefix: ''\n    joint_velocity_filter_coefficient: 0.9\n    moving_joint_names: ''\n    pd_to_lf_transition_duration: ''\n    remove_gravity_compensation_effort: ''\n    robot_has_free_flyer: ''\n\n```\n\n## chainable_controller.command_interfaces\n\nNames of the downstream controller that takes the robot state as references.\n\n\n* Type: `string_array`\n\n\n## chainable_controller.reference_prefix\n\nNames of the downstream controller that takes the robot state as references.\n\n\n* Type: `string`\n\n* Default Value: \"\"\n\n## remove_gravity_compensation_effort\n\nDo we need to remove the gravity compensation effort? In practice some robot (like the Panda robot) drivers take as input effort and sum them with the gravity compensation effort. So we need to remove this component to our computed effort in our controller.\n\n\n* Type: `bool`\n\n\n## joint_velocity_filter_coefficient\n\nSpecifies the filter coefficient for the sensor's exponential filter. If equal to 1 the filter is inactive. I equal to zero the filter crash the signal into a constant being the initial value of the signal.\n\n\n* Type: `double`\n\n* Default Value: 0.9\n\n*Constraints:*\n - parameter must be within bounds [0.0, 1.0]\n\n*Additional Constraints:*\n\n\n\n## moving_joint_names\n\nlist of active joint names used by the controller.\n\n\n* Type: `string_array`\n\n\n*Constraints:*\n - parameter is not empty\n\n*Additional Constraints:*\n\n\n\n## robot_has_free_flyer\n\nHas the robot a freeflyer or not?\n\n\n* Type: `bool`\n\n\n## pd_to_lf_transition_duration\n\nDuration **in seconds** of transition between the PD and the LF controllers.\n\n\n* Type: `double`\n\n\n*Constraints:*\n - greater than or equal to 0.0\n\n*Additional Constraints:*\n\n\n\n## <moving_joint_names>.p\n\nProportional gains for the PD controller.\n\n\n* Type: `double`\n\n\n*Constraints:*\n - greater than or equal to 0.0\n\n*Additional Constraints:*\n\n\n\n## <moving_joint_names>.d\n\nDerivation gains for the PD controller.\n\n\n* Type: `double`\n\n\n*Constraints:*\n - greater than or equal to 0.0\n\n*Additional Constraints:*\n\n\n"],
+)
+
+write_file(
+    name = "gen_extra_22",
+    out = "_gen/share/linear_feedback_controller/doc/passthrough_controller.md",
+    content = ["# Passthrough Controller Parameters\n\nDefault Config\n```yaml\npassthrough_controller:\n  ros__parameters:\n    command_interfaces: ''\n    reference_interfaces: ''\n\n```\n\n## reference_interfaces\n\nNames of the interfaces to be forwarded\n\n\n* Type: `string_array`\n\n\n*Constraints:*\n - parameter is not empty\n - contains no duplicates\n\n*Additional Constraints:*\n\n\n\n## command_interfaces\n\nNames of the interfaces to forward to.\n\n\n* Type: `string_array`\n\n\n*Constraints:*\n - parameter is not empty\n - contains no duplicates\n\n*Additional Constraints:*\n\n\n\n"],
+)
+
+write_file(
+    name = "gen_extra_23",
+    out = "_gen/share/linear_feedback_controller/hook/ament_prefix_path.dsv",
+    content = ["prepend-non-duplicate;AMENT_PREFIX_PATH;"],
+)
+
+write_file(
+    name = "gen_extra_24",
+    out = "_gen/share/linear_feedback_controller/hook/pkg_config.dsv",
+    content = ["prepend-non-duplicate;PKG_CONFIG_PATH;lib/pkgconfig\n"],
+)
+
+write_file(
+    name = "gen_extra_25",
+    out = "_gen/share/linear_feedback_controller/hook/pkg_config.ps1",
+    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value PKG_CONFIG_PATH \"$env:COLCON_CURRENT_PREFIX/lib/pkgconfig\"\n"],
+)
+
+write_file(
+    name = "gen_extra_26",
+    out = "_gen/share/linear_feedback_controller/hook/pkg_config.sh",
+    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value PKG_CONFIG_PATH \"$COLCON_CURRENT_PREFIX/lib/pkgconfig\"\n"],
+)
+
+write_file(
+    name = "gen_extra_27",
+    out = "_gen/share/linear_feedback_controller/hook/python_path.dsv",
+    content = ["prepend-non-duplicate;PYTHONPATH;lib/python3.14/site-packages"],
+)
+
+write_file(
+    name = "gen_octomap_h",
+    out = "_gen/include/octomap/octomap.h",
+    content = ["#pragma once\n#include <cstdint>\n#include <cmath>\n#include <string>\n#include <vector>\n#include <set>\n#include <map>\n#include <istream>\n#include <ostream>\nnamespace octomap {\nusing key_type = uint16_t;\ninline float logodds(double p) { return static_cast<float>(std::log(p / (1.0 - p))); }\ninline double probability(double l) { return 1.0 / (1.0 + std::exp(-l)); }\nstruct point3d {\n  float x_ = 0, y_ = 0, z_ = 0;\n  point3d() = default;\n  point3d(float x, float y, float z) : x_(x), y_(y), z_(z) {}\n  const float & x() const { return x_; }\n  const float & y() const { return y_; }\n  const float & z() const { return z_; }\n  float & x() { return x_; }\n  float & y() { return y_; }\n  float & z() { return z_; }\n  float operator()(int i) const { return i == 0 ? x_ : (i == 1 ? y_ : z_); }\n  float & operator()(int i) { return i == 0 ? x_ : (i == 1 ? y_ : z_); }\n  float norm() const { return std::sqrt(x_*x_ + y_*y_ + z_*z_); }\n  point3d normalized() const { float n = norm(); return n > 0 ? point3d(x_/n, y_/n, z_/n) : *this; }\n  double distance(const point3d & o) const { return (*this - o).norm(); }\n  point3d operator+(const point3d & o) const { return point3d(x_+o.x_, y_+o.y_, z_+o.z_); }\n  point3d operator-(const point3d & o) const { return point3d(x_-o.x_, y_-o.y_, z_-o.z_); }\n  point3d operator*(float s) const { return point3d(x_*s, y_*s, z_*s); }\n  friend std::ostream & operator<<(std::ostream & os, const point3d & p) { return os << \"(\" << p.x_ << \" \" << p.y_ << \" \" << p.z_ << \")\"; }\n};\nusing Pointcloud = std::vector<point3d>;\nstruct OcTreeKey {\n  key_type k[3] = {0, 0, 0};\n  OcTreeKey() = default;\n  OcTreeKey(key_type a, key_type b, key_type c) { k[0] = a; k[1] = b; k[2] = c; }\n  key_type operator[](int i) const { return k[i]; }\n  key_type & operator[](int i) { return k[i]; }\n  bool operator==(const OcTreeKey & o) const { return k[0]==o.k[0] && k[1]==o.k[1] && k[2]==o.k[2]; }\n  bool operator!=(const OcTreeKey & o) const { return !(*this == o); }\n  bool operator<(const OcTreeKey & o) const {\n    if (k[0] != o.k[0]) return k[0] < o.k[0];\n    if (k[1] != o.k[1]) return k[1] < o.k[1];\n    return k[2] < o.k[2];\n  }\n  struct KeyHash { std::size_t operator()(const OcTreeKey & key) const { return key.k[0] ^ (key.k[1] << 5) ^ (key.k[2] << 10); } };\n};\nusing KeySet = std::set<OcTreeKey>;\nusing KeyBoolMap = std::map<OcTreeKey, bool>;\nclass KeyRay {\npublic:\n  using iterator = std::vector<OcTreeKey>::iterator;\n  using const_iterator = std::vector<OcTreeKey>::const_iterator;\n  void reset() { ray_.clear(); }\n  iterator begin() { return ray_.begin(); }\n  iterator end() { return ray_.end(); }\n  const_iterator begin() const { return ray_.begin(); }\n  const_iterator end() const { return ray_.end(); }\n  std::size_t size() const { return ray_.size(); }\nprivate:\n  std::vector<OcTreeKey> ray_;\n};\nclass OcTreeNode {\npublic:\n  float getLogOdds() const { return 0.0f; }\n  void setLogOdds(float) {}\n  double getOccupancy() const { return 0.5; }\n  float getValue() const { return 0.0f; }\n  void setValue(float) {}\n  bool hasChildren() const { return false; }\n};\nclass ColorOcTreeNode : public OcTreeNode {\npublic:\n  struct Color {\n    uint8_t r = 255, g = 255, b = 255;\n    Color() = default;\n    Color(uint8_t r_, uint8_t g_, uint8_t b_) : r(r_), g(g_), b(b_) {}\n  };\n  Color getColor() const { return Color(); }\n  void setColor(Color) {}\n  void setColor(uint8_t, uint8_t, uint8_t) {}\n  bool isColorSet() const { return true; }\n};\nclass AbstractOcTree {\npublic:\n  virtual ~AbstractOcTree() = default;\n  virtual std::string getTreeType() const { return \"OcTree\"; }\n  double getResolution() const { return 0.1; }\n  virtual void setResolution(double) {}\n  virtual std::size_t size() const { return 0; }\n  virtual std::size_t memoryUsage() const { return 0; }\n  virtual void clear() {}\n  virtual void prune() {}\n  virtual void expand() {}\n  bool write(const std::string &) const { return true; }\n  bool writeData(std::ostream &) const { return true; }\n  bool readData(std::istream &) { return true; }\n  static AbstractOcTree * read(const std::string &) { return nullptr; }\n  static AbstractOcTree * read(std::istream &) { return nullptr; }\n  static AbstractOcTree * createTree(const std::string &, double) { return nullptr; }\n};\nclass AbstractOccupancyOcTree : public AbstractOcTree {\npublic:\n  bool writeBinary(const std::string &) { return true; }\n  bool writeBinary(std::ostream &) { return true; }\n  bool writeBinaryConst(const std::string &) const { return true; }\n  bool writeBinaryConst(std::ostream &) const { return true; }\n  bool readBinary(const std::string &) { return true; }\n  bool readBinary(std::istream &) { return true; }\n  void setOccupancyThres(double) {}\n  void setProbHit(double) {}\n  void setProbMiss(double) {}\n  void setClampingThresMin(double) {}\n  void setClampingThresMax(double) {}\n  double getOccupancyThres() const { return 0.5; }\n  double getOccupancyThresLog() const { return 0.0; }\n  double getProbHit() const { return 0.7; }\n  double getProbHitLog() const { return 0.0; }\n  double getProbMiss() const { return 0.4; }\n  double getProbMissLog() const { return 0.0; }\n  double getClampingThresMin() const { return 0.1192; }\n  double getClampingThresMinLog() const { return 0.0; }\n  double getClampingThresMax() const { return 0.971; }\n  double getClampingThresMaxLog() const { return 0.0; }\n};\ntemplate <typename NodeT>\nclass OcTreeBaseImpl : public AbstractOccupancyOcTree {\npublic:\n  using NodeType = NodeT;\n  explicit OcTreeBaseImpl(double res = 0.1) : res_(res) {}\n  struct IteratorBase {\n    NodeT node_;\n    point3d getCoordinate() const { return point3d(); }\n    double getX() const { return 0; }\n    double getY() const { return 0; }\n    double getZ() const { return 0; }\n    double getSize() const { return 0.1; }\n    unsigned getDepth() const { return 16; }\n    OcTreeKey getKey() const { return OcTreeKey(); }\n    OcTreeKey getIndexKey() const { return OcTreeKey(); }\n    NodeT & operator*() { return node_; }\n    const NodeT & operator*() const { return node_; }\n    NodeT * operator->() { return &node_; }\n    const NodeT * operator->() const { return &node_; }\n    IteratorBase & operator++() { return *this; }\n    IteratorBase operator++(int) { return *this; }\n    bool operator==(const IteratorBase &) const { return true; }\n    bool operator!=(const IteratorBase &) const { return false; }\n  };\n  using iterator = IteratorBase;\n  using leaf_iterator = IteratorBase;\n  using tree_iterator = IteratorBase;\n  using leaf_bbx_iterator = IteratorBase;\n  iterator begin(unsigned char = 0) const { return iterator(); }\n  iterator end() const { return iterator(); }\n  leaf_iterator begin_leafs(unsigned char = 0) const { return leaf_iterator(); }\n  leaf_iterator end_leafs() const { return leaf_iterator(); }\n  tree_iterator begin_tree(unsigned char = 0) const { return tree_iterator(); }\n  tree_iterator end_tree() const { return tree_iterator(); }\n  leaf_bbx_iterator begin_leafs_bbx(const OcTreeKey &, const OcTreeKey &, unsigned char = 0) const { return leaf_bbx_iterator(); }\n  leaf_bbx_iterator begin_leafs_bbx(const point3d &, const point3d &, unsigned char = 0) const { return leaf_bbx_iterator(); }\n  leaf_bbx_iterator end_leafs_bbx() const { return leaf_bbx_iterator(); }\n  unsigned getTreeDepth() const { return 16; }\n  double getNodeSize(unsigned) const { return res_; }\n  NodeT * getRoot() const { return nullptr; }\n  NodeT * getNodeChild(NodeT *, unsigned int) const { return nullptr; }\n  const NodeT * getNodeChild(const NodeT *, unsigned int) const { return nullptr; }\n  bool nodeChildExists(const NodeT *, unsigned int) const { return false; }\n  bool nodeHasChildren(const NodeT *) const { return false; }\n  void enableChangeDetection(bool) {}\n  void resetChangeDetection() {}\n  KeyBoolMap::const_iterator changedKeysBegin() const { static const KeyBoolMap m; return m.begin(); }\n  KeyBoolMap::const_iterator changedKeysEnd() const { static const KeyBoolMap m; return m.end(); }\n  std::size_t getNumLeafNodes() const { return 0; }\n  std::size_t calcNumNodes() const { return 0; }\n  void getMetricMin(double & x, double & y, double & z) { x = y = z = 0; }\n  void getMetricMin(double & x, double & y, double & z) const { x = y = z = 0; }\n  void getMetricMax(double & x, double & y, double & z) { x = y = z = 0; }\n  void getMetricMax(double & x, double & y, double & z) const { x = y = z = 0; }\n  void getMetricSize(double & x, double & y, double & z) { x = y = z = 0; }\n  point3d getBBXMin() const { return point3d(); }\n  point3d getBBXMax() const { return point3d(); }\n  void setBBXMin(const point3d &) {}\n  void setBBXMax(const point3d &) {}\n  void useBBXLimit(bool) {}\n  bool bbxSet() const { return false; }\n  bool inBBX(const point3d &) const { return true; }\n  bool inBBX(const OcTreeKey &) const { return true; }\n  OcTreeKey coordToKey(const point3d &, unsigned = 16) const { return OcTreeKey(); }\n  OcTreeKey coordToKey(double, double, double, unsigned = 16) const { return OcTreeKey(); }\n  bool coordToKeyChecked(const point3d &, OcTreeKey &) const { return true; }\n  bool coordToKeyChecked(const point3d &, unsigned, OcTreeKey &) const { return true; }\n  bool coordToKeyChecked(double, double, double, OcTreeKey &) const { return true; }\n  bool coordToKeyChecked(double, double, double, unsigned, OcTreeKey &) const { return true; }\n  key_type coordToKey(double, unsigned = 16) const { return 0; }\n  point3d keyToCoord(const OcTreeKey &, unsigned = 16) const { return point3d(); }\n  double keyToCoord(key_type, unsigned = 16) const { return 0.0; }\n  OcTreeKey adjustKeyAtDepth(const OcTreeKey & k, unsigned) const { return k; }\n  key_type adjustKeyAtDepth(key_type k, unsigned) const { return k; }\n  NodeT * search(double, double, double, unsigned = 0) const { return nullptr; }\n  NodeT * search(const point3d &, unsigned = 0) const { return nullptr; }\n  NodeT * search(const OcTreeKey &, unsigned = 0) const { return nullptr; }\n  bool isNodeOccupied(const OcTreeNode * n) const { return n ? n->getOccupancy() >= 0.5 : false; }\n  bool isNodeOccupied(const OcTreeNode & n) const { return n.getOccupancy() >= 0.5; }\n  bool isNodeAtThreshold(const OcTreeNode * n) const { return false; }\n  bool isNodeAtThreshold(const OcTreeNode & n) const { return false; }\n  NodeT * updateNode(const OcTreeKey &, float, bool = false) { return nullptr; }\n  NodeT * updateNode(const point3d &, float, bool = false) { return nullptr; }\n  NodeT * updateNode(double, double, double, float, bool = false) { return nullptr; }\n  NodeT * updateNode(const OcTreeKey &, bool, bool = false) { return nullptr; }\n  NodeT * updateNode(const point3d &, bool, bool = false) { return nullptr; }\n  NodeT * updateNode(double, double, double, bool, bool = false) { return nullptr; }\n  NodeT * setNodeValue(const OcTreeKey &, float, bool = false) { return nullptr; }\n  NodeT * setNodeValue(const point3d &, float, bool = false) { return nullptr; }\n  NodeT * setNodeValue(double, double, double, float, bool = false) { return nullptr; }\n  void updateInnerOccupancy() {}\n  void toMaxLikelihood() {}\n  bool deleteNode(const OcTreeKey &, unsigned = 0) { return true; }\n  bool deleteNode(const point3d &, unsigned = 0) { return true; }\n  bool deleteNode(double, double, double, unsigned = 0) { return true; }\n  bool computeRayKeys(const point3d &, const point3d &, KeyRay &) const { return true; }\n  bool castRay(const point3d &, const point3d &, point3d &, bool = false, double = -1.0) const { return false; }\n  void insertPointCloud(const Pointcloud &, const point3d &, double = -1.0, bool = false, bool = false) {}\nprivate:\n  double res_ = 0.1;\n};\nclass OcTree : public OcTreeBaseImpl<OcTreeNode> {\npublic:\n  explicit OcTree(double res = 0.1) : OcTreeBaseImpl<OcTreeNode>(res) {}\n  explicit OcTree(const std::string &) : OcTreeBaseImpl<OcTreeNode>(0.1) {}\n};\nclass ColorOcTree : public OcTreeBaseImpl<ColorOcTreeNode> {\npublic:\n  explicit ColorOcTree(double res = 0.1) : OcTreeBaseImpl<ColorOcTreeNode>(res) {}\n  ColorOcTreeNode * setNodeColor(const OcTreeKey &, uint8_t, uint8_t, uint8_t) { return nullptr; }\n  ColorOcTreeNode * setNodeColor(float, float, float, uint8_t, uint8_t, uint8_t) { return nullptr; }\n  ColorOcTreeNode * averageNodeColor(const OcTreeKey &, uint8_t, uint8_t, uint8_t) { return nullptr; }\n  ColorOcTreeNode * averageNodeColor(float, float, float, uint8_t, uint8_t, uint8_t) { return nullptr; }\n  ColorOcTreeNode * integrateNodeColor(const OcTreeKey &, uint8_t, uint8_t, uint8_t) { return nullptr; }\n  ColorOcTreeNode * integrateNodeColor(float, float, float, uint8_t, uint8_t, uint8_t) { return nullptr; }\n};\n}  // namespace octomap\n"],
+)
+
+write_file(
+    name = "gen_octomap_octree_key_h",
+    out = "_gen/include/octomap/OcTreeKey.h",
+    content = ["#pragma once\n#include \"octomap/octomap.h\"\n"],
+)
+
+write_file(
+    name = "gen_octomap_color_octree_h",
+    out = "_gen/include/octomap/ColorOcTree.h",
+    content = ["#pragma once\n#include \"octomap/octomap.h\"\n"],
+)
+
+write_file(
+    name = "gen_octomap_msgs_conversions_h",
+    out = "_gen/include/octomap_msgs/conversions.h",
+    content = ["#pragma once\n#include \"octomap/octomap.h\"\n#include \"octomap_msgs/msg/octomap.hpp\"\nnamespace octomap_msgs {\nusing Octomap = octomap_msgs::msg::Octomap;\ninline bool binaryMapToMsg(const octomap::AbstractOccupancyOcTree &, Octomap &) { return true; }\ninline bool fullMapToMsg(const octomap::AbstractOcTree &, Octomap &) { return true; }\ntemplate <typename T, typename D> inline bool binaryMapToMsgData(const T &, D &) { return true; }\ntemplate <typename T, typename D> inline bool fullMapToMsgData(const T &, D &) { return true; }\ninline octomap::AbstractOcTree * msgToMap(const Octomap &) { return nullptr; }\ninline octomap::AbstractOcTree * binaryMsgToMap(const Octomap &) { return nullptr; }\ninline octomap::AbstractOcTree * fullMsgToMap(const Octomap &) { return nullptr; }\n}  // namespace octomap_msgs\n"],
+)
+
+write_file(
+    name = "gen_octomap_ros_conversions_hpp",
+    out = "_gen/include/octomap_ros/conversions.hpp",
+    content = ["#pragma once\n#include \"octomap/octomap.h\"\n#include \"geometry_msgs/msg/point.hpp\"\n#include \"geometry_msgs/msg/vector3.hpp\"\n#include \"geometry_msgs/msg/pose.hpp\"\n#include \"geometry_msgs/msg/quaternion.hpp\"\n#include \"sensor_msgs/msg/point_cloud2.hpp\"\n#include \"tf2/LinearMath/Vector3.hpp\"\n#include \"tf2/LinearMath/Transform.hpp\"\nnamespace octomap {\ninline point3d pointMsgToOctomap(const geometry_msgs::msg::Point & p) { return point3d(p.x, p.y, p.z); }\ninline geometry_msgs::msg::Point pointOctomapToMsg(const point3d & p) { geometry_msgs::msg::Point m; m.x = p.x(); m.y = p.y(); m.z = p.z(); return m; }\ninline point3d pointTfToOctomap(const tf2::Vector3 & p) { return point3d(p.x(), p.y(), p.z()); }\ninline tf2::Vector3 pointOctomapToTf(const point3d & p) { return tf2::Vector3(p.x(), p.y(), p.z()); }\ninline void pointsOctomapToPointCloud2(const Pointcloud &, sensor_msgs::msg::PointCloud2 &) {}\ninline void pointCloud2ToOctomap(const sensor_msgs::msg::PointCloud2 &, Pointcloud &) {}\n}  // namespace octomap\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = [":gen_extra_0"],
+    prefix = "include/linear/feedback/controller",
+)
+
+pkg_files(
+    name = "pkg_files_extra_1",
+    srcs = [":gen_extra_1"],
+    prefix = "include/linear/feedback/controller",
+)
+
+pkg_files(
+    name = "pkg_files_extra_2",
+    srcs = [":gen_extra_2"],
+    prefix = "include/linear/feedback/controller",
+)
+
+pkg_files(
+    name = "pkg_files_extra_3",
+    srcs = [":gen_extra_3"],
+    prefix = "include/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_extra_4",
+    srcs = [":gen_extra_4"],
+    prefix = "include/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_inc_5",
+    srcs = ["include/linear_feedback_controller/handle_ros_versions.hpp"],
+    prefix = "include/linear_feedback_controller/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_inc_6",
+    srcs = ["include/linear_feedback_controller/joint_state_estimator.hpp"],
+    prefix = "include/linear_feedback_controller/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_inc_7",
+    srcs = ["include/linear_feedback_controller/lf_controller.hpp"],
+    prefix = "include/linear_feedback_controller/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_inc_8",
+    srcs = ["include/linear_feedback_controller/linear_feedback_controller.hpp"],
+    prefix = "include/linear_feedback_controller/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_inc_9",
+    srcs = ["include/linear_feedback_controller/linear_feedback_controller_ros.hpp"],
+    prefix = "include/linear_feedback_controller/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_inc_10",
+    srcs = ["include/linear_feedback_controller/passthrough_controller.hpp"],
+    prefix = "include/linear_feedback_controller/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_inc_11",
+    srcs = ["include/linear_feedback_controller/pd_controller.hpp"],
+    prefix = "include/linear_feedback_controller/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_inc_12",
+    srcs = ["include/linear_feedback_controller/robot_model_builder.hpp"],
+    prefix = "include/linear_feedback_controller/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_inc_13",
+    srcs = ["include/linear_feedback_controller/time.hpp"],
+    prefix = "include/linear_feedback_controller/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_inc_14",
+    srcs = ["include/linear_feedback_controller/visibility.hpp"],
+    prefix = "include/linear_feedback_controller/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_extra_15",
+    srcs = [":gen_extra_15"],
+    prefix = "include/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_extra_16",
+    srcs = [":gen_extra_16"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/linear_feedback_controller",
+)
+
+pkg_files(
+    name = "pkg_files_extra_17",
+    srcs = [":gen_extra_17"],
+    prefix = "lib/pkgconfig",
+)
+
+pkg_files(
+    name = "pkg_files_cmake_18",
+    srcs = [":gen_cmake_18"],
+    prefix = "share/linear_feedback_controller/cmake",
+)
+
+pkg_files(
+    name = "pkg_files_extra_20",
+    srcs = [":gen_extra_20"],
+    prefix = "share/linear_feedback_controller/doc",
+)
+
+pkg_files(
+    name = "pkg_files_extra_21",
+    srcs = [":gen_extra_21"],
+    prefix = "share/linear_feedback_controller/doc",
+)
+
+pkg_files(
+    name = "pkg_files_extra_22",
+    srcs = [":gen_extra_22"],
+    prefix = "share/linear_feedback_controller/doc",
+)
+
+pkg_files(
+    name = "pkg_files_extra_23",
+    srcs = [":gen_extra_23"],
+    prefix = "share/linear_feedback_controller/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_24",
+    srcs = [":gen_extra_24"],
+    prefix = "share/linear_feedback_controller/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_25",
+    srcs = [":gen_extra_25"],
+    prefix = "share/linear_feedback_controller/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_26",
+    srcs = [":gen_extra_26"],
+    prefix = "share/linear_feedback_controller/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_27",
+    srcs = [":gen_extra_27"],
+    prefix = "share/linear_feedback_controller/hook",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/tiago_pro_lfc_params.yaml",
+        "launch/talos_linear_feedback_controller.launch",
+        "launch/talos_params.launch",
+    ],
+    libraries = [":linear_feedback_controller"],
     package_xml = "package.xml",
+    plugin_category = "controller_interface",
+    plugins = ["controller_plugins.xml"],
     deps = [
         "@ament_cmake_auto//:ament_package",
         "@ament_cmake_python//:ament_package",
@@ -42,7 +469,400 @@ ament_package(
         "@rclcpp//:ament_package",
         "@rclcpp_lifecycle//:ament_package",
         "@realtime_tools//:ament_package",
-        "@rosdistro//:ament_package",
+        "@rosidl_dynamic_typesupport//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_lf_controller",
+    srcs = ["tests/test_lf_controller.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_15",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":linear_feedback_controller",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/linear_feedback_controller",
+        "include",
+        "include/linear_feedback_controller",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "GTEST_HAS_PTHREAD=1",
+        "LINEAR_FEEDBACK_CONTROLLER_IS_SHARED",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":linear_feedback_controller_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_linear_feedback_controller",
+    srcs = ["tests/test_linear_feedback_controller.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_15",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":linear_feedback_controller",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/linear_feedback_controller",
+        "include",
+        "include/linear_feedback_controller",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "GTEST_HAS_PTHREAD=1",
+        "LINEAR_FEEDBACK_CONTROLLER_IS_SHARED",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":linear_feedback_controller_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_pd_controller",
+    srcs = ["tests/test_pd_controller.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_15",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":linear_feedback_controller",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/linear_feedback_controller",
+        "include",
+        "include/linear_feedback_controller",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "GTEST_HAS_PTHREAD=1",
+        "LINEAR_FEEDBACK_CONTROLLER_IS_SHARED",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":linear_feedback_controller_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_robot_model_builder",
+    srcs = ["tests/test_robot_model_builder.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_15",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":linear_feedback_controller",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/linear_feedback_controller",
+        "include",
+        "include/linear_feedback_controller",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "GTEST_HAS_PTHREAD=1",
+        "LINEAR_FEEDBACK_CONTROLLER_IS_SHARED",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":linear_feedback_controller_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rcl",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "controller_interface",
+        "control_toolbox",
+        "hardware_interface",
+        "message_filters",
+        "nav_msgs",
+        "sensor_msgs",
+        "pluginlib",
+        "realtime_tools",
+        "pinocchio",
+        "linear_feedback_controller_msgs",
+        "pal_statistics",
+        "generate_parameter_library",
+        "rosidl_dynamic_typesupport",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_targets = False,
+    install = [
+        ":pkg_files_extra_0",
+        ":pkg_files_extra_1",
+        ":pkg_files_extra_2",
+        ":pkg_files_extra_3",
+        ":pkg_files_extra_4",
+        ":pkg_files_inc_5",
+        ":pkg_files_inc_6",
+        ":pkg_files_inc_7",
+        ":pkg_files_inc_8",
+        ":pkg_files_inc_9",
+        ":pkg_files_inc_10",
+        ":pkg_files_inc_11",
+        ":pkg_files_inc_12",
+        ":pkg_files_inc_13",
+        ":pkg_files_inc_14",
+        ":pkg_files_extra_15",
+        ":pkg_files_extra_16",
+        ":pkg_files_extra_17",
+        ":pkg_files_cmake_18",
+        ":pkg_files_extra_20",
+        ":pkg_files_extra_21",
+        ":pkg_files_extra_22",
+        ":pkg_files_extra_23",
+        ":pkg_files_extra_24",
+        ":pkg_files_extra_25",
+        ":pkg_files_extra_26",
+        ":pkg_files_extra_27",
+    ],
+    libraries = [":linear_feedback_controller"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@control_toolbox//:ament_package",
+        "@controller_interface//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@gmock_vendor//:ament_package",
+        "@gtest_vendor//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@jrl_cmakemodules//:ament_package",
+        "@linear_feedback_controller_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pal_statistics//:ament_package",
+        "@pinocchio//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcl//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@realtime_tools//:ament_package",
         "@rosidl_dynamic_typesupport//:ament_package",
         "@sensor_msgs//:ament_package",
     ],
