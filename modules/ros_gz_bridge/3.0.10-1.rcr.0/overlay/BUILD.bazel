@@ -14,10 +14,11 @@
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@launch_testing//:defs.bzl", "launch_test")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
-load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
@@ -202,12 +203,6 @@ rclcpp_components_register_node(
     plugin = "ros_gz_bridge::RosGzBridge",
 )
 
-ament_index(
-    name = "ament_index",
-    components = [":bridge_node_record"],
-    data = glob(["launch/**"]),
-)
-
 ### EXECUTABLES
 
 [
@@ -226,6 +221,32 @@ ament_index(
         "bridge_types",
     ]
 ]
+
+ament_index(
+    name = "ament_index",
+    components = [":bridge_node_record"],
+    data = glob(["launch/**"]),
+    executables = [
+        ":bridge_node",
+        ":bridge_types",
+        ":parameter_bridge",
+        ":static_bridge",
+    ],
+    libraries = [":ros_gz_bridge"],
+    package_xml = "package.xml",
+)
+
+launch_ros_binary(
+    name = "ros_gz_bridge_launch",
+    src = "launch/ros_gz_bridge.launch.py",
+    data = [
+        ":ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+    deps = [
+        ":ros_gz_bridge_py",
+    ],
+)
 
 ### TESTING
 
@@ -400,28 +421,24 @@ TEST_EXECUTABLES = [
 # gz-transport discovery (UDP multicast), which the test sandbox does not
 # provide; run them manually.
 [
-    py_pytest(
+    launch_test(
         name = "test_launch_" + f.split("/")[-1],
-        srcs = [f],
-        args = [
-            "-p",
-            "launch_testing.pytest.hooks",
-        ] + extra_args,
+        src = f,
+        args = extra_args,
         data = glob([
             "test/launch/*.launch",
             "test/config/*.yaml",
         ]) + TEST_EXECUTABLES + [
             ":ament_index",
-            ":ament_package",
             ":bridge_node",
             ":parameter_bridge",
             ":static_bridge",
+            "@rclcpp_components//:ament_index",
         ],
         tags = ["manual"],
         deps = [
             ":ros_gz_bridge_py",
-            "@launch_testing",
-            "@launch_testing_ros",
+            "@launch_ros",
             "@rules_python//python/runfiles",
         ],
     )
