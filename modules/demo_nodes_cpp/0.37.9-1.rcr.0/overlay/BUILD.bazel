@@ -14,10 +14,11 @@
 
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
-load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:defs.bzl", "py_library")
@@ -125,6 +126,28 @@ DEMO_COMPONENTS = {
         plugin = plugin,
     )
     for component, (_, plugin) in DEMO_COMPONENTS.items()
+]
+
+ament_index(
+    name = "ament_index",
+    components = [":{0}_record".format(c) for c in DEMO_COMPONENTS.keys()],
+    data = glob(["launch/**"]),
+    executables = [":{0}".format(e) for e in STANDALONE_EXECUTABLES.keys()] + [":{0}".format(c) for c in DEMO_COMPONENTS.keys()],
+    libraries = [":{0}_library".format(c) for c in DEMO_COMPONENTS.keys()],
+    package_xml = "package.xml",
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [":ament_index"],
+        deps = ["@launch_xml"] if f.endswith(".xml") else [],
+    )
+    for f in glob([
+        "launch/**/*.py",
+        "launch/**/*.xml",
+    ])
 ]
 
 ### TESTS
@@ -235,22 +258,15 @@ TUTORIAL_TESTS = {
 ]
 
 [
-    py_pytest(
+    launch_ros_test(
         name = test_name,
-        srcs = ["{0}_py".format(test_name)],
-        args = [
-            "-p",
-            "launch_testing.pytest.hooks",
-        ],
+        src = "{0}_py".format(test_name),
         data = exes + glob([
             "test/*.txt",
             "test/*.regex",
         ]),
         deps = [
             ":rmw_test_fixture_implementation",
-            "@launch",
-            "@launch_testing",
-            "@launch_testing_ros",
             "@rules_python//python/runfiles",
         ],
     )
