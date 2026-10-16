@@ -1,25 +1,850 @@
-# Copyright 2026 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+load("@rules_python//python:defs.bzl", "py_library")
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
 
-package(default_visibility = ["//visibility:public"])
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-2-Clause",
+    ],
+)
 
-### PACKAGING
+DEPENDENCIES = {
+    "@eigenpy//:eigenpy": "@eigenpy//:eigenpy_library",
+    "@eiquadprog//:eiquadprog": "@eiquadprog//:eiquadprog_library",
+    "@pinocchio//:pinocchio_collision": "@pinocchio//:pinocchio_collision_library",
+    "@pinocchio//:pinocchio_default": "@pinocchio//:pinocchio_default_library",
+    "@pinocchio//:pinocchio_parsers": "@pinocchio//:pinocchio_parsers_library",
+}
 
-ament_package(
-    name = "ament_package",
+CC_DEPS = [
+    "@rosdistro//cc:boost.utility",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "tsid_library",
+    srcs = [
+        "src/contacts/contact-6d.cpp",
+        "src/contacts/contact-base.cpp",
+        "src/contacts/contact-point.cpp",
+        "src/contacts/contact-two-frame-positions.cpp",
+        "src/contacts/measured-3d-force.cpp",
+        "src/contacts/measured-6d-wrench.cpp",
+        "src/contacts/measured-force-base.cpp",
+        "src/formulations/contact-level.cpp",
+        "src/formulations/inverse-dynamics-formulation-acc-force.cpp",
+        "src/formulations/inverse-dynamics-formulation-base.cpp",
+        "src/math/constraint-base.cpp",
+        "src/math/constraint-bound.cpp",
+        "src/math/constraint-equality.cpp",
+        "src/math/constraint-inequality.cpp",
+        "src/math/utils.cpp",
+        "src/robots/robot-wrapper.cpp",
+        "src/solvers/solver-HQP-base.cpp",
+        "src/solvers/solver-HQP-eiquadprog.cpp",
+        "src/solvers/solver-HQP-eiquadprog-fast.cpp",
+        "src/solvers/solver-HQP-factory.cpp",
+        "src/solvers/solver-HQP-qpoases.cpp",
+        "src/solvers/utils.cpp",
+        "src/tasks/task-actuation.cpp",
+        "src/tasks/task-actuation-bounds.cpp",
+        "src/tasks/task-actuation-equality.cpp",
+        "src/tasks/task-angular-momentum-equality.cpp",
+        "src/tasks/task-base.cpp",
+        "src/tasks/task-capture-point-inequality.cpp",
+        "src/tasks/task-com-equality.cpp",
+        "src/tasks/task-contact-force.cpp",
+        "src/tasks/task-contact-force-equality.cpp",
+        "src/tasks/task-cop-equality.cpp",
+        "src/tasks/task-joint-bounds.cpp",
+        "src/tasks/task-joint-posVelAcc-bounds.cpp",
+        "src/tasks/task-joint-posture.cpp",
+        "src/tasks/task-motion.cpp",
+        "src/tasks/task-se3-equality.cpp",
+        "src/tasks/task-two-frames-equality.cpp",
+        "src/trajectories/trajectory-euclidian.cpp",
+        "src/trajectories/trajectory-se3.cpp",
+        "src/utils/statistics.cpp",
+        "src/utils/stop-watch.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "tsid",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":tsid_library"],
+)
+
+cc_library(
+    name = "tsid_pywrap.cpython-314-x86_64-linux-gnu_library",
+    srcs = [":gen_apriltag_py_stub_c"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":tsid_library"],
+)
+
+cc_shared_library(
+    name = "tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "tsid/tsid_pywrap.so",
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":tsid_pywrap.cpython-314-x86_64-linux-gnu_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+py_library(
+    name = "tsid_py",
+    srcs = glob(["bindings/python/tsid/**/*.py"]),
+    imports = ["bindings/python"],
+    deps = [
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+write_file(
+    name = "gen_apriltag_py_stub_c",
+    out = "_gen/apriltag_py_stub.c",
+    content = ["void PyInit_apriltag(void) {}\n"],
+)
+
+write_file(
+    name = "gen_extra_0",
+    out = "_gen/include/tsid/config.hh",
+    content = ["/*\n * This file has been automatically generated by the jrl-cmakemodules.\n * Please see https://github.com/jrl-umi3218/jrl-cmakemodules/blob/master/config.hh.cmake for details.\n*/\n\n#ifndef TSID_CONFIG_HH\n# define TSID_CONFIG_HH\n\n// Package version (header).\n# define TSID_VERSION_UNKNOWN_TAG 0 // Used to mention that the current version is unknown.\n# define TSID_VERSION \"1.10.0\"\n# define TSID_MAJOR_VERSION 1\n# define TSID_MINOR_VERSION 10\n# define TSID_PATCH_VERSION 0\n\n#define TSID_VERSION_AT_LEAST(major, minor, patch) (TSID_MAJOR_VERSION>major || (TSID_MAJOR_VERSION>=major && \\\n                                                             (TSID_MINOR_VERSION>minor || (TSID_MINOR_VERSION>=minor && \\\n                                                                                                     TSID_PATCH_VERSION>=patch))))\n\n#define TSID_VERSION_AT_MOST(major, minor, patch) (TSID_MAJOR_VERSION<major || (TSID_MAJOR_VERSION<=major && \\\n                                                            (TSID_MINOR_VERSION<minor || (TSID_MINOR_VERSION<=minor && \\\n                                                                                                     TSID_PATCH_VERSION<=patch))))\n\n// Handle portable symbol export.\n// Defining manually which symbol should be exported is required\n// under Windows whether MinGW or MSVC is used.\n//\n// The headers then have to be able to work in two different modes:\n// - dllexport when one is building the library,\n// - dllimport for clients using the library.\n//\n// On Linux, set the visibility accordingly. If C++ symbol visibility\n// is handled by the compiler, see: http://gcc.gnu.org/wiki/Visibility\n//\n// Explicit template instantiation on Windows need to add\n// dllexport on the definition and dllimport on the declaration.\n// The XXX_EXPLICIT_INSTANTIATION_DECLARATION_DLLAPI macro\n// should be set on the declaration while\n// the XXX_EXPLICIT_INSTANTIATION_DEFINITION_DLLAPI macro\n// should be set on the definition.\n# if defined _WIN32 || defined __CYGWIN__\n// On Microsoft Windows, use dllimport and dllexport to tag symbols.\n#  define TSID_DLLIMPORT __declspec(dllimport)\n#  define TSID_DLLEXPORT __declspec(dllexport)\n#  define TSID_DLLLOCAL\n#  define TSID_EXPLICIT_INSTANTIATION_DECLARATION_DLLIMPORT __declspec(dllimport)\n#  define TSID_EXPLICIT_INSTANTIATION_DECLARATION_DLLEXPORT\n#  define TSID_EXPLICIT_INSTANTIATION_DEFINITION_DLLIMPORT __declspec(dllimport)\n#  define TSID_EXPLICIT_INSTANTIATION_DEFINITION_DLLEXPORT __declspec(dllexport)\n# else\n// On Linux, for GCC >= 4, tag symbols using GCC extension.\n#  if __GNUC__ >= 4\n#   define TSID_DLLIMPORT __attribute__ ((visibility(\"default\")))\n#   define TSID_DLLEXPORT __attribute__ ((visibility(\"default\")))\n#   define TSID_DLLLOCAL  __attribute__ ((visibility(\"hidden\")))\n#   define TSID_EXPLICIT_INSTANTIATION_DECLARATION_DLLIMPORT __attribute__ ((visibility(\"default\")))\n#   define TSID_EXPLICIT_INSTANTIATION_DECLARATION_DLLEXPORT __attribute__ ((visibility(\"default\")))\n#   define TSID_EXPLICIT_INSTANTIATION_DEFINITION_DLLIMPORT\n#   define TSID_EXPLICIT_INSTANTIATION_DEFINITION_DLLEXPORT\n#  else\n// Otherwise (GCC < 4 or another compiler is used), export everything.\n#   define TSID_DLLIMPORT\n#   define TSID_DLLEXPORT\n#   define TSID_DLLLOCAL\n#   define TSID_EXPLICIT_INSTANTIATION_DECLARATION_DLLIMPORT\n#   define TSID_EXPLICIT_INSTANTIATION_DECLARATION_DLLEXPORT\n#   define TSID_EXPLICIT_INSTANTIATION_DEFINITION_DLLIMPORT\n#   define TSID_EXPLICIT_INSTANTIATION_DEFINITION_DLLEXPORT\n#  endif // __GNUC__ >= 4\n# endif // defined _WIN32 || defined __CYGWIN__\n\n# ifdef TSID_STATIC\n// If one is using the library statically, get rid of\n// extra information and use standard explicit template\n// instantiation keyword.\n#  define TSID_DLLAPI\n#  define TSID_LOCAL\n#  define TSID_EXPLICIT_INSTANTIATION_DECLARATION extern template\n# else\n// Depending on whether one is building or using the\n// library define DLLAPI to import or export and\n// define the right explicit template instantiation keyword.\n#  ifdef tsid_EXPORTS\n#   define TSID_DLLAPI TSID_DLLEXPORT\n#   define TSID_EXPLICIT_INSTANTIATION_DECLARATION_DLLAPI TSID_EXPLICIT_INSTANTIATION_DECLARATION_DLLEXPORT\n#   define TSID_EXPLICIT_INSTANTIATION_DEFINITION_DLLAPI TSID_EXPLICIT_INSTANTIATION_DEFINITION_DLLEXPORT\n#  else\n#   define TSID_DLLAPI TSID_DLLIMPORT\n#   define TSID_EXPLICIT_INSTANTIATION_DECLARATION_DLLAPI TSID_EXPLICIT_INSTANTIATION_DECLARATION_DLLIMPORT\n#   define TSID_EXPLICIT_INSTANTIATION_DEFINITION_DLLAPI TSID_EXPLICIT_INSTANTIATION_DEFINITION_DLLIMPORT\n#  endif // TSID_EXPORTS\n#  define TSID_LOCAL TSID_DLLLOCAL\n# endif // TSID_STATIC\n#endif //! TSID_CONFIG_HH\n"],
+)
+
+write_file(
+    name = "gen_extra_11",
+    out = "_gen/include/tsid/deprecated.hh",
+    content = ["/*\n * This file has been automatically generated by the jrl-cmakemodules.\n * Please see https://github.com/jrl-umi3218/jrl-cmakemodules/blob/master/deprecated.hh.cmake for details.\n*/\n\n#ifndef TSID_DEPRECATED_HH\n# define TSID_DEPRECATED_HH\n\n// Define a suffix which can be used to tag a type, a function or a a\n// variable as deprecated (i.e. it will emit a warning when using it).\n//\n// Tagging a function as deprecated:\n//  void foo () TSID_DEPRECATED;\n//\n// Tagging a type as deprecated:\n//  class Foo {};\n//  typedef Foo Bar TSID_DEPRECATED;\n//\n// Tagging a variable as deprecated:\n//  int a TSID_DEPRECATED = 0;\n//\n// The use of a macro is required as this is /not/ a standardized\n// feature of C++ language or preprocessor, even if most of the\n// compilers support it.\n# if defined(__cplusplus) && (__cplusplus >= 201402L)\n#  define TSID_DEPRECATED [[deprecated]]\n#  define TSID_DEPRECATED_MESSAGE(message) [[deprecated(#message)]]\n# elif defined(__GNUC__) || defined(__clang__)\n#  define TSID_DEPRECATED __attribute__ ((deprecated))\n#  define TSID_DEPRECATED_MESSAGE(message) __attribute__ (( deprecated(#message) ))\n# else\n#  if defined(_MSC_VER) && !defined(__INTEL_COMPILER)\n#   define TSID_DEPRECATED __declspec (deprecated)\n#   define TSID_DEPRECATED_MESSAGE(message) __declspec ( deprecated(#message) )\n#  else\n// If the compiler is not recognized, drop the feature.\n#   define TSID_DEPRECATED /* nothing */\n#   define TSID_DEPRECATED_MESSAGE(message)\n#  endif // __MSVC__\n# endif // __cplusplus\n\n# if defined(__GNUC__) || defined(__clang__)\n#  ifndef TSID_PRAGMA\n#   define TSID_PRAGMA(X) _Pragma(#X)\n#  endif\n#  define TSID_DEPRECATED_HEADER(MSG) TSID_PRAGMA(GCC warning MSG)\n# elif defined(_MSC_VER) && !defined(__INTEL_COMPILER)\n#  define TSID_STRINGIZE_(MSG) #MSG\n#  define TSID_STRINGIZE(MSG) TSID_STRINGIZE_(MSG)\n#  define TSID_DEPRECATED_HEADER(MSG) \\\n    __pragma(message(__FILE__ \"(\" TSID_STRINGIZE(__LINE__) \") : Warning: \" MSG))\n# else\n#  define TSID_DEPRECATED_HEADER(MSG)\n# endif\n\n#endif //! TSID_DEPRECATED_HH\n"],
+)
+
+write_file(
+    name = "gen_extra_60",
+    out = "_gen/include/tsid/warning.hh",
+    content = ["/*\n * This file has been automatically generated by the jrl-cmakemodules.\n * Please see https://github.com/jrl-umi3218/jrl-cmakemodules/blob/master/warning.hh.cmake for details.\n*/\n\n#ifndef TSID_WARNING_HH\n# define TSID_WARNING_HH\n\n// Emits a warning in a portable way.\n//\n// To emit a warning, one can insert:\n//\n// #pragma message TSID_WARN(\"your warning message here\")\n//\n// The use of this syntax is required as this is /not/ a standardized\n// feature of C++ language or preprocessor, even if most of the\n// compilers support it.\n\n# define TSID_WARN_STRINGISE_IMPL(x) #x\n# define TSID_WARN_STRINGISE(x) \\\n         TSID_WARN_STRINGISE_IMPL(x)\n# ifdef __GNUC__\n#   define TSID_WARN(exp) (\"WARNING: \" exp)\n# else\n#  ifdef _MSC_VER\n#   define FILE_LINE_LINK __FILE__ \"(\" \\\n           TSID_WARN_STRINGISE(__LINE__) \") : \"\n#   define TSID_WARN(exp) (FILE_LINE_LINK \"WARNING: \" exp)\n#  else\n// If the compiler is not recognized, drop the feature.\n#   define TSID_WARN(MSG) /* nothing */\n#  endif // __MSVC__\n# endif // __GNUC__\n\n#endif //! TSID_WARNING_HH\n"],
+)
+
+write_file(
+    name = "gen_extra_61",
+    out = "_gen/lib/cmake/tsid/cxx-standard.cmake",
+    content = ["#\n# Copyright (C) 2020 LAAS-CNRS\n#\n# Author: Guilhem Saurel\n#\n\n# .rst: .. ifmode:: internal\n#\n# .. variable:: ENFORCE_MINIMAL_CXX_STANDARD\n#\n# When this is ON, every call to :cmake:command:`CHECK_MINIMAL_CXX_STANDARD`\n# updates the :cmake:variable:`CMAKE_CXX_STANDARD`.\noption(\n  ENFORCE_MINIMAL_CXX_STANDARD\n  \"Set CMAKE_CXX_STANDARD if a dependency require it\"\n  OFF\n)\n\n# .rst: .. ifmode:: user\n#\n# .. command:: CHECK_MINIMAL_CXX_STANDARD(STANDARD [ENFORCE])\n#\n# Ensure that a minimal C++ standard will be used.\n#\n# This will check the default standard of the current compiler, and set\n# :cmake:variable:`CMAKE_CXX_STANDARD` if necessary, and `ENFORCE` is provided,\n# or :cmake:variable:`ENFORCE_MINIMAL_CXX_STANDARD` is `ON`. Multiple calls to\n# this macro will keep the highest standard.\n#\n# Supported values are 98, 11, 14, 17, and 20.\n#\nmacro(CHECK_MINIMAL_CXX_STANDARD STANDARD)\n  set(options ENFORCE)\n  set(oneValueArgs)\n  set(multiValueArgs)\n  cmake_parse_arguments(\n    MINIMAL_CXX_STANDARD\n    \"${options}\"\n    \"${oneValueArgs}\"\n    \"${multiValueArgs}\"\n    ${ARGN}\n  )\n\n  # Get compiler default cxx standard, by printing \"__cplusplus\" (only once)\n  if(\n    NOT DEFINED _COMPILER_DEFAULT_CXX_STANDARD\n    AND\n      (\n        NOT CMAKE_CROSSCOMPILING\n        OR (CMAKE_CROSSCOMPILING AND CMAKE_CROSSCOMPILING_EMULATOR)\n      )\n  )\n    if(MSVC)\n      # See\n      # https://devblogs.microsoft.com/cppblog/msvc-now-correctly-reports-__cplusplus/\n      string(APPEND CMAKE_CXX_FLAGS \" /Zc:__cplusplus\")\n    endif()\n    write_file(\n      ${CMAKE_CURRENT_BINARY_DIR}/cmake/tmp-cxx-standard.cpp\n      \"#include <iostream>\\nint main(){std::cout << __cplusplus << std::endl;return 0;}\"\n    )\n    try_run(\n      _cxx_standard_run_status\n      _cxx_standard_build_status\n      ${CMAKE_CURRENT_BINARY_DIR}\n      ${CMAKE_CURRENT_BINARY_DIR}/cmake/tmp-cxx-standard.cpp\n      RUN_OUTPUT_VARIABLE _COMPILER_DEFAULT_CXX_STANDARD\n    )\n    if(\n      _cxx_standard_run_status EQUAL FAILED_TO_RUN\n      OR NOT _cxx_standard_build_status\n    )\n      message(\n        WARNING\n        \"Impossible to build or run the script to retrive the _COMPILER_DEFAULT_CXX_STANDARD quantity from current compiler. Setting _COMPILER_DEFAULT_CXX_STANDARD to 199711\"\n      )\n      set(_COMPILER_DEFAULT_CXX_STANDARD \"199711\")\n    endif()\n    string(\n      STRIP \"${_COMPILER_DEFAULT_CXX_STANDARD}\"\n      _COMPILER_DEFAULT_CXX_STANDARD\n    )\n    message(STATUS \"Default C++ standard: ${_COMPILER_DEFAULT_CXX_STANDARD}\")\n  endif()\n\n  # Check if we need to upgrade the current minimum\n  if(\n    NOT DEFINED _MINIMAL_CXX_STANDARD\n    OR\n      (\n        NOT ${STANDARD} EQUAL \"98\"\n        AND\n          (\n            _MINIMAL_CXX_STANDARD EQUAL \"98\"\n            OR _MINIMAL_CXX_STANDARD LESS ${STANDARD}\n          )\n      )\n  )\n    set(_MINIMAL_CXX_STANDARD \"${STANDARD}\" CACHE INTERNAL \"\")\n    message(STATUS \"Minimal C++ standard upgraded to ${_MINIMAL_CXX_STANDARD}\")\n  endif()\n\n  # Check if a non-trivial minimum has been requested\n  if(DEFINED _MINIMAL_CXX_STANDARD AND NOT _MINIMAL_CXX_STANDARD EQUAL 98)\n    if(DEFINED CMAKE_CXX_STANDARD)\n      set(_CURRENT_STANDARD ${CMAKE_CXX_STANDARD})\n    elseif(DEFINED _COMPILER_DEFAULT_CXX_STANDARD)\n      # ref\n      # https://en.cppreference.com/w/cpp/preprocessor/replace#Predefined_macros\n      # for constants\n      if(_COMPILER_DEFAULT_CXX_STANDARD EQUAL 199711)\n        set(_CURRENT_STANDARD 98)\n      elseif(_COMPILER_DEFAULT_CXX_STANDARD EQUAL 201103)\n        set(_CURRENT_STANDARD 11)\n      elseif(_COMPILER_DEFAULT_CXX_STANDARD EQUAL 201402)\n        set(_CURRENT_STANDARD 14)\n      elseif(_COMPILER_DEFAULT_CXX_STANDARD EQUAL 201703)\n        set(_CURRENT_STANDARD 17)\n        # C++20: g++-9 defines c++2a with literal 201709, g++-11 & clang-10\n        # define c++2a with literal 202002\n      elseif(\n        _COMPILER_DEFAULT_CXX_STANDARD EQUAL 201709\n        OR _COMPILER_DEFAULT_CXX_STANDARD EQUAL 202002\n      )\n        set(_CURRENT_STANDARD 20)\n      else()\n        message(\n          FATAL_ERROR\n          \"Unknown current C++ standard ${_COMPILER_DEFAULT_CXX_STANDARD} while trying to check for >= ${_MINIMAL_CXX_STANDARD}\"\n        )\n      endif()\n    else()\n      set(_CURRENT_STANDARD 98)\n    endif()\n\n    # Check that the requested minimum is higher than the currently selected\n    if(\n      _CURRENT_STANDARD EQUAL 98\n      OR _CURRENT_STANDARD LESS _MINIMAL_CXX_STANDARD\n    )\n      message(\n        STATUS\n        \"Incompatible C++ standard detected: upgrade required from ${_CURRENT_STANDARD} to >= ${_MINIMAL_CXX_STANDARD}\"\n      )\n      # Check that the requested minimum is higher than any pre-existing\n      # CMAKE_CXX_STANDARD\n      if(\n        NOT CMAKE_CXX_STANDARD\n        OR CMAKE_CXX_STANDARD EQUAL 98\n        OR CMAKE_CXX_STANDARD LESS _MINIMAL_CXX_STANDARD\n      )\n        # Throw error if a specific version is required and the currently\n        # desired one is incompatible\n        if(CMAKE_CXX_STANDARD_REQUIRED)\n          message(\n            FATAL_ERROR\n            \"CMAKE_CXX_STANDARD_REQUIRED set - cannot upgrade incompatible standard\"\n          )\n        endif()\n        # Enforcing a standard version is required - check if we can upgrade\n        # automatically\n        if(ENFORCE_MINIMAL_CXX_STANDARD OR MINIMAL_CXX_STANDARD_ENFORCE)\n          set(CMAKE_CXX_STANDARD ${_MINIMAL_CXX_STANDARD})\n          message(\n            STATUS\n            \"CMAKE_CXX_STANDARD automatically upgraded from ${_CURRENT_STANDARD} to ${CMAKE_CXX_STANDARD}\"\n          )\n        else()\n          message(\n            FATAL_ERROR\n            \"CMAKE_CXX_STANDARD upgrade from ${_CURRENT_STANDARD} to >= ${_MINIMAL_CXX_STANDARD} required\"\n          )\n        endif()\n      endif()\n    else() # requested minimum is higher than the currently selected\n      message(\n        STATUS\n        \"C++ standard sufficient: Minimal required ${_MINIMAL_CXX_STANDARD}, currently defined: ${_CURRENT_STANDARD}\"\n      )\n      # current C++ standard was not set in CMake but we enforce it\n      if(\n        NOT DEFINED CMAKE_CXX_STANDARD\n        AND (ENFORCE_MINIMAL_CXX_STANDARD OR MINIMAL_CXX_STANDARD_ENFORCE)\n      )\n        message(\n          STATUS\n          \"CMAKE_CXX_STANDARD was not set: automatically set to currently defined standard ${_CURRENT_STANDARD}\"\n        )\n        set(CMAKE_CXX_STANDARD ${_CURRENT_STANDARD})\n      endif()\n    endif() # requested minimum is higher than the currently selected\n  endif()\nendmacro()\n"],
+)
+
+write_file(
+    name = "gen_extra_62",
+    out = "_gen/lib/cmake/tsid/tsidConfig.cmake",
+    content = ["\n####### Expanded from @PACKAGE_INIT@ by configure_package_config_file() #######\n####### Any changes to this file will be overwritten by the next CMake run ####\n####### The input file was Config.cmake.in                            ########\n\nget_filename_component(PACKAGE_PREFIX_DIR \"${CMAKE_CURRENT_LIST_DIR}/../../../\" ABSOLUTE)\n\nmacro(set_and_check _var _file)\n  set(${_var} \"${_file}\")\n  if(NOT EXISTS \"${_file}\")\n    message(FATAL_ERROR \"File or directory ${_file} referenced by variable ${_var} does not exist !\")\n  endif()\nendmacro()\n\nmacro(check_required_components _NAME)\n  foreach(comp ${${_NAME}_FIND_COMPONENTS})\n    if(NOT ${_NAME}_${comp}_FOUND)\n      if(${_NAME}_FIND_REQUIRED_${comp})\n        set(${_NAME}_FOUND FALSE)\n      endif()\n    endif()\n  endforeach()\nendmacro()\n\n####################################################################################\n\n\n\nset(skip_this_file TRUE)\nif(NOT tsid_FOUND)\n  set(skip_this_file FALSE)\nendif()\nif(skip_this_file)\n  foreach(component ${tsid_FIND_COMPONENTS})\n    if(NOT \"tsid_${component}_FOUND\")\n      set(skip_this_file FALSE)\n    endif()\n  endforeach()\nendif()\nif(skip_this_file)\n  return()\nendif()\n\nset(\"tsid_INCLUDE_DIRS\" \"${PACKAGE_PREFIX_DIR}/include\")\nset(\"TSID_INCLUDE_DIRS\" \"${PACKAGE_PREFIX_DIR}/include\")\nset(\"tsid_DOXYGENDOCDIR\" \"${PACKAGE_PREFIX_DIR}/share/doc/tsid/doxygen-html\")\nset(\n  \"TSID_DOXYGENDOCDIR\"\n  \"${PACKAGE_PREFIX_DIR}/share/doc/tsid/doxygen-html\"\n)\nset(\"tsid_DEPENDENCIES\" \"eigenpy;pinocchio;eiquadprog\")\nset(\"tsid_PKG_CONFIG_DEPENDENCIES\" \"\")\n\nset(\n  CMAKE_MODULE_PATH\n  ${CMAKE_MODULE_PATH}\n  \n)\n\n# Find absolute library paths for all _PKG_CONFIG_LIBS as CMake expects full paths, while pkg-config does not.\nset(_PACKAGE_CONFIG_LIBRARIES \"\")\nset(\"_tsid_PKG_CONFIG_LIBDIR\" \"${pcfiledir}/../../lib\")\nset(\"_tsid_PKG_CONFIG_LIBS_LIST\" \"\")\nif(_tsid_PKG_CONFIG_LIBS_LIST)\n  string(FIND ${_tsid_PKG_CONFIG_LIBS_LIST} \", \" _is_comma_space)\n  while(_is_comma_space GREATER -1)\n    string(\n      REPLACE \", \"\n      \",\"\n      _tsid_PKG_CONFIG_LIBS_LIST\n      \"${_tsid_PKG_CONFIG_LIBS_LIST}\"\n    )\n    string(FIND ${_tsid_PKG_CONFIG_LIBS_LIST} \", \" _is_comma_space)\n  endwhile()\n  string(\n    REPLACE \" \"\n    \";\"\n    _tsid_PKG_CONFIG_LIBS_LIST\n    \"${_tsid_PKG_CONFIG_LIBS_LIST}\"\n  )\n  set(LIBDIR_HINTS ${_tsid_PKG_CONFIG_LIBDIR})\n  foreach(component ${_tsid_PKG_CONFIG_LIBS_LIST})\n    string(STRIP ${component} component)\n    # If the component is a link directory (\"-L/full/path\"), append to LIBDIR_HINTS.\n    string(FIND ${component} \"-L\" _is_library_dir)\n    if(${_is_library_dir} EQUAL 0)\n      string(REGEX REPLACE \"^-L\" \"\" lib_path ${component})\n      list(APPEND LIBDIR_HINTS \"${lib_path}\")\n      continue()\n    endif()\n    # If the component is a library name\n    string(FIND ${component} \"-l\" _is_library_name)\n    if(${_is_library_name} EQUAL 0)\n      string(REGEX REPLACE \"^-l\" \"\" lib ${component})\n      find_library(abs_lib_${lib} ${lib} HINTS ${LIBDIR_HINTS})\n      if(NOT abs_lib_${lib})\n        if(_LIBDIR_HINTS)\n          message(STATUS \"${lib} searched on ${_LIBDIR_HINTS} not FOUND.\")\n        else()\n          message(STATUS \"${lib} not FOUND.\")\n        endif()\n      else()\n        if(_LIBDIR_HINTS)\n          message(\n            STATUS\n            \"${lib} searched on ${_LIBDIR_HINTS} FOUND. ${lib} at ${abs_lib_${lib}}\"\n          )\n        else()\n          message(STATUS \"${lib} FOUND. ${lib} at ${abs_lib_${lib}}\")\n        endif()\n        list(APPEND _PACKAGE_CONFIG_LIBRARIES \"${abs_lib_${lib}}\")\n      endif()\n      unset(abs_lib_${lib} CACHE)\n      continue()\n    endif()\n    # If the component contains a collection of additional arguments\n    string(FIND ${component} \",\" _is_collection)\n    if(${_is_collection} GREATER -1)\n      string(REPLACE \",\" \";\" component_list \"${component}\")\n      list(GET component_list -1 lib_info)\n      set(options ${component})\n      list(REMOVE_AT options -1)\n      string(FIND ${lib_info} \"-l\" _is_library_name)\n      if(${_is_library_name} GREATER -1)\n        string(REGEX REPLACE \"^-l\" \"\" lib ${lib_info})\n        find_library(abs_lib_${lib} ${lib} HINTS ${LIBDIR_HINTS})\n        if(NOT abs_lib_${lib})\n          if(_LIBDIR_HINTS)\n            message(STATUS \"${lib} searched on ${_LIBDIR_HINTS} not FOUND.\")\n          else()\n            message(STATUS \"${lib} not FOUND.\")\n          endif()\n        else()\n          if(_LIBDIR_HINTS)\n            message(\n              STATUS\n              \"${lib} searched on ${_LIBDIR_HINTS} FOUND. ${lib} at ${abs_lib_${lib}}\"\n            )\n          else()\n            message(STATUS \"${lib} FOUND. ${lib} at ${abs_lib_${lib}}\")\n          endif()\n          list(APPEND _PACKAGE_CONFIG_LIBRARIES \"${abs_lib_${lib}}\")\n        endif()\n        unset(abs_lib_${lib} CACHE)\n        continue()\n      else() # This is an absolute lib\n        list(APPEND _PACKAGE_CONFIG_LIBRARIES \"${component}\")\n      endif()\n      continue()\n    endif()\n    # Else, this is just an absolute lib\n    if(EXISTS \"${component}\")\n      list(APPEND _PACKAGE_CONFIG_LIBRARIES \"${component}\")\n    endif()\n  endforeach()\nendif(_tsid_PKG_CONFIG_LIBS_LIST)\n\nset(\"tsid_LIBRARIES\" ${_PACKAGE_CONFIG_LIBRARIES})\nset(\"TSID_LIBRARIES\" ${_PACKAGE_CONFIG_LIBRARIES})\n\n\ninclude(\"${CMAKE_CURRENT_LIST_DIR}/cxx-standard.cmake\")\n\n\n\ninclude(CMakeFindDependencyMacro)\nif(${CMAKE_VERSION} VERSION_LESS \"3.15.0\")\n  find_package(eigenpy 2.7.12 REQUIRED)\n  find_package(pinocchio 2.3.1 REQUIRED)\n  find_package(eiquadprog 1.1.3 REQUIRED)\nelse()\n  find_dependency(eigenpy 2.7.12 REQUIRED)\n  find_dependency(pinocchio 2.3.1 REQUIRED)\n  find_dependency(eiquadprog 1.1.3 REQUIRED)\nendif()\n\nif(COMMAND ADD_REQUIRED_DEPENDENCY)\n  foreach(pkgcfg_dep ${tsid_PKG_CONFIG_DEPENDENCIES})\n    # Avoid duplicated lookup.\n    list(FIND $_PKG_CONFIG_REQUIRES \"${pkgcfg_dep}\" _index)\n    if(${_index} EQUAL -1)\n      ADD_REQUIRED_DEPENDENCY(${pkgcfg_dep})\n    endif()\n  endforeach()\nendif(COMMAND ADD_REQUIRED_DEPENDENCY)\n\ninclude(\"${CMAKE_CURRENT_LIST_DIR}/tsidTargets.cmake\")\n\nforeach(component ${tsid_FIND_COMPONENTS})\n  set(comp_file \"${CMAKE_CURRENT_LIST_DIR}/${component}Config.cmake\")\n  if(EXISTS ${comp_file})\n    include(${comp_file})\n  else()\n    set(tsid_${component}_FOUND FALSE)\n  endif()\n  if(tsid_${component}_FOUND)\n    message(STATUS \"tsid: ${component} found.\")\n  else()\n    if(tsid_FIND_REQUIRED_${component})\n      message(FATAL_ERROR \"tsid: ${component} not found.\")\n    else()\n      message(STATUS \"tsid: ${component} not found.\")\n    endif()\n  endif()\nendforeach()\ncheck_required_components(\"tsid\")\n\n\nCHECK_MINIMAL_CXX_STANDARD(17 ENFORCE)\n"],
+)
+
+write_file(
+    name = "gen_extra_63",
+    out = "_gen/lib/cmake/tsid/tsidConfigVersion.cmake",
+    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version,\n# but only if the requested major version is the same as the current one.\n# The variable CVF_VERSION must be set before calling configure_file().\n\n\nset(PACKAGE_VERSION \"1.10.0\")\n\nif(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n  set(PACKAGE_VERSION_COMPATIBLE FALSE)\nelse()\n\n  if(\"1.10.0\" MATCHES \"^([0-9]+)\\\\.\")\n    set(CVF_VERSION_MAJOR \"${CMAKE_MATCH_1}\")\n    if(NOT CVF_VERSION_MAJOR VERSION_EQUAL 0)\n      string(REGEX REPLACE \"^0+\" \"\" CVF_VERSION_MAJOR \"${CVF_VERSION_MAJOR}\")\n    endif()\n  else()\n    set(CVF_VERSION_MAJOR \"1.10.0\")\n  endif()\n\n  if(PACKAGE_FIND_VERSION_RANGE)\n    # both endpoints of the range must have the expected major version\n    math (EXPR CVF_VERSION_MAJOR_NEXT \"${CVF_VERSION_MAJOR} + 1\")\n    if (NOT PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX_MAJOR STREQUAL CVF_VERSION_MAJOR)\n          OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX VERSION_LESS_EQUAL CVF_VERSION_MAJOR_NEXT)))\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    elseif(PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        AND ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS_EQUAL PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MAX)))\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n  else()\n    if(PACKAGE_FIND_VERSION_MAJOR STREQUAL CVF_VERSION_MAJOR)\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
+)
+
+write_file(
+    name = "gen_extra_64",
+    out = "_gen/lib/cmake/tsid/tsidTargets-noconfig.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"tsid::tsid\" for configuration \"\"\nset_property(TARGET tsid::tsid APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)\nset_target_properties(tsid::tsid PROPERTIES\n  IMPORTED_LOCATION_NOCONFIG \"${_IMPORT_PREFIX}/lib/libtsid.so.1.10.0\"\n  IMPORTED_SONAME_NOCONFIG \"libtsid.so.1.10.0\"\n  )\n\nlist(APPEND _cmake_import_check_targets tsid::tsid )\nlist(APPEND _cmake_import_check_files_for_tsid::tsid \"${_IMPORT_PREFIX}/lib/libtsid.so.1.10.0\" )\n\n# Import target \"tsid::tsid_pywrap\" for configuration \"\"\nset_property(TARGET tsid::tsid_pywrap APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)\nset_target_properties(tsid::tsid_pywrap PROPERTIES\n  IMPORTED_LOCATION_NOCONFIG \"${_IMPORT_PREFIX}/lib/python3.14/site-packages/tsid/tsid_pywrap.cpython-314-x86_64-linux-gnu.so\"\n  IMPORTED_SONAME_NOCONFIG \"tsid_pywrap.cpython-314-x86_64-linux-gnu.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets tsid::tsid_pywrap )\nlist(APPEND _cmake_import_check_files_for_tsid::tsid_pywrap \"${_IMPORT_PREFIX}/lib/python3.14/site-packages/tsid/tsid_pywrap.cpython-314-x86_64-linux-gnu.so\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_extra_65",
+    out = "_gen/lib/cmake/tsid/tsidTargets.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS tsid::tsid tsid::tsid_pywrap)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target tsid::tsid\nadd_library(tsid::tsid SHARED IMPORTED)\n\nset_target_properties(tsid::tsid PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include\"\n  INTERFACE_LINK_LIBRARIES \"pinocchio::pinocchio;eiquadprog::eiquadprog\"\n)\n\n# Create imported target tsid::tsid_pywrap\nadd_library(tsid::tsid_pywrap SHARED IMPORTED)\n\nset_target_properties(tsid::tsid_pywrap PROPERTIES\n  INTERFACE_LINK_LIBRARIES \"tsid::tsid;eigenpy::eigenpy\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/tsidTargets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+write_file(
+    name = "gen_extra_67",
+    out = "_gen/lib/pkgconfig/tsid.pc",
+    content = ["prefix=${pcfiledir}/../..\nexec_prefix=${pcfiledir}/../..\nlibdir=${pcfiledir}/../../lib\nbindir=${pcfiledir}/../../bin\npkglibdir=${pcfiledir}/../../lib/tsid\nincludedir=${pcfiledir}/../../include\ndatarootdir=${pcfiledir}/../../share\npkgdatarootdir=${pcfiledir}/../../share\ndocdir=\ndoxygendocdir=\n\nName: tsid\nDescription: Efficient Task Space Inverse Dynamics for Multi-body Systems based on Pinocchio\nURL: https://github.com/stack-of-tasks/tsid\nVersion: 1.10.0\nRequires: \nConflicts: \nLibs: -L${libdir} \nLibs.private: \nCflags:  -I${includedir}\n\n\n"],
+)
+
+write_file(
+    name = "gen_extra_68",
+    out = "_gen/share/tsid/hook/ament_prefix_path.dsv",
+    content = ["prepend-non-duplicate;AMENT_PREFIX_PATH;"],
+)
+
+write_file(
+    name = "gen_extra_69",
+    out = "_gen/share/tsid/hook/pkg_config_path.dsv",
+    content = ["prepend-non-duplicate;PKG_CONFIG_PATH;lib/pkgconfig\n"],
+)
+
+write_file(
+    name = "gen_extra_70",
+    out = "_gen/share/tsid/hook/pkg_config_path.ps1",
+    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value PKG_CONFIG_PATH \"$env:COLCON_CURRENT_PREFIX/lib/pkgconfig\"\n"],
+)
+
+write_file(
+    name = "gen_extra_71",
+    out = "_gen/share/tsid/hook/pkg_config_path.sh",
+    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value PKG_CONFIG_PATH \"$COLCON_CURRENT_PREFIX/lib/pkgconfig\"\n"],
+)
+
+write_file(
+    name = "gen_extra_72",
+    out = "_gen/share/tsid/hook/pkg_config_path_multiarch.dsv",
+    content = ["prepend-non-duplicate;PKG_CONFIG_PATH;lib/x86_64-linux-gnu/pkgconfig\n"],
+)
+
+write_file(
+    name = "gen_extra_73",
+    out = "_gen/share/tsid/hook/pkg_config_path_multiarch.ps1",
+    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value PKG_CONFIG_PATH \"$env:COLCON_CURRENT_PREFIX/lib/x86_64-linux-gnu/pkgconfig\"\n"],
+)
+
+write_file(
+    name = "gen_extra_74",
+    out = "_gen/share/tsid/hook/pkg_config_path_multiarch.sh",
+    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value PKG_CONFIG_PATH \"$COLCON_CURRENT_PREFIX/lib/x86_64-linux-gnu/pkgconfig\"\n"],
+)
+
+write_file(
+    name = "gen_extra_75",
+    out = "_gen/share/tsid/hook/python_path.dsv",
+    content = ["prepend-non-duplicate;PYTHONPATH;lib/python3.14/site-packages"],
+)
+
+write_file(
+    name = "gen_extra_76",
+    out = "_gen/share/tsid/hook/pythonpath.dsv",
+    content = ["prepend-non-duplicate;PYTHONPATH;lib/python3.14/site-packages\n"],
+)
+
+write_file(
+    name = "gen_extra_77",
+    out = "_gen/share/tsid/hook/pythonpath.ps1",
+    content = ["# generated from colcon_powershell/shell/template/hook_prepend_value.ps1.em\n\ncolcon_prepend_unique_value PYTHONPATH \"$env:COLCON_CURRENT_PREFIX/lib/python3.14/site-packages\"\n"],
+)
+
+write_file(
+    name = "gen_extra_78",
+    out = "_gen/share/tsid/hook/pythonpath.sh",
+    content = ["# generated from colcon_core/shell/template/hook_prepend_value.sh.em\n\n_colcon_prepend_unique_value PYTHONPATH \"$COLCON_CURRENT_PREFIX/lib/python3.14/site-packages\"\n"],
+)
+
+write_file(
+    name = "gen_octomap_h",
+    out = "_gen/include/octomap/octomap.h",
+    content = ["#pragma once\n#include <cstdint>\n#include <cmath>\n#include <string>\n#include <vector>\n#include <set>\n#include <map>\n#include <istream>\n#include <ostream>\nnamespace octomap {\nusing key_type = uint16_t;\ninline float logodds(double p) { return static_cast<float>(std::log(p / (1.0 - p))); }\ninline double probability(double l) { return 1.0 / (1.0 + std::exp(-l)); }\nstruct point3d {\n  float x_ = 0, y_ = 0, z_ = 0;\n  point3d() = default;\n  point3d(float x, float y, float z) : x_(x), y_(y), z_(z) {}\n  const float & x() const { return x_; }\n  const float & y() const { return y_; }\n  const float & z() const { return z_; }\n  float & x() { return x_; }\n  float & y() { return y_; }\n  float & z() { return z_; }\n  float operator()(int i) const { return i == 0 ? x_ : (i == 1 ? y_ : z_); }\n  float & operator()(int i) { return i == 0 ? x_ : (i == 1 ? y_ : z_); }\n  float norm() const { return std::sqrt(x_*x_ + y_*y_ + z_*z_); }\n  point3d normalized() const { float n = norm(); return n > 0 ? point3d(x_/n, y_/n, z_/n) : *this; }\n  double distance(const point3d & o) const { return (*this - o).norm(); }\n  point3d operator+(const point3d & o) const { return point3d(x_+o.x_, y_+o.y_, z_+o.z_); }\n  point3d operator-(const point3d & o) const { return point3d(x_-o.x_, y_-o.y_, z_-o.z_); }\n  point3d operator*(float s) const { return point3d(x_*s, y_*s, z_*s); }\n  friend std::ostream & operator<<(std::ostream & os, const point3d & p) { return os << \"(\" << p.x_ << \" \" << p.y_ << \" \" << p.z_ << \")\"; }\n};\nusing Pointcloud = std::vector<point3d>;\nstruct OcTreeKey {\n  key_type k[3] = {0, 0, 0};\n  OcTreeKey() = default;\n  OcTreeKey(key_type a, key_type b, key_type c) { k[0] = a; k[1] = b; k[2] = c; }\n  key_type operator[](int i) const { return k[i]; }\n  key_type & operator[](int i) { return k[i]; }\n  bool operator==(const OcTreeKey & o) const { return k[0]==o.k[0] && k[1]==o.k[1] && k[2]==o.k[2]; }\n  bool operator!=(const OcTreeKey & o) const { return !(*this == o); }\n  bool operator<(const OcTreeKey & o) const {\n    if (k[0] != o.k[0]) return k[0] < o.k[0];\n    if (k[1] != o.k[1]) return k[1] < o.k[1];\n    return k[2] < o.k[2];\n  }\n  struct KeyHash { std::size_t operator()(const OcTreeKey & key) const { return key.k[0] ^ (key.k[1] << 5) ^ (key.k[2] << 10); } };\n};\nusing KeySet = std::set<OcTreeKey>;\nusing KeyBoolMap = std::map<OcTreeKey, bool>;\nclass KeyRay {\npublic:\n  using iterator = std::vector<OcTreeKey>::iterator;\n  using const_iterator = std::vector<OcTreeKey>::const_iterator;\n  void reset() { ray_.clear(); }\n  iterator begin() { return ray_.begin(); }\n  iterator end() { return ray_.end(); }\n  const_iterator begin() const { return ray_.begin(); }\n  const_iterator end() const { return ray_.end(); }\n  std::size_t size() const { return ray_.size(); }\nprivate:\n  std::vector<OcTreeKey> ray_;\n};\nclass OcTreeNode {\npublic:\n  float getLogOdds() const { return 0.0f; }\n  void setLogOdds(float) {}\n  double getOccupancy() const { return 0.5; }\n  float getValue() const { return 0.0f; }\n  void setValue(float) {}\n  bool hasChildren() const { return false; }\n};\nclass ColorOcTreeNode : public OcTreeNode {\npublic:\n  struct Color {\n    uint8_t r = 255, g = 255, b = 255;\n    Color() = default;\n    Color(uint8_t r_, uint8_t g_, uint8_t b_) : r(r_), g(g_), b(b_) {}\n  };\n  Color getColor() const { return Color(); }\n  void setColor(Color) {}\n  void setColor(uint8_t, uint8_t, uint8_t) {}\n  bool isColorSet() const { return true; }\n};\nclass AbstractOcTree {\npublic:\n  virtual ~AbstractOcTree() = default;\n  virtual std::string getTreeType() const { return \"OcTree\"; }\n  double getResolution() const { return 0.1; }\n  virtual void setResolution(double) {}\n  virtual std::size_t size() const { return 0; }\n  virtual std::size_t memoryUsage() const { return 0; }\n  virtual void clear() {}\n  virtual void prune() {}\n  virtual void expand() {}\n  bool write(const std::string &) const { return true; }\n  bool writeData(std::ostream &) const { return true; }\n  bool readData(std::istream &) { return true; }\n  static AbstractOcTree * read(const std::string &) { return nullptr; }\n  static AbstractOcTree * read(std::istream &) { return nullptr; }\n  static AbstractOcTree * createTree(const std::string &, double) { return nullptr; }\n};\nclass AbstractOccupancyOcTree : public AbstractOcTree {\npublic:\n  bool writeBinary(const std::string &) { return true; }\n  bool writeBinary(std::ostream &) { return true; }\n  bool writeBinaryConst(const std::string &) const { return true; }\n  bool writeBinaryConst(std::ostream &) const { return true; }\n  bool readBinary(const std::string &) { return true; }\n  bool readBinary(std::istream &) { return true; }\n  void setOccupancyThres(double) {}\n  void setProbHit(double) {}\n  void setProbMiss(double) {}\n  void setClampingThresMin(double) {}\n  void setClampingThresMax(double) {}\n  double getOccupancyThres() const { return 0.5; }\n  double getOccupancyThresLog() const { return 0.0; }\n  double getProbHit() const { return 0.7; }\n  double getProbHitLog() const { return 0.0; }\n  double getProbMiss() const { return 0.4; }\n  double getProbMissLog() const { return 0.0; }\n  double getClampingThresMin() const { return 0.1192; }\n  double getClampingThresMinLog() const { return 0.0; }\n  double getClampingThresMax() const { return 0.971; }\n  double getClampingThresMaxLog() const { return 0.0; }\n};\ntemplate <typename NodeT>\nclass OcTreeBaseImpl : public AbstractOccupancyOcTree {\npublic:\n  using NodeType = NodeT;\n  explicit OcTreeBaseImpl(double res = 0.1) : res_(res) {}\n  struct IteratorBase {\n    NodeT node_;\n    point3d getCoordinate() const { return point3d(); }\n    double getX() const { return 0; }\n    double getY() const { return 0; }\n    double getZ() const { return 0; }\n    double getSize() const { return 0.1; }\n    unsigned getDepth() const { return 16; }\n    OcTreeKey getKey() const { return OcTreeKey(); }\n    OcTreeKey getIndexKey() const { return OcTreeKey(); }\n    NodeT & operator*() { return node_; }\n    const NodeT & operator*() const { return node_; }\n    NodeT * operator->() { return &node_; }\n    const NodeT * operator->() const { return &node_; }\n    IteratorBase & operator++() { return *this; }\n    IteratorBase operator++(int) { return *this; }\n    bool operator==(const IteratorBase &) const { return true; }\n    bool operator!=(const IteratorBase &) const { return false; }\n  };\n  using iterator = IteratorBase;\n  using leaf_iterator = IteratorBase;\n  using tree_iterator = IteratorBase;\n  using leaf_bbx_iterator = IteratorBase;\n  iterator begin(unsigned char = 0) const { return iterator(); }\n  iterator end() const { return iterator(); }\n  leaf_iterator begin_leafs(unsigned char = 0) const { return leaf_iterator(); }\n  leaf_iterator end_leafs() const { return leaf_iterator(); }\n  tree_iterator begin_tree(unsigned char = 0) const { return tree_iterator(); }\n  tree_iterator end_tree() const { return tree_iterator(); }\n  leaf_bbx_iterator begin_leafs_bbx(const OcTreeKey &, const OcTreeKey &, unsigned char = 0) const { return leaf_bbx_iterator(); }\n  leaf_bbx_iterator begin_leafs_bbx(const point3d &, const point3d &, unsigned char = 0) const { return leaf_bbx_iterator(); }\n  leaf_bbx_iterator end_leafs_bbx() const { return leaf_bbx_iterator(); }\n  unsigned getTreeDepth() const { return 16; }\n  double getNodeSize(unsigned) const { return res_; }\n  NodeT * getRoot() const { return nullptr; }\n  NodeT * getNodeChild(NodeT *, unsigned int) const { return nullptr; }\n  const NodeT * getNodeChild(const NodeT *, unsigned int) const { return nullptr; }\n  bool nodeChildExists(const NodeT *, unsigned int) const { return false; }\n  bool nodeHasChildren(const NodeT *) const { return false; }\n  void enableChangeDetection(bool) {}\n  void resetChangeDetection() {}\n  KeyBoolMap::const_iterator changedKeysBegin() const { static const KeyBoolMap m; return m.begin(); }\n  KeyBoolMap::const_iterator changedKeysEnd() const { static const KeyBoolMap m; return m.end(); }\n  std::size_t getNumLeafNodes() const { return 0; }\n  std::size_t calcNumNodes() const { return 0; }\n  void getMetricMin(double & x, double & y, double & z) { x = y = z = 0; }\n  void getMetricMin(double & x, double & y, double & z) const { x = y = z = 0; }\n  void getMetricMax(double & x, double & y, double & z) { x = y = z = 0; }\n  void getMetricMax(double & x, double & y, double & z) const { x = y = z = 0; }\n  void getMetricSize(double & x, double & y, double & z) { x = y = z = 0; }\n  point3d getBBXMin() const { return point3d(); }\n  point3d getBBXMax() const { return point3d(); }\n  void setBBXMin(const point3d &) {}\n  void setBBXMax(const point3d &) {}\n  void useBBXLimit(bool) {}\n  bool bbxSet() const { return false; }\n  bool inBBX(const point3d &) const { return true; }\n  bool inBBX(const OcTreeKey &) const { return true; }\n  OcTreeKey coordToKey(const point3d &, unsigned = 16) const { return OcTreeKey(); }\n  OcTreeKey coordToKey(double, double, double, unsigned = 16) const { return OcTreeKey(); }\n  bool coordToKeyChecked(const point3d &, OcTreeKey &) const { return true; }\n  bool coordToKeyChecked(const point3d &, unsigned, OcTreeKey &) const { return true; }\n  bool coordToKeyChecked(double, double, double, OcTreeKey &) const { return true; }\n  bool coordToKeyChecked(double, double, double, unsigned, OcTreeKey &) const { return true; }\n  key_type coordToKey(double, unsigned = 16) const { return 0; }\n  point3d keyToCoord(const OcTreeKey &, unsigned = 16) const { return point3d(); }\n  double keyToCoord(key_type, unsigned = 16) const { return 0.0; }\n  OcTreeKey adjustKeyAtDepth(const OcTreeKey & k, unsigned) const { return k; }\n  key_type adjustKeyAtDepth(key_type k, unsigned) const { return k; }\n  NodeT * search(double, double, double, unsigned = 0) const { return nullptr; }\n  NodeT * search(const point3d &, unsigned = 0) const { return nullptr; }\n  NodeT * search(const OcTreeKey &, unsigned = 0) const { return nullptr; }\n  bool isNodeOccupied(const OcTreeNode * n) const { return n ? n->getOccupancy() >= 0.5 : false; }\n  bool isNodeOccupied(const OcTreeNode & n) const { return n.getOccupancy() >= 0.5; }\n  bool isNodeAtThreshold(const OcTreeNode * n) const { return false; }\n  bool isNodeAtThreshold(const OcTreeNode & n) const { return false; }\n  NodeT * updateNode(const OcTreeKey &, float, bool = false) { return nullptr; }\n  NodeT * updateNode(const point3d &, float, bool = false) { return nullptr; }\n  NodeT * updateNode(double, double, double, float, bool = false) { return nullptr; }\n  NodeT * updateNode(const OcTreeKey &, bool, bool = false) { return nullptr; }\n  NodeT * updateNode(const point3d &, bool, bool = false) { return nullptr; }\n  NodeT * updateNode(double, double, double, bool, bool = false) { return nullptr; }\n  NodeT * setNodeValue(const OcTreeKey &, float, bool = false) { return nullptr; }\n  NodeT * setNodeValue(const point3d &, float, bool = false) { return nullptr; }\n  NodeT * setNodeValue(double, double, double, float, bool = false) { return nullptr; }\n  void updateInnerOccupancy() {}\n  void toMaxLikelihood() {}\n  bool deleteNode(const OcTreeKey &, unsigned = 0) { return true; }\n  bool deleteNode(const point3d &, unsigned = 0) { return true; }\n  bool deleteNode(double, double, double, unsigned = 0) { return true; }\n  bool computeRayKeys(const point3d &, const point3d &, KeyRay &) const { return true; }\n  bool castRay(const point3d &, const point3d &, point3d &, bool = false, double = -1.0) const { return false; }\n  void insertPointCloud(const Pointcloud &, const point3d &, double = -1.0, bool = false, bool = false) {}\nprivate:\n  double res_ = 0.1;\n};\nclass OcTree : public OcTreeBaseImpl<OcTreeNode> {\npublic:\n  explicit OcTree(double res = 0.1) : OcTreeBaseImpl<OcTreeNode>(res) {}\n  explicit OcTree(const std::string &) : OcTreeBaseImpl<OcTreeNode>(0.1) {}\n};\nclass ColorOcTree : public OcTreeBaseImpl<ColorOcTreeNode> {\npublic:\n  explicit ColorOcTree(double res = 0.1) : OcTreeBaseImpl<ColorOcTreeNode>(res) {}\n  ColorOcTreeNode * setNodeColor(const OcTreeKey &, uint8_t, uint8_t, uint8_t) { return nullptr; }\n  ColorOcTreeNode * setNodeColor(float, float, float, uint8_t, uint8_t, uint8_t) { return nullptr; }\n  ColorOcTreeNode * averageNodeColor(const OcTreeKey &, uint8_t, uint8_t, uint8_t) { return nullptr; }\n  ColorOcTreeNode * averageNodeColor(float, float, float, uint8_t, uint8_t, uint8_t) { return nullptr; }\n  ColorOcTreeNode * integrateNodeColor(const OcTreeKey &, uint8_t, uint8_t, uint8_t) { return nullptr; }\n  ColorOcTreeNode * integrateNodeColor(float, float, float, uint8_t, uint8_t, uint8_t) { return nullptr; }\n};\n}  // namespace octomap\n"],
+)
+
+write_file(
+    name = "gen_octomap_octree_key_h",
+    out = "_gen/include/octomap/OcTreeKey.h",
+    content = ["#pragma once\n#include \"octomap/octomap.h\"\n"],
+)
+
+write_file(
+    name = "gen_octomap_color_octree_h",
+    out = "_gen/include/octomap/ColorOcTree.h",
+    content = ["#pragma once\n#include \"octomap/octomap.h\"\n"],
+)
+
+write_file(
+    name = "gen_octomap_msgs_conversions_h",
+    out = "_gen/include/octomap_msgs/conversions.h",
+    content = ["#pragma once\n#include \"octomap/octomap.h\"\n#include \"octomap_msgs/msg/octomap.hpp\"\nnamespace octomap_msgs {\nusing Octomap = octomap_msgs::msg::Octomap;\ninline bool binaryMapToMsg(const octomap::AbstractOccupancyOcTree &, Octomap &) { return true; }\ninline bool fullMapToMsg(const octomap::AbstractOcTree &, Octomap &) { return true; }\ntemplate <typename T, typename D> inline bool binaryMapToMsgData(const T &, D &) { return true; }\ntemplate <typename T, typename D> inline bool fullMapToMsgData(const T &, D &) { return true; }\ninline octomap::AbstractOcTree * msgToMap(const Octomap &) { return nullptr; }\ninline octomap::AbstractOcTree * binaryMsgToMap(const Octomap &) { return nullptr; }\ninline octomap::AbstractOcTree * fullMsgToMap(const Octomap &) { return nullptr; }\n}  // namespace octomap_msgs\n"],
+)
+
+write_file(
+    name = "gen_octomap_ros_conversions_hpp",
+    out = "_gen/include/octomap_ros/conversions.hpp",
+    content = ["#pragma once\n#include \"octomap/octomap.h\"\n#include \"geometry_msgs/msg/point.hpp\"\n#include \"geometry_msgs/msg/vector3.hpp\"\n#include \"geometry_msgs/msg/pose.hpp\"\n#include \"geometry_msgs/msg/quaternion.hpp\"\n#include \"sensor_msgs/msg/point_cloud2.hpp\"\n#include \"tf2/LinearMath/Vector3.hpp\"\n#include \"tf2/LinearMath/Transform.hpp\"\nnamespace octomap {\ninline point3d pointMsgToOctomap(const geometry_msgs::msg::Point & p) { return point3d(p.x, p.y, p.z); }\ninline geometry_msgs::msg::Point pointOctomapToMsg(const point3d & p) { geometry_msgs::msg::Point m; m.x = p.x(); m.y = p.y(); m.z = p.z(); return m; }\ninline point3d pointTfToOctomap(const tf2::Vector3 & p) { return point3d(p.x(), p.y(), p.z()); }\ninline tf2::Vector3 pointOctomapToTf(const point3d & p) { return tf2::Vector3(p.x(), p.y(), p.z()); }\ninline void pointsOctomapToPointCloud2(const Pointcloud &, sensor_msgs::msg::PointCloud2 &) {}\ninline void pointCloud2ToOctomap(const sensor_msgs::msg::PointCloud2 &, Pointcloud &) {}\n}  // namespace octomap\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = [":gen_extra_0"],
+    prefix = "include/tsid",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["include/tsid/contacts/contact-6d.hpp"],
+    prefix = "include/tsid/contacts",
+)
+
+pkg_files(
+    name = "pkg_files_inc_2",
+    srcs = ["include/tsid/contacts/contact-base.hpp"],
+    prefix = "include/tsid/contacts",
+)
+
+pkg_files(
+    name = "pkg_files_inc_3",
+    srcs = ["include/tsid/contacts/contact-point.hpp"],
+    prefix = "include/tsid/contacts",
+)
+
+pkg_files(
+    name = "pkg_files_inc_4",
+    srcs = ["include/tsid/contacts/contact-two-frame-positions.hpp"],
+    prefix = "include/tsid/contacts",
+)
+
+pkg_files(
+    name = "pkg_files_inc_5",
+    srcs = ["include/tsid/contacts/fwd.hpp"],
+    prefix = "include/tsid/contacts",
+)
+
+pkg_files(
+    name = "pkg_files_inc_6",
+    srcs = ["include/tsid/contacts/measured-3Dforce.hpp"],
+    prefix = "include/tsid/contacts",
+)
+
+pkg_files(
+    name = "pkg_files_inc_7",
+    srcs = ["include/tsid/contacts/measured-3d-force.hpp"],
+    prefix = "include/tsid/contacts",
+)
+
+pkg_files(
+    name = "pkg_files_inc_8",
+    srcs = ["include/tsid/contacts/measured-6Dwrench.hpp"],
+    prefix = "include/tsid/contacts",
+)
+
+pkg_files(
+    name = "pkg_files_inc_9",
+    srcs = ["include/tsid/contacts/measured-6d-wrench.hpp"],
+    prefix = "include/tsid/contacts",
+)
+
+pkg_files(
+    name = "pkg_files_inc_10",
+    srcs = ["include/tsid/contacts/measured-force-base.hpp"],
+    prefix = "include/tsid/contacts",
+)
+
+pkg_files(
+    name = "pkg_files_extra_11",
+    srcs = [":gen_extra_11"],
+    prefix = "include/tsid",
+)
+
+pkg_files(
+    name = "pkg_files_inc_12",
+    srcs = ["include/tsid/formulations/contact-level.hpp"],
+    prefix = "include/tsid/formulations",
+)
+
+pkg_files(
+    name = "pkg_files_inc_13",
+    srcs = ["include/tsid/formulations/inverse-dynamics-formulation-acc-force.hpp"],
+    prefix = "include/tsid/formulations",
+)
+
+pkg_files(
+    name = "pkg_files_inc_14",
+    srcs = ["include/tsid/formulations/inverse-dynamics-formulation-base.hpp"],
+    prefix = "include/tsid/formulations",
+)
+
+pkg_files(
+    name = "pkg_files_inc_15",
+    srcs = ["include/tsid/macros.hpp"],
+    prefix = "include/tsid",
+)
+
+pkg_files(
+    name = "pkg_files_inc_16",
+    srcs = ["include/tsid/math/constraint-base.hpp"],
+    prefix = "include/tsid/math",
+)
+
+pkg_files(
+    name = "pkg_files_inc_17",
+    srcs = ["include/tsid/math/constraint-bound.hpp"],
+    prefix = "include/tsid/math",
+)
+
+pkg_files(
+    name = "pkg_files_inc_18",
+    srcs = ["include/tsid/math/constraint-equality.hpp"],
+    prefix = "include/tsid/math",
+)
+
+pkg_files(
+    name = "pkg_files_inc_19",
+    srcs = ["include/tsid/math/constraint-inequality.hpp"],
+    prefix = "include/tsid/math",
+)
+
+pkg_files(
+    name = "pkg_files_inc_20",
+    srcs = ["include/tsid/math/fwd.hpp"],
+    prefix = "include/tsid/math",
+)
+
+pkg_files(
+    name = "pkg_files_inc_21",
+    srcs = ["include/tsid/math/utils.hpp"],
+    prefix = "include/tsid/math",
+)
+
+pkg_files(
+    name = "pkg_files_inc_22",
+    srcs = ["include/tsid/robots/fwd.hpp"],
+    prefix = "include/tsid/robots",
+)
+
+pkg_files(
+    name = "pkg_files_inc_23",
+    srcs = ["include/tsid/robots/robot-wrapper.hpp"],
+    prefix = "include/tsid/robots",
+)
+
+pkg_files(
+    name = "pkg_files_inc_24",
+    srcs = ["include/tsid/solvers/fwd.hpp"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_25",
+    srcs = ["include/tsid/solvers/solver-HQP-base.hpp"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_26",
+    srcs = ["include/tsid/solvers/solver-HQP-eiquadprog-fast.hpp"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_27",
+    srcs = ["include/tsid/solvers/solver-HQP-eiquadprog-rt.hpp"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_28",
+    srcs = ["include/tsid/solvers/solver-HQP-eiquadprog-rt.hxx"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_29",
+    srcs = ["include/tsid/solvers/solver-HQP-eiquadprog.hpp"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_30",
+    srcs = ["include/tsid/solvers/solver-HQP-factory.hpp"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_31",
+    srcs = ["include/tsid/solvers/solver-HQP-factory.hxx"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_32",
+    srcs = ["include/tsid/solvers/solver-HQP-output.hpp"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_33",
+    srcs = ["include/tsid/solvers/solver-HQP-qpoases.hpp"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_34",
+    srcs = ["include/tsid/solvers/solver-qpData.hpp"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_35",
+    srcs = ["include/tsid/solvers/utils.hpp"],
+    prefix = "include/tsid/solvers",
+)
+
+pkg_files(
+    name = "pkg_files_inc_36",
+    srcs = ["include/tsid/tasks/fwd.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_37",
+    srcs = ["include/tsid/tasks/task-actuation-bounds.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_38",
+    srcs = ["include/tsid/tasks/task-actuation-equality.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_39",
+    srcs = ["include/tsid/tasks/task-actuation.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_40",
+    srcs = ["include/tsid/tasks/task-angular-momentum-equality.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_41",
+    srcs = ["include/tsid/tasks/task-base.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_42",
+    srcs = ["include/tsid/tasks/task-capture-point-inequality.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_43",
+    srcs = ["include/tsid/tasks/task-com-equality.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_44",
+    srcs = ["include/tsid/tasks/task-contact-force-equality.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_45",
+    srcs = ["include/tsid/tasks/task-contact-force.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_46",
+    srcs = ["include/tsid/tasks/task-cop-equality.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_47",
+    srcs = ["include/tsid/tasks/task-joint-bounds.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_48",
+    srcs = ["include/tsid/tasks/task-joint-posVelAcc-bounds.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_49",
+    srcs = ["include/tsid/tasks/task-joint-posture.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_50",
+    srcs = ["include/tsid/tasks/task-motion.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_51",
+    srcs = ["include/tsid/tasks/task-se3-equality.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_52",
+    srcs = ["include/tsid/tasks/task-two-frames-equality.hpp"],
+    prefix = "include/tsid/tasks",
+)
+
+pkg_files(
+    name = "pkg_files_inc_53",
+    srcs = ["include/tsid/trajectories/fwd.hpp"],
+    prefix = "include/tsid/trajectories",
+)
+
+pkg_files(
+    name = "pkg_files_inc_54",
+    srcs = ["include/tsid/trajectories/trajectory-base.hpp"],
+    prefix = "include/tsid/trajectories",
+)
+
+pkg_files(
+    name = "pkg_files_inc_55",
+    srcs = ["include/tsid/trajectories/trajectory-euclidian.hpp"],
+    prefix = "include/tsid/trajectories",
+)
+
+pkg_files(
+    name = "pkg_files_inc_56",
+    srcs = ["include/tsid/trajectories/trajectory-se3.hpp"],
+    prefix = "include/tsid/trajectories",
+)
+
+pkg_files(
+    name = "pkg_files_inc_57",
+    srcs = ["include/tsid/utils/Stdafx.hh"],
+    prefix = "include/tsid/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_58",
+    srcs = ["include/tsid/utils/statistics.hpp"],
+    prefix = "include/tsid/utils",
+)
+
+pkg_files(
+    name = "pkg_files_inc_59",
+    srcs = ["include/tsid/utils/stop-watch.hpp"],
+    prefix = "include/tsid/utils",
+)
+
+pkg_files(
+    name = "pkg_files_extra_60",
+    srcs = [":gen_extra_60"],
+    prefix = "include/tsid",
+)
+
+pkg_files(
+    name = "pkg_files_extra_61",
+    srcs = [":gen_extra_61"],
+    prefix = "lib/cmake/tsid",
+)
+
+pkg_files(
+    name = "pkg_files_extra_62",
+    srcs = [":gen_extra_62"],
+    prefix = "lib/cmake/tsid",
+)
+
+pkg_files(
+    name = "pkg_files_extra_63",
+    srcs = [":gen_extra_63"],
+    prefix = "lib/cmake/tsid",
+)
+
+pkg_files(
+    name = "pkg_files_extra_64",
+    srcs = [":gen_extra_64"],
+    prefix = "lib/cmake/tsid",
+)
+
+pkg_files(
+    name = "pkg_files_extra_65",
+    srcs = [":gen_extra_65"],
+    prefix = "lib/cmake/tsid",
+)
+
+pkg_files(
+    name = "pkg_files_soname_66",
+    srcs = [":tsid"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib",
+    renames = {":tsid": "libtsid.so.1.10.0"},
+)
+
+pkg_files(
+    name = "pkg_files_extra_67",
+    srcs = [":gen_extra_67"],
+    prefix = "lib/pkgconfig",
+)
+
+pkg_files(
+    name = "pkg_files_extra_68",
+    srcs = [":gen_extra_68"],
+    prefix = "share/tsid/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_69",
+    srcs = [":gen_extra_69"],
+    prefix = "share/tsid/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_70",
+    srcs = [":gen_extra_70"],
+    prefix = "share/tsid/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_71",
+    srcs = [":gen_extra_71"],
+    prefix = "share/tsid/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_72",
+    srcs = [":gen_extra_72"],
+    prefix = "share/tsid/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_73",
+    srcs = [":gen_extra_73"],
+    prefix = "share/tsid/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_74",
+    srcs = [":gen_extra_74"],
+    prefix = "share/tsid/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_75",
+    srcs = [":gen_extra_75"],
+    prefix = "share/tsid/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_76",
+    srcs = [":gen_extra_76"],
+    prefix = "share/tsid/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_77",
+    srcs = [":gen_extra_77"],
+    prefix = "share/tsid/hook",
+)
+
+pkg_files(
+    name = "pkg_files_extra_78",
+    srcs = [":gen_extra_78"],
+    prefix = "share/tsid/hook",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":tsid"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -27,6 +852,867 @@ ament_package(
         "@eiquadprog//:ament_package",
         "@jrl_cmakemodules//:ament_package",
         "@pinocchio//:ament_package",
-        "@rosdistro//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "constraints",
+    srcs = ["tests/constraints.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":tsid",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tsid_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "contacts",
+    srcs = ["tests/contacts.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":tsid",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "TSID_SOURCE_DIR=\\\".\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tsid_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "hqp_solvers",
+    srcs = ["tests/hqp_solvers.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":tsid",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tsid_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "math_utils",
+    srcs = ["tests/math_utils.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":tsid",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tsid_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "robot-wrapper",
+    srcs = ["tests/robot-wrapper.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":tsid",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "TSID_SOURCE_DIR=\\\".\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tsid_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "set_gravity",
+    srcs = ["tests/set_gravity.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":tsid",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "TSID_SOURCE_DIR=\\\".\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tsid_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "tasks",
+    srcs = ["tests/tasks.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":tsid",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "TSID_SOURCE_DIR=\\\".\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tsid_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "trajectories",
+    srcs = ["tests/trajectories.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":tsid",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tsid_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "tsid-formulation",
+    srcs = ["tests/tsid-formulation.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_11",
+        ":gen_extra_60",
+        ":gen_octomap_color_octree_h",
+        ":gen_octomap_h",
+        ":gen_octomap_msgs_conversions_h",
+        ":gen_octomap_octree_key_h",
+        ":gen_octomap_ros_conversions_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        ":tsid",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tsid",
+        "include",
+        "include/tsid",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "EIGEN_RUNTIME_NO_MALLOC",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "TSID_SOURCE_DIR=\\\".\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tsid_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+py_pytest(
+    name = "py-Formulation",
+    srcs = ["tests/python/test_Formulation.py"],
+    data = [
+        ":ament_index",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ],
+    deps = [
+        ":tsid_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "py-Gravity",
+    srcs = ["tests/python/test_Gravity.py"],
+    data = [
+        ":ament_index",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ],
+    deps = [
+        ":tsid_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "py-RobotWrapper",
+    srcs = ["tests/python/test_RobotWrapper.py"],
+    data = [
+        ":ament_index",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ],
+    deps = [
+        ":tsid_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "py-Solvers",
+    srcs = ["tests/python/test_Solvers.py"],
+    data = [
+        ":ament_index",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ],
+    deps = [
+        ":tsid_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "py-Tasks",
+    srcs = ["tests/python/test_Tasks.py"],
+    data = [
+        ":ament_index",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ],
+    deps = [
+        ":tsid_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "py-Trajectories",
+    srcs = ["tests/python/test_Trajectories.py"],
+    data = [
+        ":ament_index",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ],
+    deps = [
+        ":tsid_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "py-Measured6DWrench",
+    srcs = ["tests/python/test_Measured6DWrench.py"],
+    data = [
+        ":ament_index",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ],
+    deps = [
+        ":tsid_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+genrule(
+    name = "tar",
+    srcs = [":raw_tar"],
+    outs = ["tar.tar.gz"],
+    cmd = "tmpdir=$$(mktemp -d) && tar -xzf $(location :raw_tar) -C $$tmpdir && rm -rf $$tmpdir/opt/ros/lyrical/tsid/share/tsid/environment && tar -czf $@ -C $$tmpdir opt && rm -rf $$tmpdir",
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    install = [
+        ":pkg_files_extra_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_inc_2",
+        ":pkg_files_inc_3",
+        ":pkg_files_inc_4",
+        ":pkg_files_inc_5",
+        ":pkg_files_inc_6",
+        ":pkg_files_inc_7",
+        ":pkg_files_inc_8",
+        ":pkg_files_inc_9",
+        ":pkg_files_inc_10",
+        ":pkg_files_extra_11",
+        ":pkg_files_inc_12",
+        ":pkg_files_inc_13",
+        ":pkg_files_inc_14",
+        ":pkg_files_inc_15",
+        ":pkg_files_inc_16",
+        ":pkg_files_inc_17",
+        ":pkg_files_inc_18",
+        ":pkg_files_inc_19",
+        ":pkg_files_inc_20",
+        ":pkg_files_inc_21",
+        ":pkg_files_inc_22",
+        ":pkg_files_inc_23",
+        ":pkg_files_inc_24",
+        ":pkg_files_inc_25",
+        ":pkg_files_inc_26",
+        ":pkg_files_inc_27",
+        ":pkg_files_inc_28",
+        ":pkg_files_inc_29",
+        ":pkg_files_inc_30",
+        ":pkg_files_inc_31",
+        ":pkg_files_inc_32",
+        ":pkg_files_inc_33",
+        ":pkg_files_inc_34",
+        ":pkg_files_inc_35",
+        ":pkg_files_inc_36",
+        ":pkg_files_inc_37",
+        ":pkg_files_inc_38",
+        ":pkg_files_inc_39",
+        ":pkg_files_inc_40",
+        ":pkg_files_inc_41",
+        ":pkg_files_inc_42",
+        ":pkg_files_inc_43",
+        ":pkg_files_inc_44",
+        ":pkg_files_inc_45",
+        ":pkg_files_inc_46",
+        ":pkg_files_inc_47",
+        ":pkg_files_inc_48",
+        ":pkg_files_inc_49",
+        ":pkg_files_inc_50",
+        ":pkg_files_inc_51",
+        ":pkg_files_inc_52",
+        ":pkg_files_inc_53",
+        ":pkg_files_inc_54",
+        ":pkg_files_inc_55",
+        ":pkg_files_inc_56",
+        ":pkg_files_inc_57",
+        ":pkg_files_inc_58",
+        ":pkg_files_inc_59",
+        ":pkg_files_extra_60",
+        ":pkg_files_extra_61",
+        ":pkg_files_extra_62",
+        ":pkg_files_extra_63",
+        ":pkg_files_extra_64",
+        ":pkg_files_extra_65",
+        ":pkg_files_soname_66",
+        ":pkg_files_extra_67",
+        ":pkg_files_extra_68",
+        ":pkg_files_extra_69",
+        ":pkg_files_extra_70",
+        ":pkg_files_extra_71",
+        ":pkg_files_extra_72",
+        ":pkg_files_extra_73",
+        ":pkg_files_extra_74",
+        ":pkg_files_extra_75",
+        ":pkg_files_extra_76",
+        ":pkg_files_extra_77",
+        ":pkg_files_extra_78",
+    ],
+    libraries = [":tsid"],
+    package_xml = "package.xml",
+    python = [
+        ":tsid_py",
+        ":tsid_pywrap.cpython-314-x86_64-linux-gnu",
+    ],
+    python_strip_prefix = "bindings/python",
+    tar_name = "raw_tar",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@eigenpy//:ament_package",
+        "@eiquadprog//:ament_package",
+        "@jrl_cmakemodules//:ament_package",
+        "@pinocchio//:ament_package",
     ],
 )
