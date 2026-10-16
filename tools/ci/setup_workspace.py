@@ -417,14 +417,24 @@ def render_underlay_build_file(variant_names: List[str]) -> str:
 
 
 def calculate_packages_for_variant(
-    module_dir: Path, start_name: str, start_version: str
+    module_dir: Path,
+    start_name: str,
+    start_version: str,
+    overrides: Dict[str, str] | None = None,
+    allowed_packages: set | None = None,
 ) -> List[str]:
     """
     Performs a BFS traversal starting from the given module name and version to collect
-    all transitive dependencies.
+    all transitive dependencies. If `overrides` is provided, uses the overridden
+    version of any package in the traversal rather than the older version
+    pinned in a parent's MODULE.bazel. If `allowed_packages` is provided,
+    skips any dependency not in that set (e.g. a package removed from the
+    distro that an un-updated downstream package still references).
     """
+    overrides = overrides or {}
+    effective_start_version = overrides.get(start_name, start_version)
     visited = set()
-    queue = [(start_name, module_dir / start_name / start_version / 'MODULE.bazel')]
+    queue = [(start_name, module_dir / start_name / effective_start_version / 'MODULE.bazel')]
     while queue:
         current_name, current_file = queue.pop(0)
         if current_name in visited:
@@ -439,7 +449,10 @@ def calculate_packages_for_variant(
                 content,
             )
             for next_name, next_version in deps:
-                next_file = module_dir / next_name / next_version / 'MODULE.bazel'
+                if allowed_packages is not None and next_name not in allowed_packages:
+                    continue
+                effective_next_version = overrides.get(next_name, next_version)
+                next_file = module_dir / next_name / effective_next_version / 'MODULE.bazel'
                 if next_file.exists():
                     if next_name not in visited:
                         queue.append((next_name, next_file))
@@ -524,13 +537,18 @@ def main():
         print(f"Overrode {len(overrides)} package(s) to newer available patches.")
 
     # Detect variants
+    allowed_packages = set(packages.keys())
     variants: Dict[str, List[str]] = {}
     for variant_name, variant_package in VARIANTS.items():
         if variant_package not in packages:
             print(f"Warning: Variant package {variant_package} not found in release.")
             continue
         variants[variant_name] = calculate_packages_for_variant(
-            modules_dir, variant_package, packages[variant_package]
+            modules_dir,
+            variant_package,
+            packages[variant_package],
+            overrides=overrides,
+            allowed_packages=allowed_packages,
         )
         print(f"  {variant_name}: {len(variants[variant_name])} packages")
 

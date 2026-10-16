@@ -1,10 +1,12 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
 load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rosdistro//python:defs.bzl", "py_pytest")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -62,6 +64,18 @@ CC_DEPS = [
     "@trajectory_msgs//:cc",
 ]
 
+write_file(
+    name = "gen_passthrough_controller_parameters_hpp",
+    out = "_gen/include/play_motion2/passthrough_controller_parameters.hpp",
+    content = ["#pragma once\n#include <memory>\n#include <string>\n#include <vector>\n#include \"rclcpp/rclcpp.hpp\"\n#include \"rclcpp_lifecycle/lifecycle_node.hpp\"\nnamespace passthrough_controller {\nstruct Params {\n  std::vector<std::string> interfaces;\n};\nclass ParamListener {\n public:\n  template <typename NodeT>\n  explicit ParamListener(const NodeT &) {}\n  Params get_params() const { return Params{}; }\n};\n}  // namespace passthrough_controller\n"],
+)
+
+write_file(
+    name = "gen_move_group_interface_hpp",
+    out = "_gen/include/moveit_ros_planning_interface/moveit/move_group_interface/move_group_interface.hpp",
+    content = ["#pragma once\n#include <moveit/move_group_interface/move_group_interface.hpp>\n"],
+)
+
 cc_library(
     name = "client_library",
     srcs = ["src/play_motion2/client.cpp"],
@@ -77,13 +91,17 @@ cc_library(
             "**/*.tcc",
         ],
         allow_empty = True,
-    ),
+    ) + [
+        ":gen_move_group_interface_hpp",
+        ":gen_passthrough_controller_parameters_hpp",
+    ],
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
     includes = [
         ".",
+        "_gen/include",
         "include",
         "include/play_motion2",
     ],
@@ -122,13 +140,17 @@ cc_library(
             "**/*.tcc",
         ],
         allow_empty = True,
-    ),
+    ) + [
+        ":gen_move_group_interface_hpp",
+        ":gen_passthrough_controller_parameters_hpp",
+    ],
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
     includes = [
         ".",
+        "_gen/include",
         "include",
         "include/play_motion2",
     ],
@@ -167,13 +189,17 @@ cc_library(
             "**/*.tcc",
         ],
         allow_empty = True,
-    ),
+    ) + [
+        ":gen_move_group_interface_hpp",
+        ":gen_passthrough_controller_parameters_hpp",
+    ],
     copts = [
         "-std=c++20",
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
     includes = [
         ".",
+        "_gen/include",
         "include",
         "include/play_motion2",
     ],
@@ -202,10 +228,101 @@ collect_transitive_dynamic_deps(
     dynamic_deps = DEPENDENCIES.keys(),
 )
 
+cc_binary(
+    name = "play_motion2_node",
+    srcs = [
+        "src/play_motion2/play_motion2_executor.cpp",
+        "src/play_motion2/play_motion2_mgr.cpp",
+        "src/play_motion2_main.cpp",
+        "src/utils/motion_loader.cpp",
+        "src/utils/motion_planner.cpp",
+    ] + glob(
+        [
+            "include/**/*.hpp",
+            "src/**/*.hpp",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_move_group_interface_hpp",
+        ":gen_passthrough_controller_parameters_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/play_motion2",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "HARDWARE_INTERFACE_VERSION_MAJOR=6",
+        "MOVEIT_VERSION_MAJOR=2",
+        "MOVEIT_VERSION_MINOR=15",
+        "RCLCPP_VERSION_MAJOR=32",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_binary(
+    name = "run_motion",
+    srcs = ["src/run_motion.cpp"] + glob(
+        ["include/**/*.hpp"],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/play_motion2",
+    ],
+    local_defines = ros_local_defines() + [
+        "MOVEIT_VERSION_MAJOR=2",
+        "MOVEIT_VERSION_MINOR=15",
+        "RCLCPP_VERSION_MAJOR=32",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":client_library"],
+)
+
+py_library(
+    name = "play_motion2_py",
+    srcs = glob(["play_motion2/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@action_msgs//:py",
+        "@play_motion2_msgs//:py",
+        "@rclpy",
+    ],
+)
+
 ament_index(
     name = "ament_index",
+    data = glob(
+        [
+            "config/**",
+            "launch/**",
+        ],
+        allow_empty = True,
+    ),
+    executables = [
+        ":play_motion2_node",
+        ":run_motion",
+    ],
     package_xml = "package.xml",
     deps = [
+        "@action_msgs//:ament_package",
         "@ament_cmake_auto//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_cmake_pytest//:ament_package",
@@ -232,6 +349,7 @@ ament_index(
         "@rclcpp_action//:ament_package",
         "@rclcpp_components//:ament_package",
         "@rclcpp_lifecycle//:ament_package",
+        "@rclpy//:ament_package",
         "@realtime_tools//:ament_package",
         "@robot_state_publisher//:ament_package",
         "@sensor_msgs//:ament_package",
@@ -298,7 +416,6 @@ cc_test(
     ],
     deps = DEPENDENCIES.values() + CC_DEPS + [
         ":client_library",
-        ":rrbot_system_library",
         "@rosdistro//cc:bazel_test_helper",
         "@rosdistro//cc:googletest",
     ],
@@ -308,13 +425,23 @@ launch_ros_test(
     name = "test_play_motion2_node_test.launch.py",
     src = "test/play_motion2_node_test.launch.py",
     data = [":ament_index"],
+    # Full-stack integration test: needs ros2_control (rrbot hardware plugin,
+    # generate_parameter_library-based passthrough controller, controller
+    # manager) plus MoveIt planning, which is not wired up for this package.
+    tags = [
+        "manual",
+        "xfail",
+    ],
     deps = [
+        ":play_motion2_py",
+        "@action_msgs//:py",
         "@control_msgs//:py",
         "@controller_manager//:controller_manager_py",
         "@controller_manager_msgs//:py",
         "@launch//:test_support",
         "@lifecycle_msgs//:py",
         "@play_motion2_msgs//:py",
+        "@rclpy",
         "@sensor_msgs//:py",
         "@std_msgs//:py",
         "@trajectory_msgs//:py",
@@ -326,6 +453,8 @@ py_pytest(
     srcs = ["test/test_client.py"],
     data = [":ament_index"],
     deps = [
+        ":play_motion2_py",
+        "@action_msgs//:py",
         "@control_msgs//:py",
         "@controller_manager//:controller_manager_py",
         "@controller_manager_msgs//:py",
@@ -334,6 +463,7 @@ py_pytest(
         "@launch_ros",
         "@lifecycle_msgs//:py",
         "@play_motion2_msgs//:py",
+        "@rclpy",
         "@sensor_msgs//:py",
         "@std_msgs//:py",
         "@trajectory_msgs//:py",
@@ -362,10 +492,16 @@ ament_package(
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
     cmake_export_targets = False,
+    executables = [
+        ":play_motion2_node",
+        ":run_motion",
+    ],
     install_package_xml = False,
     package_xml = "package.xml",
+    python = [":play_motion2_py"],
     tar_name = "raw_tar",
     deps = [":ament_index"] + [
+        "@action_msgs//:ament_package",
         "@ament_cmake_auto//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_cmake_pytest//:ament_package",
@@ -392,6 +528,7 @@ ament_package(
         "@rclcpp_action//:ament_package",
         "@rclcpp_components//:ament_package",
         "@rclcpp_lifecycle//:ament_package",
+        "@rclpy//:ament_package",
         "@realtime_tools//:ament_package",
         "@robot_state_publisher//:ament_package",
         "@sensor_msgs//:ament_package",

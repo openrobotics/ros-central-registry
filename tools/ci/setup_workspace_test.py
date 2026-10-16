@@ -184,6 +184,31 @@ class TestCalculatePackagesForVariant(unittest.TestCase):
             self.module_dir, "pkg_a", "1.0.0")
         self.assertEqual(result, ["pkg_a"])
 
+    def test_uses_overridden_versions_during_traversal(self):
+        # pkg_a@1.0.0 depends on pkg_b@1.0.0 (which had a dep on pkg_old),
+        # but pkg_b is overridden to 1.0.1 (which dropped pkg_old and added pkg_new).
+        self.write_module_bazel("pkg_a", "1.0.0", deps=[("pkg_b", "1.0.0")])
+        self.write_module_bazel("pkg_b", "1.0.0", deps=[("pkg_old", "1.0.0")])
+        self.write_module_bazel("pkg_b", "1.0.1", deps=[("pkg_new", "1.0.0")])
+        self.write_module_bazel("pkg_old", "1.0.0")
+        self.write_module_bazel("pkg_new", "1.0.0")
+        result = setup_workspace.calculate_packages_for_variant(
+            self.module_dir, "pkg_a", "1.0.0", overrides={"pkg_b": "1.0.1"}
+        )
+        self.assertEqual(result, ["pkg_a", "pkg_b", "pkg_new"])
+
+    def test_allowed_packages_skips_removed_dependencies(self):
+        self.write_module_bazel(
+            "pkg_a", "1.0.0", deps=[("pkg_b", "1.0.0"), ("pkg_removed", "1.0.0")]
+        )
+        self.write_module_bazel("pkg_b", "1.0.0")
+        self.write_module_bazel("pkg_removed", "1.0.0")
+        result = setup_workspace.calculate_packages_for_variant(
+            self.module_dir, "pkg_a", "1.0.0", allowed_packages={"pkg_a", "pkg_b"}
+        )
+        self.assertEqual(result, ["pkg_a", "pkg_b"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
