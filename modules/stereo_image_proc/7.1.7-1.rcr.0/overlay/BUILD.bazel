@@ -12,14 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@launch_testing//:defs.bzl", "launch_test")
 load("@pip_ros//:requirements.bzl", "requirement")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
-load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
 
 ### LIBRARIES
 
@@ -90,10 +102,24 @@ ament_index(
         ":point_cloud_node_record",
     ],
     data = glob(["launch/**"]),
+    executables = [
+        ":disparity_node",
+        ":point_cloud_node",
+    ],
     export_name = "stereo_image_proc",
     libraries = [":stereo_image_proc"],
     package_xml = "package.xml",
     plugin_category = "rclcpp_components",
+)
+
+launch_ros_binary(
+    name = "stereo_image_proc_launch",
+    src = "launch/stereo_image_proc.launch.py",
+    data = [
+        ":ament_index",
+        "@image_proc//:ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
 )
 
 ### TESTING
@@ -101,29 +127,25 @@ ament_index(
 # Tagged manual/xfail: test fixture stereo_image_publisher.py imports cv2 from
 # @pip_ros opencv-python (compiled against NumPy 1.x), which fails under NumPy 2.5.2.
 [
-    py_pytest(
+    launch_test(
         name = name,
-        srcs = ["test/{}.py".format(name)],
-        args = [
-            "-p",
-            "launch_testing.pytest.hooks",
-        ],
+        src = "test/{}.py".format(name),
         data = glob([
             "test/fixtures/**",
             "test/data/**",
         ]) + [
-            ":ament_package",
+            ":ament_index",
             ":disparity_node",
             ":point_cloud_node",
+            "@image_proc//:ament_index",
+            "@rclcpp_components//:ament_index",
         ],
         tags = [
             "manual",
             "xfail",
         ],
         deps = [
-            "@launch",
             "@launch_ros",
-            "@launch_testing",
             "@rclpy",
             "@rules_python//python/runfiles",
             "@sensor_msgs//:py",
