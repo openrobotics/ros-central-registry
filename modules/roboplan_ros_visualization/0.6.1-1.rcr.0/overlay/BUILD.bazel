@@ -1,0 +1,310 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@interactive_markers//:interactive_markers": "@interactive_markers//:interactive_markers_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@roboplan//:roboplan": "@roboplan//:roboplan_library",
+    "@roboplan_ros_cpp//:roboplan_ros_cpp": "@roboplan_ros_cpp//:roboplan_ros_cpp_library",
+    "@roboplan_simple_ik//:roboplan_simple_ik": "@roboplan_simple_ik//:roboplan_simple_ik_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+CC_DEPS = [
+    "@@std_msgs+//:cc",
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@rules_python//python/cc:current_py_cc_headers",
+    "@sensor_msgs//:cc",
+    "@visualization_msgs//:cc",
+]
+
+cc_library(
+    name = "roboplan_ros_visualization_library",
+    srcs = [
+        "src/path_visualization.cpp",
+        "src/roboplan_ik_marker.cpp",
+        "src/roboplan_visualizer.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_nanobind_h",
+        ":gen_nanobind_stl_filesystem_h",
+        ":gen_nanobind_stl_string_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/roboplan_ros_visualization",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "roboplan_ros_visualization",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":roboplan_ros_visualization_library"],
+)
+
+cc_library(
+    name = "_visualization_ext.cpython-314-x86_64-linux-gnu_library",
+    srcs = [":gen_apriltag_py_stub_c"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_nanobind_h",
+        ":gen_nanobind_stl_filesystem_h",
+        ":gen_nanobind_stl_string_h",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/roboplan_ros_visualization",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_ENABLE_TEMPLATE_INSTANTIATION",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":roboplan_ros_visualization_library"],
+)
+
+cc_shared_library(
+    name = "_visualization_ext.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "roboplan_ros/visualization/_visualization_ext.so",
+    deps = [":_visualization_ext.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "roboplan_ros",
+    srcs = glob(["bindings/python/roboplan_ros/**/*.py"]),
+    imports = ["bindings/python"],
+    deps = [
+        "@geometry_msgs//:py",
+        "@interactive_markers//:py",
+        "@rclpy",
+        "@roboplan//:roboplan_py",
+        "@roboplan_ros_cpp//:roboplan_ros",
+        "@roboplan_simple_ik//:roboplan",
+        "@sensor_msgs//:py",
+        "@visualization_msgs//:py",
+    ],
+)
+
+write_file(
+    name = "gen_apriltag_py_stub_c",
+    out = "_gen/apriltag_py_stub.c",
+    content = ["void PyInit_apriltag(void) {}\n"],
+)
+
+write_file(
+    name = "gen_nanobind_h",
+    out = "_gen/include/nanobind/nanobind.h",
+    content = ["#ifndef RCR_NANOBIND_H_\n#define RCR_NANOBIND_H_\n#include <utility>\nnamespace nanobind {\nnamespace literals {}\nstruct module_ {\n  template <typename V>\n  struct attr_proxy {\n    attr_proxy & operator=(const V &) { return *this; }\n  };\n  attr_proxy<const char *> attr(const char *) { return {}; }\n  template <typename F, typename... Extra>\n  module_ & def(const char *, F &&, const Extra &...) { return *this; }\n};\n}  // namespace nanobind\n#define NB_MODULE(name, var) \\\n  static void nb_init_##name(::nanobind::module_ &); \\\n  extern \"C\" __attribute__((visibility(\"default\"))) void * PyInit_##name() { \\\n    static ::nanobind::module_ m; \\\n    nb_init_##name(m); \\\n    return nullptr; \\\n  } \\\n  static void nb_init_##name(::nanobind::module_ & var)\n#endif\n"],
+)
+
+write_file(
+    name = "gen_nanobind_stl_filesystem_h",
+    out = "_gen/include/nanobind/stl/filesystem.h",
+    content = ["#include <filesystem>\n"],
+)
+
+write_file(
+    name = "gen_nanobind_stl_string_h",
+    out = "_gen/include/nanobind/stl/string.h",
+    content = ["#include <string>\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":roboplan_ros_visualization"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_ros_cpp//:ament_package",
+        "@roboplan_simple_ik//:ament_package",
+        "@rviz2//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+py_pytest(
+    name = "roboplan_visualizer_test_py",
+    srcs = ["bindings/test/roboplan_visualizer_test.py"],
+    data = [
+        ":_visualization_ext.cpython-314-x86_64-linux-gnu",
+        ":ament_index",
+    ],
+    deps = [
+        ":roboplan_ros",
+        "@geometry_msgs//:py",
+        "@interactive_markers//:py",
+        "@rclpy",
+        "@roboplan//:roboplan_py",
+        "@roboplan_ros_cpp//:roboplan_ros",
+        "@roboplan_simple_ik//:roboplan",
+        "@sensor_msgs//:py",
+        "@visualization_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "roboplan_ik_marker_test",
+    srcs = ["bindings/test/roboplan_ik_marker_test.py"],
+    data = [
+        ":_visualization_ext.cpython-314-x86_64-linux-gnu",
+        ":ament_index",
+    ],
+    deps = [
+        ":roboplan_ros",
+        "@geometry_msgs//:py",
+        "@interactive_markers//:py",
+        "@rclpy",
+        "@roboplan//:roboplan_py",
+        "@roboplan_ros_cpp//:roboplan_ros",
+        "@roboplan_simple_ik//:roboplan",
+        "@sensor_msgs//:py",
+        "@visualization_msgs//:py",
+    ],
+)
+
+genrule(
+    name = "tar",
+    srcs = [":raw_tar"],
+    outs = ["tar.tar.gz"],
+    cmd = "tmpdir=$$(mktemp -d) && tar -xzf $(location :raw_tar) -C $$tmpdir && rm -rf $$tmpdir/opt/ros/lyrical/roboplan_ros_visualization/share/roboplan_ros_visualization/environment/pythonpath.dsv $$tmpdir/opt/ros/lyrical/roboplan_ros_visualization/share/roboplan_ros_visualization/environment/pythonpath.sh && tar -czf $@ -C $$tmpdir opt && rm -rf $$tmpdir",
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "roboplan",
+        "Eigen3",
+        "pinocchio",
+        "tf2_eigen",
+        "trajectory_msgs",
+        "geometry_msgs",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":roboplan_ros_visualization"],
+    package_xml = "package.xml",
+    python = [
+        ":roboplan_ros",
+        ":_visualization_ext.cpython-314-x86_64-linux-gnu",
+        "bindings/python/roboplan_ros/visualization/_visualization_ext.pyi",
+        "bindings/python/roboplan_ros/visualization/py.typed",
+    ],
+    python_strip_prefix = "bindings/python",
+    tar_name = "raw_tar",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_ros_cpp//:ament_package",
+        "@roboplan_simple_ik//:ament_package",
+        "@rviz2//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
