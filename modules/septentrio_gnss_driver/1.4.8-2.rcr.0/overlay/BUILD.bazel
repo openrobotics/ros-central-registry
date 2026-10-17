@@ -1,0 +1,450 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosidl_default_generators//:defs.bzl", "default_generators", "rosidl_ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:static_transform_broadcaster_node": "@tf2_ros//:static_transform_broadcaster_node_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@diagnostic_msgs//:cc",
+    "@geometry_msgs//:cc",
+    "@gps_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@nmea_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.asio",
+    "@rosdistro//cc:boost.bind",
+    "@rosdistro//cc:boost.format",
+    "@rosdistro//cc:boost.lambda",
+    "@rosdistro//cc:boost.math",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:boost.smart_ptr",
+    "@rosdistro//cc:boost.spirit",
+    "@rosdistro//cc:boost.tokenizer",
+    "@rosdistro//cc:eigen",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "septentrio_gnss_driver_core_library",
+    srcs = [
+        "src/septentrio_gnss_driver/communication/communication_core.cpp",
+        "src/septentrio_gnss_driver/communication/message_handler.cpp",
+        "src/septentrio_gnss_driver/communication/telegram_handler.cpp",
+        "src/septentrio_gnss_driver/crc/crc.cpp",
+        "src/septentrio_gnss_driver/node/rosaic_node.cpp",
+        "src/septentrio_gnss_driver/parsers/nmea_parsers/gpgga.cpp",
+        "src/septentrio_gnss_driver/parsers/nmea_parsers/gpgsa.cpp",
+        "src/septentrio_gnss_driver/parsers/nmea_parsers/gpgsv.cpp",
+        "src/septentrio_gnss_driver/parsers/nmea_parsers/gprmc.cpp",
+        "src/septentrio_gnss_driver/parsers/parsing_utilities.cpp",
+        "src/septentrio_gnss_driver/parsers/string_utilities.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_utmups_hpp",
+        ":gen_pcap_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/septentrio_gnss_driver",
+        "_gen/include/septentrio_gnss_driver/septentrio_gnss_driver",
+        "include",
+        "include/septentrio_gnss_driver",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "ROS2",
+        "ROS2_VER_N520",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+    ],
+)
+
+cc_shared_library(
+    name = "septentrio_gnss_driver_core",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":septentrio_gnss_driver_core_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "septentrio_gnss_driver_core_components",
+    component = ":septentrio_gnss_driver_core",
+    plugins = ["rosaic_node::ROSaicNode"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "septentrio_gnss_driver_node",
+    srcs = [
+        "src/septentrio_gnss_driver/node/main.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_utmups_hpp",
+        ":gen_pcap_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/septentrio_gnss_driver",
+        "_gen/include/septentrio_gnss_driver/septentrio_gnss_driver",
+        "include",
+        "include/septentrio_gnss_driver",
+        "test",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "ROS2",
+        "ROS2_VER_N520",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":septentrio_gnss_driver_core_library",
+    ],
+)
+
+write_file(
+    name = "gen_pcap_h",
+    out = "_gen/include/pcap.h",
+    content = ["#ifndef RCR_PCAP_H_\n#define RCR_PCAP_H_\nstruct pcap {};\ntypedef struct pcap pcap_t;\ninline void pcap_close(pcap_t *) {}\ninline pcap_t * pcap_open_offline(const char *, char *) { return nullptr; }\ninline int pcap_get_selectable_fd(pcap_t *) { return -1; }\n#endif\n"],
+)
+
+write_file(
+    name = "gen_geographiclib_utmups_hpp",
+    out = "_gen/include/GeographicLib/UTMUPS.hpp",
+    content = ["#ifndef RCR_GEOGRAPHICLIB_UTMUPS_HPP_\n#define RCR_GEOGRAPHICLIB_UTMUPS_HPP_\n#include <cmath>\n#include <cctype>\n#include <string>\nnamespace GeographicLib {\nclass UTMUPS {\n public:\n  static void Forward(double lat, double lon, int & zone, bool & northp, double & x, double & y, int setzone = -1) {\n    zone = (setzone > 0) ? setzone : (static_cast<int>((lon + 180.0) / 6.0) + 1);\n    northp = (lat >= 0.0);\n    constexpr double kPi = 3.14159265358979323846;\n    constexpr double a = 6378137.0;\n    constexpr double f = 1.0 / 298.257223563;\n    constexpr double k0 = 0.9996;\n    double e2 = f * (2.0 - f);\n    double ep2 = e2 / (1.0 - e2);\n    double phi = lat * kPi / 180.0;\n    double lam = lon * kPi / 180.0;\n    double lam0 = ((zone - 1) * 6 - 180 + 3) * kPi / 180.0;\n    double sin_phi = std::sin(phi), cos_phi = std::cos(phi), tan_phi = std::tan(phi);\n    double N = a / std::sqrt(1.0 - e2 * sin_phi * sin_phi);\n    double T = tan_phi * tan_phi;\n    double C = ep2 * cos_phi * cos_phi;\n    double A = cos_phi * (lam - lam0);\n    double M = a * ((1.0 - e2 / 4.0 - 3.0 * e2 * e2 / 64.0) * phi\n      - (3.0 * e2 / 8.0 + 3.0 * e2 * e2 / 32.0) * std::sin(2.0 * phi)\n      + (15.0 * e2 * e2 / 256.0) * std::sin(4.0 * phi));\n    x = k0 * N * (A + (1.0 - T + C) * A * A * A / 6.0) + 500000.0;\n    y = k0 * (M + N * tan_phi * (A * A / 2.0 + (5.0 - T + 9.0 * C + 4.0 * C * C) * A * A * A * A / 24.0));\n    if (!northp) y += 10000000.0;\n  }\n  static void Forward(double lat, double lon, int & zone, bool & northp, double & x, double & y, double & gamma, double & k, int setzone = -1) {\n    Forward(lat, lon, zone, northp, x, y, setzone);\n    gamma = 0.0;\n    k = 0.9996;\n  }\n  static void DecodeZone(const std::string & zonestr, int & zone, bool & northp) {\n    zone = 0;\n    northp = true;\n    std::size_t i = 0;\n    while (i < zonestr.size() && std::isdigit(static_cast<unsigned char>(zonestr[i]))) {\n      zone = zone * 10 + (zonestr[i] - '0');\n      ++i;\n    }\n    if (i < zonestr.size()) {\n      char c = static_cast<char>(std::toupper(static_cast<unsigned char>(zonestr[i])));\n      northp = (c >= 'N');\n    }\n  }\n  static std::string EncodeZone(int zone, bool northp, bool = true) {\n    return std::to_string(zone) + (northp ? \"n\" : \"s\");\n  }\n};\n}  // namespace GeographicLib\n#endif\n"],
+)
+
+default_generators(
+    package_xml = "package.xml",
+    deps = [
+        "//msg:AIMPlusStatus",
+        "//msg:AttCovEuler",
+        "//msg:AttEuler",
+        "//msg:BaseVectorCart",
+        "//msg:BaseVectorGeod",
+        "//msg:ExtSensorMeas",
+        "//msg:GALAuthStatus",
+        "//msg:IMUSetup",
+        "//msg:INSNavCart",
+        "//msg:INSNavGeod",
+        "//msg:MeasEpoch",
+        "//msg:MeasEpochChannelType1",
+        "//msg:MeasEpochChannelType2",
+        "//msg:PVTCartesian",
+        "//msg:PVTGeodetic",
+        "//msg:PosCovCartesian",
+        "//msg:PosCovGeodetic",
+        "//msg:RFBand",
+        "//msg:RFStatus",
+        "//msg:ReceiverTime",
+        "//msg:VectorInfoCart",
+        "//msg:VectorInfoGeod",
+        "//msg:VelCovCartesian",
+        "//msg:VelCovGeodetic",
+        "//msg:VelSensorSetup",
+        "//msg_ros2/msg:BlockHeader",
+    ],
+)
+
+ament_index(
+    name = "ament_index_extra",
+    components = [":septentrio_gnss_driver_core_components"],
+    data = [
+        "config/gnss.yaml",
+        "config/ins.yaml",
+        "config/rover.yaml",
+        "config/rover_node.yaml",
+        "launch/rover.launch",
+        "launch/rover.launch.py",
+        "launch/rover_node.launch.py",
+    ],
+    export_name = "septentrio_gnss_driver",
+    lib_data = [":septentrio_gnss_driver_node"],
+    libraries = [
+        ":septentrio_gnss_driver_core",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@gtest_vendor//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@nmea_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_parsing_utilities",
+    srcs = [
+        "test/test_parsing_utilities.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":ament_index_extra",
+        ":septentrio_gnss_driver_core",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/septentrio_gnss_driver",
+        "_gen/include/septentrio_gnss_driver/septentrio_gnss_driver",
+        "include",
+        "include/septentrio_gnss_driver",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "ROS2",
+        "ROS2_VER_N520",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":septentrio_gnss_driver_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_string_utilities",
+    srcs = [
+        "test/test_string_utilities.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":ament_index_extra",
+        ":septentrio_gnss_driver_core",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/septentrio_gnss_driver",
+        "_gen/include/septentrio_gnss_driver/septentrio_gnss_driver",
+        "include",
+        "include/septentrio_gnss_driver",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "ROS2",
+        "ROS2_VER_N520",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":septentrio_gnss_driver_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+rosidl_ament_package(
+    cmake_export_dependencies_list = [
+        "std_msgs",
+        "rosidl_runtime_c",
+        "rosidl_typesupport_interface",
+        "rcutils",
+        "fastcdr",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_fastrtps_c",
+        "rosidl_typesupport_fastrtps_cpp",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_cpp",
+        "fastcdr",
+        "rmw",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_fastrtps_cpp",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_c",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_cpp",
+        "rosidl_typesupport_interface",
+        "rclcpp",
+        "rclcpp_components",
+        "diagnostic_msgs",
+        "nmea_msgs",
+        "sensor_msgs",
+        "geometry_msgs",
+        "gps_msgs",
+        "nav_msgs",
+        "tf2",
+        "tf2_eigen",
+        "tf2_geometry_msgs",
+        "tf2_ros",
+        "rosidl_default_runtime",
+    ],
+    cmake_export_has_library_target = True,
+    headers = glob(["include/**"]),
+    include_prefix = "",
+    interface_library = "septentrio_gnss_driver_core",
+    interface_library_export = "septentrio_gnss_driver_core",
+    interface_library_location = "lib/libseptentrio_gnss_driver_core.so",
+    libraries = [
+        ":septentrio_gnss_driver_core",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index_extra"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@gtest_vendor//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@nmea_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in [
+        "launch/rover.launch.py",
+        "launch/rover_node.launch.py",
+    ]
+]

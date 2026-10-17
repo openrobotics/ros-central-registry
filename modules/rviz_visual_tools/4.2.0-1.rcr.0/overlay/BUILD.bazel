@@ -1,0 +1,427 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@interactive_markers//:interactive_markers": "@interactive_markers//:interactive_markers_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_default_plugins//:rviz_default_plugins": "@rviz_default_plugins//:rviz_default_plugins_library",
+    "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+}
+
+CC_DEPS = [
+    "@eigen_stl_containers//:eigen_stl_containers",
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@sensor_msgs//:cc",
+    "@shape_msgs//:cc",
+    "@std_msgs//:cc",
+    "@trajectory_msgs//:cc",
+    "@visualization_msgs//:cc",
+]
+
+cc_library(
+    name = "rviz_visual_tools_remote_control_library",
+    srcs = ["src/remote_control.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/rviz_visual_tools",
+    ],
+    local_defines = ros_local_defines() + ["_USE_MATH_DEFINES"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rviz_visual_tools_remote_control",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["@@//:__subpackages__"],
+    deps = [":rviz_visual_tools_remote_control_library"],
+)
+
+cc_library(
+    name = "rviz_visual_tools_library",
+    srcs = [
+        "src/rviz_visual_tools.cpp",
+        "src/tf_visual_tools.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/rviz_visual_tools",
+    ],
+    local_defines = ros_local_defines() + ["_USE_MATH_DEFINES"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":rviz_visual_tools_remote_control_library"],
+)
+
+cc_shared_library(
+    name = "rviz_visual_tools",
+    dynamic_deps = DEPENDENCIES.keys() + [":rviz_visual_tools_remote_control"],
+    exports_filter = ["@@//:__subpackages__"],
+    deps = [":rviz_visual_tools_library"],
+)
+
+qt_cc_library(
+    name = "rviz_visual_tools_gui_library",
+    srcs = [
+        "src/key_tool.cpp",
+        "src/remote_control.cpp",
+        "src/rviz_visual_tools_gui.cpp",
+    ],
+    hdrs = [
+        "include/rviz_visual_tools/key_tool.hpp",
+        "include/rviz_visual_tools/remote_control.hpp",
+        "include/rviz_visual_tools/remote_reciever.hpp",
+        "include/rviz_visual_tools/rviz_visual_tools_gui.hpp",
+    ],
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/rviz_visual_tools",
+    ],
+    local_defines = ros_local_defines() + [
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "QT_NO_KEYWORDS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    normal_hdrs = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+        ],
+        allow_empty = True,
+        exclude = [
+            "include/rviz_visual_tools/key_tool.hpp",
+            "include/rviz_visual_tools/remote_control.hpp",
+            "include/rviz_visual_tools/remote_reciever.hpp",
+            "include/rviz_visual_tools/rviz_visual_tools_gui.hpp",
+        ],
+    ),
+    deps = DEPENDENCIES.values() + CC_DEPS + ["@rules_qt//:qt_widgets"],
+)
+
+cc_shared_library(
+    name = "rviz_visual_tools_gui",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":rviz_visual_tools_gui_library",
+        "//:__subpackages__",
+    ],
+    deps = [":rviz_visual_tools_gui_library"],
+)
+
+cc_library(
+    name = "rviz_visual_tools_imarker_simple_library",
+    srcs = ["src/imarker_simple.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/rviz_visual_tools",
+    ],
+    local_defines = ros_local_defines() + ["_USE_MATH_DEFINES"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rviz_visual_tools_library",
+        ":rviz_visual_tools_remote_control_library",
+    ],
+)
+
+cc_shared_library(
+    name = "rviz_visual_tools_imarker_simple",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":rviz_visual_tools",
+        ":rviz_visual_tools_remote_control",
+    ],
+    deps = [":rviz_visual_tools_imarker_simple_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":rviz_visual_tools_remote_control",
+        ":rviz_visual_tools",
+        ":rviz_visual_tools_imarker_simple",
+    ],
+)
+
+cc_binary(
+    name = "rviz_visual_tools_demo",
+    srcs = ["src/rviz_visual_tools_demo.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rviz_visual_tools",
+    ],
+    linkopts = ["-Wl,--allow-shlib-undefined"],
+    local_defines = ros_local_defines() + ["_USE_MATH_DEFINES"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rviz_visual_tools_library",
+        ":rviz_visual_tools_remote_control_library",
+    ],
+)
+
+cc_binary(
+    name = "rviz_visual_tools_imarker_simple_demo",
+    srcs = ["src/imarker_simple_demo.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rviz_visual_tools",
+    ],
+    linkopts = ["-Wl,--allow-shlib-undefined"],
+    local_defines = ros_local_defines() + ["_USE_MATH_DEFINES"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rviz_visual_tools_imarker_simple_library",
+        ":rviz_visual_tools_library",
+        ":rviz_visual_tools_remote_control_library",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/demo.rviz",
+        "launch/demo_combined.launch.py",
+        "launch/demo_rviz.launch.py",
+        "launch/rvt_test.launch",
+    ],
+    lib_data = [
+        ":rviz_visual_tools_demo",
+        ":rviz_visual_tools_imarker_simple_demo",
+    ],
+    libraries = [
+        ":rviz_visual_tools_remote_control",
+        ":rviz_visual_tools",
+        ":rviz_visual_tools_gui",
+        ":rviz_visual_tools_imarker_simple",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugin_description.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@eigen_stl_containers//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rviz2//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@rviz_ogre_vendor//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@shape_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@trajectory_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "rviz_visual_tools_rvt_test",
+    srcs = ["tests/rvt_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rviz_visual_tools",
+    ],
+    local_defines = ros_local_defines() + ["_USE_MATH_DEFINES"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rviz_visual_tools_library",
+        ":rviz_visual_tools_remote_control_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in [
+        "launch/demo_combined.launch.py",
+        "launch/demo_rviz.launch.py",
+    ]
+]
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "geometry_msgs",
+        "shape_msgs",
+        "rclcpp",
+        "sensor_msgs",
+        "std_msgs",
+        "trajectory_msgs",
+        "visualization_msgs",
+        "eigen3_cmake_module",
+        "Eigen3",
+        "eigen_stl_containers",
+        "interactive_markers",
+        "rviz_common",
+        "rviz_rendering",
+        "rviz_default_plugins",
+        "rviz_ogre_vendor",
+    ],
+    cmake_export_name = "export_rviz_visual_tools",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":rviz_visual_tools_remote_control",
+        ":rviz_visual_tools",
+        ":rviz_visual_tools_gui",
+        ":rviz_visual_tools_imarker_simple",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@eigen_stl_containers//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rviz2//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@rviz_ogre_vendor//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@shape_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@trajectory_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

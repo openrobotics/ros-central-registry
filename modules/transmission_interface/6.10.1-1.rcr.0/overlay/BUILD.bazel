@@ -1,0 +1,444 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+CC_DEPS = [
+    "@ros2_control_test_assets//:ros2_control_test_assets",
+    "@hardware_interface//:hardware_interface_library",
+    "@rosdistro//cc:fmt",
+]
+
+cc_library(
+    name = "transmission_interface_library",
+    srcs = [
+        "src/differential_transmission_loader.cpp",
+        "src/four_bar_linkage_transmission_loader.cpp",
+        "src/simple_transmission_loader.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_12",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/transmission_interface",
+        "_gen/include/transmission_interface/transmission_interface",
+        "include",
+        "include/transmission_interface",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "transmission_interface",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":transmission_interface_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_extra_12",
+    out = "_gen/include/transmission_interface/transmission_interface/version.h",
+    content = ["// Copyright 2015 Open Source Robotics Foundation, Inc.\n//\n// Licensed under the Apache License, Version 2.0 (the \"License\");\n// you may not use this file except in compliance with the License.\n// You may obtain a copy of the License at\n//\n//     http://www.apache.org/licenses/LICENSE-2.0\n//\n// Unless required by applicable law or agreed to in writing, software\n// distributed under the License is distributed on an \"AS IS\" BASIS,\n// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n// See the License for the specific language governing permissions and\n// limitations under the License.\n\n#ifndef TRANSMISSION_INTERFACE__VERSION_H_\n#define TRANSMISSION_INTERFACE__VERSION_H_\n\n/// \\def TRANSMISSION_INTERFACE_VERSION_MAJOR\n/// Defines TRANSMISSION_INTERFACE major version number\n#define TRANSMISSION_INTERFACE_VERSION_MAJOR (6)\n\n/// \\def TRANSMISSION_INTERFACE_VERSION_MINOR\n/// Defines TRANSMISSION_INTERFACE minor version number\n#define TRANSMISSION_INTERFACE_VERSION_MINOR (10)\n\n/// \\def TRANSMISSION_INTERFACE_VERSION_PATCH\n/// Defines TRANSMISSION_INTERFACE version patch number\n#define TRANSMISSION_INTERFACE_VERSION_PATCH (1)\n\n/// \\def TRANSMISSION_INTERFACE_VERSION_STR\n/// Defines TRANSMISSION_INTERFACE version string\n#define TRANSMISSION_INTERFACE_VERSION_STR \"6.10.1\"\n\n/// \\def TRANSMISSION_INTERFACE_VERSION_GTE\n/// Defines a macro to check whether the version of TRANSMISSION_INTERFACE is greater than or equal to\n/// the given version triple.\n#define TRANSMISSION_INTERFACE_VERSION_GTE(major, minor, patch) ( \\\n     (major < TRANSMISSION_INTERFACE_VERSION_MAJOR) ? true \\\n     : ((major > TRANSMISSION_INTERFACE_VERSION_MAJOR) ? false \\\n     : ((minor < TRANSMISSION_INTERFACE_VERSION_MINOR) ? true \\\n     : ((minor > TRANSMISSION_INTERFACE_VERSION_MINOR) ? false \\\n     : ((patch < TRANSMISSION_INTERFACE_VERSION_PATCH) ? true \\\n     : ((patch > TRANSMISSION_INTERFACE_VERSION_PATCH) ? false \\\n     : true))))))\n\n#endif  // TRANSMISSION_INTERFACE__VERSION_H_\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":transmission_interface",
+    ],
+    package_xml = "package.xml",
+    plugins = ["ros2_control_plugins.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@pluginlib//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@ros2_control_test_assets//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_differential_transmission",
+    srcs = ["test/differential_transmission_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_12",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/transmission_interface",
+        "_gen/include/transmission_interface/transmission_interface",
+        "include",
+        "include/transmission_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":transmission_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_differential_transmission_loader",
+    srcs = ["test/differential_transmission_loader_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_12",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/transmission_interface",
+        "_gen/include/transmission_interface/transmission_interface",
+        "include",
+        "include/transmission_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":transmission_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_four_bar_linkage_transmission",
+    srcs = ["test/four_bar_linkage_transmission_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_12",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/transmission_interface",
+        "_gen/include/transmission_interface/transmission_interface",
+        "include",
+        "include/transmission_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":transmission_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_four_bar_linkage_transmission_loader",
+    srcs = ["test/four_bar_linkage_transmission_loader_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_12",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/transmission_interface",
+        "_gen/include/transmission_interface/transmission_interface",
+        "include",
+        "include/transmission_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":transmission_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_simple_transmission",
+    srcs = ["test/simple_transmission_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_12",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/transmission_interface",
+        "_gen/include/transmission_interface/transmission_interface",
+        "include",
+        "include/transmission_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":transmission_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_simple_transmission_loader",
+    srcs = ["test/simple_transmission_loader_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_12",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/transmission_interface",
+        "_gen/include/transmission_interface/transmission_interface",
+        "include",
+        "include/transmission_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":transmission_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_utils",
+    srcs = ["test/utils_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_12",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/transmission_interface",
+        "_gen/include/transmission_interface/transmission_interface",
+        "include",
+        "include/transmission_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":transmission_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "hardware_interface",
+        "pluginlib",
+        "rclcpp",
+        "fmt",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_transmission_interface",
+    headers = [
+        ":gen_extra_12",
+    ] + glob(["include/**"]),
+    include_prefix = "",
+    libraries = [
+        ":transmission_interface",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@pluginlib//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@ros2_control_test_assets//:ament_package",
+    ],
+)

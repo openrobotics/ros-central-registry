@@ -1,0 +1,160 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+generate_parameter_library(
+    name = "prbt_ikfast_kinematics_parameters",
+    yaml_file = "src/prbt_ikfast_kinematics_parameters.yaml",
+)
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_eigen_kdl//:tf2_eigen_kdl": "@tf2_eigen_kdl//:tf2_eigen_kdl_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_kdl//:tf2_kdl": "@tf2_kdl//:tf2_kdl_library",
+}
+
+CC_DEPS = [
+    ":prbt_ikfast_kinematics_parameters",
+    "@generate_parameter_library//:generate_parameter_library",
+    "@moveit_core//:moveit_collision_detection_bullet_library",
+    "@moveit_core//:moveit_collision_detection_fcl_library",
+    "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_collision_distance_field_library",
+    "@moveit_core//:moveit_constraint_samplers_library",
+    "@moveit_core//:moveit_distance_field_library",
+    "@moveit_core//:moveit_dynamics_solver_library",
+    "@moveit_core//:moveit_exceptions_library",
+    "@moveit_core//:moveit_kinematic_constraints_library",
+    "@moveit_core//:moveit_kinematics_base_library",
+    "@moveit_core//:moveit_kinematics_metrics_library",
+    "@moveit_core//:moveit_planning_interface_library",
+    "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_smoothing_base_library",
+    "@moveit_core//:moveit_test_utils_library",
+    "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+]
+
+cc_library(
+    name = "prbt_manipulator_moveit_ikfast_plugin_library",
+    srcs = [":gen_moveit_resources_prbt_ikfast_manipulator_plugin_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":prbt_ikfast_kinematics_parameters_gen"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_resources_prbt_ikfast_manipulator_plugin",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "prbt_manipulator_moveit_ikfast_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":prbt_manipulator_moveit_ikfast_plugin_library"],
+)
+
+write_file(
+    name = "gen_moveit_resources_prbt_ikfast_manipulator_plugin_stub_cpp",
+    out = "_gen/moveit_resources_prbt_ikfast_manipulator_plugin_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":prbt_manipulator_moveit_ikfast_plugin"],
+    package_xml = "package.xml",
+    plugin_category = "moveit_core",
+    plugins = ["prbt_manipulator_moveit_ikfast_plugin_description.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@moveit_core//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_eigen_kdl//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_kdl//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "fmt",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "rsl",
+        "tcb_span",
+        "tl-expected",
+        "generate_parameter_library",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "moveit_resources_prbt_ikfast_manipulator_pluginTargets",
+    libraries = [":prbt_manipulator_moveit_ikfast_plugin"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@moveit_core//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_eigen_kdl//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_kdl//:ament_package",
+    ],
+)

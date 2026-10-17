@@ -1,0 +1,121 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# gz_plugin_vendor: vendors gz-plugin (version 4) from the Bazel Central
+# Registry module `gz-plugin` (shared library wrappers live in
+# @rosdistro//cc/gz) and installs it like colcon's ament_vendor() does
+# (opt/gz_plugin_vendor/...).
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc/gz:defs.bzl", "gz_install_files", "gz_install_headers", "gz_vendor_hooks")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES (gz-plugin::core / ::loader / ::register)
+
+[
+    (
+        alias(
+            name = name,
+            actual = "@rosdistro//cc/gz:" + target,
+        ),
+        alias(
+            name = name + "_library",
+            actual = "@rosdistro//cc/gz:" + target + "_library",
+        ),
+    )
+    for name, target in [
+        ("gz_plugin", "gz-plugin"),
+        ("gz_plugin_loader", "gz-plugin-loader"),
+    ]
+]
+
+# Header-only.
+alias(
+    name = "gz_plugin_register_library",
+    actual = "@rosdistro//cc/gz:gz-plugin-register_library",
+)
+
+### INSTALL LAYOUT (opt/gz_plugin_vendor/...)
+
+VENDOR = "gz_plugin_vendor"
+
+PREFIX = "opt/" + VENDOR
+
+gz_install_headers(
+    name = "install_headers",
+    prefix = PREFIX + "/include/gz/plugin4",
+    strip_prefixes = [
+        "core/include",
+        "loader/include",
+        "register/include",
+    ],
+    deps = [
+        ":gz_plugin_library",
+        ":gz_plugin_loader_library",
+        ":gz_plugin_register_library",
+    ],
+)
+
+gz_install_files(
+    name = "install_libraries",
+    srcs = [
+        ":gz_plugin",
+        ":gz_plugin_loader",
+    ],
+    flatten = True,
+    prefix = PREFIX + "/lib",
+)
+
+ENV_HOOKS = gz_vendor_hooks(
+    name = "install_hooks",
+    pythonpath = False,
+    vendor = VENDOR,
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    env_hooks = ENV_HOOKS,
+    install = [
+        ":install_headers",
+        ":install_hooks",
+        ":install_libraries",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_copyright//:ament_package",
+        "@ament_cmake_core//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_test//:ament_package",
+        "@ament_cmake_vendor_package//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@gz_cmake_vendor//:ament_package",
+        "@gz_tools_vendor//:ament_package",
+        "@gz_utils_vendor//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

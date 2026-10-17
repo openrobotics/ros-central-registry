@@ -1,0 +1,363 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@dwb_core//:dwb_core": "@dwb_core//:dwb_core_library",
+    "@nav2_costmap_2d//:nav2_costmap_2d_client": "@nav2_costmap_2d//:nav2_costmap_2d_client_library",
+    "@nav2_costmap_2d//:nav2_costmap_2d_core": "@nav2_costmap_2d//:nav2_costmap_2d_core_library",
+    "@nav2_util//:nav2_util_core": "@nav2_util//:nav2_util_core_library",
+    "@nav_2d_utils//:conversions": "@nav_2d_utils//:conversions_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+CC_DEPS = [
+    "@dwb_msgs//:cc",
+    "@geometry_msgs//:cc",
+    "@nav2_ros_common//:nav2_ros_common",
+    "@nav_2d_msgs//:cc",
+    "@rcl_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "standard_traj_generator_library",
+    srcs = [
+        "src/kinematic_parameters.cpp",
+        "src/limited_accel_generator.cpp",
+        "src/standard_traj_generator.cpp",
+        "src/xy_theta_iterator.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/dwb_plugins",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "standard_traj_generator",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":standard_traj_generator_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":standard_traj_generator"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":standard_traj_generator"],
+    package_xml = "package.xml",
+    plugin_category = "dwb_core",
+    plugins = ["plugins.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@backward_ros//:ament_package",
+        "@dwb_core//:ament_package",
+        "@dwb_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_costmap_2d//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@nav_2d_msgs//:ament_package",
+        "@nav_2d_utils//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "kinematic_parameters_test",
+    srcs = ["test/kinematic_parameters_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+    ],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/dwb_plugins",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":standard_traj_generator_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "speed_limit_test",
+    srcs = ["test/speed_limit_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+    ],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/dwb_plugins",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":standard_traj_generator_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "twist_gen_test",
+    srcs = ["test/twist_gen.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+    ],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/dwb_plugins",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":standard_traj_generator_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "vtest",
+    srcs = ["test/velocity_iterator_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+    ],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/dwb_plugins",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":standard_traj_generator_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "dwb_core",
+        "dwb_msgs",
+        "geometry_msgs",
+        "nav2_util",
+        "nav_2d_msgs",
+        "rclcpp",
+        "rcl_interfaces",
+        "nav2_ros_common",
+    ],
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":standard_traj_generator"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@backward_ros//:ament_package",
+        "@dwb_core//:ament_package",
+        "@dwb_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_costmap_2d//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@nav_2d_msgs//:ament_package",
+        "@nav_2d_utils//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+    ],
+)

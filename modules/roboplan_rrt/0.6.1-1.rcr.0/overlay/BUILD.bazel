@@ -1,0 +1,272 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@roboplan//:roboplan": "@roboplan//:roboplan_library",
+    "@roboplan_example_models//:roboplan_example_models": "@roboplan_example_models//:roboplan_example_models_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+CC_DEPS = [
+    ":_gen_textual_hdrs",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:tl_expected",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [
+    ],
+)
+
+cc_library(
+    name = "roboplan_rrt_library",
+    srcs = [
+        "src/constraints.cpp",
+        "src/rrt.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_nanobind_h",
+        ":gen_nanobind_stl_filesystem_h",
+        ":gen_nanobind_stl_string_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan_rrt",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "roboplan_rrt",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":roboplan_rrt_library"],
+)
+
+cc_library(
+    name = "_rrt_ext.cpython-314-x86_64-linux-gnu_library",
+    srcs = [":gen_apriltag_py_stub_c"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_nanobind_h",
+        ":gen_nanobind_stl_filesystem_h",
+        ":gen_nanobind_stl_string_h",
+    ],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan_rrt",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "ROBOPLAN_VERSION=\\\"0.6.1\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":roboplan_rrt_library"],
+)
+
+cc_shared_library(
+    name = "_rrt_ext.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "roboplan/rrt/_rrt_ext.so",
+    deps = [":_rrt_ext.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "roboplan",
+    srcs = glob(["bindings/python/roboplan/**/*.py"]),
+    imports = ["bindings/python"],
+    deps = [
+        "@roboplan//:roboplan_py",
+        "@roboplan_example_models//:roboplan",
+    ],
+)
+
+write_file(
+    name = "gen_apriltag_py_stub_c",
+    out = "_gen/apriltag_py_stub.c",
+    content = ["void PyInit_apriltag(void) {}\n"],
+)
+
+write_file(
+    name = "gen_nanobind_h",
+    out = "_gen/include/nanobind/nanobind.h",
+    content = ["#ifndef RCR_NANOBIND_H_\n#define RCR_NANOBIND_H_\n#include <utility>\nnamespace nanobind {\nnamespace literals {}\nstruct module_ {\n  template <typename V>\n  struct attr_proxy {\n    attr_proxy & operator=(const V &) { return *this; }\n  };\n  attr_proxy<const char *> attr(const char *) { return {}; }\n  template <typename F, typename... Extra>\n  module_ & def(const char *, F &&, const Extra &...) { return *this; }\n};\n}  // namespace nanobind\n#define NB_MODULE(name, var) \\\n  static void nb_init_##name(::nanobind::module_ &); \\\n  extern \"C\" __attribute__((visibility(\"default\"))) void * PyInit_##name() { \\\n    static ::nanobind::module_ m; \\\n    nb_init_##name(m); \\\n    return nullptr; \\\n  } \\\n  static void nb_init_##name(::nanobind::module_ & var)\n#endif\n"],
+)
+
+write_file(
+    name = "gen_nanobind_stl_filesystem_h",
+    out = "_gen/include/nanobind/stl/filesystem.h",
+    content = ["#include <filesystem>\n"],
+)
+
+write_file(
+    name = "gen_nanobind_stl_string_h",
+    out = "_gen/include/nanobind/stl/string.h",
+    content = ["#include <string>\n"],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "include/roboplan_rrt/constraints.hpp",
+    ],
+    prefix = "lib/cmake/roboplan_rrt",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_1",
+    files = [
+        "include/roboplan_rrt/graph.hpp",
+    ],
+    prefix = "lib/cmake/roboplan_rrt",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_2",
+    files = [
+        "include/roboplan_rrt/rrt.hpp",
+    ],
+    prefix = "lib/cmake/roboplan_rrt",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+        ":ament_files_2",
+    ],
+    libraries = [
+        ":roboplan_rrt",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_example_models//:ament_package",
+    ],
+)
+
+py_pytest(
+    name = "test_rrt",
+    srcs = ["bindings/test/test_rrt.py"],
+    data = [
+        ":_rrt_ext.cpython-314-x86_64-linux-gnu",
+        ":ament_index",
+    ],
+    deps = [
+        ":roboplan",
+        "@roboplan//:roboplan_py",
+        "@roboplan_example_models//:roboplan",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = glob(["include/**"]),
+    include_prefix = "",
+    libraries = [
+        ":roboplan_rrt",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":roboplan",
+        ":_rrt_ext.cpython-314-x86_64-linux-gnu",
+        "bindings/python/roboplan/rrt/_rrt_ext.pyi",
+        "bindings/python/roboplan/rrt/py.typed",
+    ],
+    python_strip_prefix = "bindings/python",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_example_models//:ament_package",
+    ],
+)

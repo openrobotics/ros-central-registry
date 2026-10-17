@@ -1,0 +1,419 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(
+    [
+        "include/**/*.h",
+        "include/**/*.hpp",
+    ],
+    allow_empty = True,
+)
+
+DEPENDENCIES = {
+    "@camera_calibration_parsers//:camera_calibration_parsers": "@camera_calibration_parsers//:camera_calibration_parsers_library",
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@image_geometry//:image_geometry": "@image_geometry//:image_geometry_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tracetools_image_pipeline//:tracetools_image_pipeline": "@tracetools_image_pipeline//:tracetools_image_pipeline_library",
+}
+
+cc_library(
+    name = "image_proc_library",
+    srcs = ["src/image_proc/processor.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@geometry_msgs//:cc",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "image_proc",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":image_proc_library"],
+    deps = [":image_proc_library"],
+)
+
+cc_library(
+    name = "rectify_library",
+    srcs = ["src/rectify.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + [
+        ":image_proc_library",
+        "@geometry_msgs//:cc",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "rectify",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":image_proc",
+    ],
+    exports_filter = [":rectify_library"],
+    deps = [":rectify_library"],
+)
+
+cc_library(
+    name = "debayer_library",
+    srcs = [
+        "src/debayer.cpp",
+        "src/edge_aware.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + [
+        ":image_proc_library",
+        "@geometry_msgs//:cc",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "debayer",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":image_proc",
+    ],
+    exports_filter = [":debayer_library"],
+    deps = [":debayer_library"],
+)
+
+cc_library(
+    name = "resize_library",
+    srcs = ["src/resize.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + [
+        ":image_proc_library",
+        "@geometry_msgs//:cc",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "resize",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":image_proc",
+    ],
+    exports_filter = [":resize_library"],
+    deps = [":resize_library"],
+)
+
+cc_library(
+    name = "crop_decimate_library",
+    srcs = ["src/crop_decimate.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + [
+        ":image_proc_library",
+        "@geometry_msgs//:cc",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "crop_decimate",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":image_proc",
+    ],
+    exports_filter = [":crop_decimate_library"],
+    deps = [":crop_decimate_library"],
+)
+
+cc_library(
+    name = "crop_non_zero_library",
+    srcs = ["src/crop_non_zero.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + [
+        ":image_proc_library",
+        "@geometry_msgs//:cc",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "crop_non_zero",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":image_proc",
+    ],
+    exports_filter = [":crop_non_zero_library"],
+    deps = [":crop_non_zero_library"],
+)
+
+write_file(
+    name = "aruco_compat_hdr",
+    out = "compat_include/opencv2/aruco.hpp",
+    content = [
+        "#ifndef OPENCV_ARUCO_COMPAT_HPP_",
+        "#define OPENCV_ARUCO_COMPAT_HPP_",
+        "#include <vector>",
+        "#include <opencv2/calib3d.hpp>",
+        "#include <opencv2/core.hpp>",
+        "#include <opencv2/objdetect/aruco_detector.hpp>",
+        "namespace cv {",
+        "namespace aruco {",
+        "inline void detectMarkers(",
+        "  InputArray image,",
+        "  const Ptr<Dictionary> & dictionary,",
+        "  OutputArrayOfArrays corners,",
+        "  OutputArray ids)",
+        "{",
+        "  ArucoDetector detector(*dictionary);",
+        "  detector.detectMarkers(image, corners, ids);",
+        "}",
+        "inline void estimatePoseSingleMarkers(",
+        "  InputArrayOfArrays _corners,",
+        "  float markerLength,",
+        "  InputArray _cameraMatrix,",
+        "  InputArray _distCoeffs,",
+        "  OutputArray _rvecs,",
+        "  OutputArray _tvecs)",
+        "{",
+        "  Mat markerObjPoints(4, 1, CV_32FC3);",
+        "  markerObjPoints.ptr<Vec3f>(0)[0] = Vec3f(-markerLength / 2.f, markerLength / 2.f, 0);",
+        "  markerObjPoints.ptr<Vec3f>(0)[1] = Vec3f(markerLength / 2.f, markerLength / 2.f, 0);",
+        "  markerObjPoints.ptr<Vec3f>(0)[2] = Vec3f(markerLength / 2.f, -markerLength / 2.f, 0);",
+        "  markerObjPoints.ptr<Vec3f>(0)[3] = Vec3f(-markerLength / 2.f, -markerLength / 2.f, 0);",
+        "  int nMarkers = static_cast<int>(_corners.total());",
+        "  _rvecs.create(nMarkers, 1, CV_64FC3);",
+        "  _tvecs.create(nMarkers, 1, CV_64FC3);",
+        "  Mat rvecs = _rvecs.getMat();",
+        "  Mat tvecs = _tvecs.getMat();",
+        "  for (int i = 0; i < nMarkers; i++) {",
+        "    solvePnP(",
+        "      markerObjPoints, _corners.getMat(i), _cameraMatrix, _distCoeffs,",
+        "      rvecs.at<Vec3d>(i), tvecs.at<Vec3d>(i));",
+        "  }",
+        "}",
+        "}  // namespace aruco",
+        "}  // namespace cv",
+        "#endif  // OPENCV_ARUCO_COMPAT_HPP_",
+        "",
+    ],
+)
+
+cc_library(
+    name = "track_marker_library",
+    srcs = [
+        "src/track_marker.cpp",
+        ":aruco_compat_hdr",
+    ],
+    hdrs = HEADERS,
+    includes = [
+        "compat_include",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + [
+        ":image_proc_library",
+        "@geometry_msgs//:cc",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "track_marker",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":image_proc",
+    ],
+    exports_filter = [":track_marker_library"],
+    deps = [":track_marker_library"],
+)
+
+### COMPONENTS
+
+COMPONENTS = [
+    ("rectify_node", ":rectify", "image_proc::RectifyNode"),
+    ("debayer_node", ":debayer", "image_proc::DebayerNode"),
+    ("resize_node", ":resize", "image_proc::ResizeNode"),
+    ("crop_decimate_node", ":crop_decimate", "image_proc::CropDecimateNode"),
+    ("crop_non_zero_node", ":crop_non_zero", "image_proc::CropNonZeroNode"),
+    ("track_marker_node", ":track_marker", "image_proc::TrackMarkerNode"),
+]
+
+[
+    rclcpp_components_register_node(
+        name = node_name,
+        component = comp,
+        node_name = node_name,
+        plugin = plugin,
+    )
+    for node_name, comp, plugin in COMPONENTS
+]
+
+### TRANSITIVE DYNAMIC DEPS
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":image_proc",
+        ":rectify",
+        ":debayer",
+        ":resize",
+        ":crop_decimate",
+        ":crop_non_zero",
+        ":track_marker",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+### TESTS
+
+cc_test(
+    name = "test_rectify",
+    srcs = ["test/test_rectify.cpp"],
+    data = [
+        "@image_transport//:ament_index_package",
+        "@image_transport//:ament_index_plugin",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":image_proc_library",
+        ":rectify_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_test(
+    name = "test_crop_non_zero",
+    srcs = ["test/test_crop_non_zero.cpp"],
+    data = [
+        "@image_transport//:ament_index_package",
+        "@image_transport//:ament_index_plugin",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":crop_non_zero_library",
+        ":image_proc_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_test(
+    name = "rostest",
+    srcs = ["test/rostest.cpp"],
+    data = [
+        "test/resources/calibration_file.ini",
+        "test/resources/logo.png",
+        "@image_transport//:ament_index_package",
+        "@image_transport//:ament_index_plugin",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = [
+        "_SRC_RESOURCES_DIR_PATH=\\\"../image_proc+/test/resources\\\"",
+    ],
+    deps = DEPENDENCIES.values() + [
+        ":image_proc_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+### PACKAGING
+
+ament_index(
+    name = "ament_index",
+    components = [":{}_record".format(node_name) for node_name, _, _ in COMPONENTS],
+    data = glob(["launch/**"]),
+    executables = [":{}".format(node_name) for node_name, _, _ in COMPONENTS],
+    libraries = [
+        ":image_proc",
+        ":rectify",
+        ":debayer",
+        ":resize",
+        ":crop_decimate",
+        ":crop_non_zero",
+        ":track_marker",
+    ],
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_targets = False,
+    components = [":{}_record".format(node_name) for node_name, _, _ in COMPONENTS],
+    data = glob(["launch/**"]),
+    executables = [":{}".format(node_name) for node_name, _, _ in COMPONENTS],
+    headers = HEADERS,
+    libraries = [
+        ":image_proc",
+        ":rectify",
+        ":debayer",
+        ":resize",
+        ":crop_decimate",
+        ":crop_non_zero",
+        ":track_marker",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@camera_calibration_parsers//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@image_geometry//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tracetools_image_pipeline//:ament_package",
+    ],
+)

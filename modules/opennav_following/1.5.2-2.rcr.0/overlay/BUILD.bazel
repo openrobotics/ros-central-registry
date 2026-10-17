@@ -1,0 +1,311 @@
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@nav2_util//:nav2_util_core": "@nav2_util//:nav2_util_core_library",
+    "@opennav_docking//:controller": "@opennav_docking//:controller_library",
+    "@opennav_docking//:pose_filter": "@opennav_docking//:pose_filter_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@angles//:angles",
+    "@geometry_msgs//:cc",
+    "@nav2_msgs//:cc",
+    "@nav2_ros_common//:nav2_ros_common",
+    "@opennav_docking_core//:opennav_docking_core",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "opennav_following_core_library",
+    srcs = [
+        "src/following_server.cpp",
+        "src/parameter_handler.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        "include",
+        "include/opennav_following",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "opennav_following_core",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":opennav_following_core_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "opennav_following_core_components",
+    component = ":opennav_following_core",
+    plugins = ["opennav_following::FollowingServer"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":opennav_following_core"],
+)
+
+cc_binary(
+    name = "opennav_following",
+    srcs = ["src/main.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/opennav_following",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":opennav_following_core_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":opennav_following_core_components"],
+    lib_data = [":opennav_following"],
+    libraries = [":opennav_following_core"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_msgs//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@opennav_docking//:ament_package",
+        "@opennav_docking_core//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_following_server_unit",
+    srcs = ["test/test_following_server_unit.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/opennav_following",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "BTCPP_LIBRARY_VERSION=\\\"4.10.0\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":opennav_following_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_test(
+    name = "test_following_server_topic",
+    src = "test/test_following_server.py",
+    data = [
+        ":ament_index",
+        ":opennav_following",
+    ],
+    deps = [
+        "@angles//:angles_py",
+        "@geometry_msgs//:py",
+        "@nav2_common",
+        "@nav2_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "test_following_server_frame",
+    src = "test/test_following_server.py",
+    data = [
+        ":ament_index",
+        ":opennav_following",
+    ],
+    deps = [
+        "@angles//:angles_py",
+        "@geometry_msgs//:py",
+        "@nav2_common",
+        "@nav2_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "test_following_server_skip_pose",
+    src = "test/test_following_server.py",
+    data = [
+        ":ament_index",
+        ":opennav_following",
+    ],
+    deps = [
+        "@angles//:angles_py",
+        "@geometry_msgs//:py",
+        "@nav2_common",
+        "@nav2_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "test_following_server_search",
+    src = "test/test_following_server.py",
+    data = [
+        ":ament_index",
+        ":opennav_following",
+    ],
+    deps = [
+        "@angles//:angles_py",
+        "@geometry_msgs//:py",
+        "@nav2_common",
+        "@nav2_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "geometry_msgs",
+        "nav2_msgs",
+        "nav2_ros_common",
+        "nav2_util",
+        "opennav_docking",
+        "opennav_docking_core",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "tf2_ros",
+    ],
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":opennav_following_core"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_msgs//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@opennav_docking//:ament_package",
+        "@opennav_docking_core//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)

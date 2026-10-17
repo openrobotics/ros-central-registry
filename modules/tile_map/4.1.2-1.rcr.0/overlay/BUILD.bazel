@@ -1,0 +1,379 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@mapviz//:mapviz_core": "@mapviz//:mapviz_core_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@swri_math_util//:swri_math_util": "@swri_math_util//:swri_math_util_library",
+    "@swri_transform_util//:swri_transform_util": "@swri_transform_util//:swri_transform_util_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+}
+
+CC_DEPS = [
+    ":_gen_textual_hdrs",
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rules_qt//:qt_core",
+    "@rules_qt//:qt_gui",
+    "@rules_qt//:qt_svg",
+    "@rules_qt//:qt_widgets",
+]
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [
+        ":gen_qtcore_h",
+        ":gen_qtnetwork_h",
+        ":gen_qnetworkaccessmanager_h",
+        ":gen_qnetworkrequest_h",
+        ":gen_qnetworkreply_h",
+        ":gen_qnetworkdiskcache_h",
+    ],
+)
+
+qt_cc_library(
+    name = "tile_map_library",
+    srcs = [
+        "src/bing_source.cpp",
+        "src/image_cache.cpp",
+        "src/stadia_source.cpp",
+        "src/texture_cache.cpp",
+        "src/tile_map_view.cpp",
+        "src/tile_source.cpp",
+        "src/wmts_source.cpp",
+    ],
+    hdrs = [
+        "include/tile_map/bing_source.hpp",
+        "include/tile_map/image_cache.hpp",
+        "include/tile_map/stadia_source.hpp",
+        "include/tile_map/tile_source.hpp",
+        "include/tile_map/wmts_source.hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/tile_map",
+    ],
+    local_defines = ros_local_defines() + [
+        "TILE_MAP_HAVE_TRANSFORM_EQUALITY",
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    normal_hdrs = [
+        "include/tile_map/texture_cache.hpp",
+        "include/tile_map/tile_map_view.hpp",
+        "include/tile_map/tile_map_plugin.hpp",
+        ":gen_rcr_qt_libc_shim_hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "tile_map",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":tile_map_library",
+        "//:__subpackages__",
+    ],
+    deps = [":tile_map_library"],
+)
+
+qt_cc_library(
+    name = "tile_map_plugin_library",
+    srcs = ["src/tile_map_plugin.cpp"],
+    hdrs = ["include/tile_map/tile_map_plugin.hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/tile_map",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    normal_hdrs = [
+        "include/tile_map/texture_cache.hpp",
+        "include/tile_map/tile_map_view.hpp",
+        "include/tile_map/bing_source.hpp",
+        "include/tile_map/image_cache.hpp",
+        "include/tile_map/stadia_source.hpp",
+        "include/tile_map/tile_source.hpp",
+        "include/tile_map/wmts_source.hpp",
+        ":gen_rcr_qt_libc_shim_hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":tile_map_library"],
+)
+
+cc_shared_library(
+    name = "tile_map_plugin",
+    dynamic_deps = DEPENDENCIES.keys() + [":tile_map"],
+    exports_filter = [
+        ":tile_map_plugin_library",
+        "//:__subpackages__",
+    ],
+    deps = [":tile_map_plugin_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_qtcore_h",
+    out = "_gen/include/QtCore",
+    content = ["#ifndef RCR_QTCORE_H_\n#define RCR_QTCORE_H_\n#include <QDir>\n#include <QIODevice>\n#include <QMetaType>\n#include <QObject>\n#include <QStandardPaths>\n#include <QString>\n#include <QUrl>\n#include <QVariant>\n#endif\n"],
+)
+
+write_file(
+    name = "gen_qtnetwork_h",
+    out = "_gen/include/QtNetwork",
+    content = ["#ifndef RCR_QTNETWORK_H_\n#define RCR_QTNETWORK_H_\n#include <QtCore>\n#include <QByteArray>\n#include <map>\nclass QAbstractNetworkCache : public QObject {\n public:\n  explicit QAbstractNetworkCache(QObject * parent = nullptr) : QObject(parent) {}\n};\nclass QNetworkDiskCache : public QAbstractNetworkCache {\n public:\n  explicit QNetworkDiskCache(QObject * parent = nullptr) : QAbstractNetworkCache(parent) {}\n  void setCacheDirectory(const QString &) {}\n};\nclass QNetworkRequest {\n public:\n  enum KnownHeaders { UserAgentHeader = 0 };\n  enum Attribute { CacheLoadControlAttribute = 0, SourceIsFromCacheAttribute = 1, User = 1000 };\n  enum CacheLoadControl { AlwaysNetwork = 0, PreferNetwork = 1, PreferCache = 2, AlwaysCache = 3 };\n  QNetworkRequest() = default;\n  explicit QNetworkRequest(const QUrl & url) : url_(url) {}\n  QUrl url() const { return url_; }\n  void setUrl(const QUrl & url) { url_ = url; }\n  void setHeader(KnownHeaders, const QVariant &) {}\n  void setRawHeader(const QByteArray &, const QByteArray &) {}\n  void setAttribute(Attribute code, const QVariant & value) { attrs_[static_cast<int>(code)] = value; }\n  QVariant attribute(Attribute code) const {\n    auto it = attrs_.find(static_cast<int>(code));\n    return it != attrs_.end() ? it->second : QVariant();\n  }\n private:\n  QUrl url_;\n  std::map<int, QVariant> attrs_;\n};\nclass QNetworkReply : public QIODevice {\n public:\n  enum NetworkError { NoError = 0, UnknownNetworkError = 99 };\n  explicit QNetworkReply(QObject * parent = nullptr) : QIODevice(parent) {}\n  int qt_metacall(QMetaObject::Call c, int id, void ** a) override { return QIODevice::qt_metacall(c, id, a); }\n  QNetworkRequest request() const { return req_; }\n  QUrl url() const { return req_.url(); }\n  NetworkError error() const { return NoError; }\n  QVariant attribute(QNetworkRequest::Attribute code) const { return req_.attribute(code); }\n protected:\n  qint64 readData(char *, qint64) override { return -1; }\n  qint64 writeData(const char *, qint64) override { return -1; }\n private:\n  QNetworkRequest req_;\n};\nclass QNetworkAccessManager : public QObject {\n public:\n  explicit QNetworkAccessManager(QObject * parent = nullptr) : QObject(parent) {}\n  int qt_metacall(QMetaObject::Call c, int id, void ** a) override { return QObject::qt_metacall(c, id, a); }\n  void setCache(QAbstractNetworkCache *) {}\n  QNetworkReply * get(const QNetworkRequest &) { return nullptr; }\n  void finished(QNetworkReply *) {}\n};\n#endif\n"],
+)
+
+write_file(
+    name = "gen_qnetworkaccessmanager_h",
+    out = "_gen/include/QNetworkAccessManager",
+    content = ["#pragma once\n#include <QtNetwork>\n"],
+)
+
+write_file(
+    name = "gen_qnetworkrequest_h",
+    out = "_gen/include/QNetworkRequest",
+    content = ["#pragma once\n#include <QtNetwork>\n"],
+)
+
+write_file(
+    name = "gen_qnetworkreply_h",
+    out = "_gen/include/QNetworkReply",
+    content = ["#pragma once\n#include <QtNetwork>\n"],
+)
+
+write_file(
+    name = "gen_qnetworkdiskcache_h",
+    out = "_gen/include/QNetworkDiskCache",
+    content = ["#pragma once\n#include <QtNetwork>\n"],
+)
+
+write_file(
+    name = "gen_rcr_qt_libc_shim_hpp",
+    out = "_gen/include/rcr_qt_libc_shim.hpp",
+    content = ["#pragma once\n#ifdef __cplusplus\n#include <QByteArray>\n#include <QJsonObject>\n#include <QJsonValue>\n#include <QObject>\n#include <QString>\n#include <QTimer>\n#include <chrono>\n#include <initializer_list>\n#include <string>\n#include <utility>\ninline QByteArray QByteArray::fromStdString(const std::string &s) { return QByteArray(s.data(), s.size()); }\ninline std::string QByteArray::toStdString() const { return std::string(constData(), size()); }\ninline QJsonObject::QJsonObject(std::initializer_list<std::pair<QString, QJsonValue>> args) : QJsonObject() {\n  for (const auto &arg : args) { insert(arg.first, arg.second); }\n}\nextern \"C\" void _ZN6QTimer14singleShotImplENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEEN2Qt9TimerTypeEPK7QObjectPN9QtPrivate15QSlotObjectBaseE(\n    long ns, Qt::TimerType timerType, const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj);\ninline void QTimer::singleShotImpl(std::chrono::nanoseconds ns, Qt::TimerType timerType, const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj) {\n  _ZN6QTimer14singleShotImplENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEEN2Qt9TimerTypeEPK7QObjectPN9QtPrivate15QSlotObjectBaseE(\n      ns.count(), timerType, receiver, slotObj);\n}\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@mapviz//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@swri_transform_util//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_tile_map_plugin",
+    srcs = ["test/test_tile_map_plugin.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_qt_libc_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":tile_map",
+        ":tile_map_plugin",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/tile_map",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tile_map_library",
+        ":tile_map_plugin_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_tile_map_sources",
+    srcs = ["test/test_tile_sources.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_qt_libc_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":tile_map",
+        ":tile_map_plugin",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/tile_map",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tile_map_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_tile_map_view",
+    srcs = ["test/test_tile_map_view.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_qt_libc_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":tile_map",
+        ":tile_map_plugin",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/tile_map",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":tile_map_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install_package_xml = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@mapviz//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@swri_transform_util//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)

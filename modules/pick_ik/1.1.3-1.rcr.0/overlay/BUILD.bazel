@@ -1,0 +1,159 @@
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+generate_parameter_library(
+    name = "pick_ik_parameters",
+    yaml_file = "src/pick_ik_parameters.yaml",
+)
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rsl//:rsl": "@rsl//:rsl_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_kdl//:tf2_kdl": "@tf2_kdl//:tf2_kdl_library",
+}
+
+CC_DEPS = [
+    ":pick_ik_parameters",
+    "@generate_parameter_library//:generate_parameter_library",
+    "@moveit_core//:moveit_exceptions_library",
+    "@moveit_core//:moveit_kinematics_base_library",
+    "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_test_utils_library",
+    "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@rosdistro//cc:tl_expected",
+]
+
+cc_library(
+    name = "pick_ik_plugin_library",
+    srcs = [
+        "src/fk_moveit.cpp",
+        "src/forward_kinematics.cpp",
+        "src/goal.cpp",
+        "src/ik_gradient.cpp",
+        "src/ik_memetic.cpp",
+        "src/pick_ik_plugin.cpp",
+        "src/robot.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":pick_ik_parameters_gen"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/pick_ik",
+        "include",
+        "include/pick_ik",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "pick_ik_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":pick_ik_plugin_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":pick_ik_plugin"],
+    package_xml = "package.xml",
+    plugin_category = "moveit_core",
+    plugins = ["pick_ik_kinematics_description.xml"],
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_resources_panda_moveit_config//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rsl//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_kdl//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "fmt",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "rsl",
+        "tcb_span",
+        "tl-expected",
+        "fmt",
+        "moveit_core",
+        "pluginlib",
+        "range-v3",
+        "rclcpp",
+        "rsl",
+        "tf2_geometry_msgs",
+        "tf2_kdl",
+        "tl-expected",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_pick_ik",
+    headers = glob(["include/**"]),
+    libraries = [":pick_ik_plugin"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_resources_panda_moveit_config//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rsl//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_kdl//:ament_package",
+    ],
+)

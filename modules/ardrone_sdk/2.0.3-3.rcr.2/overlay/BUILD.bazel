@@ -1,0 +1,154 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+]
+
+cc_library(
+    name = "ardrone_sdk_lib_library",
+    srcs = [":gen_ardrone_sdk_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "Includes",
+        "JumpingSumoSample",
+        "Sources",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["HAS_MMSG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ardrone_sdk_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":ardrone_sdk_lib_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ardrone_sdk_lib"],
+)
+
+cc_binary(
+    name = "_bin/JumpingSumoSample",
+    srcs = [":gen_ardrone_sdk_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "Includes",
+        "JumpingSumoSample",
+        "Sources",
+        "include",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ardrone_sdk_lib_library"],
+)
+
+write_file(
+    name = "gen_ardrone_sdk_stub_cpp",
+    out = "_gen/ardrone_sdk_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_0",
+    srcs = ["LICENSE.md"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":ardrone_sdk_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_ardrone_sdk",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install = [
+        ":pkg_files_extra_0",
+    ],
+    libraries = [
+        ":ardrone_sdk_lib",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        ":_bin/JumpingSumoSample",
+    ],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+    ],
+)

@@ -1,0 +1,353 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@off_highway_can//:off_highway_can": "@off_highway_can//:off_highway_can_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+CC_DEPS = [
+    "@diagnostic_msgs//:cc",
+    "@geometry_msgs//:cc",
+    "@std_msgs//:cc",
+    "@can_msgs//:cc",
+    "@off_highway_uss_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "off_highway_uss_library",
+    srcs = [
+        "src/interpolate_line.cpp",
+        "src/receiver.cpp",
+        "src/sender.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/off_highway_uss",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "off_highway_uss",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":off_highway_uss_library"],
+)
+
+rclcpp_components_register_node(
+    name = "receiver",
+    component = ":off_highway_uss",
+    node_name = "receiver",
+    plugin = "off_highway_uss::Receiver",
+)
+
+rclcpp_components_register_node(
+    name = "sender",
+    component = ":off_highway_uss",
+    node_name = "sender",
+    plugin = "off_highway_uss::Receiver",
+)
+
+rclcpp_components_register_nodes(
+    name = "off_highway_uss_components",
+    component = ":off_highway_uss",
+    plugins = ["off_highway_uss::Sender"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":off_highway_uss"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":receiver_record",
+        ":sender_record",
+        ":off_highway_uss_components",
+    ],
+    data = [
+        "config/receiver_params.yaml",
+        "config/sender_params.yaml",
+        "launch/receiver_launch.py",
+        "launch/sender_launch.py",
+    ],
+    lib_data = [
+        ":receiver",
+        ":sender",
+    ],
+    libraries = [":off_highway_uss"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@can_msgs//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@off_highway_can//:ament_package",
+        "@off_highway_uss_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_receiver_echos",
+    srcs = ["test/test_receiver_echos.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/off_highway_uss",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":off_highway_uss_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_receiver_objects",
+    srcs = ["test/test_receiver_objects.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/off_highway_uss",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":off_highway_uss_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_receiver_range",
+    srcs = ["test/test_receiver_range.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/off_highway_uss",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":off_highway_uss_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_ros_message_conversion",
+    srcs = ["test/test_ros_message_conversion.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/off_highway_uss",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":off_highway_uss_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_sender",
+    srcs = ["test/test_sender.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/off_highway_uss",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":off_highway_uss_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_uss_receiver_information",
+    srcs = ["test/test_receiver_information.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/off_highway_uss",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":off_highway_uss_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "rclcpp_components",
+        "sensor_msgs",
+        "can_msgs",
+        "off_highway_can",
+        "off_highway_uss_msgs",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_off_highway_uss",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":off_highway_uss"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@can_msgs//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@off_highway_can//:ament_package",
+        "@off_highway_uss_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

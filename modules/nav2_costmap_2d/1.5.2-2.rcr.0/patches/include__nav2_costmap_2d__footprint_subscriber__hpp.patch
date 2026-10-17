@@ -1,0 +1,37 @@
+--- a/include/nav2_costmap_2d/footprint_subscriber.hpp
++++ b/include/nav2_costmap_2d/footprint_subscriber.hpp
+@@ -16,8 +16,34 @@
+ #define NAV2_COSTMAP_2D__FOOTPRINT_SUBSCRIBER_HPP_
+ 
+ #include <atomic>
++#include <memory>
+ #include <string>
+ #include <vector>
++
++#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)
++#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_
++namespace std {
++template <class T>
++struct atomic<shared_ptr<T>> {
++  shared_ptr<T> ptr_;
++  atomic() noexcept = default;
++  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}
++  atomic(const atomic&) = delete;
++  void operator=(const atomic&) = delete;
++  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {
++    atomic_store_explicit(&ptr_, std::move(desired), order);
++  }
++  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {
++    return atomic_load_explicit(&ptr_, order);
++  }
++  operator shared_ptr<T>() const noexcept { return load(); }
++  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {
++    return atomic_exchange_explicit(&ptr_, std::move(desired), order);
++  }
++  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }
++};
++}  // namespace std
++#endif
+ 
+ #include "rclcpp/rclcpp.hpp"
+ #include "nav2_costmap_2d/footprint.hpp"

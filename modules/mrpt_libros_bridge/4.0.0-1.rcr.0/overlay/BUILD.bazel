@@ -1,0 +1,227 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+}
+
+CC_DEPS = [
+    "@tf2_msgs//:cc",
+    "@geometry_msgs//:cc",
+    "@gps_msgs//:cc",
+    "@mrpt_maps//:mrpt_maps_library",
+    "@mrpt_obs//:mrpt_obs_library",
+    "@nav_msgs//:cc",
+    "@rosdistro//cc:eigen",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@stereo_msgs//:cc",
+]
+
+cc_library(
+    name = "mrpt_libros_bridge_library",
+    srcs = [":gen_mrpt_libros_bridge_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+    ],
+    local_defines = ros_local_defines() + [
+        "CV_BRIDGE_VERSION=0x000",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_libros_bridge",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":mrpt_libros_bridge_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_mrpt_libros_bridge_stub_cpp",
+    out = "_gen/mrpt_libros_bridge_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_0",
+    out = "_gen/lib/cmake/mrpt-ros2bridge/mrpt-ros2bridge-config-version.cmake",
+    content = ["# This is a basic version file for the Config-mode of find_package().\n# It is used by write_basic_package_version_file() as input file for configure_file()\n# to create a version-file which can be installed along a config.cmake file.\n#\n# The created file sets PACKAGE_VERSION_EXACT if the current version string and\n# the requested version string are exactly the same and it sets\n# PACKAGE_VERSION_COMPATIBLE if the current version is >= requested version,\n# but only if the requested major version is the same as the current one.\n# The variable CVF_VERSION must be set before calling configure_file().\n\n\nset(PACKAGE_VERSION \"4.0.0\")\n\nif(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n  set(PACKAGE_VERSION_COMPATIBLE FALSE)\nelse()\n\n  if(\"4.0.0\" MATCHES \"^([0-9]+)\\\\.\")\n    set(CVF_VERSION_MAJOR \"${CMAKE_MATCH_1}\")\n    if(NOT CVF_VERSION_MAJOR VERSION_EQUAL 0)\n      string(REGEX REPLACE \"^0+\" \"\" CVF_VERSION_MAJOR \"${CVF_VERSION_MAJOR}\")\n    endif()\n  else()\n    set(CVF_VERSION_MAJOR \"4.0.0\")\n  endif()\n\n  if(PACKAGE_FIND_VERSION_RANGE)\n    # both endpoints of the range must have the expected major version\n    math (EXPR CVF_VERSION_MAJOR_NEXT \"${CVF_VERSION_MAJOR} + 1\")\n    if (NOT PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        OR ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX_MAJOR STREQUAL CVF_VERSION_MAJOR)\n          OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND NOT PACKAGE_FIND_VERSION_MAX VERSION_LESS_EQUAL CVF_VERSION_MAJOR_NEXT)))\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    elseif(PACKAGE_FIND_VERSION_MIN_MAJOR STREQUAL CVF_VERSION_MAJOR\n        AND ((PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"INCLUDE\" AND PACKAGE_VERSION VERSION_LESS_EQUAL PACKAGE_FIND_VERSION_MAX)\n        OR (PACKAGE_FIND_VERSION_RANGE_MAX STREQUAL \"EXCLUDE\" AND PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION_MAX)))\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n  else()\n    if(PACKAGE_FIND_VERSION_MAJOR STREQUAL CVF_VERSION_MAJOR)\n      set(PACKAGE_VERSION_COMPATIBLE TRUE)\n    else()\n      set(PACKAGE_VERSION_COMPATIBLE FALSE)\n    endif()\n\n    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)\n      set(PACKAGE_VERSION_EXACT TRUE)\n    endif()\n  endif()\nendif()\n\n\n# if the installed or the using project don't have CMAKE_SIZEOF_VOID_P set, ignore it:\nif(\"${CMAKE_SIZEOF_VOID_P}\" STREQUAL \"\" OR \"8\" STREQUAL \"\")\n  return()\nendif()\n\n# check that the installed version has the same 32/64bit-ness as the one which is currently searching:\nif(NOT CMAKE_SIZEOF_VOID_P STREQUAL \"8\")\n  math(EXPR installedBits \"8 * 8\")\n  set(PACKAGE_VERSION \"${PACKAGE_VERSION} (${installedBits}bit)\")\n  set(PACKAGE_VERSION_UNSUITABLE TRUE)\nendif()\n"],
+)
+
+write_file(
+    name = "gen_extra_1",
+    out = "_gen/lib/cmake/mrpt-ros2bridge/mrpt-ros2bridge-config.cmake",
+    content = ["\n####### Expanded from @PACKAGE_INIT@ by configure_package_config_file() #######\n####### Any changes to this file will be overwritten by the next CMake run ####\n####### The input file was mrpt-ros2bridge-config.cmake.in                            ########\n\nget_filename_component(PACKAGE_PREFIX_DIR \"${CMAKE_CURRENT_LIST_DIR}/../../../\" ABSOLUTE)\n\nmacro(set_and_check _var _file)\n  set(${_var} \"${_file}\")\n  if(NOT EXISTS \"${_file}\")\n    message(FATAL_ERROR \"File or directory ${_file} referenced by variable ${_var} does not exist !\")\n  endif()\nendmacro()\n\nmacro(check_required_components _NAME)\n  foreach(comp ${${_NAME}_FIND_COMPONENTS})\n    if(NOT ${_NAME}_${comp}_FOUND)\n      if(${_NAME}_FIND_REQUIRED_${comp})\n        set(${_NAME}_FOUND FALSE)\n      endif()\n    endif()\n  endforeach()\nendmacro()\n\n####################################################################################\n\nfind_package(mrpt_libros_bridge REQUIRED)\n\n# Provide an alias target so consumers can do: target_link_libraries(... mrpt::ros2bridge)\nif(NOT TARGET mrpt::ros2bridge)\n  add_library(mrpt::ros2bridge ALIAS mrpt_libros_bridge::mrpt_libros_bridge)\nendif()\n\n# Make sure the MRPT dependencies of our public headers are also found:\ninclude(CMakeFindDependencyMacro)\n\nfind_dependency(mrpt_maps 3.0 REQUIRED)\nfind_dependency(mrpt_obs 3.0 REQUIRED)\n"],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        ":gen_extra_0",
+    ],
+    prefix = "lib/cmake/mrpt-ros2bridge",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_1",
+    files = [
+        ":gen_extra_1",
+    ],
+    prefix = "lib/cmake/mrpt-ros2bridge",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+    ],
+    libraries = [
+        ":mrpt_libros_bridge",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@mrpt_maps//:ament_package",
+        "@mrpt_obs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@stereo_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_mrpt_libros_bridge",
+    srcs = [":gen_mrpt_libros_bridge_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mrpt_libros_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "geometry_msgs",
+        "sensor_msgs",
+        "gps_msgs",
+        "nav_msgs",
+        "stereo_msgs",
+        "std_msgs",
+        "tf2",
+        "tf2_geometry_msgs",
+        "rosbag2_cpp",
+        "mrpt_maps",
+        "mrpt_obs",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_mrpt_libros_bridge",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":mrpt_libros_bridge",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@mrpt_maps//:ament_package",
+        "@mrpt_obs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@stereo_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+    ],
+)

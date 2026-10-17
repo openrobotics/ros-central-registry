@@ -1,0 +1,230 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@lusb//:lusb": "@lusb//:lusb_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+CC_DEPS = [
+    "@rcl_interfaces//:cc",
+    "@can_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "dataspeed_can_usb_library",
+    srcs = [
+        "src/CanDriver.cpp",
+        "src/CanUsb.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/dataspeed_can_usb",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "dataspeed_can_usb",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":dataspeed_can_usb_library"],
+)
+
+rclcpp_components_register_node(
+    name = "can_node",
+    component = ":dataspeed_can_usb",
+    node_name = "can_node",
+    plugin = "dataspeed_can_usb::CanDriver",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":dataspeed_can_usb"],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "scripts/fw_update.bash",
+    ],
+    prefix = "lib/dataspeed_can_usb/scripts",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":can_node_record"],
+    data = [
+        "firmware/UsbCan_EUCAN_v10.4.0.hex",
+        "launch/example.launch.xml",
+        "udev/90-DataspeedUsbCanToolRules.rules",
+        ":ament_files_0",
+    ],
+    lib_data = [
+        ":can_node",
+    ],
+    libraries = [
+        ":dataspeed_can_usb",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@can_msgs//:ament_package",
+        "@lusb//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "dataspeed_can_usb_test_mac_addr",
+    srcs = ["tests/test_mac_addr.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/dataspeed_can_usb",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":dataspeed_can_usb_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "dataspeed_can_usb_test_module_version",
+    srcs = ["tests/test_module_version.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/dataspeed_can_usb",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":dataspeed_can_usb_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_binary(
+    name = "example.launch.xml",
+    src = "launch/example.launch.xml",
+    data = [
+        ":ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":dataspeed_can_usb",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@can_msgs//:ament_package",
+        "@lusb//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

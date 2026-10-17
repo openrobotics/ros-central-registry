@@ -1,0 +1,791 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@camera_info_manager//:camera_info_manager": "@camera_info_manager//:camera_info_manager_library",
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@depthai//:depthai-core": "@depthai//:depthai-core_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:static_transform_broadcaster_node": "@tf2_ros//:static_transform_broadcaster_node_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@composition_interfaces//:cc",
+    "@depthai//:_gen_textual_hdrs",
+    "@depthai_ros_msgs//:cc",
+    "@ffmpeg_image_transport_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:nlohmann_json",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@stereo_msgs//:cc",
+    "@vision_msgs//:cc",
+]
+
+cc_library(
+    name = "depthai_bridge_library",
+    srcs = [
+        "src/BaseConverter.cpp",
+        "src/DisparityConverter.cpp",
+        "src/GridMapConverter.cpp",
+        "src/ImageConverter.cpp",
+        "src/ImgDetectionConverter.cpp",
+        "src/ImuConverter.cpp",
+        "src/PointCloudConverter.cpp",
+        "src/SpatialDetectionConverter.cpp",
+        "src/TFPublisher.cpp",
+        "src/TrackDetectionConverter.cpp",
+        "src/TrackSpatialDetectionConverter.cpp",
+        "src/TrackedFeaturesConverter.cpp",
+        "src/TransformDataConverter.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "depthai_bridge",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":depthai_bridge_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":depthai_bridge"],
+)
+
+write_file(
+    name = "gen_cmake_0",
+    out = "_gen/share/depthai_bridge/cmake/depthai_bridgeTargets-noconfig.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"depthai_bridge\" for configuration \"\"\nset_property(TARGET depthai_bridge APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)\nset_target_properties(depthai_bridge PROPERTIES\n  IMPORTED_LOCATION_NOCONFIG \"${_IMPORT_PREFIX}/lib/libdepthai_bridge.so\"\n  IMPORTED_SONAME_NOCONFIG \"libdepthai_bridge.so\"\n  )\n\nlist(APPEND _cmake_import_check_targets depthai_bridge )\nlist(APPEND _cmake_import_check_files_for_depthai_bridge \"${_IMPORT_PREFIX}/lib/libdepthai_bridge.so\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_cmake_1",
+    out = "_gen/share/depthai_bridge/cmake/depthai_bridgeTargets.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"2.8.12\")\n   message(FATAL_ERROR \"CMake >= 2.8.12 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 2.8.12...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS depthai_bridge)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target depthai_bridge\nadd_library(depthai_bridge SHARED IMPORTED)\n\nset_target_properties(depthai_bridge PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/depthai_bridge\"\n  INTERFACE_LINK_LIBRARIES \"composition_interfaces::composition_interfaces__rosidl_generator_c;composition_interfaces::composition_interfaces__rosidl_typesupport_fastrtps_c;composition_interfaces::composition_interfaces__rosidl_typesupport_introspection_c;composition_interfaces::composition_interfaces__rosidl_typesupport_c;composition_interfaces::composition_interfaces__rosidl_generator_cpp;composition_interfaces::composition_interfaces__rosidl_typesupport_fastrtps_cpp;composition_interfaces::composition_interfaces__rosidl_typesupport_introspection_cpp;composition_interfaces::composition_interfaces__rosidl_typesupport_cpp;composition_interfaces::composition_interfaces__rosidl_generator_py;composition_interfaces::composition_interfaces__rosidl_generator_py;depthai_ros_msgs::depthai_ros_msgs__rosidl_generator_c;depthai_ros_msgs::depthai_ros_msgs__rosidl_typesupport_fastrtps_c;depthai_ros_msgs::depthai_ros_msgs__rosidl_generator_cpp;depthai_ros_msgs::depthai_ros_msgs__rosidl_typesupport_fastrtps_cpp;depthai_ros_msgs::depthai_ros_msgs__rosidl_typesupport_introspection_c;depthai_ros_msgs::depthai_ros_msgs__rosidl_typesupport_c;depthai_ros_msgs::depthai_ros_msgs__rosidl_typesupport_introspection_cpp;depthai_ros_msgs::depthai_ros_msgs__rosidl_typesupport_cpp;depthai_ros_msgs::depthai_ros_msgs__rosidl_generator_py;depthai_ros_msgs::depthai_ros_msgs__rosidl_generator_py;ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs__rosidl_generator_c;ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs__rosidl_typesupport_fastrtps_c;ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs__rosidl_generator_cpp;ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs__rosidl_typesupport_fastrtps_cpp;ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs__rosidl_typesupport_introspection_c;ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs__rosidl_typesupport_c;ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs__rosidl_typesupport_introspection_cpp;ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs__rosidl_typesupport_cpp;ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs__rosidl_generator_py;ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs__rosidl_generator_py;nav_msgs::nav_msgs__rosidl_generator_c;nav_msgs::nav_msgs__rosidl_typesupport_fastrtps_c;nav_msgs::nav_msgs__rosidl_generator_cpp;nav_msgs::nav_msgs__rosidl_typesupport_fastrtps_cpp;nav_msgs::nav_msgs__rosidl_typesupport_introspection_c;nav_msgs::nav_msgs__rosidl_typesupport_c;nav_msgs::nav_msgs__rosidl_typesupport_introspection_cpp;nav_msgs::nav_msgs__rosidl_typesupport_cpp;nav_msgs::nav_msgs__rosidl_generator_py;nav_msgs::nav_msgs__rosidl_generator_py;sensor_msgs::sensor_msgs__rosidl_generator_c;sensor_msgs::sensor_msgs__rosidl_typesupport_fastrtps_c;sensor_msgs::sensor_msgs__rosidl_generator_cpp;sensor_msgs::sensor_msgs__rosidl_typesupport_fastrtps_cpp;sensor_msgs::sensor_msgs__rosidl_typesupport_introspection_c;sensor_msgs::sensor_msgs__rosidl_typesupport_c;sensor_msgs::sensor_msgs__rosidl_typesupport_introspection_cpp;sensor_msgs::sensor_msgs__rosidl_typesupport_cpp;sensor_msgs::sensor_msgs__rosidl_generator_py;sensor_msgs::sensor_msgs_library;sensor_msgs::sensor_msgs__rosidl_generator_py;std_msgs::std_msgs__rosidl_generator_c;std_msgs::std_msgs__rosidl_typesupport_fastrtps_c;std_msgs::std_msgs__rosidl_generator_cpp;std_msgs::std_msgs__rosidl_typesupport_fastrtps_cpp;std_msgs::std_msgs__rosidl_typesupport_introspection_c;std_msgs::std_msgs__rosidl_typesupport_c;std_msgs::std_msgs__rosidl_typesupport_introspection_cpp;std_msgs::std_msgs__rosidl_typesupport_cpp;std_msgs::std_msgs__rosidl_generator_py;std_msgs::std_msgs__rosidl_generator_py;stereo_msgs::stereo_msgs__rosidl_generator_c;stereo_msgs::stereo_msgs__rosidl_typesupport_fastrtps_c;stereo_msgs::stereo_msgs__rosidl_typesupport_introspection_c;stereo_msgs::stereo_msgs__rosidl_typesupport_c;stereo_msgs::stereo_msgs__rosidl_generator_cpp;stereo_msgs::stereo_msgs__rosidl_typesupport_fastrtps_cpp;stereo_msgs::stereo_msgs__rosidl_typesupport_introspection_cpp;stereo_msgs::stereo_msgs__rosidl_typesupport_cpp;stereo_msgs::stereo_msgs__rosidl_generator_py;stereo_msgs::stereo_msgs__rosidl_generator_py;vision_msgs::vision_msgs__rosidl_generator_c;vision_msgs::vision_msgs__rosidl_typesupport_fastrtps_c;vision_msgs::vision_msgs__rosidl_generator_cpp;vision_msgs::vision_msgs__rosidl_typesupport_fastrtps_cpp;vision_msgs::vision_msgs__rosidl_typesupport_introspection_c;vision_msgs::vision_msgs__rosidl_typesupport_c;vision_msgs::vision_msgs__rosidl_typesupport_introspection_cpp;vision_msgs::vision_msgs__rosidl_typesupport_cpp;vision_msgs::vision_msgs__rosidl_generator_py;vision_msgs::vision_msgs__rosidl_generator_py;ament_index_cpp::ament_index_cpp;camera_info_manager::camera_info_manager;cv_bridge::cv_bridge;image_transport::image_transport;rclcpp::rclcpp;sensor_msgs::sensor_msgs_library;tf2::tf2;tf2_geometry_msgs::tf2_geometry_msgs;tf2_ros::static_transform_broadcaster_node;tf2_ros::tf2_ros;depthai::core;opencv_imgproc;opencv_highgui;opencv_calib3d\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/depthai_bridgeTargets-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+write_file(
+    name = "gen_rcr_chrono_v2_shim_hpp",
+    out = "_gen/include/rcr_chrono_v2_shim.hpp",
+    content = ["#pragma once\n#ifdef __cplusplus\n#include <chrono>\n#ifdef _LIBCPP_BEGIN_NAMESPACE_STD\n_LIBCPP_BEGIN_NAMESPACE_STD\nnamespace chrono { namespace _V2 = ::std::chrono; }\n_LIBCPP_END_NAMESPACE_STD\n#else\nnamespace std { namespace chrono { namespace _V2 = ::std::chrono; } }\n#endif\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "resources/cal.json",
+    ],
+    libraries = [
+        ":depthai_bridge",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@camera_info_manager//:ament_package",
+        "@composition_interfaces//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@depthai//:ament_package",
+        "@depthai_ros_msgs//:ament_package",
+        "@ffmpeg_image_transport_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@image_transport//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@robot_state_publisher//:ament_package",
+        "@ros_environment//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@stereo_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@vision_msgs//:ament_package",
+        "@xacro//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_disparity_converter_test",
+    srcs = ["test/DisparityConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_grid_map_converter_test",
+    srcs = ["test/GridMapConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_image_converter_test",
+    srcs = ["test/ImageConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_img_det_converter_test",
+    srcs = ["test/ImgDetectionConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_imu_converter_test",
+    srcs = ["test/ImuConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_pointcloud_converter_test",
+    srcs = ["test/PointCloudConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_spatial_detection_converter_test",
+    srcs = ["test/SpatialDetectionConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_track_detection_converter_test",
+    srcs = ["test/TrackDetectionConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_track_spatial_detection_converter_test",
+    srcs = ["test/TrackSpatialDetectionConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_tracked_features_converter_test",
+    srcs = ["test/TrackedFeaturesConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "depthai_bridge_transform_data_converter_test",
+    srcs = ["test/TransformDataConverterTest.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_chrono_v2_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_chrono_v2_shim.hpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/depthai_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "DEPTHAI_ENABLE_PROTOBUF",
+        "DEPTHAI_HAVE_BASALT_SUPPORT",
+        "DEPTHAI_HAVE_BETA",
+        "DEPTHAI_HAVE_DYNAMIC_CALIBRATION_SUPPORT",
+        "DEPTHAI_HAVE_HOUSING_COORDINATES",
+        "DEPTHAI_HAVE_OPENCV_SUPPORT",
+        "DEPTHAI_MERGED_TARGET",
+        "DEPTHAI_TARGET_BASALT",
+        "DEPTHAI_TARGET_CORE",
+        "DEPTHAI_TARGET_OPENCV",
+        "DEPTHAI_XTENSOR_SUPPORT",
+        "GTEST_HAS_PTHREAD=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":depthai_bridge_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake = [
+        ":gen_cmake_0",
+        ":gen_cmake_1",
+    ],
+    cmake_export_dependencies_list = [
+        "ament_index_cpp",
+        "camera_info_manager",
+        "cv_bridge",
+        "depthai_ros_msgs",
+        "image_transport",
+        "rclcpp",
+        "nav_msgs",
+        "sensor_msgs",
+        "stereo_msgs",
+        "std_msgs",
+        "vision_msgs",
+        "tf2_ros",
+        "tf2_geometry_msgs",
+        "tf2",
+        "composition_interfaces",
+        "ffmpeg_image_transport_msgs",
+    ],
+    cmake_export_name = "depthai_bridgeTargets",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":depthai_bridge",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@camera_info_manager//:ament_package",
+        "@composition_interfaces//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@depthai//:ament_package",
+        "@depthai_ros_msgs//:ament_package",
+        "@ffmpeg_image_transport_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@image_transport//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@robot_state_publisher//:ament_package",
+        "@ros_environment//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@stereo_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@vision_msgs//:ament_package",
+        "@xacro//:ament_package",
+    ],
+)

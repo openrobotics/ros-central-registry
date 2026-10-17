@@ -1,0 +1,350 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@plansys2_domain_expert//:plansys2_domain_expert": "@plansys2_domain_expert//:plansys2_domain_expert_library",
+    "@plansys2_pddl_parser//:plansys2_pddl_parser": "@plansys2_pddl_parser//:plansys2_pddl_parser_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+}
+
+CC_DEPS = [
+    "@lifecycle_msgs//:cc",
+    "@plansys2_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "plansys2_problem_expert_library",
+    srcs = [
+        "src/plansys2_problem_expert/ProblemExpert.cpp",
+        "src/plansys2_problem_expert/ProblemExpertClient.cpp",
+        "src/plansys2_problem_expert/ProblemExpertNode.cpp",
+        "src/plansys2_problem_expert/Utils.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/plansys2_problem_expert",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + ["PLUGINLIB__DISABLE_BOOST_FUNCTIONS"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "plansys2_problem_expert",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":plansys2_problem_expert_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":plansys2_problem_expert"],
+)
+
+cc_binary(
+    name = "problem_expert_node",
+    srcs = ["src/problem_expert_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/plansys2_problem_expert",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + ["PLUGINLIB__DISABLE_BOOST_FUNCTIONS"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":plansys2_problem_expert_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/problem_expert_launch.py",
+        "test/pddl/domain_charging.pddl",
+        "test/pddl/domain_exists.pddl",
+        "test/pddl/domain_simple.pddl",
+        "test/pddl/domain_simple_constants.pddl",
+        "test/pddl/domain_simple_derived.pddl",
+        "test/pddl/problem_charging.pddl",
+        "test/pddl/problem_empty_domain.pddl",
+        "test/pddl/problem_simple_1.pddl",
+        "test/pddl/problem_simple_constants_1.pddl",
+        "test/pddl/problem_simple_constants_2.pddl",
+        "test/pddl/problem_unexpected_syntax.pddl",
+    ],
+    data_strip_prefix = "test",
+    lib_data = [
+        ":problem_expert_node",
+    ],
+    libraries = [
+        ":plansys2_problem_expert",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@plansys2_domain_expert//:ament_package",
+        "@plansys2_msgs//:ament_package",
+        "@plansys2_pddl_parser//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "problem_expert_node_test",
+    srcs = ["test/unit/problem_expert_node_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/plansys2_problem_expert",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":plansys2_problem_expert_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "problem_expert_test",
+    srcs = ["test/unit/problem_expert_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/plansys2_problem_expert",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":plansys2_problem_expert_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "utils_test",
+    srcs = ["test/unit/utils_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++23",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/plansys2_problem_expert",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":plansys2_problem_expert_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_binary(
+    name = "problem_expert_launch.py",
+    src = "launch/problem_expert_launch.py",
+    data = [":ament_index"],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "plansys2_pddl_parser",
+        "ament_index_cpp",
+        "plansys2_core",
+        "plansys2_msgs",
+        "plansys2_domain_expert",
+        "std_msgs",
+        "lifecycle_msgs",
+    ],
+    cmake_export_name = "export_plansys2_problem_expert",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":plansys2_problem_expert",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@plansys2_domain_expert//:ament_package",
+        "@plansys2_msgs//:ament_package",
+        "@plansys2_pddl_parser//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

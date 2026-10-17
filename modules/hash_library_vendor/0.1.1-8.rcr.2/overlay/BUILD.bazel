@@ -1,0 +1,146 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+]
+
+cc_library(
+    name = "hash_library_vendor_library",
+    srcs = [],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_extra_5",
+        ":gen_extra_6",
+        ":gen_extra_7",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/hash_library_vendor",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "hash_library_vendor",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":hash_library_vendor_library"],
+)
+
+write_file(
+    name = "gen_extra_0",
+    out = "_gen/include/hash_library_vendor/crc32.h",
+    content = ["// //////////////////////////////////////////////////////////\n// crc32.h\n// Copyright (c) 2014,2015 Stephan Brumme. All rights reserved.\n// see http://create.stephan-brumme.com/disclaimer.html\n//\n\n#pragma once\n\n//#include \"hash.h\"\n#include <string>\n\n// define fixed size integer types\n#ifdef _MSC_VER\n// Windows\ntypedef unsigned __int8  uint8_t;\ntypedef unsigned __int32 uint32_t;\n#else\n// GCC\n#include <stdint.h>\n#endif\n\n\n/// compute CRC32 hash, based on Intel's Slicing-by-8 algorithm\n/** Usage:\n    CRC32 crc32;\n    std::string myHash  = crc32(\"Hello World\");     // std::string\n    std::string myHash2 = crc32(\"How are you\", 11); // arbitrary data, 11 bytes\n\n    // or in a streaming fashion:\n\n    CRC32 crc32;\n    while (more data available)\n      crc32.add(pointer to fresh data, number of new bytes);\n    std::string myHash3 = crc32.getHash();\n\n    Note:\n    You can find code for the faster Slicing-by-16 algorithm on my website, too:\n    http://create.stephan-brumme.com/crc32/\n    Its unrolled version is about twice as fast but its look-up table doubled in size as well.\n  */\nclass CRC32 //: public Hash\n{\npublic:\n  /// hash is 4 bytes long\n  enum { HashBytes = 4 };\n\n  /// same as reset()\n  CRC32();\n\n  /// compute CRC32 of a memory block\n  std::string operator()(const void* data, size_t numBytes);\n  /// compute CRC32 of a string, excluding final zero\n  std::string operator()(const std::string& text);\n\n  /// add arbitrary number of bytes\n  void add(const void* data, size_t numBytes);\n\n  /// return latest hash as 8 hex characters\n  std::string getHash();\n  /// return latest hash as bytes\n  void        getHash(unsigned char buffer[HashBytes]);\n\n  /// restart\n  void reset();\n\nprivate:\n  /// hash\n  uint32_t m_hash;\n};\n"],
+)
+
+write_file(
+    name = "gen_extra_1",
+    out = "_gen/include/hash_library_vendor/hash.h",
+    content = ["// //////////////////////////////////////////////////////////\n// hash.h\n// Copyright (c) 2014,2015 Stephan Brumme. All rights reserved.\n// see http://create.stephan-brumme.com/disclaimer.html\n//\n\n#pragma once\n\n#include <string>\n\n/// abstract base class\nclass Hash\n{\npublic:\n  /// compute hash of a memory block\n  virtual std::string operator()(const void* data, size_t numBytes) = 0;\n  /// compute hash of a string, excluding final zero\n  virtual std::string operator()(const std::string& text) = 0;\n\n  /// add arbitrary number of bytes\n  virtual void add(const void* data, size_t numBytes) = 0;\n\n  /// return latest hash as hex characters\n  virtual std::string getHash() = 0;\n\n  /// restart\n  virtual void reset() = 0;\n};\n"],
+)
+
+write_file(
+    name = "gen_extra_2",
+    out = "_gen/include/hash_library_vendor/hmac.h",
+    content = ["// //////////////////////////////////////////////////////////\n// hmac.h\n// Copyright (c) 2015 Stephan Brumme. All rights reserved.\n// see http://create.stephan-brumme.com/disclaimer.html\n//\n\n#pragma once\n\n// based on http://tools.ietf.org/html/rfc2104\n// see also http://en.wikipedia.org/wiki/Hash-based_message_authentication_code\n\n/** Usage:\n    std::string msg = \"The quick brown fox jumps over the lazy dog\";\n    std::string key = \"key\";\n    std::string md5hmac  = hmac< MD5  >(msg, key);\n    std::string sha1hmac = hmac< SHA1 >(msg, key);\n    std::string sha2hmac = hmac<SHA256>(msg, key);\n\n    Note:\n    To keep my code simple, HMAC computation currently needs the whole message at once.\n    This is in contrast to the hashes MD5, SHA1, etc. where an add() method is available\n    for incremental computation.\n    You can use any hash for HMAC as long as it provides:\n    - constant HashMethod::BlockSize (typically 64)\n    - constant HashMethod::HashBytes (length of hash in bytes, e.g. 20 for SHA1)\n    - HashMethod::add(buffer, bufferSize)\n    - HashMethod::getHash(unsigned char buffer[HashMethod::BlockSize])\n  */\n\n#include <string>\n#include <cstring> // memcpy\n\n/// compute HMAC hash of data and key using MD5, SHA1 or SHA256\ntemplate <typename HashMethod>\nstd::string hmac(const void* data, size_t numDataBytes, const void* key, size_t numKeyBytes)\n{\n  // initialize key with zeros\n  unsigned char usedKey[HashMethod::BlockSize] = {0};\n\n  // adjust length of key: must contain exactly blockSize bytes\n  if (numKeyBytes <= HashMethod::BlockSize)\n  {\n    // copy key\n    memcpy(usedKey, key, numKeyBytes);\n  }\n  else\n  {\n    // shorten key: usedKey = hashed(key)\n    HashMethod keyHasher;\n    keyHasher.add(key, numKeyBytes);\n    keyHasher.getHash(usedKey);\n  }\n\n  // create initial XOR padding\n  for (size_t i = 0; i < HashMethod::BlockSize; i++)\n    usedKey[i] ^= 0x36;\n\n  // inside = hash((usedKey ^ 0x36) + data)\n  unsigned char inside[HashMethod::HashBytes];\n  HashMethod insideHasher;\n  insideHasher.add(usedKey, HashMethod::BlockSize);\n  insideHasher.add(data,    numDataBytes);\n  insideHasher.getHash(inside);\n\n  // undo usedKey's previous 0x36 XORing and apply a XOR by 0x5C\n  for (size_t i = 0; i < HashMethod::BlockSize; i++)\n    usedKey[i] ^= 0x5C ^ 0x36;\n\n  // hash((usedKey ^ 0x5C) + hash((usedKey ^ 0x36) + data))\n  HashMethod finalHasher;\n  finalHasher.add(usedKey, HashMethod::BlockSize);\n  finalHasher.add(inside,  HashMethod::HashBytes);\n\n  return finalHasher.getHash();\n}\n\n\n/// convenience function for std::string\ntemplate <typename HashMethod>\nstd::string hmac(const std::string& data, const std::string& key)\n{\n  return hmac<HashMethod>(data.c_str(), data.size(), key.c_str(), key.size());\n}\n"],
+)
+
+write_file(
+    name = "gen_extra_3",
+    out = "_gen/include/hash_library_vendor/keccak.h",
+    content = ["// //////////////////////////////////////////////////////////\n// keccak.h\n// Copyright (c) 2014,2015 Stephan Brumme. All rights reserved.\n// see http://create.stephan-brumme.com/disclaimer.html\n//\n\n#pragma once\n\n//#include \"hash.h\"\n#include <string>\n\n// define fixed size integer types\n#ifdef _MSC_VER\n// Windows\ntypedef unsigned __int8  uint8_t;\ntypedef unsigned __int64 uint64_t;\n#else\n// GCC\n#include <stdint.h>\n#endif\n\n\n/// compute Keccak hash (designated SHA3)\n/** Usage:\n    Keccak keccak;\n    std::string myHash  = keccak(\"Hello World\");     // std::string\n    std::string myHash2 = keccak(\"How are you\", 11); // arbitrary data, 11 bytes\n\n    // or in a streaming fashion:\n\n    Keccak keccak;\n    while (more data available)\n      keccak.add(pointer to fresh data, number of new bytes);\n    std::string myHash3 = keccak.getHash();\n  */\nclass Keccak //: public Hash\n{\npublic:\n  /// algorithm variants\n  enum Bits { Keccak224 = 224, Keccak256 = 256, Keccak384 = 384, Keccak512 = 512 };\n\n  /// same as reset()\n  explicit Keccak(Bits bits = Keccak256);\n\n  /// compute hash of a memory block\n  std::string operator()(const void* data, size_t numBytes);\n  /// compute hash of a string, excluding final zero\n  std::string operator()(const std::string& text);\n\n  /// add arbitrary number of bytes\n  void add(const void* data, size_t numBytes);\n\n  /// return latest hash as hex characters\n  std::string getHash();\n\n  /// restart\n  void reset();\n\nprivate:\n  /// process a full block\n  void processBlock(const void* data);\n  /// process everything left in the internal buffer\n  void processBuffer();\n\n  /// 1600 bits, stored as 25x64 bit, BlockSize is no more than 1152 bits (Keccak224)\n  enum { StateSize    = 1600 / (8 * 8),\n         MaxBlockSize =  200 - 2 * (224 / 8) };\n\n  /// hash\n  uint64_t m_hash[StateSize];\n  /// size of processed data in bytes\n  uint64_t m_numBytes;\n  /// block size (less or equal to MaxBlockSize)\n  size_t   m_blockSize;\n  /// valid bytes in m_buffer\n  size_t   m_bufferSize;\n  /// bytes not processed yet\n  uint8_t  m_buffer[MaxBlockSize];\n  /// variant\n  Bits     m_bits;\n};\n"],
+)
+
+write_file(
+    name = "gen_extra_4",
+    out = "_gen/include/hash_library_vendor/md5.h",
+    content = ["// //////////////////////////////////////////////////////////\n// md5.h\n// Copyright (c) 2014 Stephan Brumme. All rights reserved.\n// see http://create.stephan-brumme.com/disclaimer.html\n//\n\n#pragma once\n\n//#include \"hash.h\"\n#include <string>\n\n// define fixed size integer types\n#ifdef _MSC_VER\n// Windows\ntypedef unsigned __int8  uint8_t;\ntypedef unsigned __int32 uint32_t;\ntypedef unsigned __int64 uint64_t;\n#else\n// GCC\n#include <stdint.h>\n#endif\n\n\n/// compute MD5 hash\n/** Usage:\n    MD5 md5;\n    std::string myHash  = md5(\"Hello World\");     // std::string\n    std::string myHash2 = md5(\"How are you\", 11); // arbitrary data, 11 bytes\n\n    // or in a streaming fashion:\n\n    MD5 md5;\n    while (more data available)\n      md5.add(pointer to fresh data, number of new bytes);\n    std::string myHash3 = md5.getHash();\n  */\nclass MD5 //: public Hash\n{\npublic:\n  /// split into 64 byte blocks (=> 512 bits), hash is 16 bytes long\n  enum { BlockSize = 512 / 8, HashBytes = 16 };\n\n  /// same as reset()\n  MD5();\n\n  /// compute MD5 of a memory block\n  std::string operator()(const void* data, size_t numBytes);\n  /// compute MD5 of a string, excluding final zero\n  std::string operator()(const std::string& text);\n\n  /// add arbitrary number of bytes\n  void add(const void* data, size_t numBytes);\n\n  /// return latest hash as 32 hex characters\n  std::string getHash();\n  /// return latest hash as bytes\n  void        getHash(unsigned char buffer[HashBytes]);\n\n  /// restart\n  void reset();\n\nprivate:\n  /// process 64 bytes\n  void processBlock(const void* data);\n  /// process everything left in the internal buffer\n  void processBuffer();\n\n  /// size of processed data in bytes\n  uint64_t m_numBytes;\n  /// valid bytes in m_buffer\n  size_t   m_bufferSize;\n  /// bytes not processed yet\n  uint8_t  m_buffer[BlockSize];\n\n  enum { HashValues = HashBytes / 4 };\n  /// hash, stored as integers\n  uint32_t m_hash[HashValues];\n};\n"],
+)
+
+write_file(
+    name = "gen_extra_5",
+    out = "_gen/include/hash_library_vendor/sha1.h",
+    content = ["// //////////////////////////////////////////////////////////\n// sha1.h\n// Copyright (c) 2014,2015 Stephan Brumme. All rights reserved.\n// see http://create.stephan-brumme.com/disclaimer.html\n//\n\n#pragma once\n\n//#include \"hash.h\"\n#include <string>\n\n// define fixed size integer types\n#ifdef _MSC_VER\n// Windows\ntypedef unsigned __int8  uint8_t;\ntypedef unsigned __int32 uint32_t;\ntypedef unsigned __int64 uint64_t;\n#else\n// GCC\n#include <stdint.h>\n#endif\n\n\n/// compute SHA1 hash\n/** Usage:\n    SHA1 sha1;\n    std::string myHash  = sha1(\"Hello World\");     // std::string\n    std::string myHash2 = sha1(\"How are you\", 11); // arbitrary data, 11 bytes\n\n    // or in a streaming fashion:\n\n    SHA1 sha1;\n    while (more data available)\n      sha1.add(pointer to fresh data, number of new bytes);\n    std::string myHash3 = sha1.getHash();\n  */\nclass SHA1 //: public Hash\n{\npublic:\n  /// split into 64 byte blocks (=> 512 bits), hash is 20 bytes long\n  enum { BlockSize = 512 / 8, HashBytes = 20 };\n\n  /// same as reset()\n  SHA1();\n\n  /// compute SHA1 of a memory block\n  std::string operator()(const void* data, size_t numBytes);\n  /// compute SHA1 of a string, excluding final zero\n  std::string operator()(const std::string& text);\n\n  /// add arbitrary number of bytes\n  void add(const void* data, size_t numBytes);\n\n  /// return latest hash as 40 hex characters\n  std::string getHash();\n  /// return latest hash as bytes\n  void        getHash(unsigned char buffer[HashBytes]);\n\n  /// restart\n  void reset();\n\nprivate:\n  /// process 64 bytes\n  void processBlock(const void* data);\n  /// process everything left in the internal buffer\n  void processBuffer();\n\n  /// size of processed data in bytes\n  uint64_t m_numBytes;\n  /// valid bytes in m_buffer\n  size_t   m_bufferSize;\n  /// bytes not processed yet\n  uint8_t  m_buffer[BlockSize];\n\n  enum { HashValues = HashBytes / 4 };\n  /// hash, stored as integers\n  uint32_t m_hash[HashValues];\n};\n"],
+)
+
+write_file(
+    name = "gen_extra_6",
+    out = "_gen/include/hash_library_vendor/sha256.h",
+    content = ["// //////////////////////////////////////////////////////////\n// sha256.h\n// Copyright (c) 2014,2015 Stephan Brumme. All rights reserved.\n// see http://create.stephan-brumme.com/disclaimer.html\n//\n\n#pragma once\n\n//#include \"hash.h\"\n#include <string>\n\n// define fixed size integer types\n#ifdef _MSC_VER\n// Windows\ntypedef unsigned __int8  uint8_t;\ntypedef unsigned __int32 uint32_t;\ntypedef unsigned __int64 uint64_t;\n#else\n// GCC\n#include <stdint.h>\n#endif\n\n\n/// compute SHA256 hash\n/** Usage:\n    SHA256 sha256;\n    std::string myHash  = sha256(\"Hello World\");     // std::string\n    std::string myHash2 = sha256(\"How are you\", 11); // arbitrary data, 11 bytes\n\n    // or in a streaming fashion:\n\n    SHA256 sha256;\n    while (more data available)\n      sha256.add(pointer to fresh data, number of new bytes);\n    std::string myHash3 = sha256.getHash();\n  */\nclass SHA256 //: public Hash\n{\npublic:\n  /// split into 64 byte blocks (=> 512 bits), hash is 32 bytes long\n  enum { BlockSize = 512 / 8, HashBytes = 32 };\n\n  /// same as reset()\n  SHA256();\n\n  /// compute SHA256 of a memory block\n  std::string operator()(const void* data, size_t numBytes);\n  /// compute SHA256 of a string, excluding final zero\n  std::string operator()(const std::string& text);\n\n  /// add arbitrary number of bytes\n  void add(const void* data, size_t numBytes);\n\n  /// return latest hash as 64 hex characters\n  std::string getHash();\n  /// return latest hash as bytes\n  void        getHash(unsigned char buffer[HashBytes]);\n\n  /// restart\n  void reset();\n\nprivate:\n  /// process 64 bytes\n  void processBlock(const void* data);\n  /// process everything left in the internal buffer\n  void processBuffer();\n\n  /// size of processed data in bytes\n  uint64_t m_numBytes;\n  /// valid bytes in m_buffer\n  size_t   m_bufferSize;\n  /// bytes not processed yet\n  uint8_t  m_buffer[BlockSize];\n\n  enum { HashValues = HashBytes / 4 };\n  /// hash, stored as integers\n  uint32_t m_hash[HashValues];\n};\n"],
+)
+
+write_file(
+    name = "gen_extra_7",
+    out = "_gen/include/hash_library_vendor/sha3.h",
+    content = ["// //////////////////////////////////////////////////////////\n// sha3.h\n// Copyright (c) 2014,2015 Stephan Brumme. All rights reserved.\n// see http://create.stephan-brumme.com/disclaimer.html\n//\n\n#pragma once\n\n//#include \"hash.h\"\n#include <string>\n\n// define fixed size integer types\n#ifdef _MSC_VER\n// Windows\ntypedef unsigned __int8  uint8_t;\ntypedef unsigned __int64 uint64_t;\n#else\n// GCC\n#include <stdint.h>\n#endif\n\n\n/// compute SHA3 hash\n/** Usage:\n    SHA3 sha3;\n    std::string myHash  = sha3(\"Hello World\");     // std::string\n    std::string myHash2 = sha3(\"How are you\", 11); // arbitrary data, 11 bytes\n\n    // or in a streaming fashion:\n\n    SHA3 sha3;\n    while (more data available)\n      sha3.add(pointer to fresh data, number of new bytes);\n    std::string myHash3 = sha3.getHash();\n  */\nclass SHA3 //: public Hash\n{\npublic:\n  /// algorithm variants\n  enum Bits { Bits224 = 224, Bits256 = 256, Bits384 = 384, Bits512 = 512 };\n\n  /// same as reset()\n  explicit SHA3(Bits bits = Bits256);\n\n  /// compute hash of a memory block\n  std::string operator()(const void* data, size_t numBytes);\n  /// compute hash of a string, excluding final zero\n  std::string operator()(const std::string& text);\n\n  /// add arbitrary number of bytes\n  void add(const void* data, size_t numBytes);\n\n  /// return latest hash as hex characters\n  std::string getHash();\n\n  /// restart\n  void reset();\n\nprivate:\n  /// process a full block\n  void processBlock(const void* data);\n  /// process everything left in the internal buffer\n  void processBuffer();\n\n  /// 1600 bits, stored as 25x64 bit, BlockSize is no more than 1152 bits (Keccak224)\n  enum { StateSize    = 1600 / (8 * 8),\n         MaxBlockSize =  200 - 2 * (224 / 8) };\n\n  /// hash\n  uint64_t m_hash[StateSize];\n  /// size of processed data in bytes\n  uint64_t m_numBytes;\n  /// block size (less or equal to MaxBlockSize)\n  size_t   m_blockSize;\n  /// valid bytes in m_buffer\n  size_t   m_bufferSize;\n  /// bytes not processed yet\n  uint8_t  m_buffer[MaxBlockSize];\n  /// variant\n  Bits     m_bits;\n};\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":hash_library_vendor",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_auto//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_targets = False,
+    headers = [
+        ":gen_extra_0",
+        ":gen_extra_1",
+        ":gen_extra_2",
+        ":gen_extra_3",
+        ":gen_extra_4",
+        ":gen_extra_5",
+        ":gen_extra_6",
+        ":gen_extra_7",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":hash_library_vendor",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_auto//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+    ],
+)

@@ -1,0 +1,165 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@resource_retriever//:resource_retriever": "@resource_retriever//:resource_retriever_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@rmf_traffic_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rmf_door_msgs//:cc",
+    "@rmf_lift_msgs//:cc",
+    "@rmf_traffic_ros2//:rmf_traffic_ros2_library",
+    "@rmf_utils//:rmf_utils_library",
+    "@rmf_visualization_msgs//:cc",
+    "@rosdistro//cc:eigen",
+    "@rules_qt//:qt_widgets",
+    "@rviz_common//:rviz_common_library",
+    "@rviz_default_plugins//:rviz_default_plugins_library",
+    "@rviz_rendering//:rviz_rendering_library",
+]
+
+qt_cc_library(
+    name = "rmf_visualization_rviz2_plugins_library",
+    srcs = [
+        "src/DoorPanel.cpp",
+        "src/LiftPanel.cpp",
+        "src/NegotiationModel.cpp",
+        "src/SchedulePanel.cpp",
+    ],
+    hdrs = [
+        "src/DoorPanel.hpp",
+        "src/LiftPanel.hpp",
+        "src/SchedulePanel.hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "RVIZ_DEFAULT_PLUGINS_BUILDING_LIBRARY",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    normal_hdrs = [
+        "src/NegotiationModel.hpp",
+        "src/StandardNames.hpp",
+        ":gen_rcr_qt_libc_shim_hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rmf_visualization_rviz2_plugins",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":rmf_visualization_rviz2_plugins_library",
+        "//:__subpackages__",
+    ],
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":rmf_visualization_rviz2_plugins_library"],
+)
+
+write_file(
+    name = "gen_cmake_0",
+    out = "_gen/share/rmf_visualization_rviz2_plugins/cmake/ament_cmake_export_include_directories-extras.cmake",
+    content = ["# generated from ament_cmake_export_include_directories/cmake/ament_cmake_export_include_directories-extras.cmake.in\n\nset(_exported_include_dirs \"${rmf_visualization_rviz2_plugins_DIR}/../../../include\")\n\n# append include directories to rmf_visualization_rviz2_plugins_INCLUDE_DIRS\n# warn about not existing paths\nif(NOT _exported_include_dirs STREQUAL \"\")\n  find_package(ament_cmake_core QUIET REQUIRED)\n  foreach(_exported_include_dir ${_exported_include_dirs})\n    if(NOT IS_DIRECTORY \"${_exported_include_dir}\")\n      message(WARNING \"Package 'rmf_visualization_rviz2_plugins' exports the include directory '${_exported_include_dir}' which doesn't exist\")\n    endif()\n    normalize_path(_exported_include_dir \"${_exported_include_dir}\")\n    list(APPEND rmf_visualization_rviz2_plugins_INCLUDE_DIRS \"${_exported_include_dir}\")\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_rcr_qt_libc_shim_hpp",
+    out = "_gen/include/rcr_qt_libc_shim.hpp",
+    content = ["#pragma once\n#ifdef __cplusplus\n#include <QByteArray>\n#include <QJsonObject>\n#include <QJsonValue>\n#include <QObject>\n#include <QString>\n#include <QTimer>\n#include <chrono>\n#include <initializer_list>\n#include <string>\n#include <utility>\ninline QByteArray QByteArray::fromStdString(const std::string &s) { return QByteArray(s.data(), s.size()); }\ninline std::string QByteArray::toStdString() const { return std::string(constData(), size()); }\ninline QJsonObject::QJsonObject(std::initializer_list<std::pair<QString, QJsonValue>> args) : QJsonObject() {\n  for (const auto &arg : args) { insert(arg.first, arg.second); }\n}\nextern \"C\" void _ZN6QTimer14singleShotImplENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEEN2Qt9TimerTypeEPK7QObjectPN9QtPrivate15QSlotObjectBaseE(\n    long ns, Qt::TimerType timerType, const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj);\ninline void QTimer::singleShotImpl(std::chrono::nanoseconds ns, Qt::TimerType timerType, const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj) {\n  _ZN6QTimer14singleShotImplENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEEN2Qt9TimerTypeEPK7QObjectPN9QtPrivate15QSlotObjectBaseE(\n      ns.count(), timerType, receiver, slotObj);\n}\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":rmf_visualization_rviz2_plugins",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugin_description.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@resource_retriever//:ament_package",
+        "@rmf_door_msgs//:ament_package",
+        "@rmf_lift_msgs//:ament_package",
+        "@rmf_traffic_msgs//:ament_package",
+        "@rmf_traffic_ros2//:ament_package",
+        "@rmf_utils//:ament_package",
+        "@rmf_visualization_msgs//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@rviz_rendering//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake = [
+        ":gen_cmake_0",
+    ],
+    cmake_export_dependencies_list = [
+        "rviz_common",
+        "rclcpp",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    libraries = [
+        ":rmf_visualization_rviz2_plugins",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@resource_retriever//:ament_package",
+        "@rmf_door_msgs//:ament_package",
+        "@rmf_lift_msgs//:ament_package",
+        "@rmf_traffic_msgs//:ament_package",
+        "@rmf_traffic_ros2//:ament_package",
+        "@rmf_utils//:ament_package",
+        "@rmf_visualization_msgs//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@rviz_rendering//:ament_package",
+    ],
+)

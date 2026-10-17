@@ -1,0 +1,249 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load(":defs.bzl", "class_loader_plugin")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+exports_files(glob(["*.bzl"]))
+
+### LIBRARY
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+cc_library(
+    name = "class_loader_headers",
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = DEPENDENCIES.values(),
+)
+
+cc_library(
+    name = "class_loader_library",
+    srcs = [
+        "src/class_loader.cpp",
+        "src/class_loader_core.cpp",
+        "src/meta_object.cpp",
+        "src/multi_library_class_loader.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "class_loader",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":class_loader_library"],
+    deps = [":class_loader_library"],
+)
+
+### TRANSITIVELY COLLECT ALL DYNAMIC DEPS TO ENSURE LINKING WORKS
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":class_loader"],
+    visibility = ["//visibility:private"],
+)
+
+### TESTING
+
+# Test: class_loader_unique_ptr_test
+
+class_loader_plugin(
+    name = "class_loader_TestPlugins1",
+    srcs = ["test/plugins1.cpp"],
+    hdrs = ["test/base.hpp"],
+    dynamic_deps = [":class_loader"],
+    deps = [":class_loader_headers"],
+)
+
+class_loader_plugin(
+    name = "class_loader_TestPlugins2",
+    srcs = ["test/plugins2.cpp"],
+    hdrs = ["test/base.hpp"],
+    dynamic_deps = [":class_loader"],
+    deps = [":class_loader_headers"],
+)
+
+class_loader_plugin(
+    name = "class_loader_TestPlugins3",
+    srcs = ["test/plugins3.cpp"],
+    hdrs = ["test/base.hpp"],
+    dynamic_deps = [":class_loader"],
+    deps = [":class_loader_headers"],
+)
+
+ament_index(
+    name = "ament_index_unique_ptr_test",
+    libraries = [
+        ":class_loader_TestPlugins1",
+        ":class_loader_TestPlugins2",
+        ":class_loader_TestPlugins3",
+    ],
+)
+
+cc_test(
+    name = "class_loader_unique_ptr_test",
+    srcs = [
+        "test/base.hpp",
+        "test/unique_ptr_test.cpp",
+    ],
+    data = [
+        ":ament_index_unique_ptr_test",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":class_loader_headers",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# Test: class_loader_utest
+
+class_loader_plugin(
+    name = "class_loader_TestGlobalPlugins",
+    srcs = ["test/global_plugins.cpp"],
+    hdrs = ["test/base.hpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":class_loader_library",
+    ],
+)
+
+ament_index(
+    name = "ament_index_class_loader_utest",
+    libraries = [
+        ":class_loader_TestPlugins1",
+        ":class_loader_TestPlugins2",
+        ":class_loader_TestPlugins3",
+        ":class_loader_TestGlobalPlugins",
+    ],
+)
+
+cc_test(
+    name = "class_loader_utest",
+    srcs = [
+        "test/base.hpp",
+        "test/utest.cpp",
+    ],
+    data = [
+        ":ament_index_class_loader_utest",
+    ],
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+    ],
+    deps = DEPENDENCIES.values() + [
+        ":class_loader_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# Test: class_loader_fviz
+
+cc_library(
+    name = "class_loader_Test_Fviz_library",
+    srcs = ["test/fviz_case_study/fviz.cpp"],
+    hdrs = [
+        "test/fviz_case_study/fviz.hpp",
+        "test/fviz_case_study/fviz_plugin_base.hpp",
+    ],
+    deps = [":class_loader_library"],
+)
+
+class_loader_plugin(
+    name = "class_loader_Test_FvizDefaultPlugin",
+    srcs = ["test/fviz_case_study/fviz_default_plugin.cpp"],
+    hdrs = [
+        "test/fviz_case_study/fviz.hpp",
+        "test/fviz_case_study/fviz_plugin_base.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":class_loader_Test_Fviz_library",
+        ":class_loader_library",
+    ],
+)
+
+ament_index(
+    name = "ament_index_fviz",
+    libraries = [
+        ":class_loader_Test_FvizDefaultPlugin",
+    ],
+)
+
+cc_binary(
+    name = "class_loader_Test_Fviz_Main",
+    srcs = ["test/fviz_case_study/fviz_main.cpp"],
+    data = [":ament_index_fviz"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":class_loader_Test_Fviz_library",
+        ":class_loader_library",
+    ],
+)
+
+cc_test(
+    name = "class_loader_fviz_test",
+    srcs = ["test/fviz_case_study/fviz_test.cpp"],
+    data = [":class_loader_Test_Fviz_Main"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":class_loader_Test_Fviz_library",
+        ":class_loader_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake = glob(["cmake/**"]) + ["class_loader-extras.cmake"],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_extras = ["class_loader-extras.cmake"],
+    headers = HEADERS,
+    libraries = [":class_loader"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@console_bridge_vendor//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

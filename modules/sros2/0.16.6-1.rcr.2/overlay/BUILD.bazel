@@ -1,0 +1,185 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### DATA
+
+ament_index(
+    name = "ament_index",
+    data = glob(["xml_cache/**"]),
+    package_xml = "package.xml",
+)
+
+### PYTHON MODULE
+
+write_file(
+    name = "pkg_info",
+    out = "sros2-0.16.6.egg-info/PKG-INFO",
+    content = [
+        "Metadata-Version: 2.1",
+        "Name: sros2",
+        "Version: 0.16.6",
+    ],
+)
+
+write_file(
+    name = "entry_points_txt",
+    out = "sros2-0.16.6.egg-info/entry_points.txt",
+    content = [
+        "[ros2cli.command]",
+        "security = sros2.command.security:SecurityCommand",
+        "",
+        "[ros2cli.extension_point]",
+        "sros2.verb = sros2.verb:VerbExtension",
+        "",
+        "[sros2.verb]",
+        "create_enclave = sros2.verb.create_enclave:CreateEnclaveVerb",
+        "create_keystore = sros2.verb.create_keystore:CreateKeystoreVerb",
+        "create_permission = sros2.verb.create_permission:CreatePermissionVerb",
+        "generate_artifacts = sros2.verb.generate_artifacts:GenerateArtifactsVerb",
+        "generate_policy = sros2.verb.generate_policy:GeneratePolicyVerb",
+        "list_enclaves = sros2.verb.list_enclaves:ListEnclavesVerb",
+    ],
+)
+
+py_library(
+    name = "sros2",
+    srcs = glob(["sros2/**/*.py"]),
+    data = glob(
+        ["sros2/**"],
+        exclude = ["sros2/**/*.py"],
+    ) + [
+        ":ament_index",
+        ":entry_points_txt",
+        ":pkg_info",
+    ],
+    imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        requirement("argcomplete"),
+        requirement("cryptography"),
+        requirement("lxml"),
+    ],
+)
+
+### TESTS
+
+# Tests that fail in colcon's reference run (lyrical 2026-10-05) too.
+_XFAIL_TESTS = [
+    "test_generate_policy",
+    "test_generate_policy_no_nodes",
+]
+
+[
+    py_pytest(
+        name = f.split("/")[-1].removesuffix(".py"),
+        srcs = [f],
+        data = glob(
+            ["test/**"],
+            exclude = ["test/**/test_*.py"],
+        ),
+        tags = [
+            "manual",
+            "xfail",
+        ] if f.split("/")[-1].removesuffix(".py") in _XFAIL_TESTS else [],
+        deps = [
+            ":sros2",
+            "@rclpy",
+            "@ros2cli",
+            "@rules_python//python/runfiles",
+            "@test_msgs//:py",
+        ],
+    )
+    for f in glob(
+        [
+            "test/test_*.py",
+            "test/sros2/**/test_*.py",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/test_flake8.py",
+            "**/test_pep257.py",
+            "**/test_copyright.py",
+            "**/test_mypy.py",
+        ],
+    )
+]
+
+[
+    py_pytest(
+        name = "test_{0}".format(linter),
+        srcs = ["test/test_{0}.py".format(linter)],
+        data = glob([
+            "**/*",
+        ]),
+        # test_copyright fails in colcon's reference run too.
+        tags = [
+            "manual",
+            "xfail",
+        ] if linter == "copyright" else [],
+        deps = ["@ament_{0}".format(linter)],
+    )
+    for linter in [
+        "copyright",
+        "flake8",
+        "mypy",
+        "pep257",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    # setup.py: ('share/sros2/xml_cache', glob.glob('xml_cache/**'))
+    data = glob(["xml_cache/*"]),
+    package_xml = "package.xml",
+    python = [":sros2"] + glob(
+        ["sros2/**"],
+        exclude = ["sros2/**/*.py"],
+    ),
+    deps = [
+        ":ament_index",
+        "@ament_copyright//:ament_package",
+        "@ament_flake8//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_mypy//:ament_package",
+        "@ament_pep257//:ament_package",
+        "@rclpy//:ament_package",
+        "@ros2cli//:ament_package",
+        "@ros_testing//:ament_package",
+        "@rosdistro//:ament_package",
+        "@test_msgs//:ament_package",
+    ],
+)

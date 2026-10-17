@@ -1,0 +1,273 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@interactive_markers//:interactive_markers": "@interactive_markers//:interactive_markers_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@std_msgs//:cc",
+    "@visualization_msgs//:cc",
+    "@moveit_core//:moveit_collision_detection_bullet_library",
+    "@moveit_core//:moveit_collision_detection_fcl_library",
+    "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_collision_distance_field_library",
+    "@moveit_core//:moveit_constraint_samplers_library",
+    "@moveit_core//:moveit_distance_field_library",
+    "@moveit_core//:moveit_dynamics_solver_library",
+    "@moveit_core//:moveit_exceptions_library",
+    "@moveit_core//:moveit_kinematic_constraints_library",
+    "@moveit_core//:moveit_kinematics_base_library",
+    "@moveit_core//:moveit_kinematics_metrics_library",
+    "@moveit_core//:moveit_planning_interface_library",
+    "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_smoothing_base_library",
+    "@moveit_core//:moveit_test_utils_library",
+    "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils_library",
+    "@moveit_ros_planning//:moveit_collision_plugin_loader_library",
+    "@moveit_ros_planning//:moveit_constraint_sampler_manager_loader_library",
+    "@moveit_ros_planning//:moveit_cpp_library",
+    "@moveit_ros_planning//:moveit_kinematics_plugin_loader_library",
+    "@moveit_ros_planning//:moveit_plan_execution_library",
+    "@moveit_ros_planning//:moveit_planning_pipeline_interfaces_library",
+    "@moveit_ros_planning//:moveit_planning_pipeline_library",
+    "@moveit_ros_planning//:moveit_planning_scene_monitor_library",
+    "@moveit_ros_planning//:moveit_rdf_loader_library",
+    "@moveit_ros_planning//:moveit_robot_model_loader_library",
+    "@moveit_ros_planning//:moveit_trajectory_execution_manager_library",
+    "@moveit_ros_planning//:srdf_publisher_node_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+]
+
+cc_library(
+    name = "moveit_robot_interaction_library",
+    srcs = [":gen_moveit_ros_robot_interaction_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_14"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/moveit_ros_robot_interaction",
+        "include",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_robot_interaction",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":moveit_robot_interaction_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_moveit_ros_robot_interaction_stub_cpp",
+    out = "_gen/moveit_ros_robot_interaction_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_14",
+    out = "_gen/include/moveit_ros_robot_interaction/moveit_robot_interaction_export.h",
+    content = ["\n#ifndef MOVEIT_ROBOT_INTERACTION_EXPORT_H\n#define MOVEIT_ROBOT_INTERACTION_EXPORT_H\n\n#ifdef MOVEIT_ROBOT_INTERACTION_STATIC_DEFINE\n#  define MOVEIT_ROBOT_INTERACTION_EXPORT\n#  define MOVEIT_ROBOT_INTERACTION_NO_EXPORT\n#else\n#  ifndef MOVEIT_ROBOT_INTERACTION_EXPORT\n#    ifdef moveit_robot_interaction_EXPORTS\n        /* We are building this library */\n#      define MOVEIT_ROBOT_INTERACTION_EXPORT __attribute__((visibility(\"default\")))\n#    else\n        /* We are using this library */\n#      define MOVEIT_ROBOT_INTERACTION_EXPORT __attribute__((visibility(\"default\")))\n#    endif\n#  endif\n\n#  ifndef MOVEIT_ROBOT_INTERACTION_NO_EXPORT\n#    define MOVEIT_ROBOT_INTERACTION_NO_EXPORT __attribute__((visibility(\"hidden\")))\n#  endif\n#endif\n\n#ifndef MOVEIT_ROBOT_INTERACTION_DEPRECATED\n#  define MOVEIT_ROBOT_INTERACTION_DEPRECATED __attribute__ ((__deprecated__))\n#endif\n\n#ifndef MOVEIT_ROBOT_INTERACTION_DEPRECATED_EXPORT\n#  define MOVEIT_ROBOT_INTERACTION_DEPRECATED_EXPORT MOVEIT_ROBOT_INTERACTION_EXPORT MOVEIT_ROBOT_INTERACTION_DEPRECATED\n#endif\n\n#ifndef MOVEIT_ROBOT_INTERACTION_DEPRECATED_NO_EXPORT\n#  define MOVEIT_ROBOT_INTERACTION_DEPRECATED_NO_EXPORT MOVEIT_ROBOT_INTERACTION_NO_EXPORT MOVEIT_ROBOT_INTERACTION_DEPRECATED\n#endif\n\n/* NOLINTNEXTLINE(readability-avoid-unconditional-preprocessor-if) */\n#if 0 /* DEFINE_NO_DEPRECATED */\n#  ifndef MOVEIT_ROBOT_INTERACTION_NO_DEPRECATED\n#    define MOVEIT_ROBOT_INTERACTION_NO_DEPRECATED\n#  endif\n#endif\n\n#endif /* MOVEIT_ROBOT_INTERACTION_EXPORT_H */\n"],
+)
+
+write_file(
+    name = "gen_cmake_16",
+    out = "_gen/share/moveit_ros_robot_interaction/cmake/ament_cmake_export_targets-extras.cmake",
+    content = ["# generated from ament_cmake_export_targets/cmake/ament_cmake_export_targets-extras.cmake.in\n\nset(_exported_targets \"moveit_ros_robot_interactionTargets\")\n\n# include all exported targets\nif(NOT _exported_targets STREQUAL \"\")\n  foreach(_target ${_exported_targets})\n    set(_export_file \"${moveit_ros_robot_interaction_DIR}/${_target}Export.cmake\")\n    include(\"${_export_file}\")\n\n    # extract the target names associated with the export\n    set(_regex \"foreach\\\\((_cmake)?_expected_?[Tt]arget (IN ITEMS )?(.+)\\\\)\")\n    file(\n      STRINGS \"${_export_file}\" _foreach_targets\n      REGEX \"${_regex}\")\n    list(LENGTH _foreach_targets _matches)\n    if(NOT _matches EQUAL 1)\n      message(FATAL_ERROR\n        \"Failed to find exported target names in '${_export_file}'\")\n    endif()\n    string(REGEX REPLACE \"${_regex}\" \"\\\\3\" _targets \"${_foreach_targets}\")\n    string(REPLACE \" \" \";\" _targets \"${_targets}\")\n    list(LENGTH _targets _length)\n\n    list(APPEND moveit_ros_robot_interaction_TARGETS ${_targets})\n  endforeach()\nendif()\n"],
+)
+
+write_file(
+    name = "gen_cmake_17",
+    out = "_gen/share/moveit_ros_robot_interaction/cmake/moveit_ros_robot_interactionTargetsExport-release.cmake",
+    content = ["#----------------------------------------------------------------\n# Generated CMake target import file for configuration \"Release\".\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Import target \"moveit_ros_robot_interaction::moveit_robot_interaction\" for configuration \"Release\"\nset_property(TARGET moveit_ros_robot_interaction::moveit_robot_interaction APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)\nset_target_properties(moveit_ros_robot_interaction::moveit_robot_interaction PROPERTIES\n  IMPORTED_LOCATION_RELEASE \"${_IMPORT_PREFIX}/lib/libmoveit_robot_interaction.so.2.15.2\"\n  IMPORTED_SONAME_RELEASE \"libmoveit_robot_interaction.so.2.15.2\"\n  )\n\nlist(APPEND _cmake_import_check_targets moveit_ros_robot_interaction::moveit_robot_interaction )\nlist(APPEND _cmake_import_check_files_for_moveit_ros_robot_interaction::moveit_robot_interaction \"${_IMPORT_PREFIX}/lib/libmoveit_robot_interaction.so.2.15.2\" )\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\n"],
+)
+
+write_file(
+    name = "gen_cmake_18",
+    out = "_gen/share/moveit_ros_robot_interaction/cmake/moveit_ros_robot_interactionTargetsExport.cmake",
+    content = ["# Generated by CMake\n\nif(\"${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}\" LESS 2.8)\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\nif(CMAKE_VERSION VERSION_LESS \"3.0.0\")\n   message(FATAL_ERROR \"CMake >= 3.0.0 required\")\nendif()\ncmake_policy(PUSH)\ncmake_policy(VERSION 3.0.0...4.0)\n#----------------------------------------------------------------\n# Generated CMake target import file.\n#----------------------------------------------------------------\n\n# Commands may need to know the format version.\nset(CMAKE_IMPORT_FILE_VERSION 1)\n\n# Protect against multiple inclusion, which would fail when already imported targets are added once more.\nset(_cmake_targets_defined \"\")\nset(_cmake_targets_not_defined \"\")\nset(_cmake_expected_targets \"\")\nforeach(_cmake_expected_target IN ITEMS moveit_ros_robot_interaction::moveit_ros_robot_interaction moveit_ros_robot_interaction::moveit_robot_interaction)\n  list(APPEND _cmake_expected_targets \"${_cmake_expected_target}\")\n  if(TARGET \"${_cmake_expected_target}\")\n    list(APPEND _cmake_targets_defined \"${_cmake_expected_target}\")\n  else()\n    list(APPEND _cmake_targets_not_defined \"${_cmake_expected_target}\")\n  endif()\nendforeach()\nunset(_cmake_expected_target)\nif(_cmake_targets_defined STREQUAL _cmake_expected_targets)\n  unset(_cmake_targets_defined)\n  unset(_cmake_targets_not_defined)\n  unset(_cmake_expected_targets)\n  unset(CMAKE_IMPORT_FILE_VERSION)\n  cmake_policy(POP)\n  return()\nendif()\nif(NOT _cmake_targets_defined STREQUAL \"\")\n  string(REPLACE \";\" \", \" _cmake_targets_defined_text \"${_cmake_targets_defined}\")\n  string(REPLACE \";\" \", \" _cmake_targets_not_defined_text \"${_cmake_targets_not_defined}\")\n  message(FATAL_ERROR \"Some (but not all) targets in this export set were already defined.\\nTargets Defined: ${_cmake_targets_defined_text}\\nTargets not yet defined: ${_cmake_targets_not_defined_text}\\n\")\nendif()\nunset(_cmake_targets_defined)\nunset(_cmake_targets_not_defined)\nunset(_cmake_expected_targets)\n\n\n# Compute the installation prefix relative to this file.\nget_filename_component(_IMPORT_PREFIX \"${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"${_IMPORT_PREFIX}\" PATH)\nif(_IMPORT_PREFIX STREQUAL \"/\")\n  set(_IMPORT_PREFIX \"\")\nendif()\n\n# Create imported target moveit_ros_robot_interaction::moveit_ros_robot_interaction\nadd_library(moveit_ros_robot_interaction::moveit_ros_robot_interaction INTERFACE IMPORTED)\n\nset_target_properties(moveit_ros_robot_interaction::moveit_ros_robot_interaction PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/moveit_ros_robot_interaction\"\n  INTERFACE_LINK_LIBRARIES \"moveit_ros_robot_interaction::moveit_robot_interaction\"\n)\n\n# Create imported target moveit_ros_robot_interaction::moveit_robot_interaction\nadd_library(moveit_ros_robot_interaction::moveit_robot_interaction SHARED IMPORTED)\n\nset_target_properties(moveit_ros_robot_interaction::moveit_robot_interaction PROPERTIES\n  INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include/moveit_ros_robot_interaction\"\n  INTERFACE_LINK_LIBRARIES \"moveit_core::moveit_core;moveit_ros_planning::moveit_ros_planning;interactive_markers::interactive_markers;tf2::tf2;tf2_eigen::tf2_eigen;tf2_ros::tf2_ros;tf2_geometry_msgs::tf2_geometry_msgs\"\n)\n\n# Load information for each installed configuration.\nfile(GLOB _cmake_config_files \"${CMAKE_CURRENT_LIST_DIR}/moveit_ros_robot_interactionTargetsExport-*.cmake\")\nforeach(_cmake_config_file IN LISTS _cmake_config_files)\n  include(\"${_cmake_config_file}\")\nendforeach()\nunset(_cmake_config_file)\nunset(_cmake_config_files)\n\n# Cleanup temporary variables.\nset(_IMPORT_PREFIX)\n\n# Loop over all imported files and verify that they actually exist\nforeach(_cmake_target IN LISTS _cmake_import_check_targets)\n  if(CMAKE_VERSION VERSION_LESS \"3.28\"\n      OR NOT DEFINED _cmake_import_check_xcframework_for_${_cmake_target}\n      OR NOT IS_DIRECTORY \"${_cmake_import_check_xcframework_for_${_cmake_target}}\")\n    foreach(_cmake_file IN LISTS \"_cmake_import_check_files_for_${_cmake_target}\")\n      if(NOT EXISTS \"${_cmake_file}\")\n        message(FATAL_ERROR \"The imported target \\\"${_cmake_target}\\\" references the file\n   \\\"${_cmake_file}\\\"\nbut this file does not exist.  Possible reasons include:\n* The file was deleted, renamed, or moved to another location.\n* An install or uninstall procedure did not complete successfully.\n* The installation package was faulty and contained\n   \\\"${CMAKE_CURRENT_LIST_FILE}\\\"\nbut not all the files it references.\n\")\n      endif()\n    endforeach()\n  endif()\n  unset(_cmake_file)\n  unset(\"_cmake_import_check_files_for_${_cmake_target}\")\nendforeach()\nunset(_cmake_target)\nunset(_cmake_import_check_targets)\n\n# This file does not depend on other imported targets which have\n# been exported from the same project but in a separate export set.\n\n# Commands beyond this point should not need to know the version.\nset(CMAKE_IMPORT_FILE_VERSION)\ncmake_policy(POP)\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "resources/access-denied.dae",
+        "resources/access-denied.stl",
+    ],
+    libraries = [
+        ":moveit_robot_interaction",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "moveit_robot_interaction": ["libmoveit_robot_interaction.so.2.15.2"],
+    },
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_ros_planning//:ament_package",
+        "@rclcpp//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "locked_robot_state_test",
+    srcs = [":gen_moveit_ros_robot_interaction_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/moveit_ros_robot_interaction",
+        "include",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":moveit_robot_interaction_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake = [
+        ":gen_cmake_16",
+        ":gen_cmake_17",
+        ":gen_cmake_18",
+    ],
+    cmake_export_dependencies_list = [
+        "moveit_core",
+        "moveit_ros_planning",
+        "interactive_markers",
+        "tf2",
+        "tf2_eigen",
+        "tf2_ros",
+        "tf2_geometry_msgs",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        "include/moveit/robot_interaction/interaction.h",
+        "include/moveit/robot_interaction/interaction.hpp",
+        "include/moveit/robot_interaction/interaction_handler.h",
+        "include/moveit/robot_interaction/interaction_handler.hpp",
+        "include/moveit/robot_interaction/interactive_marker_helpers.h",
+        "include/moveit/robot_interaction/interactive_marker_helpers.hpp",
+        "include/moveit/robot_interaction/kinematic_options.h",
+        "include/moveit/robot_interaction/kinematic_options.hpp",
+        "include/moveit/robot_interaction/kinematic_options_map.h",
+        "include/moveit/robot_interaction/kinematic_options_map.hpp",
+        "include/moveit/robot_interaction/locked_robot_state.h",
+        "include/moveit/robot_interaction/locked_robot_state.hpp",
+        "include/moveit/robot_interaction/robot_interaction.h",
+        "include/moveit/robot_interaction/robot_interaction.hpp",
+        ":gen_extra_14",
+    ],
+    libraries = [
+        ":moveit_robot_interaction",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "moveit_robot_interaction": ["libmoveit_robot_interaction.so.2.15.2"],
+    },
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_ros_planning//:ament_package",
+        "@rclcpp//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

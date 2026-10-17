@@ -1,0 +1,255 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+COPTS = ["-std=c++20"]
+
+DEFINES = [
+    "RBF_WARN_ON_INCOMPATIBLE_TYPE",
+    "RCLCPP_VERSION_MAJOR=32",
+]
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosidl_runtime_cpp//:rosidl_runtime_cpp": "@rosidl_runtime_cpp//:rosidl_runtime_cpp_library",
+    "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp": "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_library",
+    "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp": "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp_library",
+}
+
+cc_library(
+    name = "ros_babel_fish_library",
+    srcs = [
+        "src/babel_fish.cpp",
+        "src/detail/babel_fish_action_client.cpp",
+        "src/detail/babel_fish_action_server.cpp",
+        "src/detail/babel_fish_publisher.cpp",
+        "src/detail/babel_fish_service.cpp",
+        "src/detail/babel_fish_service_client.cpp",
+        "src/detail/babel_fish_subscription.cpp",
+        "src/detail/topic.cpp",
+        "src/idl/providers/local_type_support_provider.cpp",
+        "src/idl/serialization.cpp",
+        "src/idl/type_support.cpp",
+        "src/idl/type_support_provider.cpp",
+        "src/logging.hpp",
+        "src/messages/array_message.cpp",
+        "src/messages/compound_message.cpp",
+        "src/messages/message.cpp",
+    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    defines = DEFINES,
+    includes = [
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "ros_babel_fish",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":ros_babel_fish_library"],
+    deps = [":ros_babel_fish_library"],
+)
+
+### EXECUTABLES
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":ros_babel_fish"],
+    visibility = ["//visibility:private"],
+)
+
+[
+    cc_binary(
+        name = name,
+        srcs = ["examples/{}.cpp".format(name)],
+        copts = COPTS,
+        dynamic_deps = [":transitive_dynamic_deps"],
+        local_defines = ros_local_defines(),
+        deps = DEPENDENCIES.values() + [
+            ":ros_babel_fish_library",
+        ],
+    )
+    for name in [
+        "action_client",
+        "any_publisher",
+        "service_client",
+        "service_server",
+        "troll_node",
+    ]
+]
+
+cc_binary(
+    name = "any_subscriber",
+    srcs = ["examples/any_subscriber.cpp"],
+    copts = COPTS,
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":ros_babel_fish_library",
+        "@geometry_msgs//:cc",
+    ],
+)
+
+cc_binary(
+    name = "benchmark_message",
+    srcs = ["benchmark/message.cpp"],
+    copts = COPTS,
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":ros_babel_fish_library",
+        "@geometry_msgs//:cc",
+        "@google_benchmark//:benchmark",
+    ],
+)
+
+### AMENT INDEX
+
+EXECUTABLES = [
+    ":action_client",
+    ":any_publisher",
+    ":any_subscriber",
+    ":benchmark_message",
+    ":service_client",
+    ":service_server",
+    ":troll_node",
+]
+
+ament_index(
+    name = "ament_index",
+    executables = EXECUTABLES,
+    libraries = [":ros_babel_fish"],
+    package_xml = "package.xml",
+    deps = [
+        "@example_interfaces//:ament_index",
+        "@geometry_msgs//:ament_index",
+        "@ros_babel_fish_test_msgs//:ament_index",
+        "@std_msgs//:ament_index",
+    ],
+)
+
+### TESTS
+
+TEST_HEADERS = glob(["test/*.hpp"])
+
+[
+    cc_test(
+        name = "test_{}".format(name),
+        srcs = ["test/{}.cpp".format(name)] + TEST_HEADERS,
+        copts = COPTS,
+        data = [":ament_index"],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        local_defines = ros_local_defines(),
+        deps = DEPENDENCIES.values() + [
+            ":ros_babel_fish_library",
+            "@geometry_msgs//:cc",
+            "@ros_babel_fish_test_msgs//:cc",
+            "@rosdistro//cc:googletest",
+            "@std_msgs//:cc",
+        ],
+    )
+    for name in [
+        "message",
+        "message_decoding",
+        "message_encoding",
+    ]
+]
+
+[
+    cc_test(
+        name = "test_{}".format(name),
+        srcs = ["test/{}.cpp".format(name)] + TEST_HEADERS,
+        copts = COPTS,
+        data = [":ament_index"],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        local_defines = ros_local_defines(),
+        deps = DEPENDENCIES.values() + [
+            ":ros_babel_fish_library",
+            "@example_interfaces//:cc",
+            "@geometry_msgs//:cc",
+            "@ros_babel_fish_test_msgs//:cc",
+            "@rosdistro//cc:googletest",
+            "@std_msgs//:cc",
+        ],
+    )
+    for name in [
+        "action_client",
+        "action_server",
+        "service",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "rclcpp_action",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_cpp",
+        "rosidl_typesupport_introspection_cpp",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_name = "export_ros_babel_fish",
+    executables = EXECUTABLES,
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [":ros_babel_fish"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@example_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rcpputils//:ament_package",
+        "@ros_babel_fish_test_msgs//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_runtime_cpp//:ament_package",
+        "@rosidl_typesupport_cpp//:ament_package",
+        "@rosidl_typesupport_introspection_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

@@ -1,0 +1,159 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+}
+
+# Upstream compiles micro_ros_diagnostic_bridge.cpp straight into the
+# executable (and again into the test); kept as a static library here.
+cc_library(
+    name = "micro_ros_diagnostic_bridge_library",
+    srcs = ["src/micro_ros_diagnostic_bridge/micro_ros_diagnostic_bridge.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@diagnostic_msgs//:cc",
+        "@micro_ros_diagnostic_msgs//:cc",
+    ],
+)
+
+### EXECUTABLES
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "diagnostic_bridge",
+    srcs = ["src/diagnostic_bridge_node.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [":micro_ros_diagnostic_bridge_library"],
+)
+
+### AMENT INDEX
+
+DATA = glob(["launch/**"])
+
+ament_index(
+    name = "ament_index",
+    data = DATA,
+    executables = [":diagnostic_bridge"],
+    package_xml = "package.xml",
+    deps = [
+        "@diagnostic_msgs//:ament_index",
+        "@micro_ros_diagnostic_msgs//:ament_index",
+    ],
+)
+
+launch_ros_binary(
+    name = "diagnostic_bridge.launch.py",
+    src = "launch/diagnostic_bridge.launch.py",
+    data = [":ament_index"],
+)
+
+### TESTS
+
+# configure_file(test/lookup_tables.h.in ...): path of the yaml fixture,
+# resolved relative to the test runfiles.
+genrule(
+    name = "lookup_tables_h",
+    srcs = [
+        "test/lookup_tables.h.in",
+        "test/test_lookup_table.yaml",
+    ],
+    outs = ["test/generated/micro_ros_diagnostic_bridge/lookup_tables.h"],
+    cmd = "sed -e 's|@LOOKUP_TABLE_PATH@|$(rootpath test/test_lookup_table.yaml)|' $(location test/lookup_tables.h.in) > $@",
+)
+
+cc_library(
+    name = "lookup_tables",
+    hdrs = [":lookup_tables_h"],
+    includes = ["test/generated"],
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_diagnostic_bridge",
+    timeout = "moderate",
+    srcs = ["test/test_diagnostic_bridge.cpp"],
+    data = ["test/test_lookup_table.yaml"] + [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":lookup_tables",
+        ":micro_ros_diagnostic_bridge_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies_list = [
+        "ament_cmake",
+        "micro_ros_diagnostic_msgs",
+        "rosidl_generator_c",
+        "rcl",
+        "rcutils",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_targets = False,
+    cmake_extras = ["ament_cmake_export_libraries-extras.cmake"],
+    data = DATA,
+    executables = [":diagnostic_bridge"],
+    headers = HEADERS,
+    include_prefix = "",
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@micro_ros_diagnostic_msgs//:ament_package",
+        "@osrf_testing_tools_cpp//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

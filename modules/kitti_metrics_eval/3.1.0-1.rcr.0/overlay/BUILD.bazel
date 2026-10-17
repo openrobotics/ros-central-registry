@@ -1,0 +1,86 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@mrpt_math//:mrpt_math_library",
+    "@mrpt_poses//:mrpt_poses_library",
+    "@rosdistro//cc:eigen",
+]
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "kitti-metrics-eval",
+    srcs = [":gen_kitti_metrics_eval_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+write_file(
+    name = "gen_kitti_metrics_eval_stub_cpp",
+    out = "_gen/kitti_metrics_eval_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+    deps = [
+        "@mola_common//:ament_package",
+        "@mrpt_math//:ament_package",
+        "@mrpt_poses//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install_package_xml = False,
+    package_xml = "package.xml",
+    programs = [
+        ":kitti-metrics-eval",
+    ],
+    deps = [":ament_index"] + [
+        "@mola_common//:ament_package",
+        "@mrpt_math//:ament_package",
+        "@mrpt_poses//:ament_package",
+    ],
+)

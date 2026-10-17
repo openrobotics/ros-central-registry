@@ -1,0 +1,156 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+CC_DEPS = [
+    "@rcl_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "velodyne_laserscan_library",
+    srcs = ["src/velodyne_laserscan.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        "include",
+        "include/velodyne_laserscan",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "velodyne_laserscan",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":velodyne_laserscan_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "velodyne_laserscan_components",
+    component = ":velodyne_laserscan",
+    plugins = ["velodyne_laserscan::VelodyneLaserScan"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":velodyne_laserscan"],
+)
+
+cc_binary(
+    name = "velodyne_laserscan_node",
+    srcs = ["src/node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/velodyne_laserscan",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":velodyne_laserscan_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":velodyne_laserscan_components"],
+    data = [
+        "config/default-velodyne_laserscan_node-params.yaml",
+        "launch/velodyne_laserscan_node-composed-launch.py",
+        "launch/velodyne_laserscan_node-launch.py",
+    ],
+    lib_data = [":velodyne_laserscan_node"],
+    libraries = [":velodyne_laserscan"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "sensor_msgs",
+    ],
+    cmake_export_libraries = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":velodyne_laserscan"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

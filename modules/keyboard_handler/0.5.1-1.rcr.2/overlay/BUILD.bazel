@@ -1,0 +1,91 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+### LIBRARIES
+
+cc_library(
+    name = "keyboard_handler_library",
+    srcs = [
+        "src/default_unix_key_map.cpp",
+        "src/default_windows_key_map.cpp",
+        "src/keyboard_handler_base.cpp",
+        "src/keyboard_handler_unix_impl.cpp",
+        "src/keyboard_handler_windows_impl.cpp",
+    ],
+    hdrs = glob(["include/**/*.hpp"]),
+    includes = ["include"],
+    # keyboard_handler's visibility_control.hpp gates dllexport vs dllimport
+    # on KEYBOARD_HANDLER_BUILDING_LIBRARY (not the ament-standard
+    # <PKG>_BUILDING_DLL). Define it while compiling the library's own sources
+    # so its public API resolves to dllexport on Windows. No-op off Windows,
+    # where the macro block is guarded by _WIN32/__CYGWIN__.
+    local_defines = ["KEYBOARD_HANDLER_BUILDING_LIBRARY"],
+)
+
+cc_shared_library(
+    name = "keyboard_handler",
+    exports_filter = [":keyboard_handler_library"],
+    deps = [":keyboard_handler_library"],
+)
+
+### TESTS
+
+TEST_DEPENDENCIES = {
+    ":keyboard_handler": ":keyboard_handler_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":keyboard_handler"],
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_keyboard_handler",
+    srcs = [
+        "test/fake_player.hpp",
+        "test/fake_recorder.hpp",
+    ] + select({
+        "@platforms//os:windows": ["test/keyboard_handler_windows_tests.cpp"],
+        "//conditions:default": ["test/keyboard_handler_unix_tests.cpp"],
+    }),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["test"],
+    deps = TEST_DEPENDENCIES.values() + [
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_name = "export_keyboard_handler",
+    headers = glob(["include/**/*.hpp"]),
+    libraries = [":keyboard_handler"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

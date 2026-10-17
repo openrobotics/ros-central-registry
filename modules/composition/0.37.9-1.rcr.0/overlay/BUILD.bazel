@@ -1,0 +1,247 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+}
+
+COMPONENTS = {
+    "talker_component": "composition::Talker",
+    "listener_component": "composition::Listener",
+    "node_like_listener_component": "composition::NodeLikeListener",
+    "server_component": "composition::Server",
+    "client_component": "composition::Client",
+}
+
+[
+    cc_library(
+        name = "{0}_library".format(component),
+        srcs = ["src/{0}.cpp".format(component)],
+        hdrs = glob([
+            "include/**/*.hpp",
+            "include/**/*.h",
+        ]),
+        includes = ["include"],
+        local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+        deps = DEPENDENCIES.values() + [
+            "@example_interfaces//:cc",
+        ],
+    )
+    for component in COMPONENTS.keys()
+]
+
+[
+    cc_shared_library(
+        name = component,
+        dynamic_deps = DEPENDENCIES.keys(),
+        exports_filter = [":{0}_library".format(component)],
+        deps = [":{0}_library".format(component)],
+    )
+    for component in COMPONENTS.keys()
+]
+
+[
+    rclcpp_components_register_nodes(
+        name = "{0}_nodes".format(component),
+        component = ":{0}".format(component),
+        plugins = [plugin],
+    )
+    for component, plugin in COMPONENTS.items()
+]
+
+collect_transitive_dynamic_deps(
+    name = "composition_dynamic_deps",
+    dynamic_deps = [
+        ":talker_component",
+        ":listener_component",
+        ":server_component",
+        ":client_component",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+EXECUTABLES = [
+    "manual_composition",
+    "linktime_composition",
+    "dlopen_composition",
+]
+
+[
+    cc_binary(
+        name = executable,
+        srcs = ["src/{0}.cpp".format(executable)],
+        dynamic_deps = [":composition_dynamic_deps"],
+        deps = [
+            ":client_component_library",
+            ":listener_component_library",
+            ":server_component_library",
+            ":talker_component_library",
+            "@rclcpp//:rclcpp_library",
+        ],
+    )
+    for executable in EXECUTABLES
+]
+
+### TESTS
+
+ament_index(
+    name = "ament_index",
+    components = [":{0}_nodes".format(c) for c in COMPONENTS.keys()],
+    data = glob(["launch/**"]),
+    executables = [":{0}".format(e) for e in EXECUTABLES],
+    libraries = [":{0}".format(c) for c in COMPONENTS.keys()],
+    package_xml = "package.xml",
+)
+
+launch_ros_binary(
+    name = "composition_demo_launch",
+    src = "launch/composition_demo_launch.py",
+    data = [
+        ":ament_index",
+        "@rclcpp_components//:ament_index",
+        "@rclcpp_components//:component_container",
+    ],
+)
+
+write_file(
+    name = "rmw_test_fixture_implementation_py",
+    out = "rmw_test_fixture_implementation.py",
+    content = [
+        "def rmw_test_isolation_start(): pass",
+        "def rmw_test_isolation_stop(): pass",
+    ],
+)
+
+py_library(
+    name = "rmw_test_fixture_implementation",
+    srcs = [":rmw_test_fixture_implementation_py"],
+    imports = ["."],
+    visibility = ["//visibility:private"],
+)
+
+COMPOSITION_TESTS = {
+    "test_dlopen_composition": [
+        "DLOPEN_COMPOSITION_EXECUTABLE=../composition+/dlopen_composition",
+        "TALKER_LIBRARY=../composition+/libtalker_component.so",
+        "LISTENER_LIBRARY=../composition+/liblistener_component.so",
+        "SERVER_LIBRARY=../composition+/libserver_component.so",
+        "CLIENT_LIBRARY=../composition+/libclient_component.so",
+        "EXPECTED_OUTPUT_ALL=../composition+/test/composition_all",
+        "rmw_implementation=rmw_fastrtps_cpp",
+    ],
+    "test_linktime_composition": [
+        "LINKTIME_COMPOSITION_EXECUTABLE=../composition+/linktime_composition",
+        "EXPECTED_OUTPUT_ALL=../composition+/test/composition_all",
+        "rmw_implementation=rmw_fastrtps_cpp",
+    ],
+    "test_manual_composition": [
+        "MANUAL_COMPOSITION_EXECUTABLE=../composition+/manual_composition",
+        "EXPECTED_OUTPUT_ALL=../composition+/test/composition_all",
+        "rmw_implementation=rmw_fastrtps_cpp",
+    ],
+}
+
+[
+    cmake_configure_file(
+        name = "{0}_py".format(test_name),
+        src = "test/{0}.py.in".format(test_name),
+        out = "test/{0}.py".format(test_name),
+        defines = defines,
+    )
+    for test_name, defines in COMPOSITION_TESTS.items()
+]
+
+[
+    launch_ros_test(
+        name = test_name,
+        src = "{0}_py".format(test_name),
+        data = [
+            "test/composition_all.regex",
+            "test/composition_pubsub.regex",
+            "test/composition_srv.regex",
+            ":ament_index",
+            ":client_component",
+            ":dlopen_composition",
+            ":linktime_composition",
+            ":listener_component",
+            ":manual_composition",
+            ":node_like_listener_component",
+            ":server_component",
+            ":talker_component",
+        ],
+        deps = [
+            ":rmw_test_fixture_implementation",
+            "@rules_python//python/runfiles",
+        ],
+    )
+    for test_name in COMPOSITION_TESTS.keys()
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    components = [":{0}_nodes".format(c) for c in COMPONENTS.keys()],
+    data = glob(["launch/**"]),
+    executables = [":{0}".format(e) for e in EXECUTABLES],
+    libraries = [":{0}".format(c) for c in COMPONENTS.keys()],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@example_interfaces//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw_implementation_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

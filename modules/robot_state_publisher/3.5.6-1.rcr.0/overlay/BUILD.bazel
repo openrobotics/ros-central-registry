@@ -1,0 +1,334 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@kdl_parser//:kdl_parser": "@kdl_parser//:kdl_parser_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+}
+
+cc_library(
+    name = "robot_state_publisher_node_library",
+    srcs = ["src/robot_state_publisher.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@builtin_interfaces//:cc",
+        "@geometry_msgs//:cc",
+        "@rcl_interfaces//:cc",
+        "@sensor_msgs//:cc",
+        "@std_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "robot_state_publisher_node",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":robot_state_publisher_node_library"],
+    deps = [":robot_state_publisher_node_library"],
+)
+
+### COMPONENTS
+
+rclcpp_components_register_node(
+    name = "robot_state_publisher",
+    component = ":robot_state_publisher_node",
+    executor = "SingleThreadedExecutor",
+    node_name = "robot_state_publisher",
+    plugin = "robot_state_publisher::RobotStatePublisher",
+)
+
+### TRANSITIVE DYNAMIC DEPS
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":robot_state_publisher_node",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+### TEST EXECUTABLES
+
+cc_binary(
+    name = "test_two_links_fixed_joint",
+    srcs = ["test/test_two_links_fixed_joint.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "test_two_links_fixed_joint_prefix",
+    srcs = ["test/test_two_links_fixed_joint_prefix.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "test_two_links_moving_joint",
+    srcs = ["test/test_two_links_moving_joint.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:googletest",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_binary(
+    name = "test_two_links_change_fixed_joint",
+    srcs = ["test/test_two_links_change_fixed_joint.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        "@rcl_interfaces//:cc",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "test_change_mimic_joint",
+    srcs = ["test/test_change_mimic_joint.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        "@rcl_interfaces//:cc",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### LAUNCH TESTS
+
+# EnableRmwIsolation imports rmw_test_fixture_implementation; in Bazel each
+# test already runs in its own sandbox, so a no-op stub satisfies the import.
+write_file(
+    name = "rmw_test_fixture_implementation_py",
+    out = "rmw_test_fixture_implementation.py",
+    content = [
+        "def rmw_test_isolation_start(): pass",
+        "def rmw_test_isolation_stop(): pass",
+    ],
+)
+
+py_library(
+    name = "rmw_test_fixture_implementation",
+    srcs = [":rmw_test_fixture_implementation_py"],
+    imports = ["."],
+    visibility = ["//visibility:private"],
+)
+
+launch_ros_test(
+    name = "test_two_links_fixed_joint-launch.py",
+    src = "test/two_links_fixed_joint-launch.py",
+    args = [
+        "test_exe:=$(location :test_two_links_fixed_joint)",
+    ],
+    data = [
+        "test/two_links_fixed_joint.urdf",
+        ":ament_index",
+        ":robot_state_publisher",
+        ":test_two_links_fixed_joint",
+    ],
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+launch_ros_test(
+    name = "test_two_links_fixed_joint_prefix-launch.py",
+    src = "test/two_links_fixed_joint_prefix-launch.py",
+    args = [
+        "test_exe:=$(location :test_two_links_fixed_joint_prefix)",
+    ],
+    data = [
+        "test/two_links_fixed_joint.urdf",
+        ":ament_index",
+        ":robot_state_publisher",
+        ":test_two_links_fixed_joint_prefix",
+    ],
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+launch_ros_test(
+    name = "test_two_links_moving_joint-launch.py",
+    src = "test/two_links_moving_joint-launch.py",
+    args = [
+        "test_exe:=$(location :test_two_links_moving_joint)",
+    ],
+    data = [
+        "test/two_links_moving_joint.urdf",
+        ":ament_index",
+        ":robot_state_publisher",
+        ":test_two_links_moving_joint",
+    ],
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+launch_ros_test(
+    name = "test_two_links_change_fixed_joint-launch.py",
+    src = "test/two_links_change_fixed_joint-launch.py",
+    args = [
+        "test_exe:=$(location :test_two_links_change_fixed_joint)",
+    ],
+    data = [
+        "test/two_links_fixed_joint.urdf",
+        ":ament_index",
+        ":robot_state_publisher",
+        ":test_two_links_change_fixed_joint",
+    ],
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+launch_ros_test(
+    name = "test_change_mimic_joint-launch.py",
+    src = "test/change_mimic_joint-launch.py",
+    args = [
+        "test_exe:=$(location :test_change_mimic_joint)",
+    ],
+    data = [
+        "test/mimic_joint.urdf",
+        ":ament_index",
+        ":robot_state_publisher",
+        ":test_change_mimic_joint",
+    ],
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+launch_ros_test(
+    name = "test_use_robot_description_topic-launch.py",
+    src = "test/use_robot_description_topic-launch.py",
+    data = [
+        "test/two_links_fixed_joint.urdf",
+        ":ament_index",
+        ":robot_state_publisher",
+    ],
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@rules_python//python/runfiles",
+        "@std_msgs//:py",
+        "@tf2_ros_py",
+    ],
+)
+
+### AMENT INDEX
+
+# launch_ros' Node(package='robot_state_publisher', executable=...) resolves
+# the executable through the ament index.
+ament_index(
+    name = "ament_index",
+    data = glob([
+        "launch/**",
+        "urdf/**",
+    ]),
+    lib_data = [":robot_state_publisher"],
+    package_xml = "package.xml",
+    deps = ["@urdf//:ament_index"],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [":ament_index"],
+    )
+    for f in glob(["launch/*.py"])
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_robot_state_publisher_node",
+    components = [":robot_state_publisher_record"],
+    data = glob([
+        "launch/**",
+        "urdf/**",
+    ]),
+    executables = [
+        ":robot_state_publisher",
+    ],
+    headers = HEADERS,
+    libraries = [
+        ":robot_state_publisher_node",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@kdl_parser//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@tf2_ros_py//:ament_package",
+        "@urdf//:ament_package",
+    ],
+)

@@ -1,0 +1,452 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@resource_retriever//:resource_retriever": "@resource_retriever//:resource_retriever_library",
+    "@rosdistro//cc:asio": "@rosdistro//cc:asio_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp": "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp_library",
+    "@rosx_introspection//:rosx_introspection": "@rosx_introspection//:rosx_introspection_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@rcl_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:nlohmann_json",
+    "@rosdistro//cc:websocketpp",
+    "@rosgraph_msgs//:cc",
+    "@sensor_msgs//:cc",
+    "@service_msgs//:cc",
+    "@std_msgs//:cc",
+    "@std_srvs//:cc",
+    "@test_msgs//:cc",
+]
+
+cc_library(
+    name = "foxglove_library",
+    srcs = [":gen_foxglove_bridge_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/foxglove_bridge",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "foxglove",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":foxglove_library"],
+)
+
+cc_library(
+    name = "foxglove_cpp_shared_library",
+    srcs = [":gen_foxglove_bridge_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/foxglove_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "FOXGLOVE_REMOTE_ACCESS",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":foxglove_library"],
+)
+
+cc_shared_library(
+    name = "foxglove_cpp_shared",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":foxglove_cpp_shared_library"],
+)
+
+cc_library(
+    name = "foxglove_bridge_component_library",
+    srcs = [":gen_foxglove_bridge_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/foxglove_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "FOXGLOVE_REMOTE_ACCESS",
+        "NDEBUG",
+        "RESOURCE_RETRIEVER_VERSION_MAJOR=3",
+        "RESOURCE_RETRIEVER_VERSION_MINOR=9",
+        "RESOURCE_RETRIEVER_VERSION_PATCH=3",
+        "_FILE_OFFSET_BITS=64",
+        "span_CONFIG_SELECT_SPAN=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":foxglove_cpp_shared_library"],
+)
+
+cc_shared_library(
+    name = "foxglove_bridge_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":foxglove_bridge_component_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "foxglove_bridge_component_components",
+    component = ":foxglove_bridge_component",
+    plugins = ["foxglove_bridge::FoxgloveBridge"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "foxglove_bridge",
+    srcs = [":gen_foxglove_bridge_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/foxglove_bridge",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "FOXGLOVE_REMOTE_ACCESS",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+        "span_CONFIG_SELECT_SPAN=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":foxglove_bridge_component_library",
+        ":foxglove_cpp_shared_library",
+    ],
+)
+
+write_file(
+    name = "gen_foxglove_bridge_stub_cpp",
+    out = "_gen/foxglove_bridge_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":foxglove_bridge_component_components"],
+    data = [
+        "launch/foxglove_bridge_launch.xml",
+    ],
+    lib_data = [
+        ":foxglove_bridge",
+    ],
+    libraries = [
+        ":foxglove",
+        ":foxglove_cpp_shared",
+        ":foxglove_bridge_component",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@resource_retriever//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosgraph_msgs//:ament_package",
+        "@rosidl_typesupport_introspection_cpp//:ament_package",
+        "@rosx_introspection//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@service_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@test_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "cdr_serializer_test",
+    srcs = [":gen_foxglove_bridge_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/foxglove_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "FOXGLOVE_REMOTE_ACCESS",
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+        "span_CONFIG_SELECT_SPAN=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":foxglove_bridge_component_library",
+        ":foxglove_cpp_shared_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "message_definition_cache_test",
+    srcs = [":gen_foxglove_bridge_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/foxglove_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "FOXGLOVE_REMOTE_ACCESS",
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+        "span_CONFIG_SELECT_SPAN=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":foxglove_bridge_component_library",
+        ":foxglove_cpp_shared_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "smoke_test",
+    srcs = [":gen_foxglove_bridge_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/foxglove_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "ASIO_STANDALONE",
+        "FOXGLOVE_REMOTE_ACCESS",
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+        "span_CONFIG_SELECT_SPAN=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":foxglove_bridge_component_library",
+        ":foxglove_cpp_shared_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "utils_test",
+    srcs = [":gen_foxglove_bridge_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/foxglove_bridge",
+    ],
+    local_defines = ros_local_defines() + [
+        "FOXGLOVE_REMOTE_ACCESS",
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+        "span_CONFIG_SELECT_SPAN=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":foxglove_bridge_component_library",
+        ":foxglove_cpp_shared_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_binary(
+    name = "foxglove_bridge_launch.xml",
+    src = "launch/foxglove_bridge_launch.xml",
+    data = [
+        ":ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_targets = False,
+    headers = glob(["include/**"]),
+    include_prefix = "",
+    libraries = [
+        ":foxglove",
+        ":foxglove_cpp_shared",
+        ":foxglove_bridge_component",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@resource_retriever//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosgraph_msgs//:ament_package",
+        "@rosidl_typesupport_introspection_cpp//:ament_package",
+        "@rosx_introspection//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@service_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@test_msgs//:ament_package",
+    ],
+)

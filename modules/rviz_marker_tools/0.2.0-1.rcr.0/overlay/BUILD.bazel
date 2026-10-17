@@ -1,0 +1,125 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@std_msgs//:cc",
+    "@visualization_msgs//:cc",
+]
+
+cc_library(
+    name = "rviz_marker_tools_library",
+    srcs = ["src/marker_creation.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_urdf_model_link_h"],
+    copts = ["-std=c++20"],
+    includes = [
+        "_gen/include",
+        "_gen/include/urdf_model",
+        "include",
+        "include/rviz_marker_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rviz_marker_tools",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":rviz_marker_tools_library"],
+)
+
+write_file(
+    name = "gen_urdf_model_link_h",
+    out = "_gen/include/urdf_model/link.h",
+    content = ["#ifndef RCR_URDF_MODEL_LINK_H_\n#define RCR_URDF_MODEL_LINK_H_\n#include <string>\nnamespace urdf {\nstruct Vector3 {\n  double x{0.0}, y{0.0}, z{0.0};\n  Vector3() = default;\n  Vector3(double x_, double y_, double z_) : x(x_), y(y_), z(z_) {}\n};\nclass Geometry {\n public:\n  enum { SPHERE, BOX, CYLINDER, MESH, CAPSULE } type;\n  virtual ~Geometry() = default;\n};\nclass Sphere : public Geometry {\n public:\n  Sphere() { type = SPHERE; }\n  double radius{0.0};\n};\nclass Box : public Geometry {\n public:\n  Box() { type = BOX; }\n  Vector3 dim;\n};\nclass Cylinder : public Geometry {\n public:\n  Cylinder() { type = CYLINDER; }\n  double length{0.0};\n  double radius{0.0};\n};\nclass Capsule : public Geometry {\n public:\n  Capsule() { type = CAPSULE; }\n  double length{0.0};\n  double radius{0.0};\n};\nclass Mesh : public Geometry {\n public:\n  Mesh() { type = MESH; }\n  std::string filename;\n  Vector3 scale{1.0, 1.0, 1.0};\n};\n}  // namespace urdf\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":rviz_marker_tools"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@moveit_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "tf2_eigen",
+        "urdfdom_headers",
+        "geometry_msgs",
+        "std_msgs",
+        "visualization_msgs",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":rviz_marker_tools"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@moveit_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

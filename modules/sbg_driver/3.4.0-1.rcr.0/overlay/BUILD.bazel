@@ -1,0 +1,981 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosidl_default_generators//:defs.bzl", "default_generators", "rosidl_ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@nmea_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rtcm_msgs//:cc",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@std_srvs//:cc",
+    "@tf2_msgs//:cc",
+]
+
+cc_library(
+    name = "sbgECom_library",
+    srcs = glob(
+        [
+            "external/sbgECom/common/**/*.c",
+            "external/sbgECom/src/**/*.c",
+        ],
+        exclude = ["external/sbgECom/common/interfaces/sbgInterfaceSerialWin.c"],
+    ),
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/sbg_driver",
+        "_gen/include/sbg_driver/sbg_driver",
+        "external/sbgECom/common",
+        "external/sbgECom/src",
+        "include",
+        "include/sbg_driver",
+    ],
+    local_defines = ros_local_defines() + [
+        "SBG_COMMON_STATIC_USE",
+        "SBG_ECOM_USE_DEPRECATED_MACROS",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+    ],
+)
+
+genrule(
+    name = "static_sbgECom_a",
+    srcs = [":sbgECom_library"],
+    outs = ["libsbgECom.a"],
+    cmd = "for f in $(SRCS); do case $$f in *.a) cp $$f $@; exit 0;; esac; done; ar rcs $@",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "sbg_device",
+    srcs = [
+        "src/config_applier.cpp",
+        "src/config_store.cpp",
+        "src/main.cpp",
+        "src/message_publisher.cpp",
+        "src/message_wrapper.cpp",
+        "src/sbg_device.cpp",
+        "src/sbg_ros_helpers.cpp",
+        "src/sbg_utm.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/sbg_driver",
+        "_gen/include/sbg_driver/sbg_driver",
+        "external/sbgECom/common",
+        "external/sbgECom/src",
+        "include",
+        "include/sbg_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["SBG_COMMON_STATIC_USE"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":sbgECom_library",
+    ],
+)
+
+cc_binary(
+    name = "sbg_device_mag",
+    srcs = [
+        "src/config_applier.cpp",
+        "src/config_store.cpp",
+        "src/main_mag.cpp",
+        "src/message_publisher.cpp",
+        "src/message_wrapper.cpp",
+        "src/sbg_device.cpp",
+        "src/sbg_ros_helpers.cpp",
+        "src/sbg_utm.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/sbg_driver",
+        "_gen/include/sbg_driver/sbg_driver",
+        "external/sbgECom/common",
+        "external/sbgECom/src",
+        "include",
+        "include/sbg_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["SBG_COMMON_STATIC_USE"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":sbgECom_library",
+    ],
+)
+
+pkg_files(
+    name = "pkg_files_static_sbgECom",
+    srcs = [":static_sbgECom_a"],
+    prefix = "lib",
+)
+
+pkg_files(
+    name = "pkg_files_inc_0",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmd.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdAdvanced.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_2",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdAirData.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_3",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdApi.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_4",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdCommon.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_5",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdDvl.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_6",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdEthernet.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_7",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdEvent.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_8",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdFeatures.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_9",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdGnss.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_10",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdInfo.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_11",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdInterface.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_12",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdLicense.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_13",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdMag.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_14",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdOdo.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_15",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdOutput.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_16",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdSensor.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_17",
+    srcs = ["external/sbgECom/src/commands/sbgEComCmdSettings.h"],
+    prefix = "include/commands",
+)
+
+pkg_files(
+    name = "pkg_files_inc_18",
+    srcs = ["external/sbgECom/common/crc/sbgCrc.h"],
+    prefix = "include/crc",
+)
+
+pkg_files(
+    name = "pkg_files_inc_19",
+    srcs = ["external/sbgECom/common/debug/sbgDebug.h"],
+    prefix = "include/debug",
+)
+
+pkg_files(
+    name = "pkg_files_inc_20",
+    srcs = ["external/sbgECom/src/defs/sbgEComDefsGnss.h"],
+    prefix = "include/defs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_21",
+    srcs = ["external/sbgECom/common/interfaces/sbgInterface.h"],
+    prefix = "include/interfaces",
+)
+
+pkg_files(
+    name = "pkg_files_inc_22",
+    srcs = ["external/sbgECom/common/interfaces/sbgInterfaceFile.h"],
+    prefix = "include/interfaces",
+)
+
+pkg_files(
+    name = "pkg_files_inc_23",
+    srcs = ["external/sbgECom/common/interfaces/sbgInterfaceSerial.h"],
+    prefix = "include/interfaces",
+)
+
+pkg_files(
+    name = "pkg_files_inc_24",
+    srcs = ["external/sbgECom/common/interfaces/sbgInterfaceUdp.h"],
+    prefix = "include/interfaces",
+)
+
+pkg_files(
+    name = "pkg_files_inc_25",
+    srcs = ["external/sbgECom/src/logs/sbgEComLog.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_26",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogAirData.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_27",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogAutomotive.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_28",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogDepth.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_29",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogDiag.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_30",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogDvl.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_31",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogEkf.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_32",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogEkfRotAccel.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_33",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogEvent.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_34",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogGnssHdt.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_35",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogGnssPos.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_36",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogGnssVel.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_37",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogImu.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_38",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogMag.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_39",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogMagCalib.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_40",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogOdometer.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_41",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogPtp.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_42",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogRawData.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_43",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogSat.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_44",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogSessionInfo.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_45",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogShipMotion.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_46",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogStatus.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_47",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogUsbl.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_48",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogUtc.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_49",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogVelocity.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_50",
+    srcs = ["external/sbgECom/src/logs/sbgEComLogVibMon.h"],
+    prefix = "include/logs",
+)
+
+pkg_files(
+    name = "pkg_files_inc_51",
+    srcs = ["external/sbgECom/common/network/sbgNetwork.h"],
+    prefix = "include/network",
+)
+
+pkg_files(
+    name = "pkg_files_inc_52",
+    srcs = ["external/sbgECom/src/pager/sbgEComPager.h"],
+    prefix = "include/pager",
+)
+
+pkg_files(
+    name = "pkg_files_inc_53",
+    srcs = ["external/sbgECom/common/platform/sbgPlatform.h"],
+    prefix = "include/platform",
+)
+
+pkg_files(
+    name = "pkg_files_inc_54",
+    srcs = ["external/sbgECom/src/protocol/sbgEComProtocol.h"],
+    prefix = "include/protocol",
+)
+
+pkg_files(
+    name = "pkg_files_inc_55",
+    srcs = ["external/sbgECom/common/sbgCommon.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_56",
+    srcs = ["external/sbgECom/common/sbgConfig.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_57",
+    srcs = ["external/sbgECom/common/sbgDefines.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_58",
+    srcs = ["external/sbgECom/src/sbgECanId.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_59",
+    srcs = ["external/sbgECom/src/sbgECom.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_60",
+    srcs = ["external/sbgECom/src/sbgEComGetVersion.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_61",
+    srcs = ["external/sbgECom/src/sbgEComIds.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_62",
+    srcs = ["external/sbgECom/src/sbgEComLib.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_63",
+    srcs = ["external/sbgECom/src/sbgEComVersion.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_64",
+    srcs = ["external/sbgECom/common/sbgErrorCodes.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_65",
+    srcs = ["external/sbgECom/common/sbgTypes.h"],
+    prefix = "include",
+)
+
+pkg_files(
+    name = "pkg_files_inc_66",
+    srcs = ["include/sbg_driver/config_applier.h"],
+    prefix = "include/sbg_driver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_67",
+    srcs = ["include/sbg_driver/config_store.h"],
+    prefix = "include/sbg_driver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_68",
+    srcs = ["include/sbg_driver/message_publisher.h"],
+    prefix = "include/sbg_driver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_69",
+    srcs = ["include/sbg_driver/message_wrapper.h"],
+    prefix = "include/sbg_driver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_70",
+    srcs = ["include/sbg_driver/sbg_device.h"],
+    prefix = "include/sbg_driver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_466",
+    srcs = ["include/sbg_driver/sbg_matrix3.h"],
+    prefix = "include/sbg_driver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_467",
+    srcs = ["include/sbg_driver/sbg_ros_helpers.h"],
+    prefix = "include/sbg_driver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_468",
+    srcs = ["include/sbg_driver/sbg_utm.h"],
+    prefix = "include/sbg_driver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_469",
+    srcs = ["include/sbg_driver/sbg_vector3.h"],
+    prefix = "include/sbg_driver",
+)
+
+pkg_files(
+    name = "pkg_files_inc_470",
+    srcs = ["external/sbgECom/src/sessionInfo/sbgEComSessionInfo.h"],
+    prefix = "include/sessionInfo",
+)
+
+pkg_files(
+    name = "pkg_files_inc_471",
+    srcs = ["external/sbgECom/common/splitBuffer/sbgSplitBuffer.h"],
+    prefix = "include/splitBuffer",
+)
+
+pkg_files(
+    name = "pkg_files_inc_472",
+    srcs = ["external/sbgECom/common/streamBuffer/sbgStreamBuffer.h"],
+    prefix = "include/streamBuffer",
+)
+
+pkg_files(
+    name = "pkg_files_inc_473",
+    srcs = ["external/sbgECom/common/streamBuffer/sbgStreamBufferBE.h"],
+    prefix = "include/streamBuffer",
+)
+
+pkg_files(
+    name = "pkg_files_inc_474",
+    srcs = ["external/sbgECom/common/streamBuffer/sbgStreamBufferCommon.h"],
+    prefix = "include/streamBuffer",
+)
+
+pkg_files(
+    name = "pkg_files_inc_475",
+    srcs = ["external/sbgECom/common/streamBuffer/sbgStreamBufferLE.h"],
+    prefix = "include/streamBuffer",
+)
+
+pkg_files(
+    name = "pkg_files_inc_476",
+    srcs = ["external/sbgECom/common/string/sbgString.h"],
+    prefix = "include/string",
+)
+
+pkg_files(
+    name = "pkg_files_inc_477",
+    srcs = ["external/sbgECom/common/swap/sbgSwap.h"],
+    prefix = "include/swap",
+)
+
+pkg_files(
+    name = "pkg_files_inc_478",
+    srcs = ["external/sbgECom/src/transfer/sbgEComTransfer.h"],
+    prefix = "include/transfer",
+)
+
+pkg_files(
+    name = "pkg_files_inc_479",
+    srcs = ["external/sbgECom/common/version/sbgVersion.h"],
+    prefix = "include/version",
+)
+
+pkg_files(
+    name = "pkg_files_inc_480",
+    srcs = ["external/sbgECom/src/vibMon/sbgEComVibMonFft.h"],
+    prefix = "include/vibMon",
+)
+
+pkg_files(
+    name = "pkg_files_inc_481",
+    srcs = ["external/sbgECom/src/vibMon/sbgEComVibMonFftCtx.h"],
+    prefix = "include/vibMon",
+)
+
+default_generators(
+    package_xml = "package.xml",
+    deps = [
+        "//msg:SbgAirData",
+        "//msg:SbgAirDataStatus",
+        "//msg:SbgEkfEuler",
+        "//msg:SbgEkfNav",
+        "//msg:SbgEkfQuat",
+        "//msg:SbgEkfRotAccel",
+        "//msg:SbgEkfStatus",
+        "//msg:SbgEkfVelBody",
+        "//msg:SbgEvent",
+        "//msg:SbgGpsHdt",
+        "//msg:SbgGpsPos",
+        "//msg:SbgGpsPosStatus",
+        "//msg:SbgGpsRaw",
+        "//msg:SbgGpsVel",
+        "//msg:SbgGpsVelStatus",
+        "//msg:SbgImuData",
+        "//msg:SbgImuShort",
+        "//msg:SbgImuStatus",
+        "//msg:SbgMag",
+        "//msg:SbgMagCalib",
+        "//msg:SbgMagStatus",
+        "//msg:SbgOdoVel",
+        "//msg:SbgShipMotion",
+        "//msg:SbgShipMotionStatus",
+        "//msg:SbgStatus",
+        "//msg:SbgStatusAiding",
+        "//msg:SbgStatusCom",
+        "//msg:SbgStatusGeneral",
+        "//msg:SbgUtcTime",
+        "//msg:SbgUtcTimeStatus",
+    ],
+)
+
+ament_index(
+    name = "ament_index_extra",
+    data = [
+        "config/example/ellipse_A_default.yaml",
+        "config/example/ellipse_D_default.yaml",
+        "config/example/ellipse_E_default.yaml",
+        "config/example/ellipse_N_default.yaml",
+        "config/sbg_device_file_default.yaml",
+        "config/sbg_device_uart_default.yaml",
+        "config/sbg_device_udp_default.yaml",
+        "launch/examples/sbg_ellipseA.launch",
+        "launch/examples/sbg_ellipseE.launch",
+        "launch/examples/sbg_ellipseN.launch",
+        "launch/sbg_device.launch",
+        "launch/sbg_device_launch.py",
+        "launch/sbg_device_mag_calibration.launch",
+        "launch/sbg_device_mag_calibration_launch.py",
+        "meshes/.gitattributes",
+        "meshes/ELLIPSE-A.stl",
+        "meshes/ELLIPSE-D.stl",
+        "meshes/ELLIPSE-E.stl",
+        "meshes/ELLIPSE-N.stl",
+        "urdf/ELLIPSE-A.urdf",
+        "urdf/ELLIPSE-D.urdf",
+        "urdf/ELLIPSE-E.urdf",
+        "urdf/ELLIPSE-N.urdf",
+    ],
+    export_name = "sbg_driver",
+    lib_data = [
+        ":sbg_device",
+        ":sbg_device_mag",
+    ],
+    libraries = [
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@nmea_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@rtcm_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@urdf//:ament_package",
+        "@xacro//:ament_package",
+    ],
+)
+
+rosidl_ament_package(
+    cmake_export_dependencies_list = [
+        "std_msgs",
+        "geometry_msgs",
+        "builtin_interfaces",
+        "rosidl_runtime_c",
+        "rosidl_typesupport_interface",
+        "rcutils",
+        "fastcdr",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_fastrtps_c",
+        "rosidl_typesupport_fastrtps_cpp",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_cpp",
+        "fastcdr",
+        "rmw",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_fastrtps_cpp",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_c",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_cpp",
+        "rosidl_typesupport_interface",
+        "rosidl_default_runtime",
+        "rclcpp",
+        "sensor_msgs",
+        "std_msgs",
+        "std_srvs",
+        "geometry_msgs",
+        "nav_msgs",
+        "rtcm_msgs",
+        "tf2_ros",
+        "tf2_msgs",
+        "tf2_geometry_msgs",
+        "rosidl_default_runtime",
+    ],
+    install = [
+        ":pkg_files_static_sbgECom",
+        ":pkg_files_inc_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_inc_2",
+        ":pkg_files_inc_3",
+        ":pkg_files_inc_4",
+        ":pkg_files_inc_5",
+        ":pkg_files_inc_6",
+        ":pkg_files_inc_7",
+        ":pkg_files_inc_8",
+        ":pkg_files_inc_9",
+        ":pkg_files_inc_10",
+        ":pkg_files_inc_11",
+        ":pkg_files_inc_12",
+        ":pkg_files_inc_13",
+        ":pkg_files_inc_14",
+        ":pkg_files_inc_15",
+        ":pkg_files_inc_16",
+        ":pkg_files_inc_17",
+        ":pkg_files_inc_18",
+        ":pkg_files_inc_19",
+        ":pkg_files_inc_20",
+        ":pkg_files_inc_21",
+        ":pkg_files_inc_22",
+        ":pkg_files_inc_23",
+        ":pkg_files_inc_24",
+        ":pkg_files_inc_25",
+        ":pkg_files_inc_26",
+        ":pkg_files_inc_27",
+        ":pkg_files_inc_28",
+        ":pkg_files_inc_29",
+        ":pkg_files_inc_30",
+        ":pkg_files_inc_31",
+        ":pkg_files_inc_32",
+        ":pkg_files_inc_33",
+        ":pkg_files_inc_34",
+        ":pkg_files_inc_35",
+        ":pkg_files_inc_36",
+        ":pkg_files_inc_37",
+        ":pkg_files_inc_38",
+        ":pkg_files_inc_39",
+        ":pkg_files_inc_40",
+        ":pkg_files_inc_41",
+        ":pkg_files_inc_42",
+        ":pkg_files_inc_43",
+        ":pkg_files_inc_44",
+        ":pkg_files_inc_45",
+        ":pkg_files_inc_46",
+        ":pkg_files_inc_47",
+        ":pkg_files_inc_48",
+        ":pkg_files_inc_49",
+        ":pkg_files_inc_50",
+        ":pkg_files_inc_51",
+        ":pkg_files_inc_52",
+        ":pkg_files_inc_53",
+        ":pkg_files_inc_54",
+        ":pkg_files_inc_55",
+        ":pkg_files_inc_56",
+        ":pkg_files_inc_57",
+        ":pkg_files_inc_58",
+        ":pkg_files_inc_59",
+        ":pkg_files_inc_60",
+        ":pkg_files_inc_61",
+        ":pkg_files_inc_62",
+        ":pkg_files_inc_63",
+        ":pkg_files_inc_64",
+        ":pkg_files_inc_65",
+        ":pkg_files_inc_66",
+        ":pkg_files_inc_67",
+        ":pkg_files_inc_68",
+        ":pkg_files_inc_69",
+        ":pkg_files_inc_70",
+        ":pkg_files_inc_466",
+        ":pkg_files_inc_467",
+        ":pkg_files_inc_468",
+        ":pkg_files_inc_469",
+        ":pkg_files_inc_470",
+        ":pkg_files_inc_471",
+        ":pkg_files_inc_472",
+        ":pkg_files_inc_473",
+        ":pkg_files_inc_474",
+        ":pkg_files_inc_475",
+        ":pkg_files_inc_476",
+        ":pkg_files_inc_477",
+        ":pkg_files_inc_478",
+        ":pkg_files_inc_479",
+        ":pkg_files_inc_480",
+        ":pkg_files_inc_481",
+    ],
+    libraries = [
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index_extra"] + [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@nmea_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@rtcm_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@urdf//:ament_package",
+        "@xacro//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [":ament_index"],
+    )
+    for f in [
+        "launch/sbg_device_launch.py",
+        "launch/sbg_device_mag_calibration_launch.py",
+    ]
+]

@@ -1,0 +1,349 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@mapviz//:mapviz_core": "@mapviz//:mapviz_core_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@swri_math_util//:swri_math_util": "@swri_math_util//:swri_math_util_library",
+    "@swri_transform_util//:swri_transform_util": "@swri_transform_util//:swri_transform_util_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+}
+
+CC_DEPS = [
+    "@gps_msgs//:cc",
+    "@mapviz_interfaces//:cc",
+    "@marti_common_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rules_qt//:qt_core",
+    "@rules_qt//:qt_gui",
+    "@rules_qt//:qt_svg",
+    "@rules_qt//:qt_widgets",
+]
+
+qt_cc_library(
+    name = "multires_image_library",
+    srcs = [
+        "src/tile.cpp",
+        "src/tile_cache.cpp",
+        "src/tile_set.cpp",
+        "src/tile_set_layer.cpp",
+    ],
+    hdrs = ["include/multires_image/tile_cache.hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/multires_image",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+        "WFlags=WindowFlags",
+    ],
+    normal_hdrs = [
+        "include/multires_image/multires_view.hpp",
+        "include/multires_image/tile.hpp",
+        "include/multires_image/tile_set.hpp",
+        "include/multires_image/tile_set_layer.hpp",
+        "include/multires_image/tile_view.hpp",
+        "include/multires_image/QGLMap.hpp",
+        "include/multires_image/multires_image_plugin.hpp",
+        "include/multires_image/multires_view_node.hpp",
+        ":gen_rcr_qt_libc_shim_hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "multires_image",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":multires_image_library",
+        "//:__subpackages__",
+    ],
+    deps = [":multires_image_library"],
+)
+
+qt_cc_library(
+    name = "multires_widget_library",
+    srcs = [
+        "src/QGLMap.cpp",
+        "src/tile_view.cpp",
+    ],
+    hdrs = ["include/multires_image/QGLMap.hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/multires_image",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+        "WFlags=WindowFlags",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    normal_hdrs = [
+        "include/multires_image/multires_view.hpp",
+        "include/multires_image/tile.hpp",
+        "include/multires_image/tile_set.hpp",
+        "include/multires_image/tile_set_layer.hpp",
+        "include/multires_image/tile_view.hpp",
+        "include/multires_image/multires_image_plugin.hpp",
+        "include/multires_image/multires_view_node.hpp",
+        "include/multires_image/tile_cache.hpp",
+        ":gen_rcr_qt_libc_shim_hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":multires_image_library"],
+)
+
+cc_shared_library(
+    name = "multires_widget",
+    dynamic_deps = DEPENDENCIES.keys() + [":multires_image"],
+    exports_filter = [
+        ":multires_widget_library",
+        "//:__subpackages__",
+    ],
+    deps = [":multires_widget_library"],
+)
+
+qt_cc_library(
+    name = "multires_image_plugin_library",
+    srcs = [
+        "src/multires_image_plugin.cpp",
+        "src/multires_view.cpp",
+    ],
+    hdrs = ["include/multires_image/multires_image_plugin.hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/multires_image",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+        "WFlags=WindowFlags",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    normal_hdrs = [
+        "include/multires_image/multires_view.hpp",
+        "include/multires_image/tile.hpp",
+        "include/multires_image/tile_set.hpp",
+        "include/multires_image/tile_set_layer.hpp",
+        "include/multires_image/tile_view.hpp",
+        "include/multires_image/QGLMap.hpp",
+        "include/multires_image/multires_view_node.hpp",
+        "include/multires_image/tile_cache.hpp",
+        ":gen_rcr_qt_libc_shim_hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":multires_image_library",
+        ":multires_widget_library",
+    ],
+)
+
+cc_shared_library(
+    name = "multires_image_plugin",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":multires_image",
+        ":multires_widget",
+    ],
+    exports_filter = [
+        ":multires_image_plugin_library",
+        "//:__subpackages__",
+    ],
+    deps = [":multires_image_plugin_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_rcr_qt_libc_shim_hpp",
+    out = "_gen/include/rcr_qt_libc_shim.hpp",
+    content = ["#pragma once\n#ifdef __cplusplus\n#include <QByteArray>\n#include <QJsonObject>\n#include <QJsonValue>\n#include <QObject>\n#include <QString>\n#include <QTimer>\n#include <chrono>\n#include <initializer_list>\n#include <string>\n#include <utility>\ninline QByteArray QByteArray::fromStdString(const std::string &s) { return QByteArray(s.data(), s.size()); }\ninline std::string QByteArray::toStdString() const { return std::string(constData(), size()); }\ninline QJsonObject::QJsonObject(std::initializer_list<std::pair<QString, QJsonValue>> args) : QJsonObject() {\n  for (const auto &arg : args) { insert(arg.first, arg.second); }\n}\nextern \"C\" void _ZN6QTimer14singleShotImplENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEEN2Qt9TimerTypeEPK7QObjectPN9QtPrivate15QSlotObjectBaseE(\n    long ns, Qt::TimerType timerType, const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj);\ninline void QTimer::singleShotImpl(std::chrono::nanoseconds ns, Qt::TimerType timerType, const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj) {\n  _ZN6QTimer14singleShotImplENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEEN2Qt9TimerTypeEPK7QObjectPN9QtPrivate15QSlotObjectBaseE(\n      ns.count(), timerType, receiver, slotObj);\n}\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@mapviz//:ament_package",
+        "@mapviz_interfaces//:ament_package",
+        "@marti_common_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@swri_transform_util//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_queued_signals",
+    srcs = ["test/test_queued_signals.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_qt_libc_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":multires_image",
+        ":multires_image_plugin",
+        ":multires_widget",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/multires_image",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":multires_image_library",
+        ":multires_widget_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_tile_set",
+    srcs = ["test/test_tile_set.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_qt_libc_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+        ":multires_image",
+        ":multires_image_plugin",
+        ":multires_widget",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/multires_image",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":multires_image_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    install_package_xml = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@mapviz//:ament_package",
+        "@mapviz_interfaces//:ament_package",
+        "@marti_common_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@swri_transform_util//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)

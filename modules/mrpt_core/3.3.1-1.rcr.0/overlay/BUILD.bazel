@@ -1,0 +1,182 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "mrpt_core_library",
+    srcs = [
+        "src/Clock.cpp",
+        "src/WorkerThreadsPool.cpp",
+        "src/aligned_malloc.cpp",
+        "src/backtrace.cpp",
+        "src/cpu.cpp",
+        "src/demangle.cpp",
+        "src/exceptions.cpp",
+        "src/format.cpp",
+        "src/get_env.cpp",
+        "src/reverse_bytes.cpp",
+        "src/winerror2str.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_18",
+        ":gen_extra_38",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines() + [
+        "MRPT_EXCEPTIONS_CALL_STACK_MAX_DEPTH=50U",
+        "MRPT_EXCEPTIONS_WITH_CALL_STACK",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_core",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["@@//:__subpackages__"],
+    deps = [":mrpt_core_library"],
+)
+
+cc_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu_library",
+    srcs = ["python_bindings/mrpt_core_py.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_18",
+        ":gen_extra_38",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_core_library"],
+)
+
+cc_shared_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys() + [":mrpt_core"],
+    shared_lib_name = "mrpt/core/_bindings.so",
+    deps = [":_bindings.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "mrpt",
+    srcs = glob(["python/mrpt/**/*.py"]),
+    imports = ["python"],
+)
+
+write_file(
+    name = "gen_extra_18",
+    out = "_gen/include/mrpt/core/config.h",
+    content = ["/* +---------------------------------------------------------------------------+\n   |                     Mobile Robot Programming Toolkit (MRPT)               |\n   |                          https://www.mrpt.org/                            |\n   |                                                                           |\n   | Copyright (c) 2005-2026, Individual contributors, see AUTHORS file        |\n   | See: https://www.mrpt.org/Authors - All rights reserved.                  |\n   | Released under BSD License. See details in https://www.mrpt.org/License   |\n   +---------------------------------------------------------------------------+\n */\n\n#pragma once\n\n// clang-format off\n\n/** MRPT_BUILT_AS_DLL is defined only if MRPT has been built\n  *   as a shared library (.dll/.so) vs. a static library (.lib/.a).\n  *  Additionally, MRPT_EXPORTS will be defined only when compiling\n  *   the DLLs, not when the user imports them.\n  */\n#define MRPT_BUILT_AS_DLL\n\n#define MRPT_HAS_TBB              1\n\n/** These two values are detected in Eigen when building MRPT, so we have\n  the same settings given the user-provided flags  */\n#define MRPT_MAX_ALIGN_BYTES           32\n#define MRPT_MAX_STATIC_ALIGN_BYTES    32\n\n/* Automatic definition of OS-macros */\n#if defined(_WIN32) || defined(_WIN32_)  || defined(WIN32) || defined(_WIN64)\n    #define MRPT_OS_WINDOWS\n#elif defined(unix) || defined(__unix__) || defined(__unix)\n    #define MRPT_OS_LINUX\n#elif defined(__APPLE__)\n    #define MRPT_OS_APPLE\n#else\n    #error Unsupported platform (Found neither _WIN32_, __unix__ or __APPLE__)\n#endif\n\n/** The architecture is 32 or 64 bit wordsize:  */\n#define MRPT_WORD_SIZE\t64\n\n/** True if we are in amd64 or i386 architectures */\n#define MRPT_ARCH_INTEL_COMPATIBLE 1\n\n/** Use optimized functions with the SSE2 machine instructions set */\n#if defined WIN32 && (!defined WIN64 || defined EM64T) && \\\n (_MSC_VER >= 1400) || (defined __SSE2__ && defined __GNUC__ && __GNUC__ >= 4)\n\t#define MRPT_HAS_SSE2  1   // This value can be set to 0 from CMake with ENABLE_SSE2\n#else\n\t#define MRPT_HAS_SSE2  0\n#endif\n\n/** Use optimized functions with the SSE3 machine instructions set */\n#if defined WIN32 && (!defined WIN64 || defined EM64T) && \\\n (_MSC_VER >= 1500) || (defined __SSE3__ && defined __GNUC__ && __GNUC__ >= 4)\n\t#define MRPT_HAS_SSE3  1   // This value can be set to 0 from CMake with ENABLE_SSE3\n#else\n\t#define MRPT_HAS_SSE3  0\n#endif\n\n// This value can be set to 0 from CMake with ENABLE_XXX\n#define MRPT_HAS_SSE4_1  1\n#define MRPT_HAS_SSE4_2  1\n#define MRPT_HAS_SSE4_A  0\n#define MRPT_HAS_AVX     1\n#define MRPT_HAS_AVX2    1\n#define MRPT_HAS_NEON    0\n\n/** Are we in a big-endian system? (Intel, amd, etc.. are little-endian) */\n#define MRPT_IS_BIG_ENDIAN 0\n\n/** Are we in an Emscripten build? */\n#define MRPT_IN_EMSCRIPTEN 0\n\n/** Standard headers */\n#ifndef HAVE_WINSOCK2_H\n/* #undef HAVE_WINSOCK2_H */\n#endif\n\n#ifndef HAVE_LINUX_SERIAL_H\n#define HAVE_LINUX_SERIAL_H 1\n#endif\n\n#ifndef HAVE_LINUX_INPUT_H\n#define HAVE_LINUX_INPUT_H 1\n#endif\n\n#ifndef HAVE_SYS_TIME_H\n#define HAVE_SYS_TIME_H 1\n#endif\n\n#ifndef HAVE_PTHREAD_H\n#define HAVE_PTHREAD_H 1\n#endif\n\n#ifndef HAVE_UNISTD_H\n#define HAVE_UNISTD_H 1\n#endif\n\n// Has <malloc.h>?\n#ifndef HAVE_MALLOC_H\n#define HAVE_MALLOC_H 1\n#endif\n\n// Has <malloc/malloc.h>?\n#ifndef HAVE_MALLOC_MALLOC_H\n/* #undef HAVE_MALLOC_MALLOC_H */\n#endif\n\n/** Standard functions */\n#ifndef HAVE_TIMEGM\n#define HAVE_TIMEGM\n#endif\n\n#ifndef HAVE_MKGMTIME\n/* #undef HAVE_MKGMTIME */\n#endif\n\n#ifndef HAVE_GETTID\n#define HAVE_GETTID\n#endif\n\n#ifndef HAVE_SINCOS\n#define HAVE_SINCOS\n#endif\n\n#ifndef HAVE_LRINT\n/* #undef HAVE_LRINT */\n#endif\n\n#ifndef HAVE_STRTOK_R\n#define HAVE_STRTOK_R\n#endif\n\n#ifndef HAVE_LOCALTIME_R\n#define HAVE_LOCALTIME_R\n#endif\n\n#ifndef HAVE_ALIGNED_MALLOC\n/* #undef HAVE_ALIGNED_MALLOC */\n#endif\n\n/* Standard types  */\n#ifndef HAVE_LONG_DOUBLE\n#define HAVE_LONG_DOUBLE\n#endif\n\n/* BFD library for debug symbols */\n#define MRPT_HAS_BFD 0\n/* #undef HAVE_DECL_BFD_SECTION_FLAGS */\n/* #undef HAVE_DECL_BFD_GET_SECTION_FLAGS */\n/* #undef HAVE_DECL_BFD_GET_SECTION_VMA */\n/* #undef HAVE_DECL_BFD_SECTION_VMA */\n/* #undef HAVE_1_ARG_BFD_SECTION_SIZE */\n\n// -------------------------------\n//\t\t\tSome checks:\n// -------------------------------\n#if !defined(MRPT_OS_WINDOWS) && !defined(MRPT_OS_LINUX) && !defined(MRPT_OS_APPLE)\n#error Neither OS detected from MRPT_OS_LINUX, MRPT_OS_APPLE or MRPT_OS_WINDOWS!\n#endif\n\n// clang-format on\n"],
+)
+
+write_file(
+    name = "gen_extra_38",
+    out = "_gen/include/mrpt/version.h",
+    content = ["/* +---------------------------------------------------------------------------+\n   |                     Mobile Robot Programming Toolkit (MRPT)               |\n   |                          https://www.mrpt.org/                            |\n   +---------------------------------------------------------------------------+\n */\n#pragma once\n\nconst char MRPT_version_str[] = \"MRPT 3..1\";\n\n/** Version number of package in hexadecimal:\n * A 0x112233 hexadecimal version code, eg. 2.10.2 -> 0x020A02 */\n// clang-format off\n#define MRPT_VERSION 0x30301\n// clang-format on\n\n// See specs: https://reproducible-builds.org/specs/source-date-epoch/\nconst char MRPT_SOURCE_DATE_EPOCH[] = \"1790705864\";\n\nconst char MRPT_CMAKE_SOURCE_DIR[] = \"/usr/local/google/home/simmers/development/ros-central-registry/release/lyrical/2026-10-05/src/mrpt3/mrpt_core\";\nconst char MRPT_CMAKE_INSTALL_PREFIX[] = \"/usr/local/google/home/simmers/development/ros-central-registry/release/lyrical/2026-10-05/install/mrpt_core\";\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mrpt_core",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_core": [
+            "libmrpt_core.so.3.3",
+            "libmrpt_core.so.3.3.1",
+        ],
+    },
+    deps = [
+        "@mrpt_common//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        ":gen_extra_18",
+        ":gen_extra_38",
+    ] + glob(["include/**"]),
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_core",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":mrpt",
+        ":_bindings.cpython-314-x86_64-linux-gnu",
+    ],
+    python_strip_prefix = "python",
+    sonames = {
+        "mrpt_core": [
+            "libmrpt_core.so.3.3",
+            "libmrpt_core.so.3.3.1",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_common//:ament_package",
+    ],
+)

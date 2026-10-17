@@ -1,0 +1,122 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+filegroup(
+    name = "share_files",
+    srcs = glob([
+        "config/**",
+        "launch/**",
+    ]),
+)
+
+cc_library(
+    name = "kobuki_velocity_smoother_library",
+    srcs = ["src/velocity_smoother.cpp"],
+    hdrs = glob(["include/**/*.hpp"]),
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = [
+        "@geometry_msgs//:cc",
+        "@nav_msgs//:cc",
+        "@rcl_interfaces//:cc",
+        "@rclcpp//:rclcpp_library",
+        "@rclcpp_components//:rclcpp_components_library",
+    ],
+)
+
+cc_shared_library(
+    name = "kobuki_velocity_smoother",
+    shared_lib_name = "libkobuki_velocity_smoother.so",
+    deps = [":kobuki_velocity_smoother_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "component_nodes",
+    component = ":kobuki_velocity_smoother",
+    plugins = [
+        "kobuki_velocity_smoother::VelocitySmoother",
+    ],
+)
+
+cc_binary(
+    name = "velocity_smoother",
+    srcs = ["src/velocity_smoother_node.cpp"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":kobuki_velocity_smoother_library",
+        "@rclcpp//:rclcpp_library",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":component_nodes"],
+    data = [":share_files"],
+    executables = [":velocity_smoother"],
+    libraries = [":kobuki_velocity_smoother"],
+    package_xml = "package.xml",
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    name = "ament_package",
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    components = [":component_nodes"],
+    data = [":share_files"],
+    executables = [":velocity_smoother"],
+    headers = glob(["include/**/*.hpp"]),
+    include_prefix = "",
+    libraries = [":kobuki_velocity_smoother"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ecl_build//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

@@ -1,0 +1,169 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@mrpt_containers//:mrpt_containers_library",
+    "@mrpt_system//:mrpt_system_library",
+]
+
+cc_library(
+    name = "mola_yaml_library",
+    srcs = ["src/yaml_helpers.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+        "include/mola_yaml",
+        "src",
+    ],
+    local_defines = ros_local_defines() + ["STD_FS_IS_EXPERIMENTAL=0"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mola_yaml",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":mola_yaml_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mola_yaml",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mola_yaml": [
+            "libmola_yaml.so.3.3",
+            "libmola_yaml.so.3.3.0",
+        ],
+    },
+    deps = [
+        "@mola_common//:ament_package",
+        "@mrpt_containers//:ament_package",
+        "@mrpt_system//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "run_test-mola_yaml-parser",
+    srcs = ["tests/test-yaml-parser.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/mola_yaml",
+        "src",
+    ],
+    local_defines = ros_local_defines() + ["MOLA_MODULE_SOURCE_DIR=\\\"tests\\\""],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mola_yaml_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mola_yaml",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mola_yaml": [
+            "libmola_yaml.so.3.3",
+            "libmola_yaml.so.3.3.0",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mola_common//:ament_package",
+        "@mrpt_containers//:ament_package",
+        "@mrpt_system//:ament_package",
+    ],
+)

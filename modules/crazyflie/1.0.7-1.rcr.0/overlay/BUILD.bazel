@@ -1,0 +1,128 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+}
+
+CC_DEPS = [
+    "@crazyflie_interfaces//:cc",
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@sensor_msgs//:cc",
+    "@std_srvs//:cc",
+]
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "teleop",
+    srcs = ["src/teleop.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/aideck_streamer.yaml",
+        "config/config.rviz",
+        "config/crazyflies.yaml",
+        "config/motion_capture.yaml",
+        "config/server.yaml",
+        "config/teleop.yaml",
+        "launch/launch.py",
+        "launch/launch_teleop2.py",
+        "launch/teleop_launch.py",
+    ],
+    lib_data = [
+        ":teleop",
+        "scripts/aideck_streamer.py",
+        "scripts/cfmult.py",
+        "scripts/chooser.py",
+        "scripts/flash.py",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@crazyflie_description//:ament_package",
+        "@crazyflie_interfaces//:ament_package",
+        "@crazyflie_server_cpp//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [":ament_index"],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@crazyflie_description//:ament_package",
+        "@crazyflie_interfaces//:ament_package",
+        "@crazyflie_server_cpp//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+    ],
+)

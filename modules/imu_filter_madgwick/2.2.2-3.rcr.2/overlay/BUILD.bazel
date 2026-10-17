@@ -1,0 +1,255 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:ament_resource.bzl", "register_ament_resource")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:static_transform_broadcaster_node": "@tf2_ros//:static_transform_broadcaster_node_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@builtin_interfaces//:cc",
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "imu_filter_madgwick_library",
+    srcs = [
+        "src/imu_filter.cpp",
+        "src/imu_filter_ros.cpp",
+        "src/stateless_orientation.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/imu_filter_madgwick",
+        "test",
+    ],
+    local_defines = ros_local_defines() + ["IMU_FILTER_MADGWICK_CPP_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "imu_filter_madgwick",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":imu_filter_madgwick_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":imu_filter_madgwick"],
+)
+
+cc_binary(
+    name = "imu_filter_madgwick_node",
+    srcs = ["src/imu_filter_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/imu_filter_madgwick",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":imu_filter_madgwick_library"],
+)
+
+register_ament_resource(
+    name = "res_rclcpp_components",
+    category = "rclcpp_components",
+    content = "ImuFilterMadgwickRos;lib/libimu_filter_madgwick.so\n",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/imu_filter.yaml",
+        "launch/imu_filter.launch.py",
+        "launch/imu_filter_component.launch.py",
+    ],
+    lib_data = [
+        ":imu_filter_madgwick_node",
+    ],
+    libraries = [
+        ":imu_filter_madgwick",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":res_rclcpp_components",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "madgwick_test",
+    srcs = ["test/madgwick_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/imu_filter_madgwick",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":imu_filter_madgwick_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "stateless_orientation_test",
+    srcs = ["test/stateless_orientation_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/imu_filter_madgwick",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":imu_filter_madgwick_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [":ament_index"],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_name = "export_imu_filter_madgwick",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":imu_filter_madgwick",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

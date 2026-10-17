@@ -1,0 +1,326 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@swri_math_util//:swri_math_util": "@swri_math_util//:swri_math_util_library",
+    "@swri_serial_util//:swri_serial_util": "@swri_serial_util//:swri_serial_util_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+}
+
+CC_DEPS = [
+    "@diagnostic_msgs//:cc",
+    "@gps_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@novatel_gps_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.algorithm",
+    "@rosdistro//cc:boost.asio",
+    "@rosdistro//cc:boost.circular_buffer",
+    "@rosdistro//cc:boost.lexical_cast",
+    "@rosdistro//cc:boost.smart_ptr",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "novatel_gps_driver_library",
+    srcs = [":gen_novatel_gps_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/novatel_gps_driver",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "novatel_gps_driver",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":novatel_gps_driver_library"],
+)
+
+cc_library(
+    name = "novatel_gps_driver_nodes_library",
+    srcs = [":gen_novatel_gps_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/novatel_gps_driver",
+    ],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":novatel_gps_driver_library"],
+)
+
+cc_shared_library(
+    name = "novatel_gps_driver_nodes",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":novatel_gps_driver_nodes_library"],
+)
+
+rclcpp_components_register_node(
+    name = "novatel_gps_node",
+    component = ":novatel_gps_driver_nodes",
+    node_name = "novatel_gps_node",
+    plugin = "novatel_gps_driver::NovatelGpsNode",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_novatel_gps_driver_stub_cpp",
+    out = "_gen/novatel_gps_driver_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+pkg_files(
+    name = "pkg_files_extra_2",
+    srcs = ["test/bestpos-bestvel-psrdop2-sync.pcap"],
+    prefix = "test",
+)
+
+pkg_files(
+    name = "pkg_files_extra_3",
+    srcs = ["test/corrimudata.pcap"],
+    prefix = "test",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":novatel_gps_node_record"],
+    data = [
+        "launch/tester_for_eth.launch.py",
+        "launch/tester_for_usb.launch.py",
+    ],
+    lib_data = [
+        ":novatel_gps_node",
+    ],
+    libraries = [
+        ":novatel_gps_driver",
+        ":novatel_gps_driver_nodes",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@novatel_gps_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@swri_serial_util//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "novatel_gps_tests",
+    srcs = [":gen_novatel_gps_driver_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/novatel_gps_driver",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":novatel_gps_driver_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "parser_tests",
+    srcs = [":gen_novatel_gps_driver_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/novatel_gps_driver",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":novatel_gps_driver_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies_list = ["ament_cmake"],
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install = [
+        ":pkg_files_extra_2",
+        ":pkg_files_extra_3",
+    ],
+    libraries = [
+        ":novatel_gps_driver",
+        ":novatel_gps_driver_nodes",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@novatel_gps_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@swri_serial_util//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+    ],
+)

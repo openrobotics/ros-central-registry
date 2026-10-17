@@ -1,0 +1,167 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:static_transform_broadcaster_node": "@tf2_ros//:static_transform_broadcaster_node_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@mrpt_msgs//:cc",
+    "@geometry_msgs//:cc",
+    "@mrpt_kinematics//:mrpt_kinematics_library",
+    "@mrpt_libros_bridge//:mrpt_libros_bridge_library",
+    "@mrpt_nav//:mrpt_nav_library",
+    "@mrpt_nav_interfaces//:cc",
+    "@nav_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@stereo_msgs//:cc",
+    "@visualization_msgs//:cc",
+]
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "mrpt_reactivenav2d_node",
+    srcs = [":gen_mrpt_reactivenav2d_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_atomic_shared_ptr_shim_hpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/mrpt_reactivenav2d",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+write_file(
+    name = "gen_mrpt_reactivenav2d_stub_cpp",
+    out = "_gen/mrpt_reactivenav2d_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/rnav.launch.py",
+        "params/reactive2d_default.ini",
+    ],
+    lib_data = [":mrpt_reactivenav2d_node"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@mrpt_kinematics//:ament_package",
+        "@mrpt_libros_bridge//:ament_package",
+        "@mrpt_msgs//:ament_package",
+        "@mrpt_nav//:ament_package",
+        "@mrpt_nav_interfaces//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@stereo_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+launch_ros_binary(
+    name = "rnav.launch.py",
+    src = "launch/rnav.launch.py",
+    data = [
+        ":ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@mrpt_kinematics//:ament_package",
+        "@mrpt_libros_bridge//:ament_package",
+        "@mrpt_msgs//:ament_package",
+        "@mrpt_nav//:ament_package",
+        "@mrpt_nav_interfaces//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@stereo_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

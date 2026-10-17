@@ -1,0 +1,300 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+}
+
+CC_DEPS = [
+]
+
+cc_library(
+    name = "apriltag_library",
+    srcs = [
+        "apriltag.c",
+        "apriltag_pose.c",
+        "apriltag_quad_thresh.c",
+        "common/g2d.c",
+        "common/getopt.c",
+        "common/homography.c",
+        "common/image_u8.c",
+        "common/image_u8_parallel.c",
+        "common/image_u8x3.c",
+        "common/image_u8x4.c",
+        "common/matd.c",
+        "common/pam.c",
+        "common/pjpeg.c",
+        "common/pjpeg-idct.c",
+        "common/pnm.c",
+        "common/pthreads_cross.c",
+        "common/string_util.c",
+        "common/svd22.c",
+        "common/time_util.c",
+        "common/unionfind.c",
+        "common/workerpool.c",
+        "common/zarray.c",
+        "common/zhash.c",
+        "common/zmaxheap.c",
+        "tag16h5.c",
+        "tag25h9.c",
+        "tag36h10.c",
+        "tag36h11.c",
+        "tagCircle21h7.c",
+        "tagCircle49h12.c",
+        "tagCustom48h12.c",
+        "tagStandard41h12.c",
+        "tagStandard52h13.c",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    includes = ["."],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "apriltag",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["@@//:__subpackages__"],
+    deps = [":apriltag_library"],
+)
+
+cc_library(
+    name = "apriltag.cpython-314-x86_64-linux-gnu_library",
+    srcs = [":gen_apriltag_py_stub_c"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = ["."],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":apriltag_library"],
+)
+
+cc_shared_library(
+    name = "apriltag.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys() + [":apriltag"],
+    shared_lib_name = "apriltag.so",
+    deps = [":apriltag.cpython-314-x86_64-linux-gnu_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":apriltag"],
+)
+
+cc_binary(
+    name = "apriltag_demo",
+    srcs = ["example/apriltag_demo.c"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["."],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":apriltag_library"],
+)
+
+cc_binary(
+    name = "opencv_demo",
+    srcs = ["example/opencv_demo.cc"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["."],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":apriltag_library"],
+)
+
+write_file(
+    name = "gen_apriltag_py_stub_c",
+    out = "_gen/apriltag_py_stub.c",
+    content = ["void PyInit_apriltag(void) {}\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":apriltag",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "apriltag": [
+            "libapriltag.so.3",
+            "libapriltag.so.3.4.5",
+        ],
+    },
+)
+
+cc_test(
+    name = "test_detection_34139872896_defdb2f8d9_c",
+    srcs = [
+        "test/getline.c",
+        "test/test_detection.c",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    data = [
+        ":ament_index",
+        ":apriltag.cpython-314-x86_64-linux-gnu",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["."],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":apriltag_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        "apriltag.h",
+        "apriltag_math.h",
+        "apriltag_pose.h",
+        "common/debug_print.h",
+        "common/doubles.h",
+        "common/doubles_floats_impl.h",
+        "common/floats.h",
+        "common/g2d.h",
+        "common/getopt.h",
+        "common/homography.h",
+        "common/image_types.h",
+        "common/image_u8.h",
+        "common/image_u8_parallel.h",
+        "common/image_u8x3.h",
+        "common/image_u8x4.h",
+        "common/matd.h",
+        "common/math_util.h",
+        "common/pam.h",
+        "common/pjpeg.h",
+        "common/pnm.h",
+        "common/postscript_utils.h",
+        "common/pthreads_cross.h",
+        "common/string_util.h",
+        "common/svd22.h",
+        "common/time_util.h",
+        "common/timeprofile.h",
+        "common/unionfind.h",
+        "common/workerpool.h",
+        "common/zarray.h",
+        "common/zhash.h",
+        "common/zmaxheap.h",
+        "tag16h5.h",
+        "tag25h9.h",
+        "tag36h10.h",
+        "tag36h11.h",
+        "tagCircle21h7.h",
+        "tagCircle49h12.h",
+        "tagCustom48h12.h",
+        "tagStandard41h12.h",
+        "tagStandard52h13.h",
+    ],
+    headers_strip_prefix = "",
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":apriltag",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        ":apriltag_demo",
+        ":opencv_demo",
+    ],
+    python = [":apriltag.cpython-314-x86_64-linux-gnu"],
+    sonames = {
+        "apriltag": [
+            "libapriltag.so.3",
+            "libapriltag.so.3.4.5",
+        ],
+    },
+    deps = [":ament_index"] + [
+    ],
+)

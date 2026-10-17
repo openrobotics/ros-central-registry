@@ -1,0 +1,144 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_qt//:qt.bzl", "qt_cc_binary")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### EXECUTABLES
+
+DEPENDENCIES = {
+    "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
+    "@rosdistro//cc:OgreOverlay": "@rosdistro//cc:OgreOverlay_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+qt_cc_binary(
+    name = "rviz2",
+    srcs = ["src/main.cpp"],
+    data = [
+        "@rviz_common//:ament_index",
+        "@rviz_default_plugins//:ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    linkopts = select({
+        "@platforms//os:linux": ["-Wl,--allow-shlib-undefined"],
+        "//conditions:default": [],
+    }),
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@rules_qt//:qt_widgets",
+    ],
+)
+
+py_binary(
+    name = "rviz1_to_rviz2",
+    srcs = ["scripts/rviz1_to_rviz2.py"],
+    main = "scripts/rviz1_to_rviz2.py",
+    deps = [requirement("pyyaml")],
+)
+
+ament_index(
+    name = "ament_index",
+    executables = [
+        ":rviz2",
+        "scripts/rviz1_to_rviz2.py",
+    ],
+    package_xml = "package.xml",
+)
+
+### TESTS
+
+# test/tools/send_lots_of_points_node is a manual helper tool upstream (not a
+# registered test); it is built here so the sources keep compiling.
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps_rclcpp",
+    dynamic_deps = ["@rclcpp//:rclcpp"],
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "send_lots_of_points_node",
+    testonly = True,
+    srcs = ["test/tools/send_lots_of_points_node.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps_rclcpp"],
+    local_defines = ros_local_defines(),
+    deps = [
+        "@geometry_msgs//:cc",
+        "@rclcpp//:rclcpp_library",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+py_pytest(
+    name = "rviz1_to_2_check",
+    srcs = ["test/tools/rviz1_to_2_check.py"],
+    data = ["scripts/rviz1_to_rviz2.py"] + glob(["test/tools/configs/*.rviz"]),
+    env = {
+        "_CONFIG_PATH": "../rviz2+/test/tools/configs",
+        "_SCRIPT_PATH": "$(rootpath scripts/rviz1_to_rviz2.py)",
+    },
+    deps = [requirement("pyyaml")],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    executables = [
+        ":rviz2",
+        "scripts/rviz1_to_rviz2.py",
+    ],
+    package_xml = "package.xml",
+    programs = [":rviz2"],
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@rviz_ogre_vendor//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

@@ -1,0 +1,187 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@mrpt_containers//:mrpt_containers_library",
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "mrpt_system_library",
+    srcs = [
+        "src/CControlledRateTimer.cpp",
+        "src/CDirectoryExplorer.cpp",
+        "src/CFileSystemWatcher.cpp",
+        "src/CObservable.cpp",
+        "src/CObserver.cpp",
+        "src/COutputLogger.cpp",
+        "src/CRateTimer.cpp",
+        "src/CTicTac.cpp",
+        "src/CTimeLogger.cpp",
+        "src/base64.cpp",
+        "src/crc.cpp",
+        "src/datetime.cpp",
+        "src/filesystem.cpp",
+        "src/hyperlink.cpp",
+        "src/md5.cpp",
+        "src/memory.cpp",
+        "src/os.cpp",
+        "src/progress.cpp",
+        "src/scheduler.cpp",
+        "src/string_utils.cpp",
+        "src/thread_name.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_11"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines() + ["STD_FS_IS_EXPERIMENTAL=0"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_system",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":mrpt_system_library"],
+)
+
+cc_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu_library",
+    srcs = ["python_bindings/mrpt_system_py.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_11"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_system_library"],
+)
+
+cc_shared_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "mrpt/system/_bindings.so",
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":_bindings.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "mrpt",
+    srcs = glob(["python/mrpt/**/*.py"]),
+    imports = ["python"],
+    deps = ["@mrpt_containers//:mrpt"],
+)
+
+write_file(
+    name = "gen_extra_11",
+    out = "_gen/include/mrpt/system/config.h",
+    content = ["/* +---------------------------------------------------------------------------+\n   |                     Mobile Robot Programming Toolkit (MRPT)               |\n   |                          https://www.mrpt.org/                            |\n   |                                                                           |\n   | Copyright (c) 2005-2026, Individual contributors, see AUTHORS file        |\n   | See: https://www.mrpt.org/Authors - All rights reserved.                  |\n   | Released under BSD License. See details in https://www.mrpt.org/License   |\n   +---------------------------------------------------------------------------+\n */\n\n#pragma once\n\n// clang-format off\n\n/** Only for Linux: the inotify kernel module has been found. Requires kernel 2.6.13.  */\n#define MRPT_HAS_INOTIFY 1\n\n\n#define MRPT_SOURCE_BASE_DIRECTORY \"/usr/local/google/home/simmers/development/ros-central-registry/release/lyrical/2026-10-05/src/mrpt3/mrpt_system\"\n#define MRPT_INSTALL_PREFIX_DIRECTORY \"/usr/local/google/home/simmers/development/ros-central-registry/release/lyrical/2026-10-05/install/mrpt_system\"\n\n// clang-format on\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mrpt_system",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_system": [
+            "libmrpt_system.so.3.3",
+            "libmrpt_system.so.3.3.1",
+        ],
+    },
+    deps = [
+        "@mrpt_common//:ament_package",
+        "@mrpt_containers//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        ":gen_extra_11",
+    ] + glob(["include/**"]),
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_system",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":mrpt",
+        ":_bindings.cpython-314-x86_64-linux-gnu",
+    ],
+    python_strip_prefix = "python",
+    sonames = {
+        "mrpt_system": [
+            "libmrpt_system.so.3.3",
+            "libmrpt_system.so.3.3.1",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_common//:ament_package",
+        "@mrpt_containers//:ament_package",
+    ],
+)

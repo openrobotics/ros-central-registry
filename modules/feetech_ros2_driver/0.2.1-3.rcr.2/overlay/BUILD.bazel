@@ -1,0 +1,275 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+CC_DEPS = [
+    "@hardware_interface//:hardware_interface_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:fmt",
+    "@rosdistro//cc:spdlog",
+    "@rosdistro//cc:tl_expected",
+]
+
+cc_library(
+    name = "serial_port_library",
+    srcs = [":gen_feetech_ros2_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "feetech_driver/include",
+        "include",
+        "include/feetech_ros2_driver",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "serial_port",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":serial_port_library"],
+)
+
+cc_library(
+    name = "communication_protocol_library",
+    srcs = [":gen_feetech_ros2_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "feetech_driver/include",
+        "include",
+        "include/feetech_ros2_driver",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":serial_port_library"],
+)
+
+cc_shared_library(
+    name = "communication_protocol",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":communication_protocol_library"],
+)
+
+cc_library(
+    name = "feetech_ros2_driver_library",
+    srcs = [":gen_feetech_ros2_driver_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "feetech_driver/include",
+        "include",
+        "include/feetech_ros2_driver",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":communication_protocol_library",
+        ":serial_port_library",
+    ],
+)
+
+cc_shared_library(
+    name = "feetech_ros2_driver",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":feetech_ros2_driver_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "demo",
+    srcs = [":gen_feetech_ros2_driver_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "feetech_driver/include",
+        "include",
+        "include/feetech_ros2_driver",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":communication_protocol_library",
+        ":serial_port_library",
+    ],
+)
+
+write_file(
+    name = "gen_feetech_ros2_driver_stub_cpp",
+    out = "_gen/feetech_ros2_driver_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":serial_port",
+        ":communication_protocol",
+        ":feetech_ros2_driver",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "hardware_interface",
+    plugins = ["feetech_ros2_control_plugin_description.xml"],
+    sonames = {
+        "communication_protocol": [
+            "libcommunication_protocol.so.0",
+            "libcommunication_protocol.so.0.1.0",
+        ],
+        "serial_port": [
+            "libserial_port.so.0",
+            "libserial_port.so.0.1.0",
+        ],
+    },
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "hardware_interface",
+        "pluginlib",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "feetech_ros2_driverTargets",
+    headers = [
+        "include/feetech_ros2_driver/feetech_ros2_driver.hpp",
+        "feetech_driver/include/feetech_driver/version.hpp",
+    ],
+    headers_strip_prefixes = [
+        "feetech_driver/include/feetech_driver->feetech_ros2_driver/feetech_ros2_driver",
+        "include->feetech_ros2_driver",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":serial_port",
+        ":communication_protocol",
+        ":feetech_ros2_driver",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        ":demo",
+    ],
+    sonames = {
+        "communication_protocol": [
+            "libcommunication_protocol.so.0",
+            "libcommunication_protocol.so.0.1.0",
+        ],
+        "serial_port": [
+            "libserial_port.so.0",
+            "libserial_port.so.0.1.0",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)

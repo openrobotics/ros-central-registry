@@ -1,0 +1,677 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Gazebo (gz-*) libraries from the Bazel Central Registry, as shared libraries.
+
+The BCR gz modules only provide static `cc_library` targets (plus a few
+`cc_binary(linkshared = True)` plugins). ROS packages link against shared
+libraries, so this package wraps every Gazebo library that colcon's
+gz_*_vendor packages install as `libgz-<name>.so` into a `cc_shared_library`,
+chained through `dynamic_deps` exactly like upstream's CMake targets link each
+other. Third-party dependencies already available as shared libraries from
+`//cc` (protobuf, tinyxml2, zlib, sqlite3, ...) are reused; the remaining ones
+(spdlog, libuuid, zeromq, assimp, curl, ...) are linked statically into -- and
+exported from -- exactly one of the libraries below, so any binary can mix any
+subset of them without "linked statically more than once" errors.
+
+Naming follows upstream's CMake targets: `gz-sim` is the shared library
+(`gz-sim::core`), `gz-sim_library` the static `cc_library` to put in `deps`.
+The gz_*_vendor packages alias these as `@gz_sim_vendor//:gz_sim` etc.
+"""
+
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load(":defs.bzl", "gz_proto_descriptor_set", "gz_runfiles")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(["*.bzl"]))
+
+# Third-party libraries from //cc that are already shared libraries.
+PROTOBUF_DEPS = [
+    "//cc:protobuf",
+    "//cc:zlib",
+]
+
+### gz-utils
+
+alias(
+    name = "gz-utils_library",
+    actual = "@gz-utils//:gz-utils",
+)
+
+cc_shared_library(
+    name = "gz-utils",
+    exports_filter = ["@gz-utils//:__pkg__"],
+    deps = [":gz-utils_library"],
+)
+
+alias(
+    name = "gz-utils-log_library",
+    actual = "@gz-utils//log:log",
+)
+
+cc_shared_library(
+    name = "gz-utils-log",
+    dynamic_deps = [":gz-utils"],
+    exports_filter = [
+        "@gz-utils//log:__pkg__",
+        # spdlog/fmt are linked into libgz-utils-log.so and exported from here.
+        "@spdlog//:__subpackages__",
+        "@fmt//:__subpackages__",
+    ],
+    deps = [":gz-utils-log_library"],
+)
+
+# Header-only: CLI11 + gz formatter (gz-utils::cli).
+alias(
+    name = "gz-utils-cli_library",
+    actual = "@gz-utils//cli:cli",
+)
+
+alias(
+    name = "cli11",
+    actual = "@gz-utils//cli:cli11",
+)
+
+### gz-math
+
+alias(
+    name = "gz-math_library",
+    actual = "@gz-math//:gz-math",
+)
+
+cc_shared_library(
+    name = "gz-math",
+    dynamic_deps = [":gz-utils"],
+    exports_filter = ["@gz-math//:__subpackages__"],
+    deps = [":gz-math_library"],
+)
+
+alias(
+    name = "gz-math-eigen3_library",
+    actual = "@gz-math//eigen3:eigen3",
+)
+
+# python: the pybind11 extension (gz/math.so) a py_library carries as data.
+alias(
+    name = "gz-math_python",
+    actual = "@gz-math//:python",
+)
+
+gz_runfiles(
+    name = "gz-math_python_extension",
+    srcs = ["@gz-math//:python"],
+    owner_repo = "gz-math",
+    suffixes = [".so"],
+)
+
+### gz-msgs
+
+alias(
+    name = "gz-msgs_library",
+    actual = "@gz-msgs//:gz-msgs",
+)
+
+alias(
+    name = "gz-msgs_cc_proto",
+    actual = "@gz-msgs//:gzmsgs_cc_proto",
+)
+
+alias(
+    name = "gz-msgs_proto",
+    actual = "@gz-msgs//:gzmsgs_proto",
+)
+
+alias(
+    name = "gz-msgs_py_proto",
+    actual = "@gz-msgs//:gzmsgs_proto_py_pb2",
+)
+
+cc_shared_library(
+    name = "gz-msgs",
+    dynamic_deps = [
+        ":gz-math",
+        ":gz-utils",
+        "//cc:tinyxml2",
+    ] + PROTOBUF_DEPS,
+    exports_filter = ["@gz-msgs//:__subpackages__"],
+    deps = [
+        ":gz-msgs_cc_proto",
+        ":gz-msgs_library",
+    ],
+)
+
+# FileDescriptorSet of all gz.msgs protos (what gz-msgs installs as
+# share/gz/protos/gz-msgs<N>.gz_desc for the dynamic message factory).
+gz_proto_descriptor_set(
+    name = "gz-msgs_descriptor_set",
+    out = "gz-msgs12.gz_desc",
+    deps = [":gz-msgs_proto"],
+)
+
+alias(
+    name = "gz-msgs_cmd",
+    actual = "@gz-msgs//:cmd-gz-msgs",
+)
+
+### gz-transport
+
+alias(
+    name = "gz-transport_library",
+    actual = "@gz-transport//:gz-transport",
+)
+
+cc_shared_library(
+    name = "gz-transport",
+    dynamic_deps = [
+        # Not an upstream dependency, but libuuid may only be linked into one
+        # shared library and gz-common exports it.
+        ":gz-common",
+        ":gz-msgs",
+        ":gz-math",
+        ":gz-utils",
+        ":gz-utils-log",
+        "//cc:tinyxml2",
+    ] + PROTOBUF_DEPS,
+    exports_filter = [
+        "@gz-transport//:__pkg__",
+        "@@cppzmq+//:__subpackages__",
+        "@@libzmq+//:__subpackages__",
+        "@nlohmann_json//:__subpackages__",
+    ],
+    deps = [":gz-transport_library"],
+)
+
+alias(
+    name = "gz-transport-log_library",
+    actual = "@gz-transport//log:log",
+)
+
+cc_shared_library(
+    name = "gz-transport-log",
+    dynamic_deps = [
+        ":gz-transport",
+        ":gz-msgs",
+        ":gz-math",
+        ":gz-utils",
+        "//cc:sqlite3",
+        "//cc:tinyxml2",
+    ] + PROTOBUF_DEPS,
+    exports_filter = ["@gz-transport//log:__pkg__"],
+    deps = [":gz-transport-log_library"],
+)
+
+alias(
+    name = "gz-transport-parameters_library",
+    actual = "@gz-transport//parameters:parameters",
+)
+
+cc_shared_library(
+    name = "gz-transport-parameters",
+    dynamic_deps = [
+        ":gz-transport",
+        ":gz-msgs",
+        ":gz-math",
+        ":gz-utils",
+        "//cc:sqlite3",
+        "//cc:tinyxml2",
+    ] + PROTOBUF_DEPS,
+    exports_filter = ["@gz-transport//parameters:__pkg__"],
+    deps = [":gz-transport-parameters_library"],
+)
+
+### gz-common
+
+GZ_COMMON_DYNAMIC_DEPS = [
+    ":gz-math",
+    ":gz-utils",
+    ":gz-utils-log",
+]
+
+alias(
+    name = "gz-common_library",
+    actual = "@gz-common//:gz-common",
+)
+
+cc_shared_library(
+    name = "gz-common",
+    dynamic_deps = GZ_COMMON_DYNAMIC_DEPS,
+    exports_filter = [
+        "@gz-common//:__pkg__",
+        "@@libuuid+//:__subpackages__",
+    ],
+    deps = [":gz-common_library"],
+)
+
+[
+    (
+        alias(
+            name = "gz-common-%s_library" % component,
+            actual = "@gz-common//%s:%s" % (component, component),
+        ),
+        cc_shared_library(
+            name = "gz-common-" + component,
+            dynamic_deps = [":gz-common"] + GZ_COMMON_DYNAMIC_DEPS + extra_dynamic_deps,
+            exports_filter = ["@gz-common//%s:__pkg__" % component] + extra_exports,
+            deps = [":gz-common-%s_library" % component],
+        ),
+    )
+    for component, extra_dynamic_deps, extra_exports in [
+        ("events", [], []),
+        (
+            "graphics",
+            [
+                "//cc:tinyxml2",
+                "//cc:zlib",
+            ],
+            [
+                "@assimp//:__subpackages__",
+                "@@cdt+//:__subpackages__",
+                "@@pugixml+//:__subpackages__",
+                "@rapidjson//:__subpackages__",
+            ],
+        ),
+        (
+            "geospatial",
+            [
+                ":gz-common-graphics",
+                "//cc:tinyxml2",
+            ],
+            [],
+        ),
+        ("io", [], []),
+        ("profiler", [], []),
+        ("testing", [], []),
+    ]
+]
+
+### gz-plugin
+
+alias(
+    name = "gz-plugin_library",
+    actual = "@gz-plugin//:core",
+)
+
+cc_shared_library(
+    name = "gz-plugin",
+    dynamic_deps = [":gz-utils"],
+    exports_filter = ["@gz-plugin//:core"],
+    deps = [":gz-plugin_library"],
+)
+
+alias(
+    name = "gz-plugin-loader_library",
+    actual = "@gz-plugin//:loader",
+)
+
+cc_shared_library(
+    name = "gz-plugin-loader",
+    dynamic_deps = [
+        ":gz-plugin",
+        ":gz-utils",
+    ],
+    exports_filter = ["@gz-plugin//:loader"],
+    deps = [":gz-plugin-loader_library"],
+)
+
+# Header-only (gz-plugin::register).
+alias(
+    name = "gz-plugin-register_library",
+    actual = "@gz-plugin//:register",
+)
+
+### sdformat
+
+alias(
+    name = "sdformat_library",
+    actual = "@sdformat//:sdformat",
+)
+
+cc_shared_library(
+    name = "sdformat",
+    dynamic_deps = [
+        ":gz-math",
+        ":gz-utils",
+        "//cc:tinyxml2",
+    ],
+    exports_filter = ["@sdformat//:__pkg__"],
+    deps = [":sdformat_library"],
+)
+
+### gz-fuel-tools
+
+alias(
+    name = "gz-fuel-tools_library",
+    actual = "@gz-fuel-tools//:gz-fuel-tools",
+)
+
+cc_shared_library(
+    name = "gz-fuel-tools",
+    dynamic_deps = [
+        ":gz-common",
+        ":gz-msgs",
+        ":gz-math",
+        ":gz-utils",
+        ":gz-utils-log",
+        "//cc:boringssl",
+        "//cc:bzip2",
+        "//cc:libyaml",
+        "//cc:libzip",
+        "//cc:tinyxml2",
+        "//cc:zstd",
+    ] + PROTOBUF_DEPS,
+    exports_filter = [
+        "@gz-fuel-tools//:__pkg__",
+        # The static (CURL_STATICLIB) flavour of libcurl, as gz-fuel-tools
+        # links it; //cc:curl wraps the separately compiled shared flavour.
+        "@curl//:__subpackages__",
+        "@@jsoncpp+//:__subpackages__",
+        "@nlohmann_json//:__subpackages__",
+    ],
+    deps = [":gz-fuel-tools_library"],
+)
+
+### gz-physics
+
+alias(
+    name = "gz-physics_library",
+    actual = "@gz-physics//:gz-physics",
+)
+
+[
+    alias(
+        name = "gz-physics-%s_library" % component,
+        actual = "@gz-physics//:" + component,
+    )
+    for component in [
+        "heightmap",
+        "mesh",
+        "sdf",
+    ]
+]
+
+cc_shared_library(
+    name = "gz-physics",
+    dynamic_deps = [
+        ":gz-common",
+        ":gz-common-geospatial",
+        ":gz-common-graphics",
+        ":gz-math",
+        ":gz-plugin",
+        ":gz-plugin-loader",
+        ":gz-utils",
+        ":gz-utils-log",
+        ":sdformat",
+        "//cc:tinyxml2",
+    ],
+    exports_filter = ["@gz-physics//:__pkg__"],
+    deps = [
+        ":gz-physics-heightmap_library",
+        ":gz-physics-mesh_library",
+        ":gz-physics-sdf_library",
+        ":gz-physics_library",
+    ],
+)
+
+# Engine plugins: self-contained shared objects (cc_binary(linkshared)).
+[
+    alias(
+        name = "libgz-physics-%s-plugin.so" % engine,
+        actual = "@gz-physics//%s:libgz-physics-%s-plugin.so" % (engine, engine),
+    )
+    for engine in [
+        "bullet",
+        "bullet-featherstone",
+        "dartsim",
+        "tpe",
+    ]
+]
+
+filegroup(
+    name = "gz-physics_engine_plugins",
+    srcs = [
+        ":libgz-physics-bullet-featherstone-plugin.so",
+        ":libgz-physics-bullet-plugin.so",
+        ":libgz-physics-dartsim-plugin.so",
+        ":libgz-physics-tpe-plugin.so",
+    ],
+)
+
+### gz-rendering
+
+alias(
+    name = "gz-rendering_library",
+    actual = "@gz-rendering//:gz-rendering",
+)
+
+cc_shared_library(
+    name = "gz-rendering",
+    dynamic_deps = [
+        ":gz-common",
+        ":gz-common-events",
+        ":gz-common-geospatial",
+        ":gz-common-graphics",
+        ":gz-math",
+        ":gz-plugin",
+        ":gz-plugin-loader",
+        ":gz-utils",
+        ":gz-utils-log",
+        "//cc:tinyxml2",
+    ],
+    exports_filter = ["@gz-rendering//:__pkg__"],
+    deps = [":gz-rendering_library"],
+)
+
+# Render engine plugin (ogre-next), self-contained.
+alias(
+    name = "libgz-rendering-ogre2.so",
+    actual = "@gz-rendering//ogre2:libgz-rendering-ogre2.so",
+)
+
+# The ogre2 media files (materials, shaders, ...) the plugin ships as data.
+gz_runfiles(
+    name = "gz-rendering-ogre2_media",
+    srcs = [":libgz-rendering-ogre2.so"],
+    exclude_suffixes = [".so"],
+    owner_repo = "gz-rendering",
+)
+
+### gz-sensors
+
+alias(
+    name = "gz-sensors_library",
+    actual = "@gz-sensors//:gz-sensors",
+)
+
+alias(
+    name = "gz-sensors-all_library",
+    actual = "@gz-sensors//:gz-sensors-all",
+)
+
+GZ_SENSORS_DYNAMIC_DEPS = [
+    ":gz-common",
+    ":gz-common-io",
+    ":gz-common-profiler",
+    ":gz-math",
+    ":gz-msgs",
+    ":gz-transport",
+    ":gz-utils",
+    ":gz-utils-log",
+    ":sdformat",
+    "//cc:tinyxml2",
+] + PROTOBUF_DEPS
+
+cc_shared_library(
+    name = "gz-sensors",
+    dynamic_deps = GZ_SENSORS_DYNAMIC_DEPS,
+    exports_filter = ["@gz-sensors//:__pkg__"],
+    deps = [":gz-sensors_library"],
+)
+
+# All sensor components (camera, lidar, imu, ...) in one shared library.
+cc_shared_library(
+    name = "gz-sensors-all",
+    dynamic_deps = [
+        ":gz-sensors",
+        ":gz-common-events",
+        ":gz-common-geospatial",
+        ":gz-common-graphics",
+        ":gz-plugin",
+        ":gz-plugin-loader",
+        ":gz-rendering",
+    ] + GZ_SENSORS_DYNAMIC_DEPS,
+    exports_filter = ["@gz-sensors//:__pkg__"],
+    deps = [":gz-sensors-all_library"],
+)
+
+### gz-sim
+
+alias(
+    name = "gz-sim_library",
+    actual = "@gz-sim//:gz-sim",
+)
+
+alias(
+    name = "gz-sim_cc_proto",
+    actual = "@gz-sim//:gzsim_cc_proto",
+)
+
+cc_shared_library(
+    name = "gz-sim",
+    dynamic_deps = [
+        ":gz-common",
+        ":gz-common-events",
+        ":gz-common-geospatial",
+        ":gz-common-graphics",
+        ":gz-common-io",
+        ":gz-common-profiler",
+        ":gz-fuel-tools",
+        ":gz-math",
+        ":gz-msgs",
+        ":gz-physics",
+        ":gz-plugin",
+        ":gz-plugin-loader",
+        ":gz-rendering",
+        ":gz-transport",
+        ":gz-transport-parameters",
+        ":gz-utils",
+        ":gz-utils-log",
+        ":sdformat",
+        "//cc:boringssl",
+        "//cc:bzip2",
+        "//cc:libyaml",
+        "//cc:libzip",
+        "//cc:sqlite3",
+        "//cc:tinyxml2",
+        "//cc:zstd",
+    ] + PROTOBUF_DEPS,
+    exports_filter = ["@gz-sim//:__pkg__"],
+    deps = [
+        ":gz-sim_cc_proto",
+        ":gz-sim_library",
+    ],
+)
+
+# System plugins (self-contained shared objects, loaded by the server by file name).
+GZ_SIM_SYSTEMS = [
+    "ackermann-steering",
+    "acoustic-comms",
+    "advanced-lift-drag",
+    "air-pressure",
+    "air-speed",
+    "altimeter",
+    "apply-joint-force",
+    "apply-link-wrench",
+    "breadcrumbs",
+    "buoyancy-engine",
+    "buoyancy",
+    "collada-world-exporter",
+    "comms-endpoint",
+    "contact",
+    "detachable-joint",
+    "diff-drive",
+    "drive-to-pose-controller",
+    "dvl",
+    "entity-semantics",
+    "environmental-sensor",
+    "environment-preload",
+    "follow-actor",
+    "forcetorque",
+    "hydrodynamics",
+    "imu",
+    "joint-controller",
+    "joint-position-controller",
+    "joint-state-publisher",
+    "joint-trajectory-controller",
+    "kinetic-energy-monitor",
+    "label",
+    "lens-flare",
+    "lift-drag",
+    "lighter-than-air-dynamics",
+    "linearbatteryplugin",
+    "logicalaudiosensorplugin",
+    "logical-camera",
+    "log",
+    "log-video-recorder",
+    "lookup-wheel-slip",
+    "magnetometer",
+    "mecanum-drive",
+    "model-photo-shoot",
+    "multicopter-control",
+    "multicopter-motor-model",
+    "navsat",
+    "odometry-publisher",
+    "opticaltactileplugin",
+    "particle-emitter",
+    "perfect-comms",
+    "performer-detector",
+    "physics",
+    "pose-publisher",
+    "rf-comms",
+    "scene-broadcaster",
+    "sensors",
+    "shader-param",
+    "spacecraft-thruster-model",
+    "thermal-sensor",
+    "thermal",
+    "thruster",
+    "touchplugin",
+    "track-controller",
+    "tracked-vehicle",
+    "trajectory-follower",
+    "triggered-publisher",
+    "user-commands",
+    "velocity-control",
+    "wheel-slip",
+    "wind-effects",
+]
+
+[
+    alias(
+        name = "gz-sim-%s-system.so" % system,
+        actual = "@gz-sim//:gz-sim-%s-system.so" % system,
+    )
+    for system in GZ_SIM_SYSTEMS
+]
+
+# The BCR target for the free-space-explorer system has a typo'd name.
+alias(
+    name = "gz-sim-free-space-explorer-system.so",
+    actual = "@gz-sim//:gz-sim-free-space_explorer--system.so",
+)
+
+filegroup(
+    name = "gz-sim_systems",
+    srcs = [":gz-sim-%s-system.so" % system for system in GZ_SIM_SYSTEMS + ["free-space-explorer"]],
+)

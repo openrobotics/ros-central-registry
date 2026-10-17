@@ -1,0 +1,128 @@
+# Copyright 2025 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES
+
+DEPENDENCIES = {
+    "@rosidl_buffer//:rosidl_buffer": "@rosidl_buffer//:rosidl_buffer_library",
+}
+
+cc_library(
+    name = "rcl_buffer_py_bindings_library",
+    srcs = glob(["src/**/*.cpp"]),
+    includes = ["."],
+    visibility = ["//visibility:private"],
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:pybind11",
+    ],
+)
+
+cc_shared_library(
+    name = "rcl_buffer_py_bindings",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rcl_buffer_py_bindings_library"],
+    shared_lib_name = "rosidl_buffer/_rosidl_buffer_py.so",
+    user_link_flags = select({
+        "@platforms//os:osx": [
+            "-undefined",
+            "dynamic_lookup",
+        ],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:private"],
+    deps = [":rcl_buffer_py_bindings_library"],
+)
+
+### PYTHON MODULES
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rcl_buffer_py_bindings"],
+    visibility = ["//visibility:private"],
+)
+
+py_library(
+    name = "rosidl_buffer_py",
+    srcs = glob(["rosidl_buffer/**/*.py"]),
+    data = [":rcl_buffer_py_bindings"],
+    imports = ["."],
+)
+
+[
+    write_file(
+        name = "egg_" + f.replace(".", "_").replace("-", "_"),
+        out = "_egg/lib/python3.14/site-packages/rosidl_buffer-5.2.1-py3.14.egg-info/" + f,
+        content = ["rosidl_buffer"],
+    )
+    for f in [
+        "PKG-INFO",
+        "SOURCES.txt",
+        "dependency_links.txt",
+        "top_level.txt",
+    ]
+]
+
+pkg_files(
+    name = "egg_info_files",
+    srcs = [
+        ":egg_PKG_INFO",
+        ":egg_SOURCES_txt",
+        ":egg_dependency_links_txt",
+        ":egg_top_level_txt",
+    ],
+    strip_prefix = strip_prefix.from_pkg("_egg"),
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    egg_info = False,
+    install = [
+        ":egg_info_files",
+    ],
+    package_xml = "package.xml",
+    python = glob(["rosidl_buffer/**"]) + [":rcl_buffer_py_bindings"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_buffer//:ament_package",
+    ],
+)

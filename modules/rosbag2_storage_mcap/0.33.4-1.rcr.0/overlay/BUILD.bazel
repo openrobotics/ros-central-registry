@@ -1,0 +1,222 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "plugin_description.xml",
+    "package.xml",
+])
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcutils": "@rcutils//:rcutils_library",
+    "@rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:lz4_frame": "@rosdistro//cc:lz4_frame_library",
+    "@rosdistro//cc:lz4_hc": "@rosdistro//cc:lz4_hc_library",
+    "@rosdistro//cc:mcap": "@rosdistro//cc:mcap_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rosdistro//cc:zstd": "@rosdistro//cc:zstd_library",
+}
+
+cc_library(
+    name = "rosbag2_storage_mcap_library",
+    srcs = glob(["src/**/*.cpp"]),
+    hdrs = HEADERS,
+    defines = [
+        "ROSBAG2_STORAGE_MCAP_BUILDING_DLL",
+        "ROSBAG2_STORAGE_MCAP_HAS_STORAGE_OPTIONS",
+        "ROSBAG2_STORAGE_MCAP_WRITER_CREATES_DIRECTORY",
+        "ROSBAG2_STORAGE_MCAP_OVERRIDE_SEEK_METHOD",
+        "ROSBAG2_STORAGE_MCAP_HAS_YAML_HPP",
+        "ROSBAG2_STORAGE_MCAP_HAS_SET_READ_ORDER",
+        "ROSBAG2_STORAGE_MCAP_HAS_UPDATE_METADATA",
+    ],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "rosbag2_storage_mcap",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":rosbag2_storage_mcap_library"],
+    deps = [":rosbag2_storage_mcap_library"],
+)
+
+### AMENT INDEX
+
+collect_transitive_dynamic_deps(
+    name = "rosbag2_storage_mcap_with_all_deps",
+    dynamic_deps = [":rosbag2_storage_mcap"],
+    visibility = ["//visibility:private"],
+)
+
+# Runtime index for tests: the plugin plus every library it links against,
+# so pluginlib's dlopen() of the plugin resolves from lib/.
+ament_index(
+    name = "ament_index",
+    libraries = [":rosbag2_storage_mcap_with_all_deps"],
+    package_xml = "package.xml",
+    plugin_category = "rosbag2_storage",
+    plugins = ["plugin_description.xml"],
+    deps = ["@rosbag2_storage//:ament_index"],
+)
+
+# Install-tree contribution: only this package's own plugin library, as
+# `install(TARGETS rosbag2_storage_mcap ...)` does upstream.
+ament_index(
+    name = "ament_index_package",
+    libraries = [":rosbag2_storage_mcap"],
+    package_xml = "package.xml",
+    plugin_category = "rosbag2_storage",
+    plugins = ["plugin_description.xml"],
+    visibility = ["//visibility:private"],
+)
+
+### PYTHON MODULE
+
+# ament_python_install_package(ros2bag_mcap_cli); setup.cfg registers the module as a
+# `ros2bag.storage_plugin_cli_extension` entry point, which `ros2 bag` looks up
+# through importlib.metadata, so render the egg-info next to the module.
+_EGG_INFO_DIR = "ros2bag_mcap_cli-0.33.4-py3.egg-info"
+
+write_file(
+    name = "ros2bag_mcap_cli_pkg_info",
+    out = _EGG_INFO_DIR + "/PKG-INFO",
+    content = [
+        "Metadata-Version: 2.1",
+        "Name: ros2bag_mcap_cli",
+        "Version: 0.33.4",
+    ],
+)
+
+write_file(
+    name = "ros2bag_mcap_cli_sources",
+    out = _EGG_INFO_DIR + "/SOURCES.txt",
+    content = ["setup.cfg"],
+)
+
+write_file(
+    name = "ros2bag_mcap_cli_dependency_links",
+    out = _EGG_INFO_DIR + "/dependency_links.txt",
+    content = [""],
+)
+
+write_file(
+    name = "ros2bag_mcap_cli_entry_points",
+    out = _EGG_INFO_DIR + "/entry_points.txt",
+    content = [
+        "[ros2bag.storage_plugin_cli_extension]",
+        "mcap = ros2bag_mcap_cli",
+    ],
+)
+
+write_file(
+    name = "ros2bag_mcap_cli_top_level",
+    out = _EGG_INFO_DIR + "/top_level.txt",
+    content = ["ros2bag_mcap_cli"],
+)
+
+_EGG_INFO_FILES = [
+    ":ros2bag_mcap_cli_dependency_links",
+    ":ros2bag_mcap_cli_entry_points",
+    ":ros2bag_mcap_cli_pkg_info",
+    ":ros2bag_mcap_cli_sources",
+    ":ros2bag_mcap_cli_top_level",
+]
+
+py_library(
+    name = "ros2bag_mcap_cli",
+    srcs = glob(["ros2bag_mcap_cli/**/*.py"]),
+    data = _EGG_INFO_FILES,
+    imports = ["."],
+)
+
+### TESTS
+
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    ":rosbag2_storage_mcap": ":rosbag2_storage_mcap_library",
+    "@rosbag2_test_common": "@rosbag2_test_common//:rosbag2_test_common_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps_test",
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+[
+    cc_test(
+        name = test,
+        srcs = ["test/rosbag2_storage_mcap/{0}.cpp".format(test)],
+        data = [
+            "test/rosbag2_storage_mcap/mcap_writer_options_zstd.yaml",
+            ":ament_index",
+        ],
+        dynamic_deps = [":transitive_dynamic_deps_test"],
+        local_defines = ros_local_defines() + [
+            '_TEST_RESOURCES_DIR_PATH=\\"../rosbag2_storage_mcap+/test/rosbag2_storage_mcap\\"',
+        ],
+        deps = TEST_DEPENDENCIES.values() + [
+            "@rosdistro//cc:googletest",
+            "@std_msgs//:cc",
+        ],
+    )
+    for test in [
+        "test_mcap_storage",
+        "test_mcap_topic_filter",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_name = "export_rosbag2_storage_mcap",
+    egg_info = False,
+    libraries = [":rosbag2_storage_mcap"],
+    package_xml = "package.xml",
+    python = [":ros2bag_mcap_cli"] + _EGG_INFO_FILES,
+    deps = [
+        ":ament_index_package",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@mcap_vendor//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosbag2_test_common//:ament_package",
+        "@rosdistro//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

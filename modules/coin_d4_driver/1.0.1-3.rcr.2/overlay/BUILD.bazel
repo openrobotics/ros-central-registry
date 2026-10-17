@@ -1,0 +1,174 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "coin_d4_driver_lib_library",
+    srcs = [
+        "src/coin_d4_base_handler.cpp",
+        "src/coin_d4_lifecycle_handler.cpp",
+        "src/coin_d4_node_handler.cpp",
+        "src/lidar_sdk/lidar_data_processor.cpp",
+        "src/lidar_sdk/mtime.cpp",
+        "src/lidar_sdk/serial_port.cpp",
+        "src/lidar_sdk/timer.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/coin_d4_driver",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "coin_d4_driver_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":coin_d4_driver_lib_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":coin_d4_driver_lib"],
+)
+
+cc_binary(
+    name = "multi_coin_d4_node",
+    srcs = ["src/multi_coin_d4_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/coin_d4_driver",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":coin_d4_driver_lib_library"],
+)
+
+cc_binary(
+    name = "single_coin_d4_node",
+    srcs = ["src/single_coin_d4_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/coin_d4_driver",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":coin_d4_driver_lib_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/multi_lidar_node.launch.py",
+        "launch/single_lidar_node.launch.py",
+        "params/multi_lidar_node.yaml",
+        "params/single_lidar_node.yaml",
+    ],
+    lib_data = [
+        ":multi_coin_d4_node",
+        ":single_coin_d4_node",
+    ],
+    libraries = [":coin_d4_driver_lib"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [":ament_index"],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ament_cmake",
+        "rclcpp",
+        "sensor_msgs",
+        "geometry_msgs",
+        "rclcpp_lifecycle",
+    ],
+    cmake_export_name = "export_coin_d4_driver",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":coin_d4_driver_lib"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

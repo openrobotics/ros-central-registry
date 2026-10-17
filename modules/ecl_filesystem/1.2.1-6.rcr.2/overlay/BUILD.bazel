@@ -1,0 +1,143 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ecl_errors//:ecl_errors": "@ecl_errors//:ecl_errors_library",
+}
+
+CC_DEPS = [
+    "@ecl_config//:ecl_config",
+    "@ecl_config//:ecl_config_library",
+]
+
+cc_library(
+    name = "ecl_filesystem_library",
+    srcs = ["src/lib/realpath.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_1"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src/test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ecl_filesystem",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":ecl_filesystem_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ecl_filesystem"],
+)
+
+write_file(
+    name = "gen_extra_1",
+    out = "_gen/include/ecl/filesystem/config.hpp",
+    content = ["/**\n * @file /include/ecl/filesystem/config.hpp\n * \n * @brief Pre-processed macros that define time for the platform.\n * \n * Cmake is used to check/verify your target platform parameters related\n * to filesystem functions. At the moment this is all automated. If ever this\n * needs to change (i.e. if we need to hand configure some macros as per\n * ecl_config style) then we should move this to ecl_config itself.\n **/\n/*****************************************************************************\n** Guards\n*****************************************************************************/\n\n#ifndef ECL_FILESYSTEM_CONFIG_HPP_\n#define ECL_FILESYSTEM_CONFIG_HPP_\n\n/*****************************************************************************\n** Include\n*****************************************************************************/\n\n#include <ecl/config/ecl.hpp>\n\n/**\n * @addtogroup Macros\n * @{\n**/\n\n/*****************************************************************************\n** Private macros\n*****************************************************************************/\n/**\n * @def ECL_PRIVATE_HAS_POSIX_REALPATH\n *\n * @brief Can utilise the posix realpath function from -lrt.\n**/\n#define ECL_PRIVATE_HAS_POSIX_REALPATH\n\n/*****************************************************************************\n** Public macros\n*****************************************************************************/\n\n/**\n * @}\n **/\n\n#endif /* ECL_FILESYSTEM_CONFIG_HPP_ */\n \n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":ecl_filesystem",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "ecl_filesystem": ["libecl_filesystem.so.1.2.1"],
+    },
+    deps = [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@ecl_build//:ament_package",
+        "@ecl_config//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_license//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "ecl_test_realpath",
+    srcs = ["src/test/realpath.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_1"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src/test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ecl_filesystem_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ecl_config",
+        "ecl_errors",
+    ],
+    cmake_export_include_directories = False,
+    headers = [
+        ":gen_extra_1",
+    ] + glob(["include/**"]),
+    include_prefix = "",
+    libraries = [
+        ":ecl_filesystem",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "ecl_filesystem": ["libecl_filesystem.so.1.2.1"],
+    },
+    deps = [":ament_index"] + [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@ecl_build//:ament_package",
+        "@ecl_config//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_license//:ament_package",
+    ],
+)

@@ -1,0 +1,143 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "complementary_filter_library",
+    srcs = [
+        "src/complementary_filter.cpp",
+        "src/complementary_filter_ros.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/imu_complementary_filter",
+    ],
+    local_defines = ros_local_defines() + ["IMU_COMPLEMENTARY_FILTER_BUILDING_LIBRARY"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "complementary_filter",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":complementary_filter_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":complementary_filter"],
+)
+
+cc_binary(
+    name = "complementary_filter_node",
+    srcs = ["src/complementary_filter_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/imu_complementary_filter",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":complementary_filter_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/filter_config.yaml",
+        "launch/complementary_filter.launch.py",
+    ],
+    lib_data = [":complementary_filter_node"],
+    libraries = [":complementary_filter"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@rclcpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+launch_ros_binary(
+    name = "complementary_filter.launch.py",
+    src = "launch/complementary_filter.launch.py",
+    data = [":ament_index"],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_name = "export_imu_complementary_filter",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":complementary_filter"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@rclcpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)

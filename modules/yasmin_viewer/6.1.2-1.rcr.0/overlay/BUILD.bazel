@@ -1,0 +1,181 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@yasmin//:yasmin": "@yasmin//:yasmin_library",
+    "@yasmin_ros//:yasmin_ros": "@yasmin_ros//:yasmin_ros_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.asio",
+    "@yasmin_msgs//:cc",
+]
+
+cc_library(
+    name = "yasmin_viewer_library",
+    srcs = [":gen_yasmin_viewer_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/yasmin_viewer",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "yasmin_viewer",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":yasmin_viewer_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "yasmin_viewer_node",
+    srcs = [":gen_yasmin_viewer_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/yasmin_viewer",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+py_library(
+    name = "yasmin_viewer_py",
+    srcs = glob(["yasmin_viewer/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@rclpy",
+        "@yasmin//:yasmin_py",
+        "@yasmin_msgs//:py",
+        "@yasmin_ros//:yasmin_ros_py",
+    ],
+)
+
+write_file(
+    name = "gen_yasmin_viewer_stub_cpp",
+    out = "_gen/yasmin_viewer_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "web/app.js",
+        "web/index.html",
+        "web/mermaid.min.js",
+        "web/style.css",
+    ],
+    lib_data = [":yasmin_viewer_node"],
+    libraries = [":yasmin_viewer"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@yasmin//:ament_package",
+        "@yasmin_msgs//:ament_package",
+        "@yasmin_ros//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ament_index_cpp",
+        "rclcpp",
+        "rclpy",
+        "yasmin",
+        "yasmin_ros",
+        "yasmin_msgs",
+    ],
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":yasmin_viewer"],
+    package_xml = "package.xml",
+    python = [":yasmin_viewer_py"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@yasmin//:ament_package",
+        "@yasmin_msgs//:ament_package",
+        "@yasmin_ros//:ament_package",
+    ],
+)

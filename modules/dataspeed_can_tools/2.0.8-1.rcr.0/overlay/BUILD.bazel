@@ -1,0 +1,275 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@can_msgs//:cc",
+    "@dataspeed_can_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "dataspeed_can_tools_library",
+    srcs = [
+        "src/CanExtractor.cpp",
+        "src/DbcIterator.cpp",
+        "src/DbcMessage.cpp",
+        "src/DbcSignal.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "dataspeed_can_tools",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":dataspeed_can_tools_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":dataspeed_can_tools"],
+)
+
+cc_binary(
+    name = "dbc_bag",
+    srcs = ["src/dbc_bag.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":dataspeed_can_tools_library"],
+)
+
+cc_binary(
+    name = "dbc_node",
+    srcs = ["src/dbc_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":dataspeed_can_tools_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "tests/Test.dbc",
+    ],
+    lib_data = [
+        ":dbc_bag",
+        ":dbc_node",
+        ":dataspeed_can_tools",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@can_msgs//:ament_package",
+        "@dataspeed_can_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_iterator",
+    srcs = ["tests/test_iterator.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":dataspeed_can_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_message",
+    srcs = ["tests/test_message.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":dataspeed_can_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_signal",
+    srcs = ["tests/test_signal.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":dataspeed_can_tools_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@can_msgs//:ament_package",
+        "@dataspeed_can_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

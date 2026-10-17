@@ -1,0 +1,96 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:nlohmann_json",
+]
+
+cc_library(
+    name = "nlohmann_json_schema_validator_library",
+    srcs = [],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_0"],
+    includes = ["_gen/include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "nlohmann_json_schema_validator",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":nlohmann_json_schema_validator_library"],
+)
+
+write_file(
+    name = "gen_extra_0",
+    out = "_gen/include/nlohmann/json-schema.hpp",
+    content = ["/*\n * JSON schema validator for JSON for modern C++\n *\n * Copyright (c) 2016-2019 Patrick Boettcher <p@yai.se>.\n *\n * SPDX-License-Identifier: MIT\n *\n */\n#ifndef NLOHMANN_JSON_SCHEMA_HPP__\n#define NLOHMANN_JSON_SCHEMA_HPP__\n\n#ifdef _WIN32\n#\tif defined(JSON_SCHEMA_VALIDATOR_EXPORTS)\n#\t\tdefine JSON_SCHEMA_VALIDATOR_API __declspec(dllexport)\n#\telif defined(JSON_SCHEMA_VALIDATOR_IMPORTS)\n#\t\tdefine JSON_SCHEMA_VALIDATOR_API __declspec(dllimport)\n#\telse\n#\t\tdefine JSON_SCHEMA_VALIDATOR_API\n#\tendif\n#else\n#\tdefine JSON_SCHEMA_VALIDATOR_API\n#endif\n\n#include <nlohmann/json.hpp>\n\n#ifdef NLOHMANN_JSON_VERSION_MAJOR\n#\tif (NLOHMANN_JSON_VERSION_MAJOR * 10000 + NLOHMANN_JSON_VERSION_MINOR * 100 + NLOHMANN_JSON_VERSION_PATCH) < 30800\n#\t\terror \"Please use this library with NLohmann's JSON version 3.8.0 or higher\"\n#\tendif\n#else\n#\terror \"expected existing NLOHMANN_JSON_VERSION_MAJOR preproc variable, please update to NLohmann's JSON 3.8.0\"\n#endif\n\n// make yourself a home - welcome to nlohmann's namespace\nnamespace nlohmann\n{\n\n// A class representing a JSON-URI for schemas derived from\n// section 8 of JSON Schema: A Media Type for Describing JSON Documents\n// draft-wright-json-schema-00\n//\n// New URIs can be derived from it using the derive()-method.\n// This is useful for resolving refs or subschema-IDs in json-schemas.\n//\n// This is done implement the requirements described in section 8.2.\n//\nclass JSON_SCHEMA_VALIDATOR_API json_uri\n{\n\tstd::string urn_;\n\n\tstd::string scheme_;\n\tstd::string authority_;\n\tstd::string path_;\n\n\tjson::json_pointer pointer_; // fragment part if JSON-Pointer\n\tstd::string identifier_;     // fragment part if Locatation Independent ID\n\nprotected:\n\t// decodes a JSON uri and replaces all or part of the currently stored values\n\tvoid update(const std::string &uri) { urn_ = uri; }\n\n\tstd::tuple<std::string, std::string, std::string, std::string, std::string> as_tuple() const\n\t{\n\t\treturn std::make_tuple(urn_, scheme_, authority_, path_, identifier_ != \"\" ? identifier_ : pointer_.to_string());\n\t}\n\npublic:\n\tjson_uri(const std::string &uri)\n\t{\n\t\tupdate(uri);\n\t}\n\n\tconst std::string &scheme() const { return scheme_; }\n\tconst std::string &authority() const { return authority_; }\n\tconst std::string &path() const { return path_; }\n\n\tconst json::json_pointer &pointer() const { return pointer_; }\n\tconst std::string &identifier() const { return identifier_; }\n\n\tstd::string fragment() const\n\t{\n\t\tif (identifier_ == \"\")\n\t\t\treturn pointer_.to_string();\n\t\telse\n\t\t\treturn identifier_;\n\t}\n\n\tstd::string url() const { return location(); }\n\tstd::string location() const { return urn_; }\n\n\tstatic std::string escape(const std::string &s) { return s; }\n\n\t// create a new json_uri based in this one and the given uri\n\t// resolves relative changes (pathes or pointers) and resets part if proto or hostname changes\n\tjson_uri derive(const std::string &uri) const\n\t{\n\t\tjson_uri u = *this;\n\t\tu.update(uri);\n\t\treturn u;\n\t}\n\n\t// append a pointer-field to the pointer-part of this uri\n\tjson_uri append(const std::string &field) const\n\t{\n\t\tif (identifier_ != \"\")\n\t\t\treturn *this;\n\n\t\tjson_uri u = *this;\n\t\tu.pointer_ /= field;\n\t\treturn u;\n\t}\n\n\tstd::string to_string() const { return urn_; }\n\n\tfriend bool operator<(const json_uri &l, const json_uri &r)\n\t{\n\t\treturn l.as_tuple() < r.as_tuple();\n\t}\n\n\tfriend bool operator==(const json_uri &l, const json_uri &r)\n\t{\n\t\treturn l.as_tuple() == r.as_tuple();\n\t}\n\n\tfriend std::ostream &operator<<(std::ostream &os, const json_uri &u) { return os << u.to_string(); }\n};\n\nnamespace json_schema\n{\n\ninline json draft7_schema_builtin;\n\ntypedef std::function<void(const json_uri & /*id*/, json & /*value*/)> schema_loader;\ntypedef std::function<void(const std::string & /*format*/, const std::string & /*value*/)> format_checker;\ntypedef std::function<void(const std::string & /*contentEncoding*/, const std::string & /*contentMediaType*/, const json & /*instance*/)> content_checker;\n\n// Interface for validation error handlers\nclass JSON_SCHEMA_VALIDATOR_API error_handler\n{\npublic:\n\tvirtual ~error_handler() {}\n\tvirtual void error(const json::json_pointer & /*ptr*/, const json & /*instance*/, const std::string & /*message*/) = 0;\n};\n\nclass JSON_SCHEMA_VALIDATOR_API basic_error_handler : public error_handler\n{\n\tbool error_{false};\n\npublic:\n\tvoid error(const json::json_pointer & /*ptr*/, const json & /*instance*/, const std::string & /*message*/) override\n\t{\n\t\terror_ = true;\n\t}\n\n\tvirtual void reset() { error_ = false; }\n\toperator bool() const { return error_; }\n};\n\n/**\n * Checks validity of JSON schema built-in string format specifiers like 'date-time', 'ipv4', ...\n */\ninline void default_string_format_check(const std::string & /*format*/, const std::string & /*value*/) {}\n\nclass root_schema {};\n\nclass JSON_SCHEMA_VALIDATOR_API json_validator\n{\n\tstd::unique_ptr<root_schema> root_;\n\tjson schema_;\n\n\tvoid validate_schema(const json &s) const {\n\t\tif (!s.is_object() && !s.is_boolean()) {\n\t\t\tthrow std::invalid_argument(\"schema must be object or boolean\");\n\t\t}\n\t}\n\n\tstatic bool check_type(const std::string &t, const json &inst) {\n\t\tif (t == \"object\") return inst.is_object();\n\t\tif (t == \"array\") return inst.is_array();\n\t\tif (t == \"string\") return inst.is_string();\n\t\tif (t == \"number\") return inst.is_number();\n\t\tif (t == \"integer\") return inst.is_number_integer();\n\t\tif (t == \"boolean\") return inst.is_boolean();\n\t\tif (t == \"null\") return inst.is_null();\n\t\treturn true;\n\t}\n\n\tvoid validate_node(const json &s, const json &inst, const json::json_pointer &ptr, error_handler &err) const {\n\t\tif (s.is_boolean()) {\n\t\t\tif (!s.get<bool>()) err.error(ptr, inst, \"boolean false schema\");\n\t\t\treturn;\n\t\t}\n\t\tif (!s.is_object()) return;\n\t\tif (s.contains(\"const\") && inst != s[\"const\"]) {\n\t\t\terr.error(ptr, inst, \"const mismatch\");\n\t\t}\n\t\tif (s.contains(\"enum\") && s[\"enum\"].is_array()) {\n\t\t\tbool found = false;\n\t\t\tfor (const auto &v : s[\"enum\"]) { if (v == inst) { found = true; break; } }\n\t\t\tif (!found) err.error(ptr, inst, \"enum mismatch\");\n\t\t}\n\t\tif (s.contains(\"type\")) {\n\t\t\tconst auto &t = s[\"type\"];\n\t\t\tif (t.is_string()) {\n\t\t\t\tif (!check_type(t.get<std::string>(), inst)) err.error(ptr, inst, \"type mismatch\");\n\t\t\t} else if (t.is_array()) {\n\t\t\t\tbool ok = false;\n\t\t\t\tfor (const auto &sub : t) { if (sub.is_string() && check_type(sub.get<std::string>(), inst)) { ok = true; break; } }\n\t\t\t\tif (!ok) err.error(ptr, inst, \"type mismatch\");\n\t\t\t}\n\t\t}\n\t\tif (inst.is_number()) {\n\t\t\tif (s.contains(\"minimum\") && inst.get<double>() < s[\"minimum\"].get<double>()) err.error(ptr, inst, \"minimum\");\n\t\t\tif (s.contains(\"maximum\") && inst.get<double>() > s[\"maximum\"].get<double>()) err.error(ptr, inst, \"maximum\");\n\t\t}\n\t\tif (inst.is_object()) {\n\t\t\tif (s.contains(\"required\") && s[\"required\"].is_array()) {\n\t\t\t\tfor (const auto &req : s[\"required\"]) {\n\t\t\t\t\tif (req.is_string() && !inst.contains(req.get<std::string>())) {\n\t\t\t\t\t\terr.error(ptr, inst, \"missing required property: \" + req.get<std::string>());\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tif (s.contains(\"properties\") && s[\"properties\"].is_object()) {\n\t\t\t\tfor (auto it = s[\"properties\"].begin(); it != s[\"properties\"].end(); ++it) {\n\t\t\t\t\tif (inst.contains(it.key())) {\n\t\t\t\t\t\tvalidate_node(it.value(), inst[it.key()], ptr / it.key(), err);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\tif (inst.is_array() && s.contains(\"items\") && s[\"items\"].is_object()) {\n\t\t\tfor (std::size_t i = 0; i < inst.size(); ++i) {\n\t\t\t\tvalidate_node(s[\"items\"], inst[i], ptr / std::to_string(i), err);\n\t\t\t}\n\t\t}\n\t\tif (s.contains(\"oneOf\") && s[\"oneOf\"].is_array()) {\n\t\t\tint valid_count = 0;\n\t\t\tfor (const auto &sub : s[\"oneOf\"]) {\n\t\t\t\tbasic_error_handler sub_err;\n\t\t\t\tvalidate_node(sub, inst, ptr, sub_err);\n\t\t\t\tif (!sub_err) ++valid_count;\n\t\t\t}\n\t\t\tif (valid_count != 1) err.error(ptr, inst, \"oneOf failed\");\n\t\t}\n\t\tif (s.contains(\"anyOf\") && s[\"anyOf\"].is_array()) {\n\t\t\tbool any_ok = false;\n\t\t\tfor (const auto &sub : s[\"anyOf\"]) {\n\t\t\t\tbasic_error_handler sub_err;\n\t\t\t\tvalidate_node(sub, inst, ptr, sub_err);\n\t\t\t\tif (!sub_err) { any_ok = true; break; }\n\t\t\t}\n\t\t\tif (!any_ok) err.error(ptr, inst, \"anyOf failed\");\n\t\t}\n\t\tif (s.contains(\"allOf\") && s[\"allOf\"].is_array()) {\n\t\t\tfor (const auto &sub : s[\"allOf\"]) {\n\t\t\t\tvalidate_node(sub, inst, ptr, err);\n\t\t\t}\n\t\t}\n\t}\n\npublic:\n\tjson_validator(schema_loader = nullptr, format_checker = nullptr, content_checker = nullptr) {}\n\n\tjson_validator(const json &s, schema_loader = nullptr, format_checker = nullptr, content_checker = nullptr) : schema_(s) { validate_schema(schema_); }\n\tjson_validator(json &&s, schema_loader = nullptr, format_checker = nullptr, content_checker = nullptr) : schema_(std::move(s)) { validate_schema(schema_); }\n\n\tjson_validator(json_validator &&) = default;\n\tjson_validator &operator=(json_validator &&) = default;\n\n\tjson_validator(json_validator const &) = delete;\n\tjson_validator &operator=(json_validator const &) = delete;\n\n\t~json_validator() = default;\n\n\t// insert and set the root-schema\n\tvoid set_root_schema(const json &s) { validate_schema(s); schema_ = s; }\n\tvoid set_root_schema(json &&s) { validate_schema(s); schema_ = std::move(s); }\n\n\t// validate a json-document based on the root-schema\n\tjson validate(const json &instance) const {\n\t\tstruct throwing_err : error_handler {\n\t\t\tvoid error(const json::json_pointer &ptr, const json &, const std::string &msg) override {\n\t\t\t\tthrow std::invalid_argument(\"At \" + ptr.to_string() + \": \" + msg);\n\t\t\t}\n\t\t} err;\n\t\treturn validate(instance, err);\n\t}\n\n\t// validate a json-document based on the root-schema with a custom error-handler\n\tjson validate(const json &instance, error_handler &err, const json_uri & /*initial_uri*/ = json_uri(\"#\")) const {\n\t\tvalidate_node(schema_, instance, json::json_pointer(\"\"), err);\n\t\treturn json();\n\t}\n};\n\n} // namespace json_schema\n} // namespace nlohmann\n\n#endif /* NLOHMANN_JSON_SCHEMA_HPP__ */\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":nlohmann_json_schema_validator",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "nlohmann_json_schema_validator": [
+            "libnlohmann_json_schema_validator.so.2",
+            "libnlohmann_json_schema_validator.so.2.4.0",
+        ],
+    },
+    deps = [
+        "@ament_cmake//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        ":gen_extra_0",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":nlohmann_json_schema_validator",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "nlohmann_json_schema_validator": [
+            "libnlohmann_json_schema_validator.so.2",
+            "libnlohmann_json_schema_validator.so.2.4.0",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+    ],
+)

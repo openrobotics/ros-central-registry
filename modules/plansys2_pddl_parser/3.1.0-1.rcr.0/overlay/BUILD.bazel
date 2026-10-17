@@ -1,0 +1,206 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+}
+
+CC_DEPS = [
+    "@plansys2_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "plansys2_pddl_parser_library",
+    srcs = [
+        "src/plansys2_pddl_parser/Action.cpp",
+        "src/plansys2_pddl_parser/And.cpp",
+        "src/plansys2_pddl_parser/Derived.cpp",
+        "src/plansys2_pddl_parser/Exists.cpp",
+        "src/plansys2_pddl_parser/Expression.cpp",
+        "src/plansys2_pddl_parser/Forall.cpp",
+        "src/plansys2_pddl_parser/Function.cpp",
+        "src/plansys2_pddl_parser/FunctionModifier.cpp",
+        "src/plansys2_pddl_parser/Ground.cpp",
+        "src/plansys2_pddl_parser/GroundFunc.cpp",
+        "src/plansys2_pddl_parser/Imply.cpp",
+        "src/plansys2_pddl_parser/Lifted.cpp",
+        "src/plansys2_pddl_parser/Not.cpp",
+        "src/plansys2_pddl_parser/Oneof.cpp",
+        "src/plansys2_pddl_parser/Or.cpp",
+        "src/plansys2_pddl_parser/ParamCond.cpp",
+        "src/plansys2_pddl_parser/TemporalAction.cpp",
+        "src/plansys2_pddl_parser/TypeGround.cpp",
+        "src/plansys2_pddl_parser/Utils.cpp",
+        "src/plansys2_pddl_parser/When.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++23"],
+    includes = [
+        "include",
+        "include/plansys2_pddl_parser",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "plansys2_pddl_parser",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":plansys2_pddl_parser_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":plansys2_pddl_parser"],
+)
+
+cc_binary(
+    name = "parser",
+    srcs = ["src/parser.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++23"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/plansys2_pddl_parser",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":plansys2_pddl_parser_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "test/pddl/dom1.pddl",
+        "test/pddl/dom2.pddl",
+        "test/pddl/prob1.pddl",
+        "test/pddl/prob2.pddl",
+        "test/pddl/suave_domain.pddl",
+        "test/pddl/suave_domain_extended_created.pddl",
+        "test/pddl/suave_problem.pddl",
+        "test/pddl/suave_problem_extended_created.pddl",
+    ],
+    data_strip_prefix = "test",
+    lib_data = [
+        ":parser",
+    ],
+    libraries = [
+        ":plansys2_pddl_parser",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@plansys2_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "pddl_parser_test",
+    srcs = ["test/pddl_parser_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++23"],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/plansys2_pddl_parser",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":plansys2_pddl_parser_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = ["plansys2_msgs"],
+    cmake_export_name = "export_plansys2_pddl_parser",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":plansys2_pddl_parser",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@plansys2_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)

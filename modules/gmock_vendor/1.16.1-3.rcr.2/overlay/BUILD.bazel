@@ -1,0 +1,93 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+pkg_files(
+    name = "vendor_src",
+    srcs = glob([
+        "include/gmock/**",
+        "src/**",
+    ]),
+    prefix = "src/gmock_vendor",
+    strip_prefix = strip_prefix.from_pkg(),
+)
+
+write_file(
+    name = "meta_src_gmock_vendor_CMakeLists_txt",
+    out = "_meta/src/gmock_vendor/CMakeLists.txt",
+    content = [
+        "project(gmock CXX C)",
+        "cmake_minimum_required(VERSION 3.8)",
+        "",
+        "find_package(gtest_vendor REQUIRED)",
+        "",
+        "include_directories(",
+        "  include",
+        "  .  # to find the source files included with \"src/gmock*.cc\"",
+        "  ${gtest_vendor_BASE_DIR}/include",
+        "  ${gtest_vendor_BASE_DIR}",
+        ")",
+        "",
+        "add_library(gmock STATIC",
+        "  ${gtest_vendor_BASE_DIR}/src/gtest-all.cc",
+        "  src/gmock-all.cc)",
+        "target_compile_features(gmock PUBLIC cxx_std_11)  # Require C++11",
+        "",
+        "# When building with asan (i.e. using colcon build --mixin asan-gcc),",
+        "# asan itself provides a \"fake\" pthread that tricks the pthread",
+        "# detection logic into thinking no link libraries are necessary",
+        "# (see https://wiki.gentoo.org/wiki/AddressSanitizer/Problems#pthread_linking_issues",
+        "# for some additional information).  To work around that, we unconditionally",
+        "# add the -pthread flag for Linux machines so it will always work",
+        "if(UNIX AND NOT APPLE)",
+        "  target_link_libraries(gmock \"-pthread\")",
+        "endif()",
+        "",
+        "if(NOT WIN32)",
+        "  set_target_properties(gmock PROPERTIES COMPILE_FLAGS \"-Wno-missing-field-initializers\")",
+        "  set_target_properties(gmock PROPERTIES POSITION_INDEPENDENT_CODE True)",
+        "endif()",
+        "",
+        "add_library(gmock_main STATIC src/gmock_main.cc)",
+        "target_compile_features(gmock_main PUBLIC cxx_std_11)  # Require C++11",
+    ],
+)
+
+pkg_files(
+    name = "meta_files",
+    srcs = [":meta_src_gmock_vendor_CMakeLists_txt"],
+    strip_prefix = strip_prefix.from_pkg("_meta"),
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    cmake = [
+        "gmock_vendorConfig.cmake",
+    ],
+    cmake_strip_prefix = "",
+    install = [
+        ":meta_files",
+        ":vendor_src",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@gtest_vendor//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

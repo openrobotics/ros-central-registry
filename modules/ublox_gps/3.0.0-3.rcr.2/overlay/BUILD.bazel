@@ -1,0 +1,252 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:asio": "@rosdistro//cc:asio_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@ublox_msgs//:ublox_msgs_lib": "@ublox_msgs//:ublox_msgs_lib_library",
+}
+
+CC_DEPS = [
+    "@diagnostic_msgs//:cc",
+    "@geometry_msgs//:cc",
+    "@nmea_msgs//:cc",
+    "@rcl_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rtcm_msgs//:cc",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@ublox_msgs//:c",
+    "@ublox_msgs//:cc",
+]
+
+cc_library(
+    name = "ublox_gps_library",
+    srcs = [":gen_ublox_gps_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ublox_gps",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ublox_gps",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":ublox_gps_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "ublox_gps_components",
+    component = ":ublox_gps",
+    plugins = ["ublox_node::UbloxNode"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ublox_gps"],
+)
+
+cc_binary(
+    name = "ublox_gps_node",
+    srcs = [":gen_ublox_gps_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ublox_gps",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ublox_gps_library"],
+)
+
+cc_binary(
+    name = "ublox_logger",
+    srcs = [":gen_ublox_gps_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ublox_gps",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ublox_gps_library"],
+)
+
+write_file(
+    name = "gen_ublox_gps_stub_cpp",
+    out = "_gen/ublox_gps_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":ublox_gps_components"],
+    data = [
+        "config/c94_m8p_base.yaml",
+        "config/c94_m8p_rover.yaml",
+        "config/c94_m8t_base.yaml",
+        "config/c94_m8t_rover.yaml",
+        "config/neo_m8u_rover.yaml",
+        "config/nmea.yaml",
+        "config/zed_f9p.yaml",
+        "launch/ublox_gps_node-composed-launch.py",
+        "launch/ublox_gps_node-launch.py",
+    ],
+    lib_data = [
+        ":ublox_gps_node",
+        ":ublox_logger",
+    ],
+    libraries = [":ublox_gps"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nmea_msgs//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rtcm_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@ublox_msgs//:ament_package",
+        "@ublox_serialization//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_ublox_gps",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":ublox_gps"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nmea_msgs//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rtcm_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@ublox_msgs//:ament_package",
+        "@ublox_serialization//:ament_package",
+    ],
+)

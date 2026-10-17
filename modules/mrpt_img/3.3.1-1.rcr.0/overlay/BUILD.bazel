@@ -1,0 +1,174 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@mrpt_config//:mrpt_config_library",
+    "@mrpt_io//:mrpt_io_library",
+    "@mrpt_math//:mrpt_math_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "mrpt_img_library",
+    srcs = [":gen_mrpt_img_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_16"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_img",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":mrpt_img_library"],
+)
+
+cc_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu_library",
+    srcs = [":gen_mrpt_img_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_16"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_img_library"],
+)
+
+cc_shared_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "mrpt/img/_bindings.so",
+    deps = [":_bindings.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "mrpt",
+    srcs = glob(["python/mrpt/**/*.py"]),
+    imports = ["python"],
+    deps = [
+        "@mrpt_config//:mrpt",
+        "@mrpt_io//:mrpt",
+        "@mrpt_math//:mrpt",
+    ],
+)
+
+write_file(
+    name = "gen_mrpt_img_stub_cpp",
+    out = "_gen/mrpt_img_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_extra_16",
+    out = "_gen/include/mrpt/img/config.h",
+    content = ["/* +---------------------------------------------------------------------------+\n   |                     Mobile Robot Programming Toolkit (MRPT)               |\n   |                          https://www.mrpt.org/                            |\n   |                                                                           |\n   | Copyright (c) 2005-2026, Individual contributors, see AUTHORS file        |\n   | See: https://www.mrpt.org/Authors - All rights reserved.                  |\n   | Released under BSD License. See details in https://www.mrpt.org/License   |\n   +---------------------------------------------------------------------------+\n */\n\n#pragma once\n\n// clang-format off\n\n/** Enable Katakana, Hiragana & Kanji character sets in mrpt::img::CCanvas.\n  *  Disable this to save executable sizes if these fonts will be not used. */\n #define MRPT_HAS_ASIAN_FONTS \n\n// clang-format on\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mrpt_img",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_img": [
+            "libmrpt_img.so.3.3",
+            "libmrpt_img.so.3.3.1",
+        ],
+    },
+    deps = [
+        "@mrpt_common//:ament_package",
+        "@mrpt_config//:ament_package",
+        "@mrpt_io//:ament_package",
+        "@mrpt_math//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        ":gen_extra_16",
+    ] + glob(["include/**"]),
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_img",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":mrpt",
+        ":_bindings.cpython-314-x86_64-linux-gnu",
+    ],
+    python_strip_prefix = "python",
+    sonames = {
+        "mrpt_img": [
+            "libmrpt_img.so.3.3",
+            "libmrpt_img.so.3.3.1",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_common//:ament_package",
+        "@mrpt_config//:ament_package",
+        "@mrpt_io//:ament_package",
+        "@mrpt_math//:ament_package",
+    ],
+)

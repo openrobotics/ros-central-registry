@@ -1,0 +1,290 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+    "@slg_msgs//:cc",
+    "@slg_msgs//:slg_core",
+    "@visualization_msgs//:cc",
+]
+
+cc_library(
+    name = "laser_segmentation_core_library",
+    srcs = [
+        "src/laser_segmentation.cpp",
+        "src/parameter_handler.cpp",
+        "src/segmentation/jump_distance.cpp",
+        "src/segmentation/jump_distance_merge.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/laser_segmentation",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "laser_segmentation_core",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":laser_segmentation_core_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "laser_segmentation_core_components",
+    component = ":laser_segmentation_core",
+    plugins = ["laser_segmentation::LaserSegmentation"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":laser_segmentation_core"],
+)
+
+cc_binary(
+    name = "laser_segmentation",
+    srcs = ["src/main.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/laser_segmentation",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":laser_segmentation_core_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":laser_segmentation_core_components"],
+    data = [
+        "launch/segmentation.launch.py",
+        "params/close_steps_detect.yml",
+        "params/default_params.yml",
+    ],
+    lib_data = [":laser_segmentation"],
+    libraries = [":laser_segmentation_core"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@slg_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_integration",
+    srcs = ["test/test_integration.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/laser_segmentation",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":laser_segmentation_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_laser_segmentation",
+    srcs = ["test/test_laser_segmentation.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/laser_segmentation",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":laser_segmentation_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_segmentations",
+    srcs = ["test/test_segmentations.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/laser_segmentation",
+        "test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":laser_segmentation_core_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_binary(
+    name = "segmentation.launch.py",
+    src = "launch/segmentation.launch.py",
+    data = [
+        ":ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "rclcpp_components",
+        "sensor_msgs",
+        "visualization_msgs",
+        "slg_msgs",
+    ],
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":laser_segmentation_core"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@slg_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

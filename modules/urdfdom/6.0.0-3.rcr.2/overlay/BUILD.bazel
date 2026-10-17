@@ -1,0 +1,365 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["urdf_parser/include/**/*.h"])
+
+DEPENDENCIES = {
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@urdfdom_headers//:urdfdom_headers": "@urdfdom_headers//:urdfdom_headers_library",
+}
+
+MODEL_SOURCES = [
+    "urdf_parser/src/joint.cpp",
+    "urdf_parser/src/link.cpp",
+    "urdf_parser/src/model.cpp",
+    "urdf_parser/src/pose.cpp",
+    "urdf_parser/src/pose.hpp",
+]
+
+# Upstream builds three shared libraries (see urdf_parser/CMakeLists.txt):
+# urdfdom_model, urdfdom_world (the model sources plus world.cpp) and
+# urdfdom_sensor (links urdfdom_model).
+
+cc_library(
+    name = "urdfdom_model_library",
+    srcs = MODEL_SOURCES,
+    hdrs = HEADERS,
+    defines = ["URDFDOM_EXPORTS"],
+    includes = ["urdf_parser/include"],
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "urdfdom_model",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":urdfdom_model_library"],
+    deps = [":urdfdom_model_library"],
+)
+
+cc_library(
+    name = "urdfdom_world_library",
+    srcs = MODEL_SOURCES + ["urdf_parser/src/world.cpp"],
+    hdrs = HEADERS,
+    defines = ["URDFDOM_EXPORTS"],
+    includes = ["urdf_parser/include"],
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "urdfdom_world",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":urdfdom_world_library"],
+    deps = [":urdfdom_world_library"],
+)
+
+cc_library(
+    name = "urdfdom_sensor_library",
+    srcs = [
+        "urdf_parser/src/urdf_sensor.cpp",
+        "urdf_parser/src/urdf_sensor.hpp",
+    ],
+    hdrs = HEADERS,
+    defines = ["URDFDOM_EXPORTS"],
+    includes = ["urdf_parser/include"],
+    deps = DEPENDENCIES.values() + [":urdfdom_model_library"],
+)
+
+cc_shared_library(
+    name = "urdfdom_sensor",
+    dynamic_deps = DEPENDENCIES.keys() + [":urdfdom_model"],
+    exports_filter = [":urdfdom_sensor_library"],
+    deps = [":urdfdom_sensor_library"],
+)
+
+# Compatibility targets for dependents written against the previous single
+# library: urdfdom_world is a strict superset of urdfdom_model (same sources
+# plus the world parser), which is everything `urdf` and friends link.
+alias(
+    name = "urdfdom_library",
+    actual = ":urdfdom_world_library",
+)
+
+alias(
+    name = "urdfdom",
+    actual = ":urdfdom_world",
+)
+
+### BINARIES
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        ":urdfdom_model",
+        ":urdfdom_sensor",
+        ":urdfdom_world",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "check_urdf",
+    srcs = ["urdf_parser/src/check_urdf.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":urdfdom_model_library",
+        ":urdfdom_world_library",
+    ],
+)
+
+cc_binary(
+    name = "urdf_to_graphviz",
+    srcs = ["urdf_parser/src/urdf_to_graphviz.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":urdfdom_model_library"],
+)
+
+# "urdf_mem_test is a binary for testing, not a unit test" (upstream), but it
+# is installed to bin/ alongside the other tools.
+cc_binary(
+    name = "urdf_mem_test",
+    srcs = ["urdf_parser/test/memtest.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":urdfdom_model_library"],
+)
+
+### TESTS
+
+# urdf_parser/test/CMakeLists.txt registers every gtest twice: once with
+# LC_ALL=C and once (`<name>_locale`) with LC_ALL=nl_NL.UTF-8 to catch
+# locale-dependent number parsing.
+[
+    cc_test(
+        name = test + suffix,
+        srcs = ["urdf_parser/test/{0}.cpp".format(test)],
+        data = glob(["urdf_parser/test/gtest/**"]),
+        dynamic_deps = [":transitive_dynamic_deps"],
+        env = {"LC_ALL": lc_all},
+        deps = [
+            ":urdfdom_model_library",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test in [
+        "urdf_double_convert",
+        "urdf_schema_capsule_geometry_test",
+        "urdf_schema_quaternion_test",
+        "urdf_unit_test",
+        "urdf_version_test",
+    ]
+    for suffix, lc_all in [
+        ("", "C"),
+        ("_locale", "nl_NL.UTF-8"),
+    ]
+]
+
+### PKG-CONFIG & CMAKE
+
+# configure_file(cmake/pkgconfig/urdfdom.pc.in ...) installed to lib/pkgconfig/
+# (plain CMake package, CMAKE_INSTALL_INCLUDEDIR=include/urdfdom).
+expand_template(
+    name = "pkgconfig_pc",
+    out = "pkgconfig/urdfdom.pc",
+    substitutions = {
+        "@PROJECT_NAME@": "urdfdom",
+        "@RELATIVE_PATH_LIBDIR_TO_PREFIX@": "..",
+        "@CMAKE_INSTALL_LIBDIR@": "lib",
+        "@CMAKE_INSTALL_INCLUDEDIR@": "include/urdfdom",
+        "@PKG_NAME@": "urdfdom",
+        "@PKG_DESC@": "Unified Robot Description Format",
+        "@URDF_VERSION@": "6.0.0",
+        "@PKG_DEPENDS@": "urdfdom_headers",
+        "@PKG_URDF_LIBS@": "-lurdfdom_sensor -lurdfdom_model -lurdfdom_world",
+    },
+    template = "cmake/pkgconfig/urdfdom.pc.in",
+)
+
+expand_template(
+    name = "cmake_config",
+    out = "cmake_out/urdfdom-config.cmake",
+    substitutions = {
+        "@PACKAGE_INIT@": 'get_filename_component(PACKAGE_PREFIX_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../" ABSOLUTE)',
+        "@PROJECT_NAME@": "urdfdom",
+        "@PKG_NAME@": "urdfdom",
+        "@RELATIVE_PATH_CMAKE_DIR_TO_PREFIX@": "../../..",
+        "@CMAKE_INSTALL_INCLUDEDIR@": "include/urdfdom",
+        "@CMAKE_INSTALL_LIBDIR@": "lib",
+        "@PKG_LIBRARIES@": "urdfdom_sensor;urdfdom_model;urdfdom_world",
+        "@PKG_DEPENDS@": "urdfdom_headers",
+        "@PKG_EXPORTS@": "urdfdom",
+    },
+    template = "cmake/urdfdom-config.cmake.in",
+)
+
+write_file(
+    name = "cmake_config_version",
+    out = "cmake_out/urdfdom-configVersion.cmake",
+    content = [
+        'set(PACKAGE_VERSION "6.0.0")',
+        "if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)",
+        "  set(PACKAGE_VERSION_COMPATIBLE FALSE)",
+        "else()",
+        '  if(PACKAGE_FIND_VERSION_MAJOR STREQUAL "6")',
+        "    set(PACKAGE_VERSION_COMPATIBLE TRUE)",
+        "  else()",
+        "    set(PACKAGE_VERSION_COMPATIBLE FALSE)",
+        "  endif()",
+        "  if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)",
+        "    set(PACKAGE_VERSION_EXACT TRUE)",
+        "  endif()",
+        "endif()",
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_export",
+    out = "cmake_out/urdfdomExport.cmake",
+    content = [
+        "if(NOT TARGET urdfdom::urdfdom_model)",
+        '  get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        "  add_library(urdfdom::urdfdom_model SHARED IMPORTED)",
+        "  set_target_properties(urdfdom::urdfdom_model PROPERTIES",
+        '    INTERFACE_COMPILE_FEATURES "cxx_std_14"',
+        '    INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include/urdfdom"',
+        '    INTERFACE_LINK_LIBRARIES "urdfdom_headers::urdfdom_headers"',
+        "  )",
+        "  add_library(urdfdom::urdfdom_world SHARED IMPORTED)",
+        "  set_target_properties(urdfdom::urdfdom_world PROPERTIES",
+        '    INTERFACE_COMPILE_FEATURES "cxx_std_14"',
+        '    INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include/urdfdom"',
+        '    INTERFACE_LINK_LIBRARIES "urdfdom_headers::urdfdom_headers"',
+        "  )",
+        "  add_library(urdfdom::urdfdom_sensor SHARED IMPORTED)",
+        "  set_target_properties(urdfdom::urdfdom_sensor PROPERTIES",
+        '    INTERFACE_COMPILE_FEATURES "cxx_std_14"',
+        '    INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include/urdfdom"',
+        '    INTERFACE_LINK_LIBRARIES "urdfdom::urdfdom_model;urdfdom_headers::urdfdom_headers"',
+        "  )",
+        "  add_library(urdfdom::urdf_parser INTERFACE IMPORTED)",
+        "  set_target_properties(urdfdom::urdf_parser PROPERTIES",
+        '    INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include/urdfdom"',
+        '    INTERFACE_LINK_LIBRARIES "urdfdom::urdfdom_model;urdfdom::urdfdom_sensor;urdfdom::urdfdom_world"',
+        "  )",
+        '  include("${CMAKE_CURRENT_LIST_DIR}/urdfdomExport-release.cmake")',
+        "  set(_IMPORT_PREFIX)",
+        "endif()",
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_export_release",
+    out = "cmake_out/urdfdomExport-release.cmake",
+    content = [
+        "foreach(_lib urdfdom_model urdfdom_world urdfdom_sensor)",
+        "  set_property(TARGET urdfdom::${_lib} APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)",
+        "  set_target_properties(urdfdom::${_lib} PROPERTIES",
+        '    IMPORTED_LINK_DEPENDENT_LIBRARIES_RELEASE "console_bridge::console_bridge;tinyxml2::tinyxml2"',
+        '    IMPORTED_LOCATION_RELEASE "${_IMPORT_PREFIX}/lib/lib${_lib}.so"',
+        '    IMPORTED_SONAME_RELEASE "lib${_lib}.so"',
+        "  )",
+        "endforeach()",
+        "",
+    ],
+)
+
+### PACKAGING
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        ":cmake_config",
+        ":cmake_config_version",
+        ":cmake_export",
+        ":cmake_export_release",
+    ],
+    prefix = "lib/urdfdom/cmake",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_1",
+    files = [
+        ":pkgconfig_pc",
+    ],
+    prefix = "lib/pkgconfig",
+    strip_prefix = "*",
+)
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+    ],
+    headers = HEADERS,
+    headers_strip_prefix = "urdf_parser/include",
+    include_prefix = "",
+    libraries = [
+        ":urdfdom_model",
+        ":urdfdom_sensor",
+        ":urdfdom_world",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        ":check_urdf",
+        ":urdf_mem_test",
+        ":urdf_to_graphviz",
+    ],
+    sonames = {
+        "urdfdom_model": [
+            "liburdfdom_model.so.6",
+            "liburdfdom_model.so.6.0.0",
+        ],
+        "urdfdom_sensor": [
+            "liburdfdom_sensor.so.6",
+            "liburdfdom_sensor.so.6.0.0",
+        ],
+        "urdfdom_world": [
+            "liburdfdom_world.so.6",
+            "liburdfdom_world.so.6.0.0",
+        ],
+    },
+    deps = [
+        "@console_bridge_vendor//:ament_package",
+        "@rosdistro//:ament_package",
+        "@urdfdom_headers//:ament_package",
+    ],
+)

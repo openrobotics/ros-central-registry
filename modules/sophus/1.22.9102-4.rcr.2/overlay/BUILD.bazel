@@ -1,0 +1,111 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+filegroup(
+    name = "headers",
+    srcs = glob(
+        ["sophus/*.hpp"],
+        exclude = ["sophus/test_macros.hpp"],
+    ),
+)
+
+cc_library(
+    name = "sophus",
+    hdrs = glob(["sophus/*.hpp"]),
+    includes = ["."],
+    deps = [
+        "@rosdistro//cc:eigen",
+        "@rosdistro//cc:fmt",
+    ],
+)
+
+alias(
+    name = "sophus_library",
+    actual = ":sophus",
+)
+
+[
+    cc_test(
+        name = test_name,
+        size = "small",
+        srcs = [
+            "sophus/test_macros.hpp",
+            "test/core/{}.cpp".format(test_name),
+            "test/core/tests.hpp",
+        ],
+        deps = [":sophus"],
+    )
+    for test_name in [
+        "test_common",
+        "test_cartesian2",
+        "test_cartesian3",
+        "test_so2",
+        "test_se2",
+        "test_rxso2",
+        "test_sim2",
+        "test_so3",
+        "test_se3",
+        "test_rxso3",
+        "test_sim3",
+        "test_velocities",
+        "test_geometry",
+    ]
+]
+
+genrule(
+    name = "sophus_cmake_gen",
+    srcs = ["SophusConfig.cmake.in"],
+    outs = [
+        "cmake_gen/SophusConfig.cmake",
+        "cmake_gen/SophusConfigVersion.cmake",
+        "cmake_gen/SophusTargets.cmake",
+    ],
+    cmd = """
+cp $(location SophusConfig.cmake.in) $(location cmake_gen/SophusConfig.cmake)
+echo 'set(PACKAGE_VERSION "1.22.10")' > $(location cmake_gen/SophusConfigVersion.cmake)
+echo 'add_library(Sophus::Sophus INTERFACE IMPORTED)' > $(location cmake_gen/SophusTargets.cmake)
+""",
+)
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    cmake = [":sophus_cmake_gen"],
+    cmake_strip_prefix = "cmake_gen",
+    headers = [":headers"],
+    headers_strip_prefix = "",
+    include_prefix = "",
+    deps = [
+        "@rosdistro//:ament_package",
+    ],
+)

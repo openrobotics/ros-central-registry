@@ -1,0 +1,343 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+CC_DEPS = [
+    "@can_msgs//:cc",
+    "@lifecycle_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@ros2_socketcan_msgs//:cc",
+]
+
+cc_library(
+    name = "ros2_socketcan_library",
+    srcs = [
+        "src/socket_can_common.cpp",
+        "src/socket_can_id.cpp",
+        "src/socket_can_receiver.cpp",
+        "src/socket_can_sender.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_socketcan",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ros2_socketcan",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["@@//:__subpackages__"],
+    deps = [":ros2_socketcan_library"],
+)
+
+cc_library(
+    name = "socket_can_receiver_node_library",
+    srcs = ["src/socket_can_receiver_node.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_socketcan",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ros2_socketcan_library"],
+)
+
+cc_shared_library(
+    name = "socket_can_receiver_node",
+    dynamic_deps = DEPENDENCIES.keys() + [":ros2_socketcan"],
+    exports_filter = ["@@//:__subpackages__"],
+    deps = [":socket_can_receiver_node_library"],
+)
+
+cc_library(
+    name = "socket_can_sender_node_library",
+    srcs = ["src/socket_can_sender_node.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_socketcan",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ros2_socketcan_library",
+        ":socket_can_receiver_node_library",
+    ],
+)
+
+cc_shared_library(
+    name = "socket_can_sender_node",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":ros2_socketcan",
+        ":socket_can_receiver_node",
+    ],
+    deps = [":socket_can_sender_node_library"],
+)
+
+rclcpp_components_register_node(
+    name = "socket_can_receiver_node_exe",
+    component = ":socket_can_receiver_node",
+    node_name = "socket_can_receiver_node_exe",
+    plugin = "drivers::socketcan::SocketCanReceiverNode",
+)
+
+rclcpp_components_register_node(
+    name = "socket_can_sender_node_exe",
+    component = ":socket_can_receiver_node",
+    node_name = "socket_can_sender_node_exe",
+    plugin = "drivers::socketcan::SocketCanReceiverNode",
+)
+
+rclcpp_components_register_nodes(
+    name = "socket_can_sender_node_components",
+    component = ":socket_can_sender_node",
+    plugins = ["drivers::socketcan::SocketCanSenderNode"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":ros2_socketcan",
+        ":socket_can_receiver_node",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":socket_can_receiver_node_exe_record",
+        ":socket_can_sender_node_exe_record",
+        ":socket_can_sender_node_components",
+    ],
+    data = [
+        "launch/socket_can_bridge.launch.xml",
+        "launch/socket_can_receiver.launch.py",
+        "launch/socket_can_sender.launch.py",
+    ],
+    lib_data = [
+        ":socket_can_receiver_node_exe",
+        ":socket_can_sender_node_exe",
+    ],
+    libraries = [
+        ":ros2_socketcan",
+        ":socket_can_receiver_node",
+        ":socket_can_sender_node",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@can_msgs//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@ros2_socketcan_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "ros2_socketcan_node_destruction_test",
+    srcs = [
+        "test/gtest_main.cpp",
+        "test/node_destruction.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_socketcan",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ros2_socketcan_library",
+        ":socket_can_receiver_node_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "ros2_socketcan_test",
+    srcs = [
+        "test/gtest_main.cpp",
+        "test/receiver.cpp",
+        "test/sanity_checks.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_socketcan",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ros2_socketcan_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "rclcpp_components",
+        "rclcpp_lifecycle",
+        "lifecycle_msgs",
+        "can_msgs",
+        "ros2_socketcan_msgs",
+    ],
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [
+        ":ros2_socketcan",
+        ":socket_can_receiver_node",
+        ":socket_can_sender_node",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@can_msgs//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@ros2_socketcan_msgs//:ament_package",
+    ],
+)

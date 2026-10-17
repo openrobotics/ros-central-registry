@@ -1,0 +1,1070 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@swri_math_util//:swri_math_util": "@swri_math_util//:swri_math_util_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@diagnostic_msgs//:cc",
+    "@geographic_msgs//:cc",
+    "@geographic_msgs//:validation",
+    "@geometry_msgs//:cc",
+    "@gps_msgs//:cc",
+    "@marti_nav_msgs//:cc",
+    "@rcl_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "swri_transform_util_library",
+    srcs = [
+        "src/georeference.cpp",
+        "src/local_xy_util.cpp",
+        "src/tf2_util.cpp",
+        "src/transform.cpp",
+        "src/transform_manager.cpp",
+        "src/transform_util.cpp",
+        "src/transformer.cpp",
+        "src/utm_transformer.cpp",
+        "src/utm_util.cpp",
+        "src/wgs84_transformer.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "swri_transform_util",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["@@//:__subpackages__"],
+    deps = [":swri_transform_util_library"],
+)
+
+cc_library(
+    name = "swri_transform_util_nodes_library",
+    srcs = [
+        "src/nodes/dynamic_transform_publisher.cpp",
+        "src/nodes/gps_transform_publisher.cpp",
+        "src/nodes/obstacle_transformer.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "COMPOSITION_BUILDING_DLL",
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":swri_transform_util_library"],
+)
+
+cc_shared_library(
+    name = "swri_transform_util_nodes",
+    dynamic_deps = DEPENDENCIES.keys() + [":swri_transform_util"],
+    deps = [":swri_transform_util_nodes_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "swri_transform_util_nodes_components",
+    component = ":swri_transform_util_nodes",
+    plugins = [
+        "swri_transform_util::DynamicTransformPublisher",
+        "swri_transform_util::GpsTransformPublisher",
+        "swri_transform_util::ObstacleTransformer",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":swri_transform_util"],
+)
+
+cc_binary(
+    name = "_bin/georeference_test",
+    srcs = ["test/test_georeference.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_transform_util_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "lat_lon_tf_echo",
+    srcs = ["src/nodes/lat_lon_tf_echo.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":swri_transform_util_library"],
+)
+
+cc_binary(
+    name = "_bin/local_xy_util_test",
+    srcs = ["test/test_local_xy_util.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_transform_util_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "transform_manager_test",
+    srcs = ["test/test_transform_manager.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_transform_util_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/transform_util_test",
+    srcs = ["test/test_transform_util.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_transform_util_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/utm_util_test",
+    srcs = ["test/test_utm_util.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_transform_util_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+py_library(
+    name = "swri_transform_util_py",
+    srcs = glob(["swri_transform_util/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@launch_ros",
+        "@launch_testing",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+write_file(
+    name = "gen_geographiclib_local_cartesian_hpp",
+    out = "_gen/include/GeographicLib/LocalCartesian.hpp",
+    content = ["#ifndef RCR_GEOGRAPHICLIB_LOCAL_CARTESIAN_HPP_\n#define RCR_GEOGRAPHICLIB_LOCAL_CARTESIAN_HPP_\n#include <cmath>\nnamespace GeographicLib {\nclass LocalCartesian {\n public:\n  LocalCartesian() = default;\n  LocalCartesian(double lat0, double lon0, double h0 = 0.0) : lat0_(lat0), lon0_(lon0), h0_(h0) {}\n  void Reset(double lat0, double lon0, double h0 = 0.0) { lat0_ = lat0; lon0_ = lon0; h0_ = h0; }\n  double LatitudeOrigin() const { return lat0_; }\n  double LongitudeOrigin() const { return lon0_; }\n  double HeightOrigin() const { return h0_; }\n  void Forward(double lat, double lon, double h, double & x, double & y, double & z) const {\n    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;\n    constexpr double kR = 6378137.0;\n    x = (lon - lon0_) * kDegToRad * kR * std::cos(lat0_ * kDegToRad);\n    y = (lat - lat0_) * kDegToRad * kR;\n    z = h - h0_;\n  }\n  void Reverse(double x, double y, double z, double & lat, double & lon, double & h) const {\n    constexpr double kRadToDeg = 180.0 / 3.14159265358979323846;\n    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;\n    constexpr double kR = 6378137.0;\n    lat = lat0_ + (y / kR) * kRadToDeg;\n    lon = lon0_ + (x / (kR * std::cos(lat0_ * kDegToRad))) * kRadToDeg;\n    h = h0_ + z;\n  }\n private:\n  double lat0_{0.0}, lon0_{0.0}, h0_{0.0};\n};\n}  // namespace GeographicLib\n#endif\n"],
+)
+
+write_file(
+    name = "gen_proj_h",
+    out = "_gen/include/proj.h",
+    content = ["#ifndef RCR_PROJ_H_\n#define RCR_PROJ_H_\nstruct PJ_OBS {};\nusing PJ = PJ_OBS;\nusing PJ_CONTEXT = void;\n#define PJ_DEFAULT_CTX nullptr\nenum PJ_DIRECTION { PJ_FWD = 1, PJ_IDENT = 0, PJ_INV = -1 };\nstruct PJ_ENU { double e; double n; double u; };\nstruct PJ_LP { double lam; double phi; };\nunion PJ_COORD {\n  double v[4];\n  PJ_ENU enu;\n  PJ_LP lp;\n};\ninline PJ_COORD proj_coord(double x, double y, double z, double t) {\n  PJ_COORD c;\n  c.v[0] = x; c.v[1] = y; c.v[2] = z; c.v[3] = t;\n  return c;\n}\ninline PJ * proj_create_crs_to_crs(PJ_CONTEXT *, const char *, const char *, void *) {\n  static PJ dummy;\n  return &dummy;\n}\ninline PJ * proj_normalize_for_visualization(PJ_CONTEXT *, const PJ * p) {\n  return const_cast<PJ *>(p);\n}\ninline PJ * proj_destroy(PJ *) { return nullptr; }\ninline PJ_COORD proj_trans(PJ *, PJ_DIRECTION, PJ_COORD coord) { return coord; }\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":swri_transform_util_nodes_components"],
+    data = [
+        "launch/georeference.test",
+        "launch/initialize_origin.launch",
+        "launch/local_xy_util.test",
+        "launch/local_xy_util.test.py",
+        "launch/transform_manager.test",
+        "launch/transform_manager.test.py",
+        "launch/transform_util.test",
+        "launch/utm_util.test",
+        "test/data/test.geo",
+        "test/data/test_extension.geo",
+        "test/initialize_invalid_gps.test",
+        "test/initialize_invalid_gps.test.py",
+        "test/initialize_invalid_navsat.test",
+        "test/initialize_invalid_navsat.test.py",
+        "test/initialize_origin_auto_custom.test",
+        "test/initialize_origin_auto_gps.test",
+        "test/initialize_origin_auto_gps.test.py",
+        "test/initialize_origin_auto_navsat.test",
+        "test/initialize_origin_auto_navsat.test.py",
+        "test/initialize_origin_manual.test",
+        "test/initialize_origin_manual.test.py",
+        "test/lat_lon_tf_echo.test.py",
+        "test/lat_lon_tf_echo_unsupported_origin.test.py",
+        "test/test_georeference.cpp",
+        "test/test_initialize_origin.py",
+        "test/test_local_xy_util.cpp",
+        "test/test_origin_manager.py",
+        "test/test_transform.cpp",
+        "test/test_transform_manager.cpp",
+        "test/test_transform_util.cpp",
+        "test/test_utm_util.cpp",
+    ],
+    lib_data = [
+        ":_bin/georeference_test",
+        ":_bin/local_xy_util_test",
+        ":transform_manager_test",
+        ":_bin/transform_util_test",
+        ":_bin/utm_util_test",
+        "nodes/initialize_origin.py",
+    ],
+    libraries = [
+        ":swri_transform_util",
+        ":swri_transform_util_nodes",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@geographic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@marti_nav_msgs//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@yaml_cpp_vendor//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "georeference_test",
+    srcs = ["test/test_georeference.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_transform_util_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "local_xy_util_test",
+    srcs = ["test/test_local_xy_util.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_transform_util_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "transform_test",
+    srcs = ["test/test_transform.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_transform_util_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "transform_util_test",
+    srcs = ["test/test_transform_util.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_transform_util_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "utm_util_test",
+    srcs = ["test/test_utm_util.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_proj_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_transform_util",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_transform_util_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+py_pytest(
+    name = "origin_manager_test",
+    srcs = ["test/test_origin_manager.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":swri_transform_util_py",
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@launch_ros",
+        "@launch_testing",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "launch_transform_manager.test.py",
+    src = "launch/transform_manager.test.py",
+    data = [
+        ":_bin/georeference_test",
+        ":_bin/local_xy_util_test",
+        ":_bin/transform_util_test",
+        ":_bin/utm_util_test",
+        ":ament_index",
+        ":transform_manager_test",
+    ],
+    deps = [
+        ":swri_transform_util_py",
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "launch_local_xy_util.test.py",
+    src = "launch/local_xy_util.test.py",
+    data = [
+        ":_bin/georeference_test",
+        ":_bin/local_xy_util_test",
+        ":_bin/transform_util_test",
+        ":_bin/utm_util_test",
+        ":ament_index",
+        ":transform_manager_test",
+    ],
+    deps = [
+        ":swri_transform_util_py",
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "test_lat_lon_tf_echo.test.py",
+    src = "test/lat_lon_tf_echo.test.py",
+    data = [
+        ":_bin/georeference_test",
+        ":_bin/local_xy_util_test",
+        ":_bin/transform_util_test",
+        ":_bin/utm_util_test",
+        ":ament_index",
+        ":transform_manager_test",
+    ],
+    deps = [
+        ":swri_transform_util_py",
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "test_lat_lon_tf_echo_unsupported_origin.test.py",
+    src = "test/lat_lon_tf_echo_unsupported_origin.test.py",
+    data = [
+        ":_bin/georeference_test",
+        ":_bin/local_xy_util_test",
+        ":_bin/transform_util_test",
+        ":_bin/utm_util_test",
+        ":ament_index",
+        ":transform_manager_test",
+    ],
+    deps = [
+        ":swri_transform_util_py",
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "test_initialize_invalid_gps.test.py",
+    src = "test/initialize_invalid_gps.test.py",
+    data = [
+        ":_bin/georeference_test",
+        ":_bin/local_xy_util_test",
+        ":_bin/transform_util_test",
+        ":_bin/utm_util_test",
+        ":ament_index",
+        ":transform_manager_test",
+    ],
+    deps = [
+        ":swri_transform_util_py",
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "test_initialize_invalid_navsat.test.py",
+    src = "test/initialize_invalid_navsat.test.py",
+    data = [
+        ":_bin/georeference_test",
+        ":_bin/local_xy_util_test",
+        ":_bin/transform_util_test",
+        ":_bin/utm_util_test",
+        ":ament_index",
+        ":transform_manager_test",
+    ],
+    deps = [
+        ":swri_transform_util_py",
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "test_initialize_origin_auto_gps.test.py",
+    src = "test/initialize_origin_auto_gps.test.py",
+    data = [
+        ":_bin/georeference_test",
+        ":_bin/local_xy_util_test",
+        ":_bin/transform_util_test",
+        ":_bin/utm_util_test",
+        ":ament_index",
+        ":transform_manager_test",
+    ],
+    deps = [
+        ":swri_transform_util_py",
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "test_initialize_origin_auto_navsat.test.py",
+    src = "test/initialize_origin_auto_navsat.test.py",
+    data = [
+        ":_bin/georeference_test",
+        ":_bin/local_xy_util_test",
+        ":_bin/transform_util_test",
+        ":_bin/utm_util_test",
+        ":ament_index",
+        ":transform_manager_test",
+    ],
+    deps = [
+        ":swri_transform_util_py",
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+launch_ros_test(
+    name = "test_initialize_origin_manual.test.py",
+    src = "test/initialize_origin_manual.test.py",
+    data = [
+        ":_bin/georeference_test",
+        ":_bin/local_xy_util_test",
+        ":_bin/transform_util_test",
+        ":_bin/utm_util_test",
+        ":ament_index",
+        ":transform_manager_test",
+    ],
+    deps = [
+        ":swri_transform_util_py",
+        "@diagnostic_msgs//:py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@marti_nav_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ament_cmake",
+        "geometry_msgs",
+        "OpenCV",
+        "rclcpp",
+        "swri_math_util",
+        "tf2",
+        "tf2_geometry_msgs",
+        "tf2_ros",
+        "yaml_cpp_vendor",
+        "yaml-cpp",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_swri_transform_util",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":swri_transform_util",
+        ":swri_transform_util_nodes",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        ":lat_lon_tf_echo",
+    ],
+    python = [":swri_transform_util_py"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@geographic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@marti_nav_msgs//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@yaml_cpp_vendor//:ament_package",
+    ],
+)

@@ -1,0 +1,465 @@
+load("@rosdistro//ament:ament_resource.bzl", "register_ament_resource")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@int2dds_ffi_vendor//:int2dds_ffi": "@int2dds_ffi_vendor//:int2dds_ffi_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+    "@rmw_dds_common//:rmw_dds_common": "@rmw_dds_common//:rmw_dds_common_library",
+    "@rosidl_dynamic_typesupport//:rosidl_dynamic_typesupport": "@rosidl_dynamic_typesupport//:rosidl_dynamic_typesupport_library",
+    "@rosidl_runtime_c//:rosidl_runtime_c": "@rosidl_runtime_c//:rosidl_runtime_c_library",
+    "@rosidl_runtime_cpp//:rosidl_runtime_cpp": "@rosidl_runtime_cpp//:rosidl_runtime_cpp_library",
+    "@rosidl_typesupport_c//:rosidl_typesupport_c": "@rosidl_typesupport_c//:rosidl_typesupport_c_library",
+    "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp": "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_library",
+    "@rosidl_typesupport_introspection_c//:rosidl_typesupport_introspection_c": "@rosidl_typesupport_introspection_c//:rosidl_typesupport_introspection_c_library",
+    "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp": "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp_library",
+}
+
+CC_DEPS = [
+    "@rmw_dds_common//:cc",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "rmw_int2dds_cpp_library",
+    srcs = [
+        "src/client/rmw_client.cpp",
+        "src/client/rmw_client_request.cpp",
+        "src/common/error_handling.cpp",
+        "src/common/gid.cpp",
+        "src/common/listeners.cpp",
+        "src/common/take_with_info.cpp",
+        "src/common/topic_names.cpp",
+        "src/event/rmw_event.cpp",
+        "src/graph/discovery.cpp",
+        "src/graph/rmw_graph.cpp",
+        "src/guard_condition/rmw_guard_condition.cpp",
+        "src/init/rmw_init.cpp",
+        "src/node/rmw_node.cpp",
+        "src/publisher/rmw_publish.cpp",
+        "src/publisher/rmw_publisher.cpp",
+        "src/qos/rmw_qos.cpp",
+        "src/rmw_int2dds.cpp",
+        "src/serialization/cdr_serializer.cpp",
+        "src/serialization/dynamic_serialization_support.cpp",
+        "src/serialization/rmw_serialize.cpp",
+        "src/service/rmw_service.cpp",
+        "src/service/rmw_service_request.cpp",
+        "src/subscription/rmw_subscription.cpp",
+        "src/subscription/rmw_take.cpp",
+        "src/wait/rmw_wait.cpp",
+        "src/wait/rmw_wait_set.cpp",
+        "src/wait/waitset_registry.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/rmw_int2dds_cpp",
+    ],
+    local_defines = ros_local_defines() + ["RMW_INT2DDS_CPP_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rmw_int2dds_cpp",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":rmw_int2dds_cpp_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rmw_int2dds_cpp"],
+)
+
+cc_binary(
+    name = "_bin/test_connection",
+    srcs = ["test/test_connection.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rmw_int2dds_cpp",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + ["@rosdistro//cc:googletest"],
+)
+
+cc_binary(
+    name = "_bin/test_event_smoke",
+    srcs = ["test/test_event_smoke.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rmw_int2dds_cpp",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rmw_int2dds_cpp_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/test_event_validation",
+    srcs = ["test/test_event_validation.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rmw_int2dds_cpp",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rmw_int2dds_cpp_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+register_ament_resource(
+    name = "res_rmw_typesupport",
+    category = "rmw_typesupport",
+    content = "rosidl_typesupport_c;rosidl_typesupport_introspection_c;rosidl_typesupport_cpp;rosidl_typesupport_introspection_cpp",
+)
+
+register_ament_resource(
+    name = "res_rmw_typesupport_c",
+    category = "rmw_typesupport_c",
+    content = "rosidl_typesupport_c;rosidl_typesupport_introspection_c",
+)
+
+register_ament_resource(
+    name = "res_rmw_typesupport_cpp",
+    category = "rmw_typesupport_cpp",
+    content = "rosidl_typesupport_cpp;rosidl_typesupport_introspection_cpp",
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":_bin/test_connection",
+        ":_bin/test_event_smoke",
+        ":_bin/test_event_validation",
+    ],
+    libraries = [
+        ":rmw_int2dds_cpp",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":res_rmw_typesupport",
+        ":res_rmw_typesupport_c",
+        ":res_rmw_typesupport_cpp",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_cpplint//:ament_package",
+        "@ament_cmake_flake8//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros_core//:ament_package",
+        "@ament_cmake_test//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@int2dds_ffi_vendor//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rmw_dds_common//:ament_package",
+        "@rosidl_dynamic_typesupport//:ament_package",
+        "@rosidl_runtime_c//:ament_package",
+        "@rosidl_runtime_cpp//:ament_package",
+        "@rosidl_typesupport_c//:ament_package",
+        "@rosidl_typesupport_cpp//:ament_package",
+        "@rosidl_typesupport_introspection_c//:ament_package",
+        "@rosidl_typesupport_introspection_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_connection",
+    srcs = ["test/test_connection.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rmw_int2dds_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rmw_int2dds_cpp_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_event_smoke",
+    srcs = ["test/test_event_smoke.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rmw_int2dds_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rmw_int2dds_cpp_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_event_validation",
+    srcs = ["test/test_event_validation.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rmw_int2dds_cpp",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rmw_int2dds_cpp_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_rmw_wait_guards",
+    srcs = ["test/test_rmw_wait_guards.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rmw_int2dds_cpp",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rmw_int2dds_cpp_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "int2dds_ffi_vendor",
+        "rcutils",
+        "rmw",
+        "rosidl_dynamic_typesupport",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_introspection_c",
+        "rosidl_typesupport_introspection_cpp",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_cpp",
+        "rmw_dds_common",
+    ],
+    cmake_export_name = "export_rmw_int2dds_cpp",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":rmw_int2dds_cpp",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        ":res_rmw_typesupport",
+        ":res_rmw_typesupport_c",
+        ":res_rmw_typesupport_cpp",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_cpplint//:ament_package",
+        "@ament_cmake_flake8//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros_core//:ament_package",
+        "@ament_cmake_test//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@int2dds_ffi_vendor//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rmw_dds_common//:ament_package",
+        "@rosidl_dynamic_typesupport//:ament_package",
+        "@rosidl_runtime_c//:ament_package",
+        "@rosidl_runtime_cpp//:ament_package",
+        "@rosidl_typesupport_c//:ament_package",
+        "@rosidl_typesupport_cpp//:ament_package",
+        "@rosidl_typesupport_introspection_c//:ament_package",
+        "@rosidl_typesupport_introspection_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

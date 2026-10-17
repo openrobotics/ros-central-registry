@@ -27,6 +27,7 @@ from tools.ci.bzlmod_lib import scan_module_for_dependencies
 from tools.ci.bzlmod_lib import find_packages_with_newer_versions
 
 VARIANTS = {
+    "all": "ros",
     "core": "ros_core",
     "base": "ros_base",
     "desktop": "desktop",
@@ -34,6 +35,142 @@ VARIANTS = {
     "perception": "perception",
     "simulation": "simulation",
 }
+
+# Patches applied to the `llvm` BCR module via single_version_override in the
+# generated workspace. The files live in tools/ci/patches/llvm/ and are copied
+# into <workspace>/patches/ by setup_workspace. Each entry is
+# (filename, explanation) -- the explanation is emitted as a comment above the
+# patch label in MODULE.bazel so readers know why each one exists.
+LLVM_PATCHES = [
+    (
+        "fastbuild_compile_flags.patch",
+        "Adds --@llvm//config:fastbuild_optimization_mode=<O0|O1|O2|O3|Og|Os|Oz>\n"
+        "to pick the optimization level of `-c fastbuild` builds (default O0),\n"
+        "giving feature parity with toolchains_llvm.\n"
+        "See: https://github.com/hermeticbuild/hermetic-llvm/pull/802",
+    ),
+    (
+        "header_search_paths.patch",
+        "Fixes a bug that causes several BCR package headers to be shadowed by\n"
+        "LLVM headers.\n"
+        "See: https://github.com/hermeticbuild/hermetic-llvm/pull/806",
+    ),
+    (
+        "msan_libcxx.patch",
+        "Forces libc++ and libc++-abi to be compiled with msan support when using\n"
+        "@llvm//config:msan (MSan requires an instrumented C++ standard library),\n"
+        "following the existing inherit_asan pattern.\n"
+        "See: https://github.com/hermeticbuild/hermetic-llvm/pull/803",
+    ),
+    (
+        "stage0_object_reset.patch",
+        "Makes the cc_stage0_object transition reset user copt/cxxopt/conlyopt/\n"
+        "linkopt (as configure_builder_for_runtimes already does for the other\n"
+        "runtimes) and the fuzzer/profile settings it forgot, so crtbegin.o/\n"
+        "crtend.o never carry -fsanitize-coverage instrumentation into every\n"
+        "shared library.\n"
+        "See: https://github.com/hermeticbuild/hermetic-llvm/pull/815",
+    ),
+    (
+        "llvm21_third_party_zstd.patch",
+        "Backports @llvm-project//third-party:BUILD.bazel (llvm_enable_zstd) to\n"
+        "LLVM 21.x so sanitizer symbolizer transitions work.\n"
+        "See: https://github.com/hermeticbuild/hermetic-llvm/pull/805",
+    ),
+    (
+        "asan_runtime.patch",
+        "Applies the (already declared) ASAN_CFLAGS and UBSAN_STANDALONE_CFLAGS to\n"
+        "the asan / ubsan_standalone runtimes so they are built with -fno-rtti\n"
+        "-fno-exceptions like upstream CMake does. Without it the runtimes\n"
+        "reference __cxa_begin_catch / __gxx_personality_v0 / _Unwind_Resume and\n"
+        "plain-C links (e.g. CMake's compiler check in rules_foreign_cc) fail.\n"
+        "See: https://github.com/hermeticbuild/hermetic-llvm/pull/813",
+    ),
+    (
+        "sanitizer_runtime_libunwind.patch",
+        "Makes sanitizer_common_symbolizer depend on libunwind on Linux. The\n"
+        "toolchain links with --unwindlib=none and only hands libunwind to C++\n"
+        "links, so a C link against a sanitizer runtime otherwise lacks\n"
+        "_Unwind_Backtrace / _Unwind_GetIP.\n"
+        "See: https://github.com/hermeticbuild/hermetic-llvm/pull/814",
+    ),
+    (
+        "sanitizer_strip_foreign_source_paths.patch",
+        "Adds the opt-in @llvm//config:sanitizer_strip_foreign_source_paths flag.\n"
+        "When set, compile command lines exported to foreign build systems (no\n"
+        "`source_file` variable: rules_foreign_cc, rules_rust cargo_build_script)\n"
+        "strip source paths from UBSan locations and disable ASan global metadata,\n"
+        "so code compiled with absolute paths does not embed the build root.\n"
+        "See: https://github.com/hermeticbuild/hermetic-llvm/pull/816",
+    ),
+]
+
+# LLVM release the hermetic toolchain's libc++/compiler-rt sources are pinned
+# to (via llvm.version(...) in the generated MODULE.bazel). Newer libc++
+# releases (23.x) dropped transitive standard-library includes that several
+# BCR modules we can't patch from rosdistro (fastdds, uncrustify, ...) still
+# rely on, so hold at 21.x -- the same line the llvm21_third_party_zstd patch
+# above targets.
+LLVM_VERSION = "21.1.8"
+
+# Where the llvm patches are kept in this repo, relative to the repo root.
+LLVM_PATCHES_SOURCE_DIR = Path("tools") / "ci" / "patches" / "llvm"
+
+# Subdirectory of the generated workspace that patches are copied into.
+WORKSPACE_PATCHES_DIR = "patches"
+
+
+def copy_llvm_patches(repo_root: Path, target_workspace: Path) -> List[Path]:
+    """
+    Copy every patch listed in LLVM_PATCHES from repo_root/tools/ci/patches/llvm
+    into <target_workspace>/patches/, and write an exports_files BUILD.bazel
+    alongside them. Returns the destination paths. Raises FileNotFoundError if
+    a listed patch is missing from the repo.
+    """
+    src_dir = repo_root / LLVM_PATCHES_SOURCE_DIR
+    dst_dir = target_workspace / WORKSPACE_PATCHES_DIR
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    written: List[Path] = []
+    for filename, _ in LLVM_PATCHES:
+        src = src_dir / filename
+        if not src.is_file():
+            raise FileNotFoundError(f"llvm patch {src} listed in LLVM_PATCHES does not exist")
+        dst = dst_dir / filename
+        dst.write_bytes(src.read_bytes())
+        written.append(dst)
+    return written
+
+
+def render_patches_build_file(patch_filenames: List[str]) -> str:
+    """BUILD.bazel content for <workspace>/patches/ exporting the given files."""
+    lines = [get_copyright_header().rstrip("\n"), "", "exports_files(["]
+    lines += [f'    "{name}",' for name in patch_filenames]
+    lines += ["])"]
+    return "\n".join(lines) + "\n"
+
+
+def render_llvm_override(llvm_bcr_version: str) -> str:
+    """
+    MODULE.bazel snippet that pins the llvm BCR module and applies LLVM_PATCHES
+    to it via single_version_override.
+    """
+    out = [
+        "single_version_override(",
+        '    module_name = "llvm",',
+        "    patch_strip = 1,",
+        "    patches = [",
+    ]
+    for filename, explanation in LLVM_PATCHES:
+        for line in explanation.splitlines():
+            out.append(f"        # {line}")
+        out.append(f'        "//{WORKSPACE_PATCHES_DIR}:{filename}",')
+    out += [
+        "    ],",
+        f'    version = "{llvm_bcr_version}",',
+        ")",
+    ]
+    return "\n".join(out) + "\n"
+
 
 BAZELRC_TEMPLATE = """# Copyright 2026 Open Source Robotics Foundation, Inc.
 #
@@ -252,15 +389,52 @@ def get_copyright_header() -> str:
 # limitations under the License.
 """
 
+def render_underlay_build_file(variant_names: List[str]) -> str:
+    """BUILD.bazel content declaring one `ament_underlay` tarball per variant.
+
+    `bazel build //:desktop_full` (etc.) produces `<variant>.tar.gz`: an
+    isolated-layout ROS underlay containing `<pkg>/{bin,lib,include,share}` for
+    every package reachable from the variant's `:ament_package`.
+    """
+    lines = [
+        'load("@rosdistro//ament:defs.bzl", "ament_underlay")',
+        "",
+        'package(default_visibility = ["//visibility:public"])',
+        "",
+    ]
+    for name in variant_names:
+        if name == "all":
+            continue
+        package = VARIANTS[name]
+        lines += [
+            "ament_underlay(",
+            f'    name = "{name}",',
+            f'    deps = ["@{package}//:ament_package"],',
+            ")",
+            "",
+        ]
+    return "\n".join(lines)
+
+
 def calculate_packages_for_variant(
-    module_dir: Path, start_name: str, start_version: str
+    module_dir: Path,
+    start_name: str,
+    start_version: str,
+    overrides: Dict[str, str] | None = None,
+    allowed_packages: set | None = None,
 ) -> List[str]:
     """
     Performs a BFS traversal starting from the given module name and version to collect
-    all transitive dependencies.
+    all transitive dependencies. If `overrides` is provided, uses the overridden
+    version of any package in the traversal rather than the older version
+    pinned in a parent's MODULE.bazel. If `allowed_packages` is provided,
+    skips any dependency not in that set (e.g. a package removed from the
+    distro that an un-updated downstream package still references).
     """
+    overrides = overrides or {}
+    effective_start_version = overrides.get(start_name, start_version)
     visited = set()
-    queue = [(start_name, module_dir / start_name / start_version / 'MODULE.bazel')]
+    queue = [(start_name, module_dir / start_name / effective_start_version / 'MODULE.bazel')]
     while queue:
         current_name, current_file = queue.pop(0)
         if current_name in visited:
@@ -275,10 +449,14 @@ def calculate_packages_for_variant(
                 content,
             )
             for next_name, next_version in deps:
-                next_file = module_dir / next_name / next_version / 'MODULE.bazel'
+                if allowed_packages is not None and next_name not in allowed_packages:
+                    continue
+                effective_next_version = overrides.get(next_name, next_version)
+                next_file = module_dir / next_name / effective_next_version / 'MODULE.bazel'
                 if next_file.exists():
                     if next_name not in visited:
                         queue.append((next_name, next_file))
+    visited.discard("ros")
     visited.discard("rosdistro")
     return sorted(list(visited))
 
@@ -359,13 +537,18 @@ def main():
         print(f"Overrode {len(overrides)} package(s) to newer available patches.")
 
     # Detect variants
+    allowed_packages = set(packages.keys())
     variants: Dict[str, List[str]] = {}
     for variant_name, variant_package in VARIANTS.items():
         if variant_package not in packages:
             print(f"Warning: Variant package {variant_package} not found in release.")
             continue
         variants[variant_name] = calculate_packages_for_variant(
-            modules_dir, variant_package, packages[variant_package]
+            modules_dir,
+            variant_package,
+            packages[variant_package],
+            overrides=overrides,
+            allowed_packages=allowed_packages,
         )
         print(f"  {variant_name}: {len(variants[variant_name])} packages")
 
@@ -377,9 +560,12 @@ def main():
     # Write BUILD.bazel
     with open(target_workspace / "BUILD.bazel", "w") as f:
         f.write(get_copyright_header())
+        f.write(render_underlay_build_file(sorted(variants.keys())))
 
-    # Write fmt.patch
-    with open(target_workspace / "fmt.patch", "w") as f:
+    # Write patches/ (fmt + llvm) with an exports_files BUILD.bazel.
+    patches_dir = target_workspace / WORKSPACE_PATCHES_DIR
+    patches_dir.mkdir(parents=True, exist_ok=True)
+    with open(patches_dir / "fmt.patch", "w") as f:
         f.write("""diff -urN a/BUILD.bazel b/BUILD.bazel
 --- a/BUILD.bazel	2026-08-20 00:00:00.000000000 +0000
 +++ b/BUILD.bazel	2026-08-20 00:00:00.000000000 +0000
@@ -392,6 +578,15 @@ def main():
          "include/fmt/*.h",
      ]),
 """)
+    try:
+        copy_llvm_patches(workspace_root, target_workspace)
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    with open(patches_dir / "BUILD.bazel", "w") as f:
+        f.write(render_patches_build_file(
+            ["fmt.patch"] + [name for name, _ in LLVM_PATCHES]
+        ))
 
     # Write ros-<variant>.txt files
     for variant_name, variant_packages in variants.items():
@@ -407,25 +602,21 @@ def main():
 
 # BCR deps
 
-bazel_dep(name = "aspect_rules_py", version = "1.11.7")
-bazel_dep(name = "llvm", version = "0.8.17")
+bazel_dep(name = "llvm", version = "0.8.24")
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "protobuf", version = "35.1")
-bazel_dep(name = "rules_cc", version = "0.2.22")
+bazel_dep(name = "protobuf", version = "36.2")
+bazel_dep(name = "rules_cc", version = "0.2.26")
 bazel_dep(name = "rules_go", version = "0.60.0")
-bazel_dep(name = "rules_python", version = "1.9.2")
+bazel_dep(name = "rules_python", version = "2.4.1")
 bazel_dep(name = "rules_qt", version = "0.0.7")
-bazel_dep(name = "rules_rs", version = "0.0.111")
+bazel_dep(name = "rules_rs", version = "0.1.0")
 bazel_dep(name = "rules_shell", version = "0.8.0")
 
-# There is a large design change in rules_python 2.x, and some versions don't
-# support 3.14. So let's stick with the older version for now. This forces
-# the 1.9.2 version even if other packages in ROS specify a newer version.
-single_version_override(
-    module_name = "rules_python",
-    version = "1.9.2"
-)
-
+# Pin the hermetic LLVM toolchain module and carry a handful of not-yet-released
+# upstream fixes against it (see tools/ci/setup_workspace.py:LLVM_PATCHES).
+""")
+        f.write(render_llvm_override("0.8.24"))
+        f.write("""
 ## RCR deps
 
 """)
@@ -522,7 +713,13 @@ uv.configure(version = "0.9.7")
 # C++ configuration
 
 llvm = use_extension("@llvm//extensions:llvm.bzl", "llvm")
-use_repo(llvm, "llvm-project")
+""")
+        f.write(
+            "# Pin the LLVM release used for libc++/compiler-rt sources (see\n"
+            "# tools/ci/setup_workspace.py:LLVM_VERSION for why this is held back).\n"
+            f'llvm.version(llvm_version = "{LLVM_VERSION}")\n'
+        )
+        f.write("""use_repo(llvm, "llvm-project")
 
 qt = use_extension("@rules_qt//extension:qt.bzl", "fetch")
 qt.install(
@@ -577,7 +774,7 @@ register_toolchains(
 single_version_override(
     module_name = "fmt",
     patch_strip = 1,
-    patches = ["//:fmt.patch"],
+    patches = ["//patches:fmt.patch"],
 )
 """)
 

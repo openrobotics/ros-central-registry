@@ -1,0 +1,163 @@
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+generate_parameter_library(
+    name = "imu_filter_parameters",
+    yaml_file = "src/imu_filter_parameters.yaml",
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    ":imu_filter_parameters",
+    "@generate_parameter_library//:generate_parameter_library",
+    "@geometry_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@sensor_msgs//:cc",
+    "@std_srvs//:cc",
+]
+
+cc_library(
+    name = "leo_filters_library",
+    srcs = [
+        "src/complementary_filter.cpp",
+        "src/imu_filter.cpp",
+        "src/odom_filter.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ) + [":imu_filter_parameters_gen"],
+    copts = ["-std=c++20"],
+    includes = [
+        "_gen/include",
+        "_gen/include/leo_filters",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "leo_filters",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":leo_filters_library"],
+)
+
+rclcpp_components_register_node(
+    name = "imu_filter",
+    component = ":leo_filters",
+    node_name = "imu_filter",
+    plugin = "leo_filters::OdomFilter",
+)
+
+rclcpp_components_register_node(
+    name = "odom_filter",
+    component = ":leo_filters",
+    node_name = "odom_filter",
+    plugin = "leo_filters::OdomFilter",
+)
+
+rclcpp_components_register_nodes(
+    name = "leo_filters_components",
+    component = ":leo_filters",
+    plugins = ["leo_filters::ImuFilter"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":imu_filter_record",
+        ":odom_filter_record",
+        ":leo_filters_components",
+    ],
+    lib_data = [
+        ":imu_filter",
+        ":odom_filter",
+    ],
+    libraries = [":leo_filters"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_copyright//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "fmt",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "rsl",
+        "tcb_span",
+        "tl-expected",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    libraries = [":leo_filters"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_copyright//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)

@@ -1,0 +1,184 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob([
+    "include/**/*.hpp",
+    "include/**/*.data",
+])
+
+cc_library(
+    name = "steering_functions_library",
+    srcs = [
+        "src/dubins_state_space/dubins_state_space.cpp",
+        "src/filter/ekf.cpp",
+        "src/reeds_shepp_state_space/reeds_shepp_state_space.cpp",
+        "src/utilities/utilities.cpp",
+    ] + glob(["src/hc_cc_state_space/*.cpp"]),
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = [
+        "@rosdistro//cc:eigen",
+    ],
+)
+
+cc_shared_library(
+    name = "steering_functions",
+    exports_filter = [":steering_functions_library"],
+    deps = [":steering_functions_library"],
+)
+
+# Upstream installs the library as a static archive (lib/libsteering_functions.a).
+filegroup(
+    name = "steering_functions_archive",
+    srcs = [":steering_functions_library"],
+    output_group = "archive",
+)
+
+### TESTS
+
+# Upstream only wires these gtests up under its catkin (ROS 1) branch; the
+# non-ROS unit tests are ported here (timing_test needs ros/package.h).
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":steering_functions"],
+    visibility = ["//visibility:private"],
+)
+
+# steering_functions_test and hc_cc_circle_test draw 1e5 random samples each.
+[
+    cc_test(
+        name = test,
+        size = size,
+        srcs = ["test/{}.cpp".format(test)],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        deps = [
+            ":steering_functions_library",
+            "@rosdistro//cc:eigen",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test, size in {
+        "fresnel_test": "small",
+        "hc_cc_circle_test": "large",
+        "jacobian_test": "medium",
+        "steering_functions_test": "enormous",
+    }.items()
+]
+
+### CMAKE CONFIG (plain cmake package: lib/cmake/<pkg>/)
+
+write_file(
+    name = "cmake_config_version",
+    out = "cmake_out/steering_functions-config-version.cmake",
+    content = [
+        'set(PACKAGE_VERSION "0.3.0")',
+        "if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)",
+        "  set(PACKAGE_VERSION_COMPATIBLE FALSE)",
+        "else()",
+        "  set(PACKAGE_VERSION_COMPATIBLE TRUE)",
+        "  if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)",
+        "    set(PACKAGE_VERSION_EXACT TRUE)",
+        "  endif()",
+        "endif()",
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_targets",
+    out = "cmake_out/steering_functions-targets.cmake",
+    content = [
+        "if(NOT TARGET steering_functions::steering_functions)",
+        '  get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        '  get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" PATH)',
+        "  add_library(steering_functions::steering_functions STATIC IMPORTED)",
+        "  set_target_properties(steering_functions::steering_functions PROPERTIES",
+        '    INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"',
+        '    INTERFACE_LINK_LIBRARIES "Eigen3::Eigen"',
+        "  )",
+        '  include("${CMAKE_CURRENT_LIST_DIR}/steering_functions-targets-noconfig.cmake")',
+        "  set(_IMPORT_PREFIX)",
+        "endif()",
+        "",
+    ],
+)
+
+write_file(
+    name = "cmake_targets_noconfig",
+    out = "cmake_out/steering_functions-targets-noconfig.cmake",
+    content = [
+        "set_property(TARGET steering_functions::steering_functions APPEND PROPERTY IMPORTED_CONFIGURATIONS NOCONFIG)",
+        "set_target_properties(steering_functions::steering_functions PROPERTIES",
+        '  IMPORTED_LINK_INTERFACE_LANGUAGES_NOCONFIG "CXX"',
+        '  IMPORTED_LOCATION_NOCONFIG "${_IMPORT_PREFIX}/lib/libsteering_functions.a"',
+        ")",
+        "",
+    ],
+)
+
+### PACKAGING
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "steering_functions-config.cmake",
+        ":cmake_config_version",
+        ":cmake_targets",
+        ":cmake_targets_noconfig",
+    ],
+    prefix = "lib/cmake/steering_functions",
+    strip_prefix = "*",
+)
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    data = [
+        ":ament_files_0",
+    ],
+    headers = HEADERS,
+    include_prefix = "",
+    install_package_xml = False,
+    package_xml = "package.xml",
+    sonames = {
+        "steering_functions_archive": ["libsteering_functions.a"],
+    },
+    deps = [
+        "@ros_environment//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

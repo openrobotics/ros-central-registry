@@ -1,0 +1,247 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+    "@urdfdom_headers//:urdfdom_headers": "@urdfdom_headers//:urdfdom_headers_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:boost.algorithm",
+]
+
+cc_library(
+    name = "srdfdom_library",
+    srcs = [
+        "src/model.cpp",
+        "src/srdf_writer.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        ".",
+        "include",
+        "include/srdfdom",
+    ],
+    local_defines = ros_local_defines() + [
+        "SRDFDOM_BUILDING_DLL",
+        "TEST_RESOURCE_LOCATION=\\\"test/resources\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "srdfdom",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":srdfdom_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":srdfdom"],
+)
+
+py_library(
+    name = "srdfdom_py",
+    srcs = glob(["srdfdom/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@ament_lint_cmake",
+        "@urdfdom_py",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        "scripts/display_srdf",
+    ],
+    libraries = [
+        ":srdfdom",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "srdfdom": ["libsrdfdom.so.2.0.9"],
+    },
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_cmake//:ament_package",
+        "@console_bridge_vendor//:ament_package",
+        "@urdf//:ament_package",
+        "@urdfdom_headers//:ament_package",
+        "@urdfdom_py//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_cpp_C",
+    srcs = ["test/test_parser.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/srdfdom",
+    ],
+    local_defines = ros_local_defines() + [
+        "TEST_RESOURCE_LOCATION=\\\"test/resources\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":srdfdom_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_cpp_nl_NL.UTF-8",
+    srcs = ["test/test_parser.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/srdfdom",
+    ],
+    local_defines = ros_local_defines() + [
+        "TEST_RESOURCE_LOCATION=\\\"test/resources\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":srdfdom_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+py_pytest(
+    name = "self_parser_test",
+    srcs = ["test/test.py"],
+    data = [":ament_index"],
+    deps = [
+        ":srdfdom_py",
+        "@ament_lint_cmake",
+        "@urdfdom_py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "console_bridge",
+        "urdfdom_headers",
+        "urdf",
+        "TinyXML2",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "srdfdomTargets",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":srdfdom",
+    ],
+    package_xml = "package.xml",
+    python = [":srdfdom_py"],
+    sonames = {
+        "srdfdom": ["libsrdfdom.so.2.0.9"],
+    },
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_cmake//:ament_package",
+        "@console_bridge_vendor//:ament_package",
+        "@urdf//:ament_package",
+        "@urdfdom_headers//:ament_package",
+        "@urdfdom_py//:ament_package",
+    ],
+)

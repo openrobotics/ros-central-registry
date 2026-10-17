@@ -1,0 +1,251 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:ament_resource.bzl", "register_ament_resource")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+CC_DEPS = [
+    "@example_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "fake_imu_library_library",
+    srcs = ["src/fake_imu.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "fake_imu_library",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":fake_imu_library_library"],
+)
+
+cc_library(
+    name = "imu_sink_library_library",
+    srcs = ["src/imu_sink.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "imu_sink_library",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":imu_sink_library_library"],
+)
+
+rclcpp_components_register_node(
+    name = "fake_imu",
+    component = ":fake_imu_library",
+    node_name = "fake_imu",
+    plugin = "ros2launch_security_examples::FakeImu",
+)
+
+rclcpp_components_register_node(
+    name = "imu_sink",
+    component = ":fake_imu_library",
+    node_name = "imu_sink",
+    plugin = "ros2launch_security_examples::FakeImu",
+)
+
+rclcpp_components_register_nodes(
+    name = "imu_sink_library_components",
+    component = ":imu_sink_library",
+    plugins = ["ros2launch_security_examples::ImuSink"],
+)
+
+register_ament_resource(
+    name = "res_nodl_ros2launch_security_examples__fake_imu",
+    package_name = "ros2launch_security_examples__fake_imu",
+    category = "nodl",
+    content = "nodl_version: 2\ndescription: Fake IMU node that periodically publishes synthetic IMU messages.\npublishers:\n  - name: imu\n    type: sensor_msgs/msg/Imu\n    qos:\n      history: KEEP_LAST\n      depth: 10\n      reliability: RELIABLE\n      durability: VOLATILE\nservice_servers:\n  - name: reset_imu\n    type: example_interfaces/srv/Trigger\n",
+)
+
+register_ament_resource(
+    name = "res_nodl_ros2launch_security_examples__imu_sink",
+    package_name = "ros2launch_security_examples__imu_sink",
+    category = "nodl",
+    content = "nodl_version: 2\ndescription: Sink node that subscribes to the fake IMU messages and can reset the IMU.\nsubscriptions:\n  - name: imu\n    type: sensor_msgs/msg/Imu\n    qos:\n      history: KEEP_LAST\n      depth: 10\n      reliability: RELIABLE\n      durability: VOLATILE\nservice_clients:\n  - name: reset_imu\n    type: example_interfaces/srv/Trigger\n",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":fake_imu_record",
+        ":imu_sink_record",
+        ":imu_sink_library_components",
+    ],
+    data = [
+        "launch/fake_imu.launch.xml",
+        "nodl/fake_imu.nodl.yaml",
+        "nodl/imu_sink.nodl.yaml",
+    ],
+    lib_data = [
+        ":fake_imu",
+        ":imu_sink",
+    ],
+    libraries = [
+        ":fake_imu_library",
+        ":imu_sink_library",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":res_nodl_ros2launch_security_examples__fake_imu",
+        ":res_nodl_ros2launch_security_examples__imu_sink",
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@ament_nodl//:ament_package",
+        "@example_interfaces//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@nodl//:ament_package",
+        "@nodl_to_policy//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@ros2launch_security//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@sros2//:ament_package",
+    ],
+)
+
+launch_ros_test(
+    name = "test_fake_imu_launch",
+    src = "test/test_fake_imu_launch.py",
+    data = [
+        ":ament_index",
+        ":fake_imu",
+        ":imu_sink",
+    ],
+    deps = [
+        "@example_interfaces//:py",
+        "@nodl_to_policy",
+        "@rclpy",
+        "@ros2launch_security",
+        "@sensor_msgs//:py",
+        "@sros2",
+    ],
+)
+
+launch_ros_test(
+    name = "test_fake_imu_launch_with_security",
+    src = "test/test_fake_imu_launch_with_security.py",
+    data = [
+        ":ament_index",
+        ":fake_imu",
+        ":imu_sink",
+    ],
+    deps = [
+        "@example_interfaces//:py",
+        "@nodl_to_policy",
+        "@rclpy",
+        "@ros2launch_security",
+        "@sensor_msgs//:py",
+        "@sros2",
+    ],
+)
+
+launch_ros_test(
+    name = "test_fake_imu_launch_with_security_nodl_to_policy",
+    src = "test/test_fake_imu_launch_with_security_nodltopolicy.py",
+    data = [
+        ":ament_index",
+        ":fake_imu",
+        ":imu_sink",
+    ],
+    deps = [
+        "@example_interfaces//:py",
+        "@nodl_to_policy",
+        "@rclpy",
+        "@ros2launch_security",
+        "@sensor_msgs//:py",
+        "@sros2",
+    ],
+)
+
+launch_ros_binary(
+    name = "fake_imu.launch.xml",
+    src = "launch/fake_imu.launch.xml",
+    data = [
+        ":ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    libraries = [
+        ":fake_imu_library",
+        ":imu_sink_library",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@ament_nodl//:ament_package",
+        "@example_interfaces//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@nodl//:ament_package",
+        "@nodl_to_policy//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@ros2launch_security//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@sros2//:ament_package",
+    ],
+)

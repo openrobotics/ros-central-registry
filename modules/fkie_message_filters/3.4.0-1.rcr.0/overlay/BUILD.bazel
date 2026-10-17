@@ -1,0 +1,199 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.smart_ptr",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "fkie_message_filters_library",
+    srcs = [
+        "src/logging.cpp",
+        "src/publisher_subscriber_base.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_24",
+        ":gen_extra_62",
+    ],
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/fkie_message_filters",
+        "_gen/include/fkie_message_filters/helpers",
+        "include",
+        "include/fkie_message_filters",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "fkie_message_filters",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":fkie_message_filters_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":fkie_message_filters"],
+)
+
+write_file(
+    name = "gen_extra_24",
+    out = "_gen/include/fkie_message_filters/helpers/abi_namespace.hpp",
+    content = ["/****************************************************************************\n *\n * fkie_message_filters\n * Copyright © 2018-2025 Fraunhofer FKIE\n * Author: Timo Röhling\n * SPDX-License-Identifier: Apache-2.0\n *\n * Licensed under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n *     http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS,\n * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n * See the License for the specific language governing permissions and\n * limitations under the License.\n *\n ****************************************************************************/\n#ifndef FKIE_MF_BEGIN_ABI_NAMESPACE\n#define FKIE_MF_BEGIN_ABI_NAMESPACE inline namespace abi3 {\n#endif\n#ifndef FKIE_MF_END_ABI_NAMESPACE\n#define FKIE_MF_END_ABI_NAMESPACE }\n#endif\n"],
+)
+
+write_file(
+    name = "gen_extra_62",
+    out = "_gen/include/fkie_message_filters/version.hpp",
+    content = ["/****************************************************************************\n *\n * fkie_message_filters\n * Copyright © 2018-2025 Fraunhofer FKIE\n * Author: Timo Röhling\n * SPDX-License-Identifier: Apache-2.0\n *\n * Licensed under the Apache License, Version 2.0 (the \"License\");\n * you may not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n *     http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n * distributed under the License is distributed on an \"AS IS\" BASIS,\n * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n * See the License for the specific language governing permissions and\n * limitations under the License.\n *\n ****************************************************************************/\n#ifndef INCLUDE_FKIE_MESSAGE_FILTERS_VERSION_HPP_\n#define INCLUDE_FKIE_MESSAGE_FILTERS_VERSION_HPP_\n#pragma once\n\n#define FKIE_MF_VERSION_MAJOR  3\n#define FKIE_MF_VERSION_MINOR  4\n#define FKIE_MF_VERSION_PATCH  0\n#define FKIE_MF_VERSION_STRING \"3.4.0\"\n#define FKIE_MF_VERSION        197632\n\n#ifndef FKIE_MF_IMAGE_TRANSPORT_VERSION\n#    define FKIE_MF_IMAGE_TRANSPORT_VERSION 394250\n#endif\n#ifndef FKIE_MF_RCLCPP_VERSION\n#    define FKIE_MF_RCLCPP_VERSION 2097155\n#endif\n\n#define FKIE_MF_VERSION_TUPLE(major, minor, patch) (65536 * (major) + 256 * (minor) + (patch))\n\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":fkie_message_filters",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "fkie_message_filters": ["libfkie_message_filters.so.3"],
+    },
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "filtertests",
+    srcs = [
+        "test/test_buffer.cpp",
+        "test/test_combiner_approximate_time.cpp",
+        "test/test_combiner_exact_time.cpp",
+        "test/test_combiner_fifo.cpp",
+        "test/test_combiner_latch.cpp",
+        "test/test_divider.cpp",
+        "test/test_filter_loop.cpp",
+        "test/test_helpers.cpp",
+        "test/test_main.cpp",
+        "test/test_publish_subscribe.cpp",
+        "test/test_selector.cpp",
+        "test/test_sequencer.cpp",
+        "test/test_simple_user_filter.cpp",
+        "test/test_tf_filter.cpp",
+        "test/test_user_filter.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_extra_24",
+        ":gen_extra_62",
+    ],
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/fkie_message_filters",
+        "_gen/include/fkie_message_filters/helpers",
+        "include",
+        "include/fkie_message_filters",
+    ],
+    local_defines = ros_local_defines() + ["FKIE_MF_RCLCPP_VERSION=2097155"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fkie_message_filters_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake = [
+        "cmake/check_dependency_versions.cmake",
+    ],
+    cmake_export_dependencies_list = [
+        "image_transport",
+        "rclcpp",
+        "sensor_msgs",
+        "tf2_ros",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_extras = ["check_dependency_versions.cmake"],
+    headers = [
+        ":gen_extra_24",
+        ":gen_extra_62",
+    ] + glob(["include/**"]),
+    include_prefix = "",
+    libraries = [
+        ":fkie_message_filters",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "fkie_message_filters": ["libfkie_message_filters.so.3"],
+    },
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)

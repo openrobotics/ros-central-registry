@@ -1,0 +1,56 @@
+--- a/ament_flake8/main.py
++++ b/ament_flake8/main.py
+@@ -34,6 +34,16 @@
+ 
+ 
+ def main_with_errors(argv: list[str] = sys.argv[1:]) -> tuple[Literal[0, 1], list[str]]:
++    default_path = os.curdir
++    if 'TEST_SRCDIR' in os.environ and 'BAZEL_TARGET' in os.environ:
++        target = os.environ['BAZEL_TARGET']
++        repo_name = target.split('//')[0].lstrip('@')
++        if not repo_name:
++            repo_name = os.environ.get('TEST_WORKSPACE', '_main')
++        default_path = os.path.relpath(
++            os.path.join(os.environ['TEST_SRCDIR'], repo_name)
++        )
++
+     config_file = os.path.join(
+         os.path.dirname(__file__), 'configuration', 'ament_flake8.ini')
+ 
+@@ -52,7 +62,7 @@
+     parser.add_argument(
+         'paths',
+         nargs='*',
+-        default=[os.curdir],
++        default=[default_path],
+         help='The files or directories to check. For directories files ending '
+              "in '.py' will be considered.")
+     parser.add_argument(
+@@ -76,15 +86,18 @@
+         return 1
+ 
+     # Filter out folders having AMENT_IGNORE
+-    if args.excludes is None:
+-        args.excludes = []
+-    for dirpath, dirnames, filenames in os.walk(os.getcwd()):
+-        if 'AMENT_IGNORE' in dirnames + filenames:
+-            dirnames[:] = []
+-            args.excludes.append(dirpath)
+-        else:
+-            # ignore folder starting with . or _
+-            args.excludes.extend(d for d in dirnames if d[0] in ['.', '_'])
++    excludes = []
++    for path in args.paths:
++        for subdir in args.excludes or []:
++            excludes.append(os.path.join(path, subdir))
++        for dirpath, dirnames, filenames in os.walk(path):
++            if 'AMENT_IGNORE' in dirnames + filenames:
++                dirnames[:] = []
++                excludes.append(dirpath)
++            else:
++                # ignore folder starting with . or _
++                excludes.extend(d for d in dirnames if d[0] in ['.', '_'])
++    args.excludes = excludes
+ 
+     report = generate_flake8_report(
+         args.config_file, args.paths, args.excludes,

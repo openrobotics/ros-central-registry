@@ -1,0 +1,96 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "_image_transport_library",
+    srcs = ["src/image_transport_py/pybind_image_transport.cpp"],
+    hdrs = glob([
+        "include/**/*.hpp",
+        "src/image_transport_py/*.hpp",
+    ]),
+    includes = [
+        "include",
+        "src/image_transport_py",
+    ],
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:pybind11",
+        "@rules_python//python/cc:current_py_cc_headers",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "_image_transport",
+    dynamic_deps = [":transitive_dynamic_deps"],
+    exports_filter = [":_image_transport_library"],
+    shared_lib_name = "image_transport_py/_image_transport.so",
+    deps = [":_image_transport_library"],
+)
+
+py_library(
+    name = "image_transport_py",
+    srcs = glob(["image_transport_py/**/*.py"]),
+    data = [":_image_transport"],
+    imports = ["."],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    package_xml = "package.xml",
+    python = [
+        ":image_transport_py",
+        ":_image_transport",
+    ],
+    deps = [
+        "@ament_cmake_python//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rpyutils//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

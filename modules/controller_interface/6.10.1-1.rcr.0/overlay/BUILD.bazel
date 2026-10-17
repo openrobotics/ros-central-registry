@@ -1,0 +1,1016 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@pal_statistics//:pal_statistics": "@pal_statistics//:pal_statistics_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+CC_DEPS = [
+    "@lifecycle_msgs//:cc",
+    "@geometry_msgs//:cc",
+    "@hardware_interface//:hardware_interface_library",
+    "@rosdistro//cc:fmt",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "controller_interface_library",
+    srcs = [
+        "src/chainable_controller_interface.cpp",
+        "src/controller_interface.cpp",
+        "src/controller_interface_base.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "controller_interface",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":controller_interface_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+write_file(
+    name = "gen_extra_7",
+    out = "_gen/include/controller_interface/controller_interface/version.h",
+    content = ["// Copyright 2015 Open Source Robotics Foundation, Inc.\n//\n// Licensed under the Apache License, Version 2.0 (the \"License\");\n// you may not use this file except in compliance with the License.\n// You may obtain a copy of the License at\n//\n//     http://www.apache.org/licenses/LICENSE-2.0\n//\n// Unless required by applicable law or agreed to in writing, software\n// distributed under the License is distributed on an \"AS IS\" BASIS,\n// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n// See the License for the specific language governing permissions and\n// limitations under the License.\n\n#ifndef CONTROLLER_INTERFACE__VERSION_H_\n#define CONTROLLER_INTERFACE__VERSION_H_\n\n/// \\def CONTROLLER_INTERFACE_VERSION_MAJOR\n/// Defines CONTROLLER_INTERFACE major version number\n#define CONTROLLER_INTERFACE_VERSION_MAJOR (6)\n\n/// \\def CONTROLLER_INTERFACE_VERSION_MINOR\n/// Defines CONTROLLER_INTERFACE minor version number\n#define CONTROLLER_INTERFACE_VERSION_MINOR (10)\n\n/// \\def CONTROLLER_INTERFACE_VERSION_PATCH\n/// Defines CONTROLLER_INTERFACE version patch number\n#define CONTROLLER_INTERFACE_VERSION_PATCH (1)\n\n/// \\def CONTROLLER_INTERFACE_VERSION_STR\n/// Defines CONTROLLER_INTERFACE version string\n#define CONTROLLER_INTERFACE_VERSION_STR \"6.10.1\"\n\n/// \\def CONTROLLER_INTERFACE_VERSION_GTE\n/// Defines a macro to check whether the version of CONTROLLER_INTERFACE is greater than or equal to\n/// the given version triple.\n#define CONTROLLER_INTERFACE_VERSION_GTE(major, minor, patch) ( \\\n     (major < CONTROLLER_INTERFACE_VERSION_MAJOR) ? true \\\n     : ((major > CONTROLLER_INTERFACE_VERSION_MAJOR) ? false \\\n     : ((minor < CONTROLLER_INTERFACE_VERSION_MINOR) ? true \\\n     : ((minor > CONTROLLER_INTERFACE_VERSION_MINOR) ? false \\\n     : ((patch < CONTROLLER_INTERFACE_VERSION_PATCH) ? true \\\n     : ((patch > CONTROLLER_INTERFACE_VERSION_PATCH) ? false \\\n     : true))))))\n\n#endif  // CONTROLLER_INTERFACE__VERSION_H_\n"],
+)
+
+write_file(
+    name = "gen_atomic_shared_ptr_shim_hpp",
+    out = "_gen/include/atomic_shared_ptr_shim.hpp",
+    content = ["#if !defined(__cpp_lib_atomic_shared_ptr) && !defined(RCR_ATOMIC_SHARED_PTR_SHIM_HPP_)\n#define RCR_ATOMIC_SHARED_PTR_SHIM_HPP_\n#include <atomic>\n#ifdef __cplusplus\n#include <memory>\n#endif\nnamespace std {\ntemplate <class T>\nstruct atomic<shared_ptr<T>> {\n  shared_ptr<T> ptr_;\n  atomic() noexcept = default;\n  atomic(shared_ptr<T> desired) noexcept : ptr_(std::move(desired)) {}\n  atomic(const atomic&) = delete;\n  void operator=(const atomic&) = delete;\n  void store(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    atomic_store_explicit(&ptr_, std::move(desired), order);\n  }\n  shared_ptr<T> load(memory_order order = memory_order_seq_cst) const noexcept {\n    return atomic_load_explicit(&ptr_, order);\n  }\n  operator shared_ptr<T>() const noexcept { return load(); }\n  shared_ptr<T> exchange(shared_ptr<T> desired, memory_order order = memory_order_seq_cst) noexcept {\n    return atomic_exchange_explicit(&ptr_, std::move(desired), order);\n  }\n  void operator=(shared_ptr<T> desired) noexcept { store(std::move(desired)); }\n};\n}  // namespace std\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":controller_interface",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@pal_statistics//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@realtime_tools//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_chainable_controller_interface",
+    srcs = ["test/test_chainable_controller_interface.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_controller_interface",
+    srcs = ["test/test_controller_interface.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_controller_tf_prefix",
+    srcs = ["test/test_controller_tf_prefix.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_controller_with_options",
+    srcs = ["test/test_controller_with_options.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "PARAMETERS_FILE_PATH=\\\"test/\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_force_torque_sensor",
+    srcs = ["test/test_force_torque_sensor.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_gps_sensor",
+    srcs = ["test/test_gps_sensor.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_imu_sensor",
+    srcs = ["test/test_imu_sensor.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_led_rgb_device",
+    srcs = ["test/test_led_rgb_device.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_magnetic_field_sensor",
+    srcs = ["test/test_magnetic_field_sensor.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_pose_sensor",
+    srcs = ["test/test_pose_sensor.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_range_sensor",
+    srcs = ["test/test_range_sensor.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_semantic_component_command_interface",
+    srcs = ["test/test_semantic_component_command_interface.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_semantic_component_interface",
+    srcs = ["test/test_semantic_component_interface.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_test_utils",
+    srcs = ["test/test_test_utils.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_atomic_shared_ptr_shim_hpp",
+        ":gen_extra_7",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "atomic_shared_ptr_shim.hpp",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_interface",
+        "_gen/include/controller_interface/controller_interface",
+        "include",
+        "include/controller_interface",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":controller_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "fmt",
+        "hardware_interface",
+        "pal_statistics",
+        "rclcpp_lifecycle",
+        "realtime_tools",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_controller_interface",
+    headers = [
+        "include/controller_interface/chainable_controller_interface.hpp",
+        "include/controller_interface/controller_interface.hpp",
+        "include/controller_interface/controller_interface_base.hpp",
+        "include/controller_interface/controller_interface_params.hpp",
+        "include/controller_interface/helpers.hpp",
+        "include/controller_interface/test_utils.hpp",
+        "include/controller_interface/tf_prefix.hpp",
+        ":gen_extra_7",
+        "include/semantic_components/force_torque_sensor.hpp",
+        "include/semantic_components/gps_sensor.hpp",
+        "include/semantic_components/imu_sensor.hpp",
+        "include/semantic_components/led_rgb_device.hpp",
+        "include/semantic_components/magnetic_field_sensor.hpp",
+        "include/semantic_components/pose_sensor.hpp",
+        "include/semantic_components/range_sensor.hpp",
+        "include/semantic_components/semantic_component_command_interface.hpp",
+        "include/semantic_components/semantic_component_interface.hpp",
+    ],
+    libraries = [
+        ":controller_interface",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@pal_statistics//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@realtime_tools//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

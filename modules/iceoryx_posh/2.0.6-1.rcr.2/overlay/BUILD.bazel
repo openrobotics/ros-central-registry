@@ -1,0 +1,398 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### GENERATED HEADERS
+
+expand_template(
+    name = "iceoryx_posh_deployment_hpp",
+    out = "include/iceoryx_posh/iceoryx_posh_deployment.hpp",
+    substitutions = {
+        "@IOX_COMMUNICATION_POLICY@": "ManyToManyPolicy",
+        "@IOX_MAX_PUBLISHERS@": "512",
+        "@IOX_MAX_SUBSCRIBERS@": "1024",
+        "@IOX_MAX_INTERFACE_NUMBER@": "4",
+        "@IOX_MAX_SUBSCRIBERS_PER_PUBLISHER@": "256",
+        "@IOX_MAX_CHUNKS_ALLOCATED_PER_PUBLISHER_SIMULTANEOUSLY@": "8",
+        "@IOX_MAX_PUBLISHER_HISTORY@": "16",
+        "@IOX_MAX_CHUNKS_HELD_PER_SUBSCRIBER_SIMULTANEOUSLY@": "256",
+        "@IOX_INTERNAL_MAX_NUMBER_OF_NOTIFIERS@": "256",
+    },
+    template = "cmake/iceoryx_posh_deployment.hpp.in",
+)
+
+expand_template(
+    name = "iceoryx_versions_hpp",
+    out = "include/iceoryx_versions.hpp",
+    substitutions = {
+        "@PROJECT_VERSION_MAJOR@": "2",
+        "@PROJECT_VERSION_MINOR@": "0",
+        "@PROJECT_VERSION_PATCH@": "6",
+        "@IOX_VERSION_TWEAK@": "0",
+        "@CMAKE_PROJECT_VERSION@": "2.0.6",
+        "@ICEORYX_BUILDDATE@": "1970-01-01T00:00:00Z",
+        "@ICEORYX_SHA1@": "5eefc15a968ac6aea6faa8f7c61d15abff29b2c4",
+    },
+    template = "cmake/iceoryx_versions.hpp.in",
+)
+
+### LIBRARIES
+
+HEADERS = glob(
+    ["include/**"],
+    exclude_directories = 1,
+) + [
+    ":iceoryx_posh_deployment_hpp",
+    ":iceoryx_versions_hpp",
+]
+
+POSH_SRCS = [
+    "source/capro/capro_message.cpp",
+    "source/capro/service_description.cpp",
+    "source/log/posh_logging.cpp",
+    "source/mepoo/chunk_header.cpp",
+    "source/mepoo/chunk_management.cpp",
+    "source/mepoo/chunk_settings.cpp",
+    "source/mepoo/mem_pool.cpp",
+    "source/mepoo/memory_info.cpp",
+    "source/mepoo/memory_manager.cpp",
+    "source/mepoo/mepoo_config.cpp",
+    "source/mepoo/mepoo_segment.cpp",
+    "source/mepoo/segment_config.cpp",
+    "source/mepoo/segment_manager.cpp",
+    "source/mepoo/shared_chunk.cpp",
+    "source/mepoo/shm_safe_unmanaged_chunk.cpp",
+    "source/popo/building_blocks/condition_listener.cpp",
+    "source/popo/building_blocks/condition_notifier.cpp",
+    "source/popo/building_blocks/condition_variable_data.cpp",
+    "source/popo/building_blocks/locking_policy.cpp",
+    "source/popo/building_blocks/unique_port_id.cpp",
+    "source/popo/client_options.cpp",
+    "source/popo/listener.cpp",
+    "source/popo/notification_info.cpp",
+    "source/popo/ports/base_port.cpp",
+    "source/popo/ports/base_port_data.cpp",
+    "source/popo/ports/client_port_data.cpp",
+    "source/popo/ports/client_port_roudi.cpp",
+    "source/popo/ports/client_port_user.cpp",
+    "source/popo/ports/interface_port.cpp",
+    "source/popo/ports/interface_port_data.cpp",
+    "source/popo/ports/publisher_port_data.cpp",
+    "source/popo/ports/publisher_port_roudi.cpp",
+    "source/popo/ports/publisher_port_user.cpp",
+    "source/popo/ports/server_port_data.cpp",
+    "source/popo/ports/server_port_roudi.cpp",
+    "source/popo/ports/server_port_user.cpp",
+    "source/popo/ports/subscriber_port_data.cpp",
+    "source/popo/ports/subscriber_port_multi_producer.cpp",
+    "source/popo/ports/subscriber_port_roudi.cpp",
+    "source/popo/ports/subscriber_port_single_producer.cpp",
+    "source/popo/ports/subscriber_port_user.cpp",
+    "source/popo/publisher_options.cpp",
+    "source/popo/rpc_header.cpp",
+    "source/popo/server_options.cpp",
+    "source/popo/subscriber_options.cpp",
+    "source/popo/trigger.cpp",
+    "source/popo/trigger_handle.cpp",
+    "source/popo/user_trigger.cpp",
+    "source/roudi/service_registry.cpp",
+    "source/runtime/ipc_interface_base.cpp",
+    "source/runtime/ipc_interface_creator.cpp",
+    "source/runtime/ipc_interface_user.cpp",
+    "source/runtime/ipc_message.cpp",
+    "source/runtime/ipc_runtime_interface.cpp",
+    "source/runtime/node.cpp",
+    "source/runtime/node_data.cpp",
+    "source/runtime/node_property.cpp",
+    "source/runtime/port_config_info.cpp",
+    "source/runtime/posh_runtime.cpp",
+    "source/runtime/posh_runtime_impl.cpp",
+    "source/runtime/posh_runtime_single_process.cpp",
+    "source/runtime/service_discovery.cpp",
+    "source/runtime/shared_memory_user.cpp",
+    "source/version/version_info.cpp",
+]
+
+PRIVATE_HDRS = glob(
+    [
+        "source/**/*.hpp",
+        "source/**/*.inl",
+    ],
+    allow_empty = True,
+)
+
+cc_library(
+    name = "iceoryx_posh_library",
+    srcs = POSH_SRCS + PRIVATE_HDRS,
+    hdrs = HEADERS,
+    includes = ["include"],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lpthread",
+            "-lrt",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "@iceoryx_hoofs//:iceoryx_hoofs_library",
+    ],
+)
+
+cc_shared_library(
+    name = "iceoryx_posh",
+    dynamic_deps = [
+        "@iceoryx_hoofs//:iceoryx_hoofs",
+        "@iceoryx_hoofs//:iceoryx_platform",
+    ],
+    exports_filter = [":iceoryx_posh_library"],
+    deps = [":iceoryx_posh_library"],
+)
+
+cc_library(
+    name = "iceoryx_posh_gateway_library",
+    srcs = ["source/gateway/gateway_base.cpp"] + PRIVATE_HDRS,
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = [
+        ":iceoryx_posh_library",
+        "@iceoryx_hoofs//:iceoryx_hoofs_library",
+    ],
+)
+
+cc_shared_library(
+    name = "iceoryx_posh_gateway",
+    dynamic_deps = [
+        ":iceoryx_posh",
+        "@iceoryx_hoofs//:iceoryx_hoofs",
+        "@iceoryx_hoofs//:iceoryx_platform",
+    ],
+    exports_filter = [":iceoryx_posh_gateway_library"],
+    deps = [":iceoryx_posh_gateway_library"],
+)
+
+ROUDI_SRCS = [
+    "source/roudi/application/iceoryx_roudi_app.cpp",
+    "source/roudi/application/roudi_app.cpp",
+    "source/roudi/iceoryx_roudi_components.cpp",
+    "source/roudi/memory/default_roudi_memory.cpp",
+    "source/roudi/memory/iceoryx_roudi_memory_manager.cpp",
+    "source/roudi/memory/memory_block.cpp",
+    "source/roudi/memory/memory_provider.cpp",
+    "source/roudi/memory/mempool_collection_memory_block.cpp",
+    "source/roudi/memory/mempool_segment_manager_memory_block.cpp",
+    "source/roudi/memory/port_pool_memory_block.cpp",
+    "source/roudi/memory/posix_shm_memory_provider.cpp",
+    "source/roudi/memory/roudi_memory_manager.cpp",
+    "source/roudi/port_manager.cpp",
+    "source/roudi/port_pool.cpp",
+    "source/roudi/process.cpp",
+    "source/roudi/process_manager.cpp",
+    "source/roudi/roudi.cpp",
+    "source/roudi/roudi_cmd_line_parser.cpp",
+    "source/roudi/roudi_cmd_line_parser_config_file_option.cpp",
+    "source/roudi/roudi_config.cpp",
+]
+
+cc_library(
+    name = "iceoryx_posh_roudi_library",
+    srcs = ROUDI_SRCS + PRIVATE_HDRS,
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = [
+        ":iceoryx_posh_library",
+        "@iceoryx_hoofs//:iceoryx_hoofs_library",
+    ],
+)
+
+cc_shared_library(
+    name = "iceoryx_posh_roudi",
+    dynamic_deps = [
+        ":iceoryx_posh",
+        "@iceoryx_hoofs//:iceoryx_hoofs",
+        "@iceoryx_hoofs//:iceoryx_platform",
+    ],
+    exports_filter = [":iceoryx_posh_roudi_library"],
+    deps = [":iceoryx_posh_roudi_library"],
+)
+
+CONFIG_SRCS = [
+    "source/gateway/gateway_config.cpp",
+    "source/gateway/toml_gateway_config_parser.cpp",
+    "source/log/posh_config_logging.cpp",
+    "source/roudi/roudi_config_toml_file_provider.cpp",
+]
+
+cc_library(
+    name = "iceoryx_posh_config_library",
+    srcs = CONFIG_SRCS + PRIVATE_HDRS,
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = [
+        ":iceoryx_posh_library",
+        ":iceoryx_posh_roudi_library",
+        "@iceoryx_hoofs//:iceoryx_hoofs_library",
+        "@rosdistro//cc:cpptoml",
+    ],
+)
+
+cc_shared_library(
+    name = "iceoryx_posh_config",
+    dynamic_deps = [
+        ":iceoryx_posh",
+        ":iceoryx_posh_roudi",
+        "@iceoryx_hoofs//:iceoryx_hoofs",
+        "@iceoryx_hoofs//:iceoryx_platform",
+    ],
+    exports_filter = [":iceoryx_posh_config_library"],
+    deps = [":iceoryx_posh_config_library"],
+)
+
+### BINARIES
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        ":iceoryx_posh",
+        ":iceoryx_posh_config",
+        ":iceoryx_posh_gateway",
+        ":iceoryx_posh_roudi",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "iox-roudi",
+    srcs = ["source/roudi/application/roudi_main.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":iceoryx_posh_config_library",
+        ":iceoryx_posh_library",
+        ":iceoryx_posh_roudi_library",
+        "@iceoryx_hoofs//:iceoryx_hoofs_library",
+    ],
+)
+
+### INSTALL METADATA
+
+[
+    write_file(
+        name = "gen_" + f.replace("/", "_").replace(".", "_").replace("-", "_"),
+        out = "_gen/" + f,
+        content = [""],
+    )
+    for f in [
+        "lib/cmake/iceoryx_posh/iceoryx_poshConfig.cmake",
+        "lib/cmake/iceoryx_posh/iceoryx_poshConfigVersion.cmake",
+        "lib/cmake/iceoryx_posh/iceoryx_poshTargets-noconfig.cmake",
+        "lib/cmake/iceoryx_posh/iceoryx_poshTargets.cmake",
+    ]
+]
+
+pkg_files(
+    name = "cmake_gen_files",
+    srcs = [
+        ":gen_lib_cmake_iceoryx_posh_iceoryx_poshConfigVersion_cmake",
+        ":gen_lib_cmake_iceoryx_posh_iceoryx_poshConfig_cmake",
+        ":gen_lib_cmake_iceoryx_posh_iceoryx_poshTargets_cmake",
+        ":gen_lib_cmake_iceoryx_posh_iceoryx_poshTargets_noconfig_cmake",
+    ],
+    strip_prefix = strip_prefix.from_pkg("_gen"),
+)
+
+pkg_files(
+    name = "etc_files",
+    srcs = ["etc/iceoryx/roudi_config_example.toml"],
+    prefix = "etc",
+    strip_prefix = strip_prefix.from_pkg("etc/iceoryx"),
+)
+
+### PACKAGING
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "cmake/IceoryxPoshDeployment.cmake",
+    ],
+    prefix = "lib/cmake/iceoryx_posh",
+    strip_prefix = "cmake",
+)
+
+register_ament_files(
+    name = "ament_files_1",
+    files = [
+        "doc/3rd_party_licenses/cpptoml/LICENSE",
+    ],
+    prefix = "share/doc/iceoryx_posh",
+    strip_prefix = "doc",
+)
+
+register_ament_files(
+    name = "ament_files_2",
+    files = [
+        "LICENSE",
+    ],
+    prefix = "share/doc/iceoryx_posh",
+    strip_prefix = "*",
+)
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+        ":ament_files_2",
+    ],
+    headers = HEADERS,
+    headers_strip_prefix = "include",
+    include_prefix = "iceoryx/v2.0.6",
+    install = [
+        ":cmake_gen_files",
+        ":etc_files",
+    ],
+    install_package_xml = False,
+    libraries = [
+        ":iceoryx_posh",
+        ":iceoryx_posh_config",
+        ":iceoryx_posh_gateway",
+        ":iceoryx_posh_roudi",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        ":iox-roudi",
+    ],
+    deps = [
+        "@iceoryx_hoofs//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

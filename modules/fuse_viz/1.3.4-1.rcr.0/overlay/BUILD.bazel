@@ -1,0 +1,180 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+}
+
+CC_DEPS = [
+    "@fuse_constraints//:fuse_constraints_library",
+    "@fuse_core//:fuse_core_library",
+    "@fuse_msgs//:cc",
+    "@fuse_variables//:fuse_variables_library",
+    "@geometry_msgs//:cc",
+    "@rosdistro//cc:eigen",
+    "@rules_qt//:qt_core",
+    "@rules_qt//:qt_gui",
+    "@rules_qt//:qt_svg",
+    "@rules_qt//:qt_widgets",
+    "@rviz_common//:rviz_common_library",
+    "@rviz_rendering//:rviz_rendering_library",
+]
+
+qt_cc_library(
+    name = "fuse_viz_library",
+    srcs = [
+        "src/mapped_covariance_property.cpp",
+        "src/mapped_covariance_visual.cpp",
+        "src/pose_2d_stamped_property.cpp",
+        "src/pose_2d_stamped_visual.cpp",
+        "src/relative_pose_2d_stamped_constraint_property.cpp",
+        "src/relative_pose_2d_stamped_constraint_visual.cpp",
+        "src/serialized_graph_display.cpp",
+    ],
+    hdrs = [
+        "include/fuse_viz/mapped_covariance_property.hpp",
+        "include/fuse_viz/pose_2d_stamped_property.hpp",
+        "include/fuse_viz/relative_pose_2d_stamped_constraint_property.hpp",
+        "include/fuse_viz/serialized_graph_display.hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+        "-include",
+        "rcr_ceres_rotation_shim.hpp",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/fuse_viz",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    normal_hdrs = [
+        "include/fuse_viz/conversions.h",
+        "include/fuse_viz/conversions.hpp",
+        "include/fuse_viz/mapped_covariance_property.h",
+        "include/fuse_viz/mapped_covariance_visual.h",
+        "include/fuse_viz/mapped_covariance_visual.hpp",
+        "include/fuse_viz/pose_2d_stamped_property.h",
+        "include/fuse_viz/pose_2d_stamped_visual.h",
+        "include/fuse_viz/pose_2d_stamped_visual.hpp",
+        "include/fuse_viz/relative_pose_2d_stamped_constraint_property.h",
+        "include/fuse_viz/relative_pose_2d_stamped_constraint_visual.h",
+        "include/fuse_viz/relative_pose_2d_stamped_constraint_visual.hpp",
+        "include/fuse_viz/serialized_graph_display.h",
+        ":gen_rcr_qt_libc_shim_hpp",
+        ":gen_rcr_ceres_rotation_shim_hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "fuse_viz",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":fuse_viz_library",
+        "//:__subpackages__",
+    ],
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":fuse_viz_library"],
+)
+
+write_file(
+    name = "gen_rcr_qt_libc_shim_hpp",
+    out = "_gen/include/rcr_qt_libc_shim.hpp",
+    content = ["#pragma once\n#ifdef __cplusplus\n#include <QByteArray>\n#include <QJsonObject>\n#include <QJsonValue>\n#include <QObject>\n#include <QString>\n#include <QTimer>\n#include <chrono>\n#include <initializer_list>\n#include <string>\n#include <utility>\ninline QByteArray QByteArray::fromStdString(const std::string &s) { return QByteArray(s.data(), s.size()); }\ninline std::string QByteArray::toStdString() const { return std::string(constData(), size()); }\ninline QJsonObject::QJsonObject(std::initializer_list<std::pair<QString, QJsonValue>> args) : QJsonObject() {\n  for (const auto &arg : args) { insert(arg.first, arg.second); }\n}\nextern \"C\" void _ZN6QTimer14singleShotImplENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEEN2Qt9TimerTypeEPK7QObjectPN9QtPrivate15QSlotObjectBaseE(\n    long ns, Qt::TimerType timerType, const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj);\ninline void QTimer::singleShotImpl(std::chrono::nanoseconds ns, Qt::TimerType timerType, const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj) {\n  _ZN6QTimer14singleShotImplENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEEN2Qt9TimerTypeEPK7QObjectPN9QtPrivate15QSlotObjectBaseE(\n      ns.count(), timerType, receiver, slotObj);\n}\n#endif\n"],
+)
+
+write_file(
+    name = "gen_rcr_ceres_rotation_shim_hpp",
+    out = "_gen/include/rcr_ceres_rotation_shim.hpp",
+    content = ["#ifndef RCR_CERES_ROTATION_SHIM_HPP_\n#define RCR_CERES_ROTATION_SHIM_HPP_\n#include <ceres/ceres.h>\nnamespace ceres {\ntemplate <typename T>\ninline void AngleAxisToQuaternion(const T* angle_axis, T* quaternion) {\n  const T& a0 = angle_axis[0];\n  const T& a1 = angle_axis[1];\n  const T& a2 = angle_axis[2];\n  const T theta_squared = a0 * a0 + a1 * a1 + a2 * a2;\n  if (theta_squared > T(0.0)) {\n    const T theta = sqrt(theta_squared);\n    const T half_theta = theta * T(0.5);\n    const T k = sin(half_theta) / theta;\n    quaternion[0] = cos(half_theta);\n    quaternion[1] = a0 * k;\n    quaternion[2] = a1 * k;\n    quaternion[3] = a2 * k;\n  } else {\n    const T k(0.5);\n    quaternion[0] = T(1.0);\n    quaternion[1] = a0 * k;\n    quaternion[2] = a1 * k;\n    quaternion[3] = a2 * k;\n  }\n}\ntemplate <typename T>\ninline void QuaternionToAngleAxis(const T* quaternion, T* angle_axis) {\n  const T& q1 = quaternion[1];\n  const T& q2 = quaternion[2];\n  const T& q3 = quaternion[3];\n  const T sin_squared_theta = q1 * q1 + q2 * q2 + q3 * q3;\n  if (sin_squared_theta > T(0.0)) {\n    const T sin_theta = sqrt(sin_squared_theta);\n    const T& cos_theta = quaternion[0];\n    const T two_theta = T(2.0) * ((cos_theta < T(0.0)) ? atan2(-sin_theta, -cos_theta) : atan2(sin_theta, cos_theta));\n    const T k = two_theta / sin_theta;\n    angle_axis[0] = q1 * k;\n    angle_axis[1] = q2 * k;\n    angle_axis[2] = q3 * k;\n  } else {\n    const T k(2.0);\n    angle_axis[0] = q1 * k;\n    angle_axis[1] = q2 * k;\n    angle_axis[2] = q3 * k;\n  }\n}\ntemplate <typename T>\ninline void QuaternionProduct(const T z[4], const T w[4], T zw[4]) {\n  zw[0] = z[0] * w[0] - z[1] * w[1] - z[2] * w[2] - z[3] * w[3];\n  zw[1] = z[0] * w[1] + z[1] * w[0] + z[2] * w[3] - z[3] * w[2];\n  zw[2] = z[0] * w[2] - z[1] * w[3] + z[2] * w[0] + z[3] * w[1];\n  zw[3] = z[0] * w[3] + z[1] * w[2] - z[2] * w[1] + z[3] * w[0];\n}\ntemplate <typename T>\ninline void UnitQuaternionRotatePoint(const T q[4], const T pt[3], T result[3]) {\n  const T t2 =  q[0] * q[1];\n  const T t3 =  q[0] * q[2];\n  const T t4 =  q[0] * q[3];\n  const T t5 = -q[1] * q[1];\n  const T t6 =  q[1] * q[2];\n  const T t7 =  q[1] * q[3];\n  const T t8 = -q[2] * q[2];\n  const T t9 =  q[2] * q[3];\n  const T t1 = -q[3] * q[3];\n  result[0] = T(2) * ((t8 + t1) * pt[0] + (t6 - t4) * pt[1] + (t3 + t7) * pt[2]) + pt[0];\n  result[1] = T(2) * ((t4 + t6) * pt[0] + (t5 + t1) * pt[1] + (t9 - t2) * pt[2]) + pt[1];\n  result[2] = T(2) * ((t7 - t3) * pt[0] + (t2 + t9) * pt[1] + (t5 + t8) * pt[2]) + pt[2];\n}\ntemplate <typename T>\ninline void QuaternionRotatePoint(const T q[4], const T pt[3], T result[3]) {\n  const T scale = T(1) / sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);\n  const T unit[4] = {scale * q[0], scale * q[1], scale * q[2], scale * q[3]};\n  UnitQuaternionRotatePoint(unit, pt, result);\n}\ntemplate <typename T>\ninline void AngleAxisRotatePoint(const T angle_axis[3], const T pt[3], T result[3]) {\n  T q[4];\n  AngleAxisToQuaternion(angle_axis, q);\n  UnitQuaternionRotatePoint(q, pt, result);\n}\ntemplate <typename T>\ninline void EulerAnglesToRotationMatrix(const T* euler, int row_stride, T* R) {\n  (void)row_stride;\n  const T r = euler[0], p = euler[1], y = euler[2];\n  const T cr = cos(r), sr = sin(r), cp = cos(p), sp = sin(p), cy = cos(y), sy = sin(y);\n  R[0] = cy * cp; R[1] = cy * sp * sr - sy * cr; R[2] = cy * sp * cr + sy * sr;\n  R[3] = sy * cp; R[4] = sy * sp * sr + cy * cr; R[5] = sy * sp * cr - cy * sr;\n  R[6] = -sp;     R[7] = cp * sr;                R[8] = cp * cr;\n}\n}  // namespace ceres\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":fuse_viz"],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["rviz_plugins.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@fuse_constraints//:ament_package",
+        "@fuse_core//:ament_package",
+        "@fuse_msgs//:ament_package",
+        "@fuse_variables//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@gtest_vendor//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":fuse_viz"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@fuse_constraints//:ament_package",
+        "@fuse_core//:ament_package",
+        "@fuse_msgs//:ament_package",
+        "@fuse_variables//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@gtest_vendor//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+    ],
+)

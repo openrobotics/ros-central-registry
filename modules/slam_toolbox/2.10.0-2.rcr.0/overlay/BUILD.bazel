@@ -1,0 +1,2298 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "register_ament_resource")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosidl_default_generators//:defs.bzl", "default_generators", "rosidl_ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@bondcpp//:bondcpp": "@bondcpp//:bondcpp_library",
+    "@interactive_markers//:interactive_markers": "@interactive_markers//:interactive_markers_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_default_plugins//:rviz_default_plugins": "@rviz_default_plugins//:rviz_default_plugins_library",
+    "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:static_transform_broadcaster_node": "@tf2_ros//:static_transform_broadcaster_node_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@tf2_sensor_msgs//:tf2_sensor_msgs": "@tf2_sensor_msgs//:tf2_sensor_msgs_library",
+}
+
+CC_DEPS = [
+    "@bond//:cc",
+    "@builtin_interfaces//:cc",
+    "@geometry_msgs//:cc",
+    "@lifecycle_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:eigen",
+    "@rules_qt//:qt_widgets",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@std_srvs//:cc",
+    "@visualization_msgs//:cc",
+]
+
+qt_cc_library(
+    name = "SlamToolboxPlugin_library",
+    srcs = ["rviz_plugin/slam_toolbox_rviz_plugin.cpp"],
+    hdrs = ["rviz_plugin/slam_toolbox_rviz_plugin.hpp"],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "RVIZ_DEFAULT_PLUGINS_BUILDING_LIBRARY",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    normal_hdrs = [
+        "include/slam_toolbox/experimental/slam_toolbox_lifelong.hpp",
+        "include/slam_toolbox/experimental/slam_toolbox_map_and_localization.hpp",
+        "include/slam_toolbox/get_pose_helper.hpp",
+        "include/slam_toolbox/laser_utils.hpp",
+        "include/slam_toolbox/loop_closure_assistant.hpp",
+        "include/slam_toolbox/loop_closure_listener.hpp",
+        "include/slam_toolbox/map_saver.hpp",
+        "include/slam_toolbox/merge_maps_kinematic.hpp",
+        "include/slam_toolbox/serialization.hpp",
+        "include/slam_toolbox/slam_mapper.hpp",
+        "include/slam_toolbox/slam_toolbox_async.hpp",
+        "include/slam_toolbox/slam_toolbox_common.hpp",
+        "include/slam_toolbox/slam_toolbox_decentralized_multirobot.hpp",
+        "include/slam_toolbox/slam_toolbox_localization.hpp",
+        "include/slam_toolbox/slam_toolbox_sync.hpp",
+        "include/slam_toolbox/snap_utils.hpp",
+        "include/slam_toolbox/toolbox_msgs.hpp",
+        "include/slam_toolbox/toolbox_types.hpp",
+        "include/slam_toolbox/visualization_utils.hpp",
+        "lib/karto_sdk/include/karto_sdk/Karto.h",
+        "lib/karto_sdk/include/karto_sdk/Macros.h",
+        "lib/karto_sdk/include/karto_sdk/Mapper.h",
+        "lib/karto_sdk/include/karto_sdk/Math.h",
+        "lib/karto_sdk/include/karto_sdk/Types.h",
+        "lib/karto_sdk/include/karto_sdk/nanoflann.hpp",
+        "lib/karto_sdk/include/karto_sdk/nanoflann_adaptors.h",
+        "solvers/ceres_solver.hpp",
+        "solvers/ceres_utils.h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_version_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_internal_autodiff_h",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+    ],
+)
+
+cc_shared_library(
+    name = "SlamToolboxPlugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":SlamToolboxPlugin_library",
+        "//:__subpackages__",
+    ],
+    deps = [":SlamToolboxPlugin_library"],
+)
+
+cc_library(
+    name = "kartoSlamToolbox_library",
+    srcs = [
+        "lib/karto_sdk/src/Karto.cpp",
+        "lib/karto_sdk/src/Mapper.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    local_defines = ros_local_defines() + ["KARTO_DYNAMIC"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+    ],
+)
+
+cc_shared_library(
+    name = "kartoSlamToolbox",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":kartoSlamToolbox_library"],
+)
+
+cc_library(
+    name = "toolbox_common_library",
+    srcs = [
+        "src/laser_utils.cpp",
+        "src/loop_closure_assistant.cpp",
+        "src/loop_closure_listener.cpp",
+        "src/map_saver.cpp",
+        "src/slam_mapper.cpp",
+        "src/slam_toolbox_common.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+    ],
+)
+
+cc_shared_library(
+    name = "toolbox_common",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":toolbox_common_library"],
+)
+
+cc_library(
+    name = "async_slam_toolbox_library",
+    srcs = ["src/slam_toolbox_async.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "async_slam_toolbox",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":async_slam_toolbox_library"],
+)
+
+cc_library(
+    name = "ceres_solver_plugin_library",
+    srcs = ["solvers/ceres_solver.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+    ],
+)
+
+cc_shared_library(
+    name = "ceres_solver_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":ceres_solver_plugin_library"],
+)
+
+cc_library(
+    name = "decentralized_multirobot_slam_toolbox_library",
+    srcs = ["src/slam_toolbox_decentralized_multirobot.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "decentralized_multirobot_slam_toolbox",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":decentralized_multirobot_slam_toolbox_library"],
+)
+
+cc_library(
+    name = "lifelong_slam_toolbox_library",
+    srcs = ["src/experimental/slam_toolbox_lifelong.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "lifelong_slam_toolbox",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":lifelong_slam_toolbox_library"],
+)
+
+cc_library(
+    name = "localization_slam_toolbox_library",
+    srcs = ["src/slam_toolbox_localization.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "localization_slam_toolbox",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":localization_slam_toolbox_library"],
+)
+
+cc_library(
+    name = "map_and_localization_slam_toolbox_library",
+    srcs = ["src/experimental/slam_toolbox_map_and_localization.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":localization_slam_toolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "map_and_localization_slam_toolbox",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":map_and_localization_slam_toolbox_library"],
+)
+
+cc_library(
+    name = "sync_slam_toolbox_library",
+    srcs = ["src/slam_toolbox_sync.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_shared_library(
+    name = "sync_slam_toolbox",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":sync_slam_toolbox_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "async_slam_toolbox_node",
+    srcs = ["src/slam_toolbox_async_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":async_slam_toolbox_library",
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_binary(
+    name = "decentralized_multirobot_slam_toolbox_node",
+    srcs = ["src/slam_toolbox_decentralized_multirobot_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":decentralized_multirobot_slam_toolbox_library",
+        ":kartoSlamToolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_binary(
+    name = "lifelong_slam_toolbox_node",
+    srcs = ["src/experimental/slam_toolbox_lifelong_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":lifelong_slam_toolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_binary(
+    name = "localization_slam_toolbox_node",
+    srcs = ["src/slam_toolbox_localization_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":localization_slam_toolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_binary(
+    name = "map_and_localization_slam_toolbox_node",
+    srcs = ["src/experimental/slam_toolbox_map_and_localization_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":localization_slam_toolbox_library",
+        ":map_and_localization_slam_toolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_binary(
+    name = "merge_maps_kinematic",
+    srcs = ["src/merge_maps_kinematic.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+cc_binary(
+    name = "sync_slam_toolbox_node",
+    srcs = ["src/slam_toolbox_sync_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_boost_archive_archive_exception_hpp",
+        ":gen_boost_archive_binary_iarchive_hpp",
+        ":gen_boost_archive_binary_oarchive_hpp",
+        ":gen_boost_archive_text_iarchive_hpp",
+        ":gen_boost_archive_text_oarchive_hpp",
+        ":gen_boost_serialization_access_hpp",
+        ":gen_boost_serialization_array_hpp",
+        ":gen_boost_serialization_assume_abstract_hpp",
+        ":gen_boost_serialization_base_object_hpp",
+        ":gen_boost_serialization_deque_hpp",
+        ":gen_boost_serialization_export_hpp",
+        ":gen_boost_serialization_list_hpp",
+        ":gen_boost_serialization_map_hpp",
+        ":gen_boost_serialization_nvp_hpp",
+        ":gen_boost_serialization_optional_hpp",
+        ":gen_boost_serialization_set_hpp",
+        ":gen_boost_serialization_shared_ptr_hpp",
+        ":gen_boost_serialization_split_free_hpp",
+        ":gen_boost_serialization_split_member_hpp",
+        ":gen_boost_serialization_string_hpp",
+        ":gen_boost_serialization_utility_hpp",
+        ":gen_boost_serialization_variant_hpp",
+        ":gen_boost_serialization_vector_hpp",
+        ":gen_ceres_autodiff_cost_function_h",
+        ":gen_ceres_autodiff_manifold_h",
+        ":gen_ceres_ceres_h",
+        ":gen_ceres_cost_function_h",
+        ":gen_ceres_cost_function_to_functor_h",
+        ":gen_ceres_covariance_h",
+        ":gen_ceres_cubic_interpolation_h",
+        ":gen_ceres_internal_autodiff_h",
+        ":gen_ceres_jet_h",
+        ":gen_ceres_local_parameterization_h",
+        ":gen_ceres_loss_function_h",
+        ":gen_ceres_manifold_h",
+        ":gen_ceres_problem_h",
+        ":gen_ceres_rotation_h",
+        ":gen_ceres_solver_h",
+        ":gen_ceres_types_h",
+        ":gen_ceres_version_h",
+        ":gen_nanoflann_hpp",
+        ":gen_tbb_blocked_range_h",
+        ":gen_tbb_parallel_for_each_h",
+        ":gen_tbb_parallel_for_h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/slam_toolbox",
+        "include",
+        "include/slam_toolbox",
+        "lib/karto_sdk/include",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":kartoSlamToolbox_library",
+        ":sync_slam_toolbox_library",
+        ":toolbox_common_library",
+    ],
+)
+
+write_file(
+    name = "gen_nanoflann_hpp",
+    out = "_gen/include/nanoflann.hpp",
+    content = ["#ifndef RCR_NANOFLANN_HPP_\n#define RCR_NANOFLANN_HPP_\n#include <algorithm>\n#include <cstddef>\n#include <utility>\n#include <vector>\nnamespace nanoflann {\ntemplate <typename T, class DataSource, typename _DistanceType = T, typename IndexType = std::size_t>\nstruct L2_Simple_Adaptor {\n  using ElementType = T;\n  using DistanceType = _DistanceType;\n  const DataSource & data_source;\n  explicit L2_Simple_Adaptor(const DataSource & ds) : data_source(ds) {}\n};\nstruct KDTreeSingleIndexAdaptorParams {\n  explicit KDTreeSingleIndexAdaptorParams(std::size_t = 10) {}\n};\ntemplate <typename Distance, class DatasetAdaptor, int DIM = -1, typename IndexType = std::size_t>\nclass KDTreeSingleIndexAdaptor {\n public:\n  using ElementType = typename Distance::ElementType;\n  using DistanceType = typename Distance::DistanceType;\n  KDTreeSingleIndexAdaptor(int dim, const DatasetAdaptor & adaptor, const KDTreeSingleIndexAdaptorParams & = KDTreeSingleIndexAdaptorParams())\n      : dim_(dim), adaptor_(adaptor) {}\n  void buildIndex() {}\n  std::size_t knnSearch(const ElementType * query_pt, std::size_t num_closest, IndexType * out_indices, DistanceType * out_distances_sq) const {\n    const std::size_t N = adaptor_.kdtree_get_point_count();\n    std::vector<std::pair<DistanceType, IndexType>> dists;\n    dists.reserve(N);\n    const int d = (DIM > 0) ? DIM : dim_;\n    for (std::size_t i = 0; i < N; ++i) {\n      DistanceType sq = 0;\n      for (int k = 0; k < d; ++k) {\n        DistanceType diff = query_pt[k] - adaptor_.kdtree_get_pt(i, k);\n        sq += diff * diff;\n      }\n      dists.emplace_back(sq, static_cast<IndexType>(i));\n    }\n    const std::size_t count = std::min(num_closest, N);\n    std::partial_sort(dists.begin(), dists.begin() + count, dists.end());\n    for (std::size_t i = 0; i < count; ++i) {\n      out_indices[i] = dists[i].second;\n      out_distances_sq[i] = dists[i].first;\n    }\n    return count;\n  }\n private:\n  int dim_;\n  const DatasetAdaptor & adaptor_;\n};\n}  // namespace nanoflann\n#endif\n"],
+)
+
+write_file(
+    name = "gen_tbb_blocked_range_h",
+    out = "_gen/include/tbb/blocked_range.h",
+    content = ["#ifndef RCR_TBB_BLOCKED_RANGE_H_\n#define RCR_TBB_BLOCKED_RANGE_H_\n#include <cstddef>\nnamespace tbb {\ntemplate <typename Value>\nclass blocked_range {\n public:\n  blocked_range(Value begin, Value end, std::size_t grainsize = 1)\n      : begin_(begin), end_(end), grainsize_(grainsize) {}\n  Value begin() const { return begin_; }\n  Value end() const { return end_; }\n  std::size_t size() const { return static_cast<std::size_t>(end_ - begin_); }\n  std::size_t grainsize() const { return grainsize_; }\n  bool empty() const { return !(begin_ < end_); }\n private:\n  Value begin_, end_;\n  std::size_t grainsize_;\n};\n}  // namespace tbb\n#endif\n"],
+)
+
+write_file(
+    name = "gen_tbb_parallel_for_h",
+    out = "_gen/include/tbb/parallel_for.h",
+    content = ["#ifndef RCR_TBB_PARALLEL_FOR_H_\n#define RCR_TBB_PARALLEL_FOR_H_\n#include \"tbb/blocked_range.h\"\nnamespace tbb {\ntemplate <typename Range, typename Body>\ninline void parallel_for(const Range & range, const Body & body) {\n  body(range);\n}\ntemplate <typename Index, typename Func>\ninline void parallel_for(Index first, Index last, const Func & f) {\n  for (Index i = first; i < last; ++i) f(i);\n}\n}  // namespace tbb\n#endif\n"],
+)
+
+write_file(
+    name = "gen_tbb_parallel_for_each_h",
+    out = "_gen/include/tbb/parallel_for_each.h",
+    content = ["#ifndef RCR_TBB_PARALLEL_FOR_EACH_H_\n#define RCR_TBB_PARALLEL_FOR_EACH_H_\nnamespace tbb {\ntemplate <typename Iterator, typename Body>\ninline void parallel_for_each(Iterator first, Iterator last, const Body & body) {\n  for (; first != last; ++first) body(*first);\n}\ntemplate <typename Container, typename Body>\ninline void parallel_for_each(Container & c, const Body & body) {\n  for (auto & item : c) body(item);\n}\ntemplate <typename Container, typename Body>\ninline void parallel_for_each(const Container & c, const Body & body) {\n  for (const auto & item : c) body(item);\n}\n}  // namespace tbb\n#endif\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_access_hpp",
+    out = "_gen/include/boost/serialization/access.hpp",
+    content = ["#ifndef RCR_BOOST_SERIALIZATION_ACCESS_HPP_\n#define RCR_BOOST_SERIALIZATION_ACCESS_HPP_\n#include <cstddef>\n#include <exception>\n#include <utility>\nnamespace boost {\nnamespace serialization {\nclass access {\n public:\n  template <class Archive, class T>\n  static void serialize(Archive & ar, T & t, const unsigned int version) {\n    t.serialize(ar, version);\n  }\n  template <class T>\n  static void destroy(const T * t) { delete t; }\n};\ntemplate <class T>\nstruct nvp {\n  const char * name;\n  T * value;\n  nvp(const char * n, T & v) : name(n), value(&v) {}\n};\ntemplate <class T>\ninline nvp<T> make_nvp(const char * name, T & v) { return nvp<T>(name, v); }\ntemplate <class Base, class Derived>\ninline Base & base_object(Derived & d) { return static_cast<Base &>(d); }\ntemplate <class Base, class Derived>\ninline const Base & base_object(const Derived & d) { return static_cast<const Base &>(d); }\ntemplate <class T>\nstruct array_wrapper {\n  T * data;\n  std::size_t size;\n};\ntemplate <class T>\ninline array_wrapper<T> make_array(T * data, std::size_t size) { return {data, size}; }\ntemplate <class Archive, class T>\ninline void split_free(Archive &, T &, const unsigned int) {}\ntemplate <class Archive, class T>\ninline void split_member(Archive &, T &, const unsigned int) {}\n}  // namespace serialization\nnamespace archive {\nenum archive_flags { no_header = 1, no_codecvt = 2, no_xml_tag_checking = 4, no_tracking = 8 };\nclass archive_exception : public std::exception {\n public:\n  const char * what() const noexcept override { return \"boost::archive::archive_exception\"; }\n};\nclass ArchiveStub {\n public:\n  template <typename... Args>\n  explicit ArchiveStub(Args &&...) {}\n  template <typename T>\n  ArchiveStub & operator<<(const T &) { return *this; }\n  template <typename T>\n  ArchiveStub & operator>>(T &&) { return *this; }\n  template <typename T>\n  ArchiveStub & operator&(T &&) { return *this; }\n  template <typename T>\n  void register_type() {}\n};\nusing ArchiveStubBase = ArchiveStub;\nstruct binary_iarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct binary_oarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct text_iarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\nstruct text_oarchive : ArchiveStub { using ArchiveStub::ArchiveStub; };\n}  // namespace archive\n}  // namespace boost\n#define BOOST_SERIALIZATION_NVP(v) ::boost::serialization::make_nvp(#v, v)\n#define BOOST_SERIALIZATION_BASE_OBJECT_NVP(...) ::boost::serialization::base_object<__VA_ARGS__>(*this)\n#define BOOST_SERIALIZATION_ASSUME_ABSTRACT(...)\n#define BOOST_CLASS_EXPORT(...)\n#define BOOST_CLASS_EXPORT_KEY(...)\n#define BOOST_CLASS_EXPORT_IMPLEMENT(...)\n#define BOOST_SERIALIZATION_SPLIT_MEMBER()\n#define BOOST_SERIALIZATION_SPLIT_FREE(...)\n#endif\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_nvp_hpp",
+    out = "_gen/include/boost/serialization/nvp.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_base_object_hpp",
+    out = "_gen/include/boost/serialization/base_object.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_utility_hpp",
+    out = "_gen/include/boost/serialization/utility.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_export_hpp",
+    out = "_gen/include/boost/serialization/export.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_map_hpp",
+    out = "_gen/include/boost/serialization/map.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_vector_hpp",
+    out = "_gen/include/boost/serialization/vector.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_string_hpp",
+    out = "_gen/include/boost/serialization/string.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_array_hpp",
+    out = "_gen/include/boost/serialization/array.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_shared_ptr_hpp",
+    out = "_gen/include/boost/serialization/shared_ptr.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_set_hpp",
+    out = "_gen/include/boost/serialization/set.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_split_free_hpp",
+    out = "_gen/include/boost/serialization/split_free.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_split_member_hpp",
+    out = "_gen/include/boost/serialization/split_member.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_list_hpp",
+    out = "_gen/include/boost/serialization/list.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_deque_hpp",
+    out = "_gen/include/boost/serialization/deque.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_optional_hpp",
+    out = "_gen/include/boost/serialization/optional.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_variant_hpp",
+    out = "_gen/include/boost/serialization/variant.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_serialization_assume_abstract_hpp",
+    out = "_gen/include/boost/serialization/assume_abstract.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_archive_binary_iarchive_hpp",
+    out = "_gen/include/boost/archive/binary_iarchive.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_archive_binary_oarchive_hpp",
+    out = "_gen/include/boost/archive/binary_oarchive.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_archive_text_iarchive_hpp",
+    out = "_gen/include/boost/archive/text_iarchive.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_archive_text_oarchive_hpp",
+    out = "_gen/include/boost/archive/text_oarchive.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_boost_archive_archive_exception_hpp",
+    out = "_gen/include/boost/archive/archive_exception.hpp",
+    content = ["#include <boost/serialization/access.hpp>\n"],
+)
+
+write_file(
+    name = "gen_ceres_ceres_h",
+    out = "_gen/include/ceres/ceres.h",
+    content = ["#ifndef RCR_CERES_CERES_H_\n#define RCR_CERES_CERES_H_\n#include <Eigen/Dense>\n#include <algorithm>\n#include <cmath>\n#include <cstddef>\n#include <cstdint>\n#include <memory>\n#include <set>\n#include <string>\n#include <utility>\n#include <vector>\n#define CERES_VERSION_MAJOR 2\n#define CERES_VERSION_MINOR 1\n#define CERES_VERSION_REVISION 0\nnamespace ceres {\ntemplate <typename T> inline bool isinf(const T & x) { return std::isinf(static_cast<double>(x)); }\ntemplate <typename T> inline bool IsInfinite(const T & x) { return std::isinf(static_cast<double>(x)); }\ntemplate <typename T> inline T abs(const T & x) { return std::abs(x); }\ntemplate <typename T> inline T floor(const T & x) { return std::floor(x); }\ntemplate <typename T> inline T cos(const T & x) { return std::cos(x); }\ntemplate <typename T> inline T sin(const T & x) { return std::sin(x); }\ntemplate <typename T> inline T asin(const T & x) { return std::asin(x); }\ntemplate <typename T> inline T acos(const T & x) { return std::acos(x); }\ntemplate <typename T> inline T atan2(const T & y, const T & x) { return std::atan2(y, x); }\ntemplate <typename T> inline T sqrt(const T & x) { return std::sqrt(x); }\ntemplate <typename T> inline T exp(const T & x) { return std::exp(x); }\ntemplate <typename T> inline T log(const T & x) { return std::log(x); }\nenum Ownership { DO_NOT_TAKE_OWNERSHIP = 0, TAKE_OWNERSHIP = 1 };\nenum LinearSolverType { DENSE_NORMAL_CHOLESKY = 0, DENSE_QR = 1, SPARSE_NORMAL_CHOLESKY = 2, DENSE_SCHUR = 3, SPARSE_SCHUR = 4, ITERATIVE_SCHUR = 5, CGNR = 6 };\nenum PreconditionerType { IDENTITY = 0, JACOBI = 1, SCHUR_JACOBI = 2, CLUSTER_JACOBI = 3, CLUSTER_TRIDIAGONAL = 4, SUBSET = 5 };\nenum VisibilityClusteringType { CANONICAL_VIEWS = 0, SINGLE_LINKAGE = 1 };\nenum SparseLinearAlgebraLibraryType { SUITE_SPARSE = 0, EIGEN_SPARSE = 1, CX_SPARSE = 2, ACCELERATE_SPARSE = 3, NO_SPARSE = 4 };\nenum DenseLinearAlgebraLibraryType { EIGEN = 0, LAPACK = 1, CUDA = 2 };\nenum LoggingType { SILENT = 0, PER_MINIMIZER_ITERATION = 1 };\nenum MinimizerType { TRUST_REGION = 0, LINE_SEARCH = 1 };\nenum LineSearchDirectionType { STEEPEST_DESCENT = 0, NONLINEAR_CONJUGATE_GRADIENT = 1, LBFGS = 2, BFGS = 3 };\nenum LineSearchType { ARMIJO = 0, WOLFE = 1 };\nenum NonlinearConjugateGradientType { FLETCHER_REEVES = 0, POLAK_RIBIERE = 1, HESTENES_STIEFEL = 2 };\nenum LineSearchInterpolationType { BISECTION = 0, QUADRATIC = 1, CUBIC = 2 };\nenum TrustRegionStrategyType { LEVENBERG_MARQUARDT = 0, DOGLEG = 1 };\nenum DoglegType { TRADITIONAL_DOGLEG = 0, SUBSPACE_DOGLEG = 1 };\nenum CovarianceAlgorithmType { DENSE_SVD = 0, SPARSE_QR = 1 };\nenum DumpFormatType { CONSOLE = 0, PROTOBUF = 1, TEXTFILE = 2 };\n#define RCR_CERES_OPT_STR_FN(Opt, DefVal) \\\n  inline const char * Opt##ToString(Opt) { return #DefVal; } \\\n  inline bool StringTo##Opt(const std::string &, Opt * v) { if (v) *v = DefVal; return true; }\nRCR_CERES_OPT_STR_FN(CovarianceAlgorithmType, DENSE_SVD)\nRCR_CERES_OPT_STR_FN(DenseLinearAlgebraLibraryType, EIGEN)\nRCR_CERES_OPT_STR_FN(DoglegType, TRADITIONAL_DOGLEG)\ninline const char * DumpFormatTypeToString(DumpFormatType) { return \"CONSOLE\"; }\nRCR_CERES_OPT_STR_FN(LinearSolverType, SPARSE_NORMAL_CHOLESKY)\nRCR_CERES_OPT_STR_FN(LineSearchDirectionType, LBFGS)\nRCR_CERES_OPT_STR_FN(LineSearchInterpolationType, CUBIC)\nRCR_CERES_OPT_STR_FN(LineSearchType, WOLFE)\ninline const char * LoggingTypeToString(LoggingType) { return \"SILENT\"; }\nRCR_CERES_OPT_STR_FN(MinimizerType, TRUST_REGION)\nRCR_CERES_OPT_STR_FN(NonlinearConjugateGradientType, FLETCHER_REEVES)\nRCR_CERES_OPT_STR_FN(PreconditionerType, JACOBI)\nRCR_CERES_OPT_STR_FN(SparseLinearAlgebraLibraryType, SUITE_SPARSE)\nRCR_CERES_OPT_STR_FN(TrustRegionStrategyType, LEVENBERG_MARQUARDT)\nRCR_CERES_OPT_STR_FN(VisibilityClusteringType, CANONICAL_VIEWS)\n#undef RCR_CERES_OPT_STR_FN\ninline bool StringtoLoggingType(const std::string &, LoggingType * v) { if (v) *v = SILENT; return true; }\ninline bool StringtoDumpFormatType(const std::string &, DumpFormatType * v) { if (v) *v = CONSOLE; return true; }\nusing ResidualBlockId = void *;\nclass LossFunction {\n public:\n  virtual ~LossFunction() = default;\n  virtual void Evaluate(double s, double out[3]) const { out[0] = s; out[1] = 1.0; out[2] = 0.0; }\n};\nclass HuberLoss : public LossFunction {\n public:\n  explicit HuberLoss(double) {}\n};\nclass CauchyLoss : public LossFunction {\n public:\n  explicit CauchyLoss(double) {}\n};\nclass LocalParameterization {\n public:\n  virtual ~LocalParameterization() = default;\n  virtual bool Plus(const double * x, const double * delta, double * x_plus_delta) const = 0;\n  virtual bool ComputeJacobian(const double * x, double * jacobian) const = 0;\n  virtual bool MultiplyByJacobian(const double *, int, const double *, double *) const { return true; }\n  virtual int GlobalSize() const = 0;\n  virtual int LocalSize() const = 0;\n};\nclass Manifold {\n public:\n  virtual ~Manifold() = default;\n  virtual int AmbientSize() const = 0;\n  virtual int TangentSize() const = 0;\n  virtual bool Plus(const double * x, const double * delta, double * x_plus_delta) const = 0;\n  virtual bool PlusJacobian(const double * x, double * jacobian) const = 0;\n  virtual bool RightMultiplyByPlusJacobian(const double *, int, const double *, double *) const { return true; }\n  virtual bool Minus(const double * y, const double * x, double * y_minus_x) const = 0;\n  virtual bool MinusJacobian(const double * x, double * jacobian) const = 0;\n};\ntemplate <typename Functor, int kAmbientSize, int kTangentSize>\nclass AutoDiffManifold : public Manifold {\n public:\n  AutoDiffManifold() : functor_(new Functor()) {}\n  explicit AutoDiffManifold(Functor * functor) : functor_(functor) {}\n  int AmbientSize() const override { return kAmbientSize; }\n  int TangentSize() const override { return kTangentSize; }\n  bool Plus(const double * x, const double * delta, double * x_plus_delta) const override {\n    return functor_->Plus(x, delta, x_plus_delta);\n  }\n  bool PlusJacobian(const double *, double * jacobian) const override {\n    if (jacobian) std::fill_n(jacobian, kAmbientSize * kTangentSize, 0.0);\n    return true;\n  }\n  bool Minus(const double * y, const double * x, double * y_minus_x) const override {\n    return functor_->Minus(y, x, y_minus_x);\n  }\n  bool MinusJacobian(const double *, double * jacobian) const override {\n    if (jacobian) std::fill_n(jacobian, kTangentSize * kAmbientSize, 0.0);\n    return true;\n  }\n private:\n  std::unique_ptr<Functor> functor_;\n};\nclass CostFunction {\n public:\n  virtual ~CostFunction() = default;\n  virtual bool Evaluate(double const* const* parameters, double* residuals, double** jacobians) const = 0;\n  const std::vector<int32_t> & parameter_block_sizes() const { return parameter_block_sizes_; }\n  int num_residuals() const { return num_residuals_; }\n protected:\n  std::vector<int32_t> * mutable_parameter_block_sizes() { return &parameter_block_sizes_; }\n  void set_num_residuals(int num_residuals) { num_residuals_ = num_residuals; }\n private:\n  std::vector<int32_t> parameter_block_sizes_;\n  int num_residuals_{0};\n};\ntemplate <typename CostFunctor, int kNumResiduals, int N0, int N1 = 0, int N2 = 0, int N3 = 0, int N4 = 0, int N5 = 0>\nclass AutoDiffCostFunction : public CostFunction {\n public:\n  explicit AutoDiffCostFunction(CostFunctor * functor) : functor_(functor) {\n    set_num_residuals(kNumResiduals);\n    if (N0 > 0) mutable_parameter_block_sizes()->push_back(N0);\n    if (N1 > 0) mutable_parameter_block_sizes()->push_back(N1);\n    if (N2 > 0) mutable_parameter_block_sizes()->push_back(N2);\n    if (N3 > 0) mutable_parameter_block_sizes()->push_back(N3);\n    if (N4 > 0) mutable_parameter_block_sizes()->push_back(N4);\n    if (N5 > 0) mutable_parameter_block_sizes()->push_back(N5);\n  }\n  bool Evaluate(double const* const* parameters, double* residuals, double**) const override {\n    if constexpr (N5 > 0) {\n      return (*functor_)(parameters[0], parameters[1], parameters[2], parameters[3], parameters[4], parameters[5], residuals);\n    } else if constexpr (N4 > 0) {\n      return (*functor_)(parameters[0], parameters[1], parameters[2], parameters[3], parameters[4], residuals);\n    } else if constexpr (N3 > 0) {\n      return (*functor_)(parameters[0], parameters[1], parameters[2], parameters[3], residuals);\n    } else if constexpr (N2 > 0) {\n      return (*functor_)(parameters[0], parameters[1], parameters[2], residuals);\n    } else if constexpr (N1 > 0) {\n      return (*functor_)(parameters[0], parameters[1], residuals);\n    } else {\n      return (*functor_)(parameters[0], residuals);\n    }\n  }\n private:\n  std::unique_ptr<CostFunctor> functor_;\n};\nnamespace internal {\ntemplate <int... Ns> struct StaticParameterDims {};\ntemplate <int kNumResiduals, typename ParameterDims, typename Functor, typename T>\ninline bool AutoDifferentiate(const Functor & functor, T const * const * parameters, int, T * outputs, T ** jacobians) {\n  (void)jacobians;\n  return functor(parameters[0], parameters[1], outputs);\n}\n}  // namespace internal\nclass Covariance {\n public:\n  struct Options {\n    SparseLinearAlgebraLibraryType sparse_linear_algebra_library_type{SUITE_SPARSE};\n    CovarianceAlgorithmType algorithm_type{DENSE_SVD};\n    double min_reciprocal_condition_number{1e-14};\n    int null_space_rank{0};\n    int num_threads{1};\n    bool apply_loss_function{true};\n  };\n  explicit Covariance(const Options &) {}\n};\nclass Problem {\n public:\n  struct Options {\n    Ownership cost_function_ownership{TAKE_OWNERSHIP};\n    Ownership loss_function_ownership{TAKE_OWNERSHIP};\n    Ownership local_parameterization_ownership{TAKE_OWNERSHIP};\n    Ownership manifold_ownership{TAKE_OWNERSHIP};\n    bool enable_fast_removal{false};\n    bool disable_all_safety_checks{false};\n  };\n  struct EvaluateOptions {\n    std::vector<double*> parameter_blocks;\n    std::vector<ResidualBlockId> residual_blocks;\n    bool apply_loss_function{true};\n    int num_threads{1};\n  };\n  struct ResidualBlock {\n    std::shared_ptr<CostFunction> cost;\n    std::vector<double*> params;\n  };\n  Problem() = default;\n  explicit Problem(const Options &) {}\n  ResidualBlockId AddResidualBlock(\n      CostFunction * cost, LossFunction *,\n      double * x0, double * x1 = nullptr, double * x2 = nullptr,\n      double * x3 = nullptr, double * x4 = nullptr, double * x5 = nullptr) {\n    std::vector<double*> p;\n    for (double * x : {x0, x1, x2, x3, x4, x5}) {\n      if (x) { p.push_back(x); param_blocks_.insert(x); }\n    }\n    blocks_.push_back({std::shared_ptr<CostFunction>(cost, [](CostFunction*){}), std::move(p)});\n    return reinterpret_cast<ResidualBlockId>(blocks_.size());\n  }\n  ResidualBlockId AddResidualBlock(\n      CostFunction * cost, LossFunction *, const std::vector<double*> & param_blocks) {\n    for (double * x : param_blocks) if (x) param_blocks_.insert(x);\n    blocks_.push_back({std::shared_ptr<CostFunction>(cost, [](CostFunction*){}), param_blocks});\n    return reinterpret_cast<ResidualBlockId>(blocks_.size());\n  }\n  void AddParameterBlock(double * values, int) { if (values) param_blocks_.insert(values); }\n  void AddParameterBlock(double * values, int, LocalParameterization *) { if (values) param_blocks_.insert(values); }\n  void AddParameterBlock(double * values, int, Manifold *) { if (values) param_blocks_.insert(values); }\n  bool HasParameterBlock(const double * values) const {\n    return param_blocks_.count(const_cast<double*>(values)) > 0;\n  }\n  void RemoveParameterBlock(const double * values) {\n    param_blocks_.erase(const_cast<double*>(values));\n  }\n  void RemoveResidualBlock(ResidualBlockId) {}\n  void SetManifold(double *, Manifold *) {}\n  void SetParameterization(double *, LocalParameterization *) {}\n  int NumParameterBlocks() const { return static_cast<int>(param_blocks_.size()); }\n  int NumResidualBlocks() const { return static_cast<int>(blocks_.size()); }\n  void SetParameterBlockConstant(const double * x) { const_blocks_.insert(const_cast<double*>(x)); }\n  void SetParameterBlockVariable(double * x) { const_blocks_.erase(x); }\n  bool IsParameterBlockConstant(const double * x) const { return const_blocks_.count(const_cast<double*>(x)) > 0; }\n  void SetParameterLowerBound(double *, int, double) {}\n  void SetParameterUpperBound(double *, int, double) {}\n  bool Evaluate(const EvaluateOptions &, double * cost, std::vector<double> *, std::vector<double> *, void *) {\n    if (cost) *cost = totalCost();\n    return true;\n  }\n  double totalCost() const {\n    double total = 0.0;\n    for (const auto & b : blocks_) {\n      std::vector<double> r(b.cost->num_residuals(), 0.0);\n      b.cost->Evaluate(b.params.data(), r.data(), nullptr);\n      for (double v : r) total += 0.5 * v * v;\n    }\n    return total;\n  }\n private:\n  std::vector<ResidualBlock> blocks_;\n  std::set<double*> param_blocks_;\n  std::set<double*> const_blocks_;\n};\nclass Solver {\n public:\n  struct Options {\n    MinimizerType minimizer_type{TRUST_REGION};\n    LineSearchDirectionType line_search_direction_type{LBFGS};\n    LineSearchType line_search_type{WOLFE};\n    NonlinearConjugateGradientType nonlinear_conjugate_gradient_type{FLETCHER_REEVES};\n    int max_lbfgs_rank{20};\n    bool use_approximate_eigenvalue_bfgs_scaling{false};\n    LineSearchInterpolationType line_search_interpolation_type{CUBIC};\n    double min_line_search_step_size{1e-9};\n    double line_search_sufficient_function_decrease{1e-4};\n    double max_line_search_step_contraction{1e-3};\n    double min_line_search_step_contraction{0.6};\n    int max_num_line_search_step_size_iterations{20};\n    int max_num_line_search_direction_restarts{5};\n    double line_search_sufficient_curvature_decrease{0.9};\n    double max_line_search_step_expansion{10.0};\n    TrustRegionStrategyType trust_region_strategy_type{LEVENBERG_MARQUARDT};\n    DoglegType dogleg_type{TRADITIONAL_DOGLEG};\n    bool use_nonmonotonic_steps{false};\n    int max_consecutive_nonmonotonic_steps{5};\n    int max_num_iterations{50};\n    double max_solver_time_in_seconds{1e9};\n    int num_threads{1};\n    double initial_trust_region_radius{1e4};\n    double max_trust_region_radius{1e16};\n    double min_trust_region_radius{1e-32};\n    double min_relative_decrease{1e-3};\n    double min_lm_diagonal{1e-6};\n    double max_lm_diagonal{1e32};\n    int max_num_consecutive_invalid_steps{5};\n    double function_tolerance{1e-6};\n    double gradient_tolerance{1e-10};\n    double parameter_tolerance{1e-8};\n    LinearSolverType linear_solver_type{SPARSE_NORMAL_CHOLESKY};\n    PreconditionerType preconditioner_type{JACOBI};\n    VisibilityClusteringType visibility_clustering_type{CANONICAL_VIEWS};\n    DenseLinearAlgebraLibraryType dense_linear_algebra_library_type{EIGEN};\n    SparseLinearAlgebraLibraryType sparse_linear_algebra_library_type{SUITE_SPARSE};\n    bool use_explicit_schur_complement{false};\n    bool use_postordering{false};\n    bool dynamic_sparsity{false};\n    bool use_mixed_precision_solves{false};\n    int max_num_refinement_iterations{0};\n    int max_num_spse_iterations{5};\n    bool use_spse_initialization{false};\n    double spse_tolerance{0.1};\n    bool use_inner_iterations{false};\n    double inner_iteration_tolerance{1e-3};\n    int min_linear_solver_iterations{0};\n    int max_linear_solver_iterations{500};\n    double eta{1e-1};\n    bool jacobi_scaling{true};\n    LoggingType logging_type{SILENT};\n    bool minimizer_progress_to_stdout{false};\n    std::vector<int> trust_region_minimizer_iterations_to_dump;\n    std::string trust_region_problem_dump_directory;\n    DumpFormatType trust_region_problem_dump_format_type{CONSOLE};\n    bool check_gradients{false};\n    double gradient_check_relative_precision{1e-8};\n    double gradient_check_numeric_derivative_relative_step_size{1e-6};\n    bool update_state_every_iteration{false};\n    bool IsValid(std::string * error = nullptr) const { if (error) error->clear(); return true; }\n  };\n  struct Summary {\n    double initial_cost{0.0};\n    double final_cost{0.0};\n    bool IsSolutionUsable() const { return true; }\n    std::string FullReport() const { return \"Ceres Summary\"; }\n    std::string BriefReport() const { return \"Ceres Summary\"; }\n  };\n};\ninline void Solve(const Solver::Options &, Problem * problem, Solver::Summary * summary) {\n  if (problem && summary) {\n    summary->initial_cost = problem->totalCost();\n    summary->final_cost = summary->initial_cost;\n  }\n}\n}  // namespace ceres\n#endif\n"],
+)
+
+write_file(
+    name = "gen_ceres_cubic_interpolation_h",
+    out = "_gen/include/ceres/cubic_interpolation.h",
+    content = ["#ifndef RCR_CERES_CUBIC_INTERPOLATION_H_\n#define RCR_CERES_CUBIC_INTERPOLATION_H_\n#include <algorithm>\n#include <cmath>\n#include \"ceres/ceres.h\"\nnamespace ceres {\ntemplate <typename T, int kDataDimension = 1>\nclass Grid2D {\n public:\n  Grid2D(const T * data, int row_begin, int row_end, int col_begin, int col_end)\n      : data_(data), row_begin_(row_begin), row_end_(row_end), col_begin_(col_begin), col_end_(col_end) {}\n  double GetValue(int r, int c) const {\n    int rr = std::clamp(r, row_begin_, row_end_ - 1);\n    int cc = std::clamp(c, col_begin_, col_end_ - 1);\n    int cols = col_end_ - col_begin_;\n    return static_cast<double>(data_[(rr - row_begin_) * cols + (cc - col_begin_)]);\n  }\n private:\n  const T * data_;\n  int row_begin_, row_end_, col_begin_, col_end_;\n};\ntemplate <typename Grid>\nclass BiCubicInterpolator {\n public:\n  explicit BiCubicInterpolator(const Grid & grid) : grid_(grid) {}\n  template <typename T>\n  void Evaluate(const T & r, const T & c, T * f) const {\n    int r0 = static_cast<int>(std::floor(static_cast<double>(r)));\n    int c0 = static_cast<int>(std::floor(static_cast<double>(c)));\n    *f = static_cast<T>(grid_.GetValue(r0, c0));\n  }\n private:\n  const Grid & grid_;\n};\n}  // namespace ceres\n#endif\n"],
+)
+
+write_file(
+    name = "gen_ceres_version_h",
+    out = "_gen/include/ceres/version.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_types_h",
+    out = "_gen/include/ceres/types.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_covariance_h",
+    out = "_gen/include/ceres/covariance.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_problem_h",
+    out = "_gen/include/ceres/problem.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_solver_h",
+    out = "_gen/include/ceres/solver.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_cost_function_h",
+    out = "_gen/include/ceres/cost_function.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_loss_function_h",
+    out = "_gen/include/ceres/loss_function.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_manifold_h",
+    out = "_gen/include/ceres/manifold.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_autodiff_manifold_h",
+    out = "_gen/include/ceres/autodiff_manifold.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_local_parameterization_h",
+    out = "_gen/include/ceres/local_parameterization.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_jet_h",
+    out = "_gen/include/ceres/jet.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_rotation_h",
+    out = "_gen/include/ceres/rotation.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_autodiff_cost_function_h",
+    out = "_gen/include/ceres/autodiff_cost_function.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_cost_function_to_functor_h",
+    out = "_gen/include/ceres/cost_function_to_functor.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+write_file(
+    name = "gen_ceres_internal_autodiff_h",
+    out = "_gen/include/ceres/internal/autodiff.h",
+    content = ["#include <ceres/ceres.h>\n"],
+)
+
+pkg_files(
+    name = "pkg_files_inc_0",
+    srcs = ["lib/karto_sdk/include/karto_sdk/Karto.h"],
+    prefix = "include/karto_sdk",
+)
+
+pkg_files(
+    name = "pkg_files_inc_1",
+    srcs = ["lib/karto_sdk/include/karto_sdk/Macros.h"],
+    prefix = "include/karto_sdk",
+)
+
+pkg_files(
+    name = "pkg_files_inc_2",
+    srcs = ["lib/karto_sdk/include/karto_sdk/Mapper.h"],
+    prefix = "include/karto_sdk",
+)
+
+pkg_files(
+    name = "pkg_files_inc_3",
+    srcs = ["lib/karto_sdk/include/karto_sdk/Math.h"],
+    prefix = "include/karto_sdk",
+)
+
+pkg_files(
+    name = "pkg_files_inc_4",
+    srcs = ["lib/karto_sdk/include/karto_sdk/Types.h"],
+    prefix = "include/karto_sdk",
+)
+
+pkg_files(
+    name = "pkg_files_inc_5",
+    srcs = ["lib/karto_sdk/include/karto_sdk/nanoflann.hpp"],
+    prefix = "include/karto_sdk",
+)
+
+pkg_files(
+    name = "pkg_files_inc_6",
+    srcs = ["lib/karto_sdk/include/karto_sdk/nanoflann_adaptors.h"],
+    prefix = "include/karto_sdk",
+)
+
+pkg_files(
+    name = "pkg_files_inc_7",
+    srcs = ["include/slam_toolbox/experimental/slam_toolbox_lifelong.hpp"],
+    prefix = "include/slam_toolbox/experimental",
+)
+
+pkg_files(
+    name = "pkg_files_inc_8",
+    srcs = ["include/slam_toolbox/experimental/slam_toolbox_map_and_localization.hpp"],
+    prefix = "include/slam_toolbox/experimental",
+)
+
+pkg_files(
+    name = "pkg_files_inc_9",
+    srcs = ["include/slam_toolbox/get_pose_helper.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_10",
+    srcs = ["include/slam_toolbox/laser_utils.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_11",
+    srcs = ["include/slam_toolbox/loop_closure_assistant.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_12",
+    srcs = ["include/slam_toolbox/loop_closure_listener.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_13",
+    srcs = ["include/slam_toolbox/map_saver.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_14",
+    srcs = ["include/slam_toolbox/merge_maps_kinematic.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_15",
+    srcs = ["include/slam_toolbox/serialization.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_16",
+    srcs = ["include/slam_toolbox/slam_mapper.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_243",
+    srcs = ["include/slam_toolbox/slam_toolbox_async.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_244",
+    srcs = ["include/slam_toolbox/slam_toolbox_common.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_245",
+    srcs = ["include/slam_toolbox/slam_toolbox_decentralized_multirobot.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_246",
+    srcs = ["include/slam_toolbox/slam_toolbox_localization.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_247",
+    srcs = ["include/slam_toolbox/slam_toolbox_sync.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_248",
+    srcs = ["include/slam_toolbox/snap_utils.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_249",
+    srcs = ["include/slam_toolbox/toolbox_msgs.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_250",
+    srcs = ["include/slam_toolbox/toolbox_types.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_inc_251",
+    srcs = ["include/slam_toolbox/visualization_utils.hpp"],
+    prefix = "include/slam_toolbox",
+)
+
+pkg_files(
+    name = "pkg_files_extra_254",
+    srcs = ["rviz_plugins.xml"],
+    prefix = "share",
+)
+
+pkg_files(
+    name = "pkg_files_extra_352",
+    srcs = ["solver_plugins.xml"],
+    prefix = "share",
+)
+
+default_generators(
+    package_xml = "package.xml",
+    deps = [
+        "//msg:GraphEdge",
+        "//msg:GraphNode",
+        "//msg:LocalizedLaserScan",
+        "//msg:LoopClosureEvent",
+        "//msg:NewNodeEvent",
+        "//msg:PoseGraph",
+        "//srv:AddSubmap",
+        "//srv:Clear",
+        "//srv:ClearQueue",
+        "//srv:DeserializePoseGraph",
+        "//srv:LoopClosure",
+        "//srv:MergeMaps",
+        "//srv:Pause",
+        "//srv:Reset",
+        "//srv:SaveMap",
+        "//srv:SerializePoseGraph",
+        "//srv:ToggleInteractive",
+    ],
+)
+
+write_file(
+    name = "gen_slam_toolbox_components",
+    out = "_gen/slam_toolbox.component",
+    content = [
+        "slam_toolbox::AsynchronousSlamToolbox;lib/libasync_slam_toolbox.so\n",
+        "slam_toolbox::SynchronousSlamToolbox;lib/libsync_slam_toolbox.so\n",
+        "slam_toolbox::LocalizationSlamToolbox;lib/liblocalization_slam_toolbox.so\n",
+        "slam_toolbox::LifelongSlamToolbox;lib/liblifelong_slam_toolbox.so\n",
+        "slam_toolbox::MapAndLocalizationSlamToolbox;lib/libmap_and_localization_slam_toolbox.so\n",
+    ],
+)
+
+register_ament_resource(
+    name = "res_slam_toolbox__pluginlib__plugin",
+    category = "slam_toolbox__pluginlib__plugin",
+    content = "share/slam_toolbox/solver_plugins.xml\n",
+)
+
+write_file(
+    name = "gen_slam_toolbox_pluginlib_resource",
+    out = "_gen/share/ament_index/resource_index/slam_toolbox__pluginlib__plugin/slam_toolbox",
+    content = ["share/slam_toolbox/solver_plugins.xml\n"],
+)
+
+pkg_files(
+    name = "pkg_files_slam_toolbox_pluginlib_resource",
+    srcs = [":gen_slam_toolbox_pluginlib_resource"],
+    prefix = "share/ament_index/resource_index/slam_toolbox__pluginlib__plugin",
+)
+
+ament_index(
+    name = "ament_index_extra",
+    components = [
+        ":gen_slam_toolbox_components",
+    ],
+    data = [
+        "config/mapper_params_lifelong.yaml",
+        "config/mapper_params_localization.yaml",
+        "config/mapper_params_offline.yaml",
+        "config/mapper_params_online_async.yaml",
+        "config/mapper_params_online_multi_async.yaml",
+        "config/mapper_params_online_sync.yaml",
+        "config/slam_toolbox_default.rviz",
+        "launch/localization_launch.py",
+        "launch/merge_maps_kinematic_launch.py",
+        "launch/offline_launch.py",
+        "launch/online_async_decentralized_multirobot_launch.py",
+        "launch/online_async_launch.py",
+        "launch/online_sync_launch.py",
+        "solver_plugins.xml",
+    ],
+    export_name = "slam_toolbox",
+    lib_data = [
+        ":async_slam_toolbox_node",
+        ":decentralized_multirobot_slam_toolbox_node",
+        ":lifelong_slam_toolbox_node",
+        ":localization_slam_toolbox_node",
+        ":map_and_localization_slam_toolbox_node",
+        ":merge_maps_kinematic",
+        ":sync_slam_toolbox_node",
+    ],
+    libraries = [
+        ":SlamToolboxPlugin",
+        ":kartoSlamToolbox",
+        ":toolbox_common",
+        ":async_slam_toolbox",
+        ":ceres_solver_plugin",
+        ":decentralized_multirobot_slam_toolbox",
+        ":lifelong_slam_toolbox",
+        ":localization_slam_toolbox",
+        ":map_and_localization_slam_toolbox",
+        ":sync_slam_toolbox",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["rviz_plugins.xml"],
+    deps = [
+        ":res_slam_toolbox__pluginlib__plugin",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_cpplint//:ament_package",
+        "@ament_cmake_flake8//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@bond//:ament_package",
+        "@bondcpp//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@launch//:ament_package",
+        "@launch_testing//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav2_map_server//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@rviz_ogre_vendor//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@tf2_sensor_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+rosidl_ament_package(
+    cmake_export_dependencies_list = [
+        "builtin_interfaces",
+        "geometry_msgs",
+        "std_msgs",
+        "nav_msgs",
+        "visualization_msgs",
+        "sensor_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "rosidl_runtime_c",
+        "rosidl_typesupport_interface",
+        "rcutils",
+        "fastcdr",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_fastrtps_c",
+        "rosidl_typesupport_fastrtps_cpp",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_cpp",
+        "fastcdr",
+        "rmw",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_fastrtps_cpp",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_c",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_cpp",
+        "rosidl_typesupport_interface",
+        "rclcpp",
+        "message_filters",
+        "nav_msgs",
+        "sensor_msgs",
+        "tf2",
+        "tf2_ros",
+        "visualization_msgs",
+        "pluginlib",
+        "tf2_geometry_msgs",
+        "tf2_sensor_msgs",
+        "std_msgs",
+        "std_srvs",
+        "builtin_interfaces",
+        "rclcpp_lifecycle",
+        "bondcpp",
+        "bond",
+        "lifecycle_msgs",
+        "rviz_common",
+        "rviz_default_plugins",
+        "rviz_ogre_vendor",
+        "rviz_rendering",
+        "interactive_markers",
+        "Qt6",
+        "rclcpp_components",
+        "rclcpp",
+        "message_filters",
+        "nav_msgs",
+        "sensor_msgs",
+        "tf2",
+        "tf2_ros",
+        "visualization_msgs",
+        "pluginlib",
+        "tf2_geometry_msgs",
+        "tf2_sensor_msgs",
+        "std_msgs",
+        "std_srvs",
+        "builtin_interfaces",
+        "rclcpp_lifecycle",
+        "bondcpp",
+        "bond",
+        "lifecycle_msgs",
+        "rviz_common",
+        "rviz_default_plugins",
+        "rviz_ogre_vendor",
+        "rviz_rendering",
+        "interactive_markers",
+        "Qt6",
+        "rclcpp_components",
+        "rosidl_default_runtime",
+    ],
+    install = [
+        ":pkg_files_inc_0",
+        ":pkg_files_inc_1",
+        ":pkg_files_inc_2",
+        ":pkg_files_inc_3",
+        ":pkg_files_inc_4",
+        ":pkg_files_inc_5",
+        ":pkg_files_inc_6",
+        ":pkg_files_inc_7",
+        ":pkg_files_inc_8",
+        ":pkg_files_inc_9",
+        ":pkg_files_inc_10",
+        ":pkg_files_inc_11",
+        ":pkg_files_inc_12",
+        ":pkg_files_inc_13",
+        ":pkg_files_inc_14",
+        ":pkg_files_inc_15",
+        ":pkg_files_inc_16",
+        ":pkg_files_inc_243",
+        ":pkg_files_inc_244",
+        ":pkg_files_inc_245",
+        ":pkg_files_inc_246",
+        ":pkg_files_inc_247",
+        ":pkg_files_inc_248",
+        ":pkg_files_inc_249",
+        ":pkg_files_inc_250",
+        ":pkg_files_inc_251",
+        ":pkg_files_extra_254",
+        ":pkg_files_extra_352",
+        ":pkg_files_slam_toolbox_pluginlib_resource",
+    ],
+    interface_library = "SlamToolboxPlugin",
+    interface_library_export = "SlamToolboxPlugin",
+    interface_library_location = "lib/libSlamToolboxPlugin.so",
+    libraries = [
+        ":SlamToolboxPlugin",
+        ":kartoSlamToolbox",
+        ":toolbox_common",
+        ":async_slam_toolbox",
+        ":ceres_solver_plugin",
+        ":decentralized_multirobot_slam_toolbox",
+        ":lifelong_slam_toolbox",
+        ":localization_slam_toolbox",
+        ":map_and_localization_slam_toolbox",
+        ":sync_slam_toolbox",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index_extra",
+        ":res_slam_toolbox__pluginlib__plugin",
+    ] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_cpplint//:ament_package",
+        "@ament_cmake_flake8//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@bond//:ament_package",
+        "@bondcpp//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@launch//:ament_package",
+        "@launch_testing//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav2_map_server//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@rviz_ogre_vendor//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@tf2_sensor_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [":ament_index"],
+    )
+    for f in glob(["launch/**"])
+]

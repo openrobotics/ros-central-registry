@@ -1,0 +1,204 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### DATA
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+    deps = [
+        "@rosbag2_storage_default_plugins//:ament_index",
+    ],
+)
+
+### ENTRYPOINTS
+
+# ros2cli discovers its `bag` command and the `ros2bag.verb` extension point
+# through setuptools entry points, so render setup.py's egg-info next to the
+# module the same way `colcon build` (setup.py develop/install) would.
+py_binary(
+    name = "setup",
+    srcs = ["setup.py"],
+    visibility = ["//visibility:private"],
+    deps = [
+        requirement("setuptools"),
+    ],
+)
+
+genrule(
+    name = "entry_points",
+    srcs = glob(
+        ["**/**"],
+        exclude = [
+            "*.bazel",
+            "*.bzl",
+        ],
+    ),
+    outs = [
+        "ros2bag.egg-info/PKG-INFO",
+        "ros2bag.egg-info/entry_points.txt",
+        "ros2bag.egg-info/top_level.txt",
+    ],
+    cmd = "$(location :setup) egg_info --egg-base=. && mkdir -p $(@D)/ros2bag.egg-info && cp -r ros2bag.egg-info/* $(@D)/ros2bag.egg-info/",
+    tools = [":setup"],
+    visibility = ["//visibility:private"],
+)
+
+### PYTHON MODULE
+
+py_library(
+    name = "ros2bag",
+    srcs = glob(["ros2bag/**/*.py"]),
+    data = [
+        ":ament_index",
+        ":entry_points",
+    ],
+    imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosbag2_storage_default_plugins//:rosbag2_storage_default_plugins_py",
+        requirement("pyyaml"),
+    ],
+)
+
+# The `ros2` CLI with the `bag` command loaded, for the launch tests below
+# (and for `bazel run @ros2bag//:ros2 -- bag ...`).
+write_file(
+    name = "ros2_main",
+    out = "ros2_main.py",
+    content = [
+        "import sys",
+        "from ros2cli.cli import main",
+        "if __name__ == '__main__':",
+        "    sys.argv[0] = 'ros2'",
+        "    sys.exit(main())",
+    ],
+)
+
+py_binary(
+    name = "ros2",
+    srcs = [":ros2_main"],
+    main = ":ros2_main.py",
+    deps = [
+        ":ros2bag",
+        "@ros2cli",
+        requirement("packaging"),
+    ],
+)
+
+### TESTS
+
+# Plain pytest unit tests.
+[
+    py_pytest(
+        name = test,
+        srcs = ["test/{0}.py".format(test)],
+        data = glob(["test/resources/**"]),
+        deps = [
+            ":ros2bag",
+            "@rclpy",
+        ],
+    )
+    for test in [
+        "test_api",
+        "test_recorder_args_parser",
+    ]
+]
+
+# launch_testing tests that spawn `ros2 bag ...` as a subprocess; `ros2` is
+# resolved through PATH, which we point at this package's runfiles.
+[
+    launch_ros_test(
+        name = test,
+        src = "test/{0}.py".format(test),
+        data = glob(["test/resources/**"]) + [":ros2"],
+        env = {"PATH": "../ros2bag+:/usr/local/bin:/usr/bin:/bin"},
+        deps = [
+            ":ros2bag",
+            "@rclpy",
+            "@rosbag2_test_common//:rosbag2_test_common_py",
+        ],
+    )
+    for test in [
+        "test_burst",
+        "test_cli_extension",
+        "test_info",
+        "test_play_qos_profiles",
+        "test_record",
+        "test_record_qos_profiles",
+        "test_record_with_compression_thread_priority",
+    ]
+]
+
+[
+    py_pytest(
+        name = "test_{0}".format(linter),
+        srcs = ["test/test_{0}.py".format(linter)],
+        data = glob(["**/*"]) + [":ament_index"],
+        deps = ["@ament_{0}".format(linter)],
+    )
+    for linter in [
+        "copyright",
+        "flake8",
+        "pep257",
+        "xmllint",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    package_xml = "package.xml",
+    python = [":ros2bag"],
+    deps = [
+        ":ament_index",
+        "@ament_copyright//:ament_package",
+        "@ament_flake8//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_pep257//:ament_package",
+        "@ament_xmllint//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclpy//:ament_package",
+        "@ros2cli//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosbag2_storage_default_plugins//:ament_package",
+        "@rosbag2_test_common//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

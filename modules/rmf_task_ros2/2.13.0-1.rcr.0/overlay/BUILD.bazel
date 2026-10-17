@@ -1,0 +1,272 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@nlohmann_json_schema_validator_vendor//:nlohmann_json_schema_validator": "@nlohmann_json_schema_validator_vendor//:nlohmann_json_schema_validator_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rmf_api_msgs//:rmf_api_msgs",
+    "@rmf_task_msgs//:cc",
+    "@rmf_traffic//:rmf_traffic_library",
+    "@rmf_traffic_ros2//:rmf_traffic_ros2_library",
+    "@rmf_utils//:rmf_utils_library",
+    "@rmf_websocket//:rmf_websocket_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:nlohmann_json",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "rmf_task_ros2_library",
+    srcs = [
+        "src/rmf_task_ros2/DispatchState.cpp",
+        "src/rmf_task_ros2/Dispatcher.cpp",
+        "src/rmf_task_ros2/bidding/AsyncBidder.cpp",
+        "src/rmf_task_ros2/bidding/Auctioneer.cpp",
+        "src/rmf_task_ros2/bidding/Response.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/rmf_task_ros2",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rmf_task_ros2",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":rmf_task_ros2_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "rmf_bidder_node",
+    srcs = ["src/mock_bidder/main.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rmf_task_ros2",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":rmf_task_ros2_library"],
+)
+
+cc_binary(
+    name = "rmf_task_dispatcher",
+    srcs = ["src/dispatcher_node/main.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rmf_task_ros2",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":rmf_task_ros2_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":rmf_bidder_node",
+        ":rmf_task_dispatcher",
+    ],
+    libraries = [
+        ":rmf_task_ros2",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_catch2//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@backward_ros//:ament_package",
+        "@nlohmann_json_schema_validator_vendor//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rmf_api_msgs//:ament_package",
+        "@rmf_task_msgs//:ament_package",
+        "@rmf_traffic//:ament_package",
+        "@rmf_traffic_ros2//:ament_package",
+        "@rmf_utils//:ament_package",
+        "@rmf_websocket//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_rmf_task_ros2",
+    srcs = [
+        "test/bidding/test_Evaluator.cpp",
+        "test/bidding/test_SelfBid.cpp",
+        "test/dispatcher/test_Dispatcher.cpp",
+        "test/main.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rmf_task_ros2",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rmf_task_ros2_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "std_msgs",
+        "rmf_traffic",
+        "rmf_task_msgs",
+        "rclcpp",
+        "nlohmann_json",
+        "nlohmann_json_schema_validator",
+        "rmf_api_msgs",
+        "rmf_websocket",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_rmf_task_ros2",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":rmf_task_ros2",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_catch2//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@backward_ros//:ament_package",
+        "@nlohmann_json_schema_validator_vendor//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rmf_api_msgs//:ament_package",
+        "@rmf_task_msgs//:ament_package",
+        "@rmf_traffic//:ament_package",
+        "@rmf_traffic_ros2//:ament_package",
+        "@rmf_utils//:ament_package",
+        "@rmf_websocket//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

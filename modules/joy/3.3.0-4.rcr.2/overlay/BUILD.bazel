@@ -1,0 +1,195 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:sdl2": "@rosdistro//cc:sdl2_library",
+}
+
+cc_library(
+    name = "joy_library",
+    srcs = ["src/joy.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "joy",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":joy_library"],
+    deps = [":joy_library"],
+)
+
+cc_library(
+    name = "game_controller_library",
+    srcs = ["src/game_controller.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "game_controller",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":game_controller_library"],
+    deps = [":game_controller_library"],
+)
+
+### COMPONENTS
+
+rclcpp_components_register_node(
+    name = "joy_node",
+    component = ":joy",
+    executor = "SingleThreadedExecutor",
+    node_name = "joy_node",
+    plugin = "joy::Joy",
+)
+
+rclcpp_components_register_node(
+    name = "game_controller_node",
+    component = ":game_controller",
+    executor = "SingleThreadedExecutor",
+    node_name = "game_controller_node",
+    plugin = "joy::GameController",
+)
+
+### BINARIES
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = ["@rosdistro//cc:sdl2"],
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "joy_enumerate_devices",
+    srcs = ["src/joy_enumerate_devices.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = ["@rosdistro//cc:sdl2_library"],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+### PACKAGING
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":joy_node_record",
+        ":game_controller_node_record",
+    ],
+    data = glob([
+        "config/**",
+        "launch/**",
+    ]),
+    executables = [
+        ":joy_node",
+        ":game_controller_node",
+        ":joy_enumerate_devices",
+    ],
+    libraries = [
+        ":joy",
+        ":game_controller",
+    ],
+    package_xml = "package.xml",
+)
+
+genrule(
+    name = "export_game_controller_cmake",
+    outs = [
+        "export_game_controllerExport.cmake",
+        "export_game_controllerExport-noconfig.cmake",
+    ],
+    cmd = "touch $(OUTS)",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake = [":export_game_controller_cmake"],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_joy",
+    cmake_strip_prefix = "",
+    components = [
+        ":joy_node_record",
+        ":game_controller_node_record",
+    ],
+    data = glob([
+        "config/**",
+        "launch/**",
+    ]),
+    executables = [
+        ":joy_node",
+        ":game_controller_node",
+        ":joy_enumerate_devices",
+    ],
+    headers = HEADERS,
+    libraries = [
+        ":joy",
+        ":game_controller",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sdl2_vendor//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

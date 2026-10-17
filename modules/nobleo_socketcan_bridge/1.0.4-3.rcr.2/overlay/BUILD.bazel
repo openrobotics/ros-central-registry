@@ -1,0 +1,213 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+CC_DEPS = [
+    "@can_msgs//:cc",
+    "@diagnostic_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:fmt",
+]
+
+cc_library(
+    name = "socketcan_bridge_component_library",
+    srcs = [":gen_nobleo_socketcan_bridge_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/nobleo_socketcan_bridge",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "socketcan_bridge_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":socketcan_bridge_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "socketcan_bridge",
+    component = ":socketcan_bridge_component",
+    node_name = "socketcan_bridge",
+    plugin = "nobleo_socketcan_bridge::SocketCanBridgeNode",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "socketcan_bridge_ee",
+    srcs = [":gen_nobleo_socketcan_bridge_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/nobleo_socketcan_bridge",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":socketcan_bridge_component_library"],
+)
+
+write_file(
+    name = "gen_nobleo_socketcan_bridge_stub_cpp",
+    out = "_gen/nobleo_socketcan_bridge_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":socketcan_bridge_record"],
+    lib_data = [
+        ":socketcan_bridge",
+        ":socketcan_bridge_ee",
+    ],
+    libraries = [
+        ":socketcan_bridge_component",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_cppcheck//:ament_package",
+        "@ament_cmake_cpplint//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@can_msgs//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "unittests",
+    srcs = [":gen_nobleo_socketcan_bridge_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/nobleo_socketcan_bridge",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":socketcan_bridge_component_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_name = "export_nobleo_socketcan_bridge",
+    libraries = [
+        ":socketcan_bridge_component",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_cppcheck//:ament_package",
+        "@ament_cmake_cpplint//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@can_msgs//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+    ],
+)

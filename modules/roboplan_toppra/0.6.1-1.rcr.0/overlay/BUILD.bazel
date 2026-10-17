@@ -1,0 +1,334 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@roboplan//:roboplan": "@roboplan//:roboplan_library",
+    "@roboplan_example_models//:roboplan_example_models": "@roboplan_example_models//:roboplan_example_models_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@toppra//:toppra": "@toppra//:toppra_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:tl_expected",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "roboplan_toppra_library",
+    srcs = [
+        "src/linear_blend_path.cpp",
+        "src/toppra.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_nanobind_h",
+        ":gen_nanobind_stl_filesystem_h",
+        ":gen_nanobind_stl_string_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan_toppra",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "roboplan_toppra",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":roboplan_toppra_library"],
+)
+
+cc_library(
+    name = "_toppra_ext.cpython-314-x86_64-linux-gnu_library",
+    srcs = [":gen_apriltag_py_stub_c"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_nanobind_h",
+        ":gen_nanobind_stl_filesystem_h",
+        ":gen_nanobind_stl_string_h",
+    ],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan_toppra",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "ROBOPLAN_VERSION=\\\"0.6.1\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":roboplan_toppra_library"],
+)
+
+cc_shared_library(
+    name = "_toppra_ext.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "roboplan/toppra/_toppra_ext.so",
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":_toppra_ext.cpython-314-x86_64-linux-gnu_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+py_library(
+    name = "roboplan",
+    srcs = glob(["bindings/python/roboplan/**/*.py"]),
+    imports = ["bindings/python"],
+    deps = [
+        "@roboplan//:roboplan_py",
+        "@roboplan_example_models//:roboplan",
+    ],
+)
+
+write_file(
+    name = "gen_apriltag_py_stub_c",
+    out = "_gen/apriltag_py_stub.c",
+    content = ["void PyInit_apriltag(void) {}\n"],
+)
+
+write_file(
+    name = "gen_nanobind_h",
+    out = "_gen/include/nanobind/nanobind.h",
+    content = ["#ifndef RCR_NANOBIND_H_\n#define RCR_NANOBIND_H_\n#include <utility>\nnamespace nanobind {\nnamespace literals {}\nstruct module_ {\n  template <typename V>\n  struct attr_proxy {\n    attr_proxy & operator=(const V &) { return *this; }\n  };\n  attr_proxy<const char *> attr(const char *) { return {}; }\n  template <typename F, typename... Extra>\n  module_ & def(const char *, F &&, const Extra &...) { return *this; }\n};\n}  // namespace nanobind\n#define NB_MODULE(name, var) \\\n  static void nb_init_##name(::nanobind::module_ &); \\\n  extern \"C\" __attribute__((visibility(\"default\"))) void * PyInit_##name() { \\\n    static ::nanobind::module_ m; \\\n    nb_init_##name(m); \\\n    return nullptr; \\\n  } \\\n  static void nb_init_##name(::nanobind::module_ & var)\n#endif\n"],
+)
+
+write_file(
+    name = "gen_nanobind_stl_filesystem_h",
+    out = "_gen/include/nanobind/stl/filesystem.h",
+    content = ["#include <filesystem>\n"],
+)
+
+write_file(
+    name = "gen_nanobind_stl_string_h",
+    out = "_gen/include/nanobind/stl/string.h",
+    content = ["#include <string>\n"],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "include/roboplan_toppra/linear_blend_path.hpp",
+    ],
+    prefix = "lib/cmake/roboplan_toppra",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_1",
+    files = [
+        "include/roboplan_toppra/toppra.hpp",
+    ],
+    prefix = "lib/cmake/roboplan_toppra",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+    ],
+    libraries = [
+        ":roboplan_toppra",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_example_models//:ament_package",
+        "@toppra//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_toppra",
+    srcs = ["test/test_toppra.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_nanobind_h",
+        ":gen_nanobind_stl_filesystem_h",
+        ":gen_nanobind_stl_string_h",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":_toppra_ext.cpython-314-x86_64-linux-gnu",
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan_toppra",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "GTEST_HAS_PTHREAD=1",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":roboplan_toppra_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":roboplan_toppra",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":roboplan",
+        ":_toppra_ext.cpython-314-x86_64-linux-gnu",
+        "bindings/python/roboplan/toppra/_toppra_ext.pyi",
+        "bindings/python/roboplan/toppra/py.typed",
+    ],
+    python_strip_prefix = "bindings/python",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_example_models//:ament_package",
+        "@toppra//:ament_package",
+    ],
+)

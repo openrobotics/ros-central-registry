@@ -1,0 +1,178 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "swri_geometry_util_library",
+    srcs = [
+        "src/cubic_spline.cpp",
+        "src/geometry_util.cpp",
+        "src/intersection.cpp",
+        "src/polygon.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_geos_c_h"],
+    copts = ["-std=c++20"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_geometry_util",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "swri_geometry_util",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":swri_geometry_util_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":swri_geometry_util"],
+)
+
+write_file(
+    name = "gen_geos_c_h",
+    out = "_gen/include/geos_c.h",
+    content = ["#ifndef RCR_GEOS_C_H_\n#define RCR_GEOS_C_H_\nextern \"C\" {\ntypedef struct GEOSContextHandle_HS * GEOSContextHandle_t;\ntypedef struct GEOSGeom_t GEOSGeometry;\ntypedef struct GEOSCoordSeq_t GEOSCoordSequence;\ntypedef void (*GEOSMessageHandler)(const char * fmt, ...);\ninline GEOSContextHandle_t GEOS_init_r() { return reinterpret_cast<GEOSContextHandle_t>(1); }\ninline void GEOS_finish_r(GEOSContextHandle_t) {}\ninline void initGEOS(GEOSMessageHandler, GEOSMessageHandler) {}\ninline void finishGEOS() {}\ninline GEOSMessageHandler GEOSContext_setNoticeHandler_r(GEOSContextHandle_t, GEOSMessageHandler h) { return h; }\ninline GEOSMessageHandler GEOSContext_setErrorHandler_r(GEOSContextHandle_t, GEOSMessageHandler h) { return h; }\ninline GEOSCoordSequence * GEOSCoordSeq_create(unsigned int, unsigned int) { return reinterpret_cast<GEOSCoordSequence *>(1); }\ninline GEOSCoordSequence * GEOSCoordSeq_create_r(GEOSContextHandle_t, unsigned int, unsigned int) { return reinterpret_cast<GEOSCoordSequence *>(1); }\ninline int GEOSCoordSeq_setX(GEOSCoordSequence *, unsigned int, double) { return 1; }\ninline int GEOSCoordSeq_setY(GEOSCoordSequence *, unsigned int, double) { return 1; }\ninline int GEOSCoordSeq_setX_r(GEOSContextHandle_t, GEOSCoordSequence *, unsigned int, double) { return 1; }\ninline int GEOSCoordSeq_setY_r(GEOSContextHandle_t, GEOSCoordSequence *, unsigned int, double) { return 1; }\ninline GEOSGeometry * GEOSGeom_createLinearRing(GEOSCoordSequence *) { return reinterpret_cast<GEOSGeometry *>(1); }\ninline GEOSGeometry * GEOSGeom_createLinearRing_r(GEOSContextHandle_t, GEOSCoordSequence *) { return reinterpret_cast<GEOSGeometry *>(1); }\ninline GEOSGeometry * GEOSGeom_createPolygon(GEOSGeometry *, GEOSGeometry **, unsigned int) { return reinterpret_cast<GEOSGeometry *>(1); }\ninline GEOSGeometry * GEOSGeom_createPolygon_r(GEOSContextHandle_t, GEOSGeometry *, GEOSGeometry **, unsigned int) { return reinterpret_cast<GEOSGeometry *>(1); }\ninline int GEOSNormalize(GEOSGeometry *) { return 0; }\ninline int GEOSNormalize_r(GEOSContextHandle_t, GEOSGeometry *) { return 0; }\ninline char GEOSIntersects(const GEOSGeometry *, const GEOSGeometry *) { return 1; }\ninline char GEOSIntersects_r(GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *) { return 1; }\ninline GEOSGeometry * GEOSIntersection(const GEOSGeometry *, const GEOSGeometry *) { return reinterpret_cast<GEOSGeometry *>(1); }\ninline GEOSGeometry * GEOSIntersection_r(GEOSContextHandle_t, const GEOSGeometry *, const GEOSGeometry *) { return reinterpret_cast<GEOSGeometry *>(1); }\ninline int GEOSArea(const GEOSGeometry *, double * area) { if (area) *area = 0.0; return 1; }\ninline int GEOSArea_r(GEOSContextHandle_t, const GEOSGeometry *, double * area) { if (area) *area = 0.0; return 1; }\ninline void GEOSGeom_destroy(GEOSGeometry *) {}\ninline void GEOSGeom_destroy_r(GEOSContextHandle_t, GEOSGeometry *) {}\n}\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":swri_geometry_util"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_geometry_util",
+    srcs = ["test/test_geometry_util.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_geos_c_h"],
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_geometry_util",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_geometry_util_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_intersection",
+    srcs = ["test/test_intersection.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_geos_c_h"],
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_geometry_util",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":swri_geometry_util_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "GEOS",
+        "OpenCV",
+        "tf2",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_swri_geometry_util",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":swri_geometry_util"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)

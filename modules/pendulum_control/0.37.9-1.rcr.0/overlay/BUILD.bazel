@@ -1,0 +1,183 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "pendulum_control_headers",
+    hdrs = glob(
+        [
+            "include/**/*.hpp",
+            "include/**/*.h",
+        ],
+        allow_empty = True,
+    ),
+    includes = ["include"],
+)
+
+cc_binary(
+    name = "pendulum_demo",
+    srcs = ["src/pendulum_demo.cpp"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":pendulum_control_headers",
+        "@pendulum_msgs//:cc",
+        "@rclcpp//:rclcpp_library",
+        "@rttest",
+        "@tlsf_cpp",
+    ],
+)
+
+cc_binary(
+    name = "pendulum_logger",
+    srcs = ["src/pendulum_logger.cpp"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":pendulum_control_headers",
+        "@pendulum_msgs//:cc",
+        "@rclcpp//:rclcpp_library",
+        "@rttest",
+    ],
+)
+
+cc_binary(
+    name = "pendulum_teleop",
+    srcs = ["src/pendulum_teleop.cpp"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":pendulum_control_headers",
+        "@pendulum_msgs//:cc",
+        "@rclcpp//:rclcpp_library",
+        "@rttest",
+    ],
+)
+
+### TESTS
+
+write_file(
+    name = "rmw_test_fixture_implementation_py",
+    out = "rmw_test_fixture_implementation.py",
+    content = [
+        "def rmw_test_isolation_start(): pass",
+        "def rmw_test_isolation_stop(): pass",
+    ],
+)
+
+py_library(
+    name = "rmw_test_fixture_implementation",
+    srcs = [":rmw_test_fixture_implementation_py"],
+    imports = ["."],
+    visibility = ["//visibility:private"],
+)
+
+cmake_configure_file(
+    name = "test_pendulum_py",
+    src = "test/test_pendulum_demo.py.in",
+    out = "test/test_pendulum.py",
+    defines = [
+        "RCLCPP_DEMO_PENDULUM_LOGGER_EXECUTABLE=../pendulum_control+/pendulum_logger",
+        "RCLCPP_DEMO_PENDULUM_DEMO_EXECUTABLE=../pendulum_control+/pendulum_demo",
+        "RCLCPP_DEMO_PENDULUM_LOGGER_EXPECTED_OUTPUT=../pendulum_control+/test/pendulum_logger",
+        "RCLCPP_DEMO_PENDULUM_DEMO_EXPECTED_OUTPUT=../pendulum_control+/test/pendulum_demo",
+        "rmw_implementation=rmw_cyclonedds_cpp",
+    ],
+)
+
+launch_ros_test(
+    name = "test_pendulum",
+    src = "test_pendulum_py",
+    data = [
+        "test/pendulum_demo.regex",
+        "test/pendulum_logger.regex",
+        ":pendulum_demo",
+        ":pendulum_logger",
+    ],
+    env = {
+        "RCL_ASSERT_RMW_ID_MATCHES": "rmw_cyclonedds_cpp",
+        "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
+    },
+    deps = [
+        ":rmw_test_fixture_implementation",
+    ],
+)
+
+cmake_configure_file(
+    name = "test_pendulum_teleop_py",
+    src = "test/test_pendulum_teleop.py.in",
+    out = "test/test_pendulum_teleop.py",
+    defines = [
+        "RCLCPP_DEMO_PENDULUM_DEMO_EXECUTABLE=../pendulum_control+/pendulum_demo",
+        "RCLCPP_DEMO_PENDULUM_TELEOP_EXECUTABLE=../pendulum_control+/pendulum_teleop",
+        "RCLCPP_DEMO_PENDULUM_DEMO_TELEOP_EXPECTED_OUTPUT=../pendulum_control+/test/pendulum_demo_teleop",
+        "RCLCPP_DEMO_PENDULUM_TELEOP_EXPECTED_OUTPUT=../pendulum_control+/test/pendulum_teleop",
+        "rmw_implementation=rmw_cyclonedds_cpp",
+    ],
+)
+
+launch_ros_test(
+    name = "test_pendulum_teleop",
+    src = "test_pendulum_teleop_py",
+    data = [
+        "test/execute_with_delay.py",
+        "test/pendulum_demo_teleop.regex",
+        "test/pendulum_teleop.txt",
+        ":pendulum_demo",
+        ":pendulum_teleop",
+    ],
+    env = {
+        "RCL_ASSERT_RMW_ID_MATCHES": "rmw_cyclonedds_cpp",
+        "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
+    },
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@ros2run",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    executables = [
+        ":pendulum_demo",
+        ":pendulum_logger",
+        ":pendulum_teleop",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@pendulum_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rmw_implementation_cmake//:ament_package",
+        "@ros2run//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rttest//:ament_package",
+        "@tlsf_cpp//:ament_package",
+    ],
+)

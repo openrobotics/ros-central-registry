@@ -1,0 +1,291 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@std_srvs//:cc",
+]
+
+cc_library(
+    name = "catch_ros2_library",
+    srcs = [
+        "src/arguments.cpp",
+        "src/catch_amalgamated.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/catch_ros2",
+    ],
+    local_defines = ros_local_defines() + ["CATCH_AMALGAMATED_CUSTOM_MAIN"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "catch_ros2",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":catch_ros2_library"],
+)
+
+cc_library(
+    name = "catch_ros2_with_main_library",
+    srcs = ["src/default_main.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/catch_ros2",
+    ],
+    local_defines = ros_local_defines() + ["CATCH_AMALGAMATED_CUSTOM_MAIN"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":catch_ros2_library"],
+)
+
+cc_shared_library(
+    name = "catch_ros2_with_main",
+    dynamic_deps = DEPENDENCIES.keys() + [":catch_ros2"],
+    deps = [":catch_ros2_with_main_library"],
+)
+
+cc_library(
+    name = "catch_ros2_with_node_main_library",
+    srcs = ["src/node_main.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/catch_ros2",
+    ],
+    local_defines = ros_local_defines() + ["CATCH_AMALGAMATED_CUSTOM_MAIN"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":catch_ros2_library"],
+)
+
+cc_shared_library(
+    name = "catch_ros2_with_node_main",
+    dynamic_deps = DEPENDENCIES.keys() + [":catch_ros2"],
+    deps = [":catch_ros2_with_node_main_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":catch_ros2",
+        ":catch_ros2_with_main",
+        ":catch_ros2_with_node_main",
+    ],
+)
+
+cc_binary(
+    name = "integration_aux_node",
+    srcs = ["examples/integration_test/integration_aux_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/catch_ros2",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_binary(
+    name = "integration_test_node",
+    srcs = ["examples/integration_test/integration_test_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/catch_ros2",
+    ],
+    local_defines = ros_local_defines() + ["CATCH_AMALGAMATED_CUSTOM_MAIN"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":catch_ros2_library",
+        ":catch_ros2_with_node_main_library",
+    ],
+)
+
+py_library(
+    name = "launch_catch_ros2",
+    srcs = glob(["launch_catch_ros2/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@ros2launch",
+        "@std_srvs//:py",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "examples/integration_test/example_integration_test.launch.py",
+        "examples/integration_test/example_integration_test.launch.xml",
+        "examples/integration_test/example_integration_test.launch.yaml",
+        "scripts/run_test.py",
+    ],
+    data_strip_prefix = "examples/integration_test",
+    lib_data = [
+        ":integration_aux_node",
+        ":integration_test_node",
+    ],
+    libraries = [
+        ":catch_ros2",
+        ":catch_ros2_with_main",
+        ":catch_ros2_with_node_main",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros2launch//:ament_package",
+        "@std_srvs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "ExampleTestWithCustomMain",
+    srcs = ["examples/custom_main/example_test_with_custom_main.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/catch_ros2",
+    ],
+    local_defines = ros_local_defines() + ["CATCH_AMALGAMATED_CUSTOM_MAIN"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":catch_ros2_library",
+        "@rosdistro//cc:bazel_test_helper",
+    ],
+)
+
+cc_test(
+    name = "ExampleUnitTest",
+    srcs = ["examples/unit_test/example_unit_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/catch_ros2",
+    ],
+    local_defines = ros_local_defines() + ["CATCH_AMALGAMATED_CUSTOM_MAIN"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":catch_ros2_library",
+        ":catch_ros2_with_main_library",
+        "@rosdistro//cc:bazel_test_helper",
+    ],
+)
+
+ament_package(
+    cmake = [
+        "cmake/catch_ros2_add_integration_test.cmake",
+    ],
+    cmake_export_dependencies_list = ["rclcpp"],
+    cmake_export_name = "export_catch_ros2",
+    cmake_extras = ["catch_ros2_add_integration_test.cmake"],
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":catch_ros2",
+        ":catch_ros2_with_main",
+        ":catch_ros2_with_node_main",
+    ],
+    package_xml = "package.xml",
+    python = [":launch_catch_ros2"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros2launch//:ament_package",
+        "@std_srvs//:ament_package",
+    ],
+)

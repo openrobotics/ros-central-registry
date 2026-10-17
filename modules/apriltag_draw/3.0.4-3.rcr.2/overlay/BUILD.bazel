@@ -1,0 +1,175 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+}
+
+CC_DEPS = [
+    "@apriltag_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "apriltag_draw_library",
+    srcs = ["src/apriltag_draw.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    includes = [
+        "include",
+        "include/apriltag_draw",
+    ],
+    local_defines = ros_local_defines() + [
+        "IMAGE_TRANSPORT_USE_NODEINTERFACE",
+        "IMAGE_TRANSPORT_USE_QOS",
+        "USE_MATCHED_EVENTS",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "apriltag_draw",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":apriltag_draw_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "apriltag_draw_components",
+    component = ":apriltag_draw",
+    plugins = ["apriltag_draw::ApriltagDraw"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":apriltag_draw"],
+)
+
+cc_binary(
+    name = "apriltag_draw_node",
+    srcs = ["src/node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/apriltag_draw",
+    ],
+    local_defines = ros_local_defines() + [
+        "IMAGE_TRANSPORT_USE_NODEINTERFACE",
+        "IMAGE_TRANSPORT_USE_QOS",
+        "USE_MATCHED_EVENTS",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":apriltag_draw_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":apriltag_draw_components"],
+    data = [
+        "launch/composable.launch.py",
+        "launch/draw.launch.py",
+    ],
+    lib_data = [":apriltag_draw_node"],
+    libraries = [":apriltag_draw"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@apriltag_msgs//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@ros_environment//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "sensor_msgs",
+        "apriltag_msgs",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "apriltag_draw_export",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":apriltag_draw"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@apriltag_msgs//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@ros_environment//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

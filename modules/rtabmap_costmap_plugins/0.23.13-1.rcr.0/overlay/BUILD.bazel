@@ -1,0 +1,162 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@nav2_costmap_2d//:layers": "@nav2_costmap_2d//:layers_library",
+    "@nav2_costmap_2d//:nav2_costmap_2d_core": "@nav2_costmap_2d//:nav2_costmap_2d_core_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+CC_DEPS = [
+    "@nav2_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@sensor_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@visualization_msgs//:cc",
+]
+
+cc_library(
+    name = "rtabmap_costmap_plugins_library",
+    srcs = ["src/voxel_layer.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        "include",
+        "include/rtabmap_costmap_plugins",
+    ],
+    local_defines = ros_local_defines() + [
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "RTABMAP_ROS_BUILDING_LIBRARY",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rtabmap_costmap_plugins",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":rtabmap_costmap_plugins_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "voxel_marker",
+    srcs = ["src/voxel_marker.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/rtabmap_costmap_plugins",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+write_file(
+    name = "gen_cmake_1",
+    out = "_gen/share/rtabmap_costmap_plugins/cmake/ament_cmake_export_include_directories-extras.cmake",
+    content = ["# generated from ament_cmake_export_include_directories/cmake/ament_cmake_export_include_directories-extras.cmake.in\n\nset(_exported_include_dirs \"${rtabmap_costmap_plugins_DIR}/../../../include\")\n\n# append include directories to rtabmap_costmap_plugins_INCLUDE_DIRS\n# warn about not existing paths\nif(NOT _exported_include_dirs STREQUAL \"\")\n  find_package(ament_cmake_core QUIET REQUIRED)\n  foreach(_exported_include_dir ${_exported_include_dirs})\n    if(NOT IS_DIRECTORY \"${_exported_include_dir}\")\n      message(WARNING \"Package 'rtabmap_costmap_plugins' exports the include directory '${_exported_include_dir}' which doesn't exist\")\n    endif()\n    normalize_path(_exported_include_dir \"${_exported_include_dir}\")\n    list(APPEND rtabmap_costmap_plugins_INCLUDE_DIRS \"${_exported_include_dir}\")\n  endforeach()\nendif()\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":voxel_marker",
+    ],
+    libraries = [
+        ":rtabmap_costmap_plugins",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "nav2_costmap_2d",
+    plugins = ["costmap_plugins.xml"],
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@nav2_costmap_2d//:ament_package",
+        "@nav2_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_environment//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake = [
+        ":gen_cmake_1",
+    ],
+    cmake_export_dependencies_list = [
+        "pluginlib",
+        "rclcpp",
+        "nav2_costmap_2d",
+        "visualization_msgs",
+    ],
+    cmake_export_include_directories = False,
+    headers = [
+        "include/rtabmap_costmap_plugins/visibility.h",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":rtabmap_costmap_plugins",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@nav2_costmap_2d//:ament_package",
+        "@nav2_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_environment//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

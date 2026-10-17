@@ -1,0 +1,1248 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosidl_default_generators//:defs.bzl", "default_generators", "rosidl_ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@angles//:angles",
+    "@builtin_interfaces//:cc",
+    "@diagnostic_msgs//:cc",
+    "@geographic_msgs//:cc",
+    "@geographic_msgs//:validation",
+    "@geometry_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.circular_buffer",
+    "@rosdistro//cc:eigen",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@std_srvs//:cc",
+]
+
+cc_library(
+    name = "rl_lib_library",
+    srcs = [
+        "src/ekf.cpp",
+        "src/filter_base.cpp",
+        "src/filter_utilities.cpp",
+        "src/navsat_transform.cpp",
+        "src/robot_localization_estimator.cpp",
+        "src/ros_filter.cpp",
+        "src/ros_filter_utilities.cpp",
+        "src/ros_robot_localization_listener.cpp",
+        "src/ukf.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+    ],
+)
+
+cc_shared_library(
+    name = "rl_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":rl_lib_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "ekf_node",
+    srcs = [
+        "src/ekf_node.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+    ],
+)
+
+cc_binary(
+    name = "_bin/filter_base-test",
+    srcs = [
+        "test/test_filter_base.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "navsat_transform_node",
+    srcs = [
+        "src/navsat_transform_node.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+    ],
+)
+
+cc_binary(
+    name = "robot_localization_listener_node",
+    srcs = [
+        "src/robot_localization_listener_node.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+    ],
+)
+
+cc_binary(
+    name = "_bin/test_ekf",
+    srcs = [
+        "test/test_ekf.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/test_ekf_node_interfaces",
+    srcs = [
+        "test/test_se_node_interfaces.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/test_filter_base_diagnostics_timestamps",
+    srcs = [
+        "test/test_filter_base_diagnostics_timestamps.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/test_navsat_conversions",
+    srcs = [
+        "test/test_navsat_conversions.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/test_robot_localization_estimator",
+    srcs = [
+        "test/test_robot_localization_estimator.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/test_ros_robot_localization_listener",
+    srcs = [
+        "test/test_ros_robot_localization_listener.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "test_ros_robot_localization_listener_publisher",
+    srcs = [
+        "test/test_ros_robot_localization_listener_publisher.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/test_ukf",
+    srcs = [
+        "test/test_ukf.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "_bin/test_ukf_node_interfaces",
+    srcs = [
+        "test/test_se_node_interfaces.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "ukf_node",
+    srcs = [
+        "src/ukf_node.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+        ":gen_geographiclib_mgrs_hpp",
+        ":gen_geographiclib_utmups_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+    ],
+)
+
+write_file(
+    name = "gen_geographiclib_utmups_hpp",
+    out = "_gen/include/GeographicLib/UTMUPS.hpp",
+    content = ["#ifndef RCR_GEOGRAPHICLIB_UTMUPS_HPP_\n#define RCR_GEOGRAPHICLIB_UTMUPS_HPP_\n#include <cmath>\n#include <cctype>\n#include <stdexcept>\n#include <string>\nnamespace GeographicLib {\nclass GeographicErr : public std::runtime_error {\n public:\n  using std::runtime_error::runtime_error;\n};\nclass UTMUPS {\n public:\n  enum zonespec {\n    MINPSEUDOZONE = -4,\n    MATCH = -3,\n    UTM = -2,\n    STANDARD = -1,\n    MINZONE = 0,\n    MAXUTMZONE = 60,\n    MAXZONE = 60,\n  };\n  static void Forward(double lat, double lon, int & zone, bool & northp, double & x, double & y, double & gamma, double & k, int setzone = STANDARD, bool = false) {\n    zone = (setzone > 0) ? setzone : (static_cast<int>(std::floor((lon + 180.0) / 6.0)) + 1);\n    northp = (lat >= 0.0);\n    constexpr double kPi = 3.14159265358979323846;\n    constexpr double a = 6378137.0;\n    constexpr double f = 1.0 / 298.257223563;\n    constexpr double k0 = 0.9996;\n    double e2 = f * (2.0 - f);\n    double e4 = e2 * e2;\n    double e6 = e4 * e2;\n    double ep2 = e2 / (1.0 - e2);\n    double phi = lat * kPi / 180.0;\n    double lam = lon * kPi / 180.0;\n    double lam0 = ((zone - 1) * 6 - 180 + 3) * kPi / 180.0;\n    double sin_phi = std::sin(phi), cos_phi = std::cos(phi), tan_phi = std::tan(phi);\n    double N = a / std::sqrt(1.0 - e2 * sin_phi * sin_phi);\n    double T = tan_phi * tan_phi;\n    double C = ep2 * cos_phi * cos_phi;\n    double A = cos_phi * (lam - lam0);\n    double M = a * ((1.0 - e2 / 4.0 - 3.0 * e4 / 64.0 - 5.0 * e6 / 256.0) * phi\n      - (3.0 * e2 / 8.0 + 3.0 * e4 / 32.0 + 45.0 * e6 / 1024.0) * std::sin(2.0 * phi)\n      + (15.0 * e4 / 256.0 + 45.0 * e6 / 1024.0) * std::sin(4.0 * phi)\n      - (35.0 * e6 / 3072.0) * std::sin(6.0 * phi));\n    x = k0 * N * (A + (1.0 - T + C) * A * A * A / 6.0\n      + (5.0 - 18.0 * T + T * T + 72.0 * C - 58.0 * ep2) * A * A * A * A * A / 120.0) + 500000.0;\n    y = k0 * (M + N * tan_phi * (A * A / 2.0 + (5.0 - T + 9.0 * C + 4.0 * C * C) * A * A * A * A / 24.0\n      + (61.0 - 58.0 * T + T * T + 600.0 * C - 330.0 * ep2) * A * A * A * A * A * A / 720.0));\n    if (!northp) y += 10000000.0;\n    double dlam = lam - lam0;\n    gamma = std::atan(std::tan(dlam) * sin_phi) * 180.0 / kPi;\n    k = k0;\n  }\n  static void Forward(double lat, double lon, int & zone, bool & northp, double & x, double & y, int setzone = STANDARD, bool mgrslimits = false) {\n    double gamma = 0.0, k = 0.9996;\n    Forward(lat, lon, zone, northp, x, y, gamma, k, setzone, mgrslimits);\n  }\n  static void Reverse(int zone, bool northp, double x, double y, double & lat, double & lon, double & gamma, double & k, bool = false) {\n    constexpr double kPi = 3.14159265358979323846;\n    constexpr double a = 6378137.0;\n    constexpr double f = 1.0 / 298.257223563;\n    constexpr double k0 = 0.9996;\n    double e2 = f * (2.0 - f);\n    double e4 = e2 * e2;\n    double e6 = e4 * e2;\n    double ep2 = e2 / (1.0 - e2);\n    double e1 = (1.0 - std::sqrt(1.0 - e2)) / (1.0 + std::sqrt(1.0 - e2));\n    double x_rel = x - 500000.0;\n    double y_rel = northp ? y : (y - 10000000.0);\n    double M = y_rel / k0;\n    double mu = M / (a * (1.0 - e2 / 4.0 - 3.0 * e4 / 64.0 - 5.0 * e6 / 256.0));\n    double phi1 = mu + (3.0 * e1 / 2.0 - 27.0 * e1 * e1 * e1 / 32.0) * std::sin(2.0 * mu)\n      + (21.0 * e1 * e1 / 16.0 - 55.0 * e1 * e1 * e1 * e1 / 32.0) * std::sin(4.0 * mu)\n      + (151.0 * e1 * e1 * e1 / 96.0) * std::sin(6.0 * mu)\n      + (1097.0 * e1 * e1 * e1 * e1 / 512.0) * std::sin(8.0 * mu);\n    double sin_p1 = std::sin(phi1), cos_p1 = std::cos(phi1), tan_p1 = std::tan(phi1);\n    double N1 = a / std::sqrt(1.0 - e2 * sin_p1 * sin_p1);\n    double T1 = tan_p1 * tan_p1;\n    double C1 = ep2 * cos_p1 * cos_p1;\n    double R1 = a * (1.0 - e2) / std::pow(1.0 - e2 * sin_p1 * sin_p1, 1.5);\n    double D = x_rel / (N1 * k0);\n    double phi = phi1 - (N1 * tan_p1 / R1) * (D * D / 2.0\n      - (5.0 + 3.0 * T1 + 10.0 * C1 - 4.0 * C1 * C1 - 9.0 * ep2) * D * D * D * D / 24.0\n      + (61.0 + 90.0 * T1 + 298.0 * C1 + 45.0 * T1 * T1 - 252.0 * ep2 - 3.0 * C1 * C1) * D * D * D * D * D * D / 720.0);\n    double lam0 = ((zone - 1) * 6 - 180 + 3) * kPi / 180.0;\n    double dlam = (D - (1.0 + 2.0 * T1 + C1) * D * D * D / 6.0\n      + (5.0 - 2.0 * C1 + 28.0 * T1 - 3.0 * C1 * C1 + 8.0 * ep2 + 24.0 * T1 * T1) * D * D * D * D * D / 120.0) / cos_p1;\n    lat = phi * 180.0 / kPi;\n    lon = (lam0 + dlam) * 180.0 / kPi;\n    gamma = std::atan(std::tan(dlam) * std::sin(phi)) * 180.0 / kPi;\n    k = k0;\n  }\n  static void Reverse(int zone, bool northp, double x, double y, double & lat, double & lon, bool mgrslimits = false) {\n    double gamma = 0.0, k = 0.9996;\n    Reverse(zone, northp, x, y, lat, lon, gamma, k, mgrslimits);\n  }\n};\nclass MGRS {\n public:\n  static void Forward(int zone, bool northp, double x, double y, int, std::string & mgrs) {\n    double lat = 0.0, lon = 0.0;\n    UTMUPS::Reverse(zone, northp, x, y, lat, lon);\n    static constexpr const char * kBands = \"CDEFGHJKLMNPQRSTUVWX\";\n    int idx = static_cast<int>(std::floor((lat + 80.0) / 8.0));\n    if (idx < 0) idx = 0;\n    if (idx > 19) idx = 19;\n    mgrs = std::to_string(zone) + kBands[idx];\n  }\n  static void Forward(int zone, bool northp, double x, double y, double lat, int, std::string & mgrs) {\n    (void)x; (void)y; (void)northp;\n    static constexpr const char * kBands = \"CDEFGHJKLMNPQRSTUVWX\";\n    int idx = static_cast<int>(std::floor((lat + 80.0) / 8.0));\n    if (idx < 0) idx = 0;\n    if (idx > 19) idx = 19;\n    mgrs = std::to_string(zone) + kBands[idx];\n  }\n  static void Reverse(const std::string & mgrs, int & zone, bool & northp, double & x, double & y, int & prec, bool = true) {\n    zone = 0;\n    northp = true;\n    x = 0.0;\n    y = 0.0;\n    prec = -1;\n    std::size_t i = 0;\n    while (i < mgrs.size() && std::isdigit(static_cast<unsigned char>(mgrs[i]))) {\n      zone = zone * 10 + (mgrs[i] - '0');\n      ++i;\n    }\n    if (i < mgrs.size()) {\n      char c = static_cast<char>(std::toupper(static_cast<unsigned char>(mgrs[i])));\n      northp = (c >= 'N');\n    }\n  }\n};\n}  // namespace GeographicLib\n#endif\n"],
+)
+
+write_file(
+    name = "gen_geographiclib_local_cartesian_hpp",
+    out = "_gen/include/GeographicLib/LocalCartesian.hpp",
+    content = ["#ifndef RCR_GEOGRAPHICLIB_LOCAL_CARTESIAN_HPP_\n#define RCR_GEOGRAPHICLIB_LOCAL_CARTESIAN_HPP_\n#include <cmath>\nnamespace GeographicLib {\nclass Geocentric {\npublic:\n  Geocentric() = default;\n  Geocentric(double, double) {}\n  static const Geocentric & WGS84() { static Geocentric g; return g; }\n  void Forward(double, double, double, double & X, double & Y, double & Z) const { X = 0; Y = 0; Z = 0; }\n  void Reverse(double, double, double, double & lat, double & lon, double & h) const { lat = 0; lon = 0; h = 0; }\n};\nclass LocalCartesian {\n public:\n  LocalCartesian() = default;\n  LocalCartesian(double lat0, double lon0, double h0 = 0.0, const Geocentric & = Geocentric::WGS84()) : lat0_(lat0), lon0_(lon0), h0_(h0) {}\n  explicit LocalCartesian(const Geocentric &) {}\n  void Reset(double lat0, double lon0, double h0 = 0.0) { lat0_ = lat0; lon0_ = lon0; h0_ = h0; }\n  double LatitudeOrigin() const { return lat0_; }\n  double LongitudeOrigin() const { return lon0_; }\n  double HeightOrigin() const { return h0_; }\n  void Forward(double lat, double lon, double h, double & x, double & y, double & z) const {\n    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;\n    constexpr double kR = 6378137.0;\n    x = (lon - lon0_) * kDegToRad * kR * std::cos(lat0_ * kDegToRad);\n    y = (lat - lat0_) * kDegToRad * kR;\n    z = h - h0_;\n  }\n  void Reverse(double x, double y, double z, double & lat, double & lon, double & h) const {\n    constexpr double kRadToDeg = 180.0 / 3.14159265358979323846;\n    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;\n    constexpr double kR = 6378137.0;\n    lat = lat0_ + (y / kR) * kRadToDeg;\n    lon = lon0_ + (x / (kR * std::cos(lat0_ * kDegToRad))) * kRadToDeg;\n    h = h0_ + z;\n  }\n private:\n  double lat0_{0.0}, lon0_{0.0}, h0_{0.0};\n};\n}  // namespace GeographicLib\n#endif\n"],
+)
+
+write_file(
+    name = "gen_geocentric_h",
+    out = "_gen/include/GeographicLib/Geocentric.hpp",
+    content = ["#pragma once\n#include \"GeographicLib/LocalCartesian.hpp\"\n"],
+)
+
+write_file(
+    name = "gen_geographiclib_mgrs_hpp",
+    out = "_gen/include/GeographicLib/MGRS.hpp",
+    content = ["#pragma once\n#include \"GeographicLib/UTMUPS.hpp\"\n"],
+)
+
+default_generators(
+    package_xml = "package.xml",
+    deps = [
+        "//srv:FromLL",
+        "//srv:FromLLArray",
+        "//srv:GetState",
+        "//srv:SetDatum",
+        "//srv:SetPose",
+        "//srv:SetUTMZone",
+        "//srv:ToLL",
+        "//srv:ToggleFilterProcessing",
+    ],
+)
+
+ament_index(
+    name = "ament_index_extra",
+    data = [
+        "launch/dual_ekf_navsat_example.launch.py",
+        "launch/ekf.launch.py",
+        "launch/navsat_transform.launch.py",
+        "launch/ukf.launch.py",
+        "params/dual_ekf_navsat_example.yaml",
+        "params/ekf.yaml",
+        "params/navsat_transform.yaml",
+        "params/ukf.yaml",
+        "test/test1.bag",
+        "test/test2.bag",
+        "test/test3.bag",
+        "test/test_ekf.cpp",
+        "test/test_ekf_localization_node_bag1.launch.py",
+        "test/test_ekf_localization_node_bag1.sh",
+        "test/test_ekf_localization_node_bag1.yaml",
+        "test/test_ekf_localization_node_bag2.launch.py",
+        "test/test_ekf_localization_node_bag2.sh",
+        "test/test_ekf_localization_node_bag2.yaml",
+        "test/test_ekf_localization_node_bag3.launch.py",
+        "test/test_ekf_localization_node_bag3.sh",
+        "test/test_ekf_localization_node_bag3.yaml",
+        "test/test_filter_base.cpp",
+        "test/test_filter_base_diagnostics_timestamps.cpp",
+        "test/test_filter_base_diagnostics_timestamps.launch.py",
+        "test/test_filter_base_diagnostics_timestamps.yaml",
+        "test/test_localization_node_bag_pose_tester.cpp",
+        "test/test_navsat_conversions.cpp",
+        "test/test_robot_localization_estimator.cpp",
+        "test/test_robot_localization_estimator.launch.py",
+        "test/test_ros_robot_localization_listener.cpp",
+        "test/test_ros_robot_localization_listener.launch.py",
+        "test/test_ros_robot_localization_listener.yaml",
+        "test/test_ros_robot_localization_listener_publisher.cpp",
+        "test/test_se_node_interfaces.cpp",
+        "test/test_se_node_interfaces.launch.py",
+        "test/test_se_node_interfaces.yaml",
+        "test/test_ukf.cpp",
+        "test/test_ukf_localization_node_bag1.launch.py",
+        "test/test_ukf_localization_node_bag1.sh",
+        "test/test_ukf_localization_node_bag1.yaml",
+        "test/test_ukf_localization_node_bag2.launch.py",
+        "test/test_ukf_localization_node_bag2.sh",
+        "test/test_ukf_localization_node_bag2.yaml",
+        "test/test_ukf_localization_node_bag3.launch.py",
+        "test/test_ukf_localization_node_bag3.sh",
+        "test/test_ukf_localization_node_bag3.yaml",
+    ],
+    export_name = "robot_localization",
+    lib_data = [
+        ":ekf_node",
+        ":_bin/filter_base-test",
+        ":navsat_transform_node",
+        ":robot_localization_listener_node",
+        ":_bin/test_ekf",
+        ":_bin/test_ekf_node_interfaces",
+        ":_bin/test_filter_base_diagnostics_timestamps",
+        ":_bin/test_navsat_conversions",
+        ":_bin/test_robot_localization_estimator",
+        ":_bin/test_ros_robot_localization_listener",
+        ":test_ros_robot_localization_listener_publisher",
+        ":_bin/test_ukf",
+        ":_bin/test_ukf_node_interfaces",
+        ":ukf_node",
+    ],
+    libraries = [
+        ":rl_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@geographic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@yaml_cpp_vendor//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "filter_base-test",
+    srcs = [
+        "test/test_filter_base.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":ament_index_extra",
+        ":rl_lib",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_ekf",
+    srcs = [
+        "test/test_ekf.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":ament_index_extra",
+        ":rl_lib",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_navsat_conversions",
+    srcs = [
+        "test/test_navsat_conversions.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":ament_index_extra",
+        ":rl_lib",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_ukf",
+    srcs = [
+        "test/test_ukf.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+        ":ament_index_extra",
+        ":rl_lib",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/robot_localization",
+        "_gen/include/robot_localization/robot_localization",
+        "include",
+        "include/robot_localization",
+        "src",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cc",
+        ":rl_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+rosidl_ament_package(
+    cmake_export_dependencies_list = [
+        "builtin_interfaces",
+        "geometry_msgs",
+        "geographic_msgs",
+        "diagnostic_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "service_msgs",
+        "rosidl_runtime_c",
+        "rosidl_typesupport_interface",
+        "rcutils",
+        "fastcdr",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_fastrtps_c",
+        "rosidl_typesupport_fastrtps_cpp",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_cpp",
+        "fastcdr",
+        "rmw",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_fastrtps_cpp",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_c",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_interface",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_cpp",
+        "rosidl_typesupport_interface",
+        "angles",
+        "Boost",
+        "diagnostic_msgs",
+        "diagnostic_updater",
+        "Eigen3",
+        "geographic_msgs",
+        "geometry_msgs",
+        "message_filters",
+        "nav_msgs",
+        "rclcpp",
+        "rosidl_default_runtime",
+        "sensor_msgs",
+        "std_msgs",
+        "std_srvs",
+        "tf2",
+        "tf2_eigen",
+        "tf2_geometry_msgs",
+        "tf2_ros",
+    ],
+    headers = glob(["include/**"]),
+    interface_library = "rl_lib",
+    interface_library_export = "robot_localization",
+    interface_library_location = "lib/librl_lib.so",
+    libraries = [
+        ":rl_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index_extra"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@geographic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@yaml_cpp_vendor//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [":ament_index"],
+    )
+    for f in glob(["launch/**"])
+]

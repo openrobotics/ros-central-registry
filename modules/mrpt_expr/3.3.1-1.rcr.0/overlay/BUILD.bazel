@@ -1,0 +1,165 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@mrpt_system//:mrpt_system_library",
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "mrpt_expr_library",
+    srcs = [":gen_mrpt_expr_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines() + ["MRPT_USE_SYSTEM_EXPRTK"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_expr",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":mrpt_expr_library"],
+)
+
+cc_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu_library",
+    srcs = [":gen_mrpt_expr_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_expr_library"],
+)
+
+cc_shared_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "mrpt/expr/_bindings.so",
+    deps = [":_bindings.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "mrpt",
+    srcs = glob(["python/mrpt/**/*.py"]),
+    imports = ["python"],
+    deps = ["@mrpt_system//:mrpt"],
+)
+
+write_file(
+    name = "gen_mrpt_expr_stub_cpp",
+    out = "_gen/mrpt_expr_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mrpt_expr",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_expr": [
+            "libmrpt_expr.so.3.3",
+            "libmrpt_expr.so.3.3.1",
+        ],
+    },
+    deps = [
+        "@mrpt_common//:ament_package",
+        "@mrpt_system//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_expr",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":mrpt",
+        ":_bindings.cpython-314-x86_64-linux-gnu",
+    ],
+    python_strip_prefix = "python",
+    sonames = {
+        "mrpt_expr": [
+            "libmrpt_expr.so.3.3",
+            "libmrpt_expr.so.3.3.1",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_common//:ament_package",
+        "@mrpt_system//:ament_package",
+    ],
+)

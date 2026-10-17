@@ -1,0 +1,284 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:static_transform_broadcaster_node": "@tf2_ros//:static_transform_broadcaster_node_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:pcl_common",
+    "@rosdistro//cc:pcl_features",
+    "@rosdistro//cc:pcl_filters",
+    "@rosdistro//cc:pcl_io",
+    "@rosdistro//cc:pcl_kdtree",
+    "@rosdistro//cc:pcl_keypoints",
+    "@rosdistro//cc:pcl_ml",
+    "@rosdistro//cc:pcl_octree",
+    "@rosdistro//cc:pcl_outofcore",
+    "@rosdistro//cc:pcl_people",
+    "@rosdistro//cc:pcl_recognition",
+    "@rosdistro//cc:pcl_registration",
+    "@rosdistro//cc:pcl_sample_consensus",
+    "@rosdistro//cc:pcl_search",
+    "@rosdistro//cc:pcl_segmentation",
+    "@rosdistro//cc:pcl_surface",
+    "@rosdistro//cc:pcl_tracking",
+    "@rosdistro//cc:pcl_visualization",
+    "@sensor_msgs//:cc",
+    "@std_srvs//:cc",
+]
+
+cc_library(
+    name = "ply_to_xyz_transframer_lib_library",
+    srcs = [
+        "src/ply_to_xyz_transframer/ply_to_xyz_transframer.cpp",
+        "src/ply_to_xyz_transframer/ply_to_xyz_transframer_interface.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = ["include"],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ply_to_xyz_transframer_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":ply_to_xyz_transframer_lib_library"],
+)
+
+cc_library(
+    name = "xyz_to_ply_transframer_lib_library",
+    srcs = [
+        "src/xyz_to_ply_transframer/xyz_to_ply_transframer.cpp",
+        "src/xyz_to_ply_transframer/xyz_to_ply_transframer_interface.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = ["include"],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "xyz_to_ply_transframer_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":xyz_to_ply_transframer_lib_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "ply_to_xyz_transframer_interface_node",
+    srcs = ["src/ply_to_xyz_transframer/ply_to_xyz_transframer_interface_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ply_to_xyz_transframer_lib_library"],
+)
+
+cc_binary(
+    name = "xyz_to_ply_transframer_interface_node",
+    srcs = ["src/xyz_to_ply_transframer/xyz_to_ply_transframer_interface_node.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":xyz_to_ply_transframer_lib_library"],
+)
+
+py_library(
+    name = "pointcloud_to_ply",
+    srcs = glob(["pointcloud_to_ply/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@sensor_msgs_py",
+        "@std_srvs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
+    ],
+)
+
+write_file(
+    name = "gen_extra_2",
+    out = "_gen/lib/pointcloud_conversions/pointcloud_to_ply_node",
+    content = ["#!/usr/bin/env python3\n# Copyright 2026 Alexandros Filotheou\n#\n# Permission is hereby granted, free of charge, to any person obtaining a copy\n# of this software and associated documentation files (the \"Software\"), to deal\n# in the Software without restriction, including without limitation the rights\n# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n# copies of the Software, and to permit persons to whom the Software is\n# furnished to do so, subject to the following conditions:\n#\n# The above copyright notice and this permission notice shall be included in all\n# copies or substantial portions of the Software.\n#\n# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n# SOFTWARE.\n\nimport os\nfrom typing import List\n\nimport numpy as np\n# Open3D must be installed in your environment (pip install open3d)\nimport open3d as o3d\nimport rclpy\nfrom rclpy.node import Node\nfrom rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy\n\nfrom sensor_msgs.msg import PointCloud2\nimport sensor_msgs_py.point_cloud2 as pc2\n\n\ndef cloud_to_numpy(msg: PointCloud2) -> np.ndarray:\n    \"\"\"Convert ROS2 PointCloud2 to (N,3) numpy array.\"\"\"\n    pts = np.asarray([\n        (x, y, z)\n        for x, y, z in pc2.read_points(msg, field_names=('x', 'y', 'z'), skip_nans=True)\n    ], dtype=np.float64)\n    return pts\n\n\ndef numpy_to_o3d_pointcloud(points: np.ndarray) -> o3d.geometry.PointCloud:\n    pcd = o3d.geometry.PointCloud()\n    pcd.points = o3d.utility.Vector3dVector(points)\n    return pcd\n\n\ndef preprocess_pointcloud(\n    pcd: o3d.geometry.PointCloud,\n    voxel_downsample_size: float,\n    remove_statistical_outliers: bool,\n    nso_nb_neighbors: int,\n    nso_std_ratio: float,\n) -> o3d.geometry.PointCloud:\n    if voxel_downsample_size and voxel_downsample_size > 0.0:\n        pcd = pcd.voxel_down_sample(voxel_downsample_size)\n\n    if remove_statistical_outliers:\n        pcd, _ = pcd.remove_statistical_outlier(\n            nb_neighbors=nso_nb_neighbors, std_ratio=nso_std_ratio\n        )\n    return pcd\n\n\ndef estimate_normals(\n    pcd: o3d.geometry.PointCloud, normal_radius: float, normal_max_nn: int\n):\n    pcd.estimate_normals(\n        search_param=o3d.geometry.KDTreeSearchParamHybrid(\n            radius=normal_radius, max_nn=normal_max_nn\n        )\n    )\n    pcd.orient_normals_consistent_tangent_plane(10)\n\n\ndef poisson_reconstruction(\n    pcd: o3d.geometry.PointCloud, depth: int, density_quantile: float\n) -> o3d.geometry.TriangleMesh:\n    mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(\n        pcd, depth=depth\n    )\n    if density_quantile is not None and 0.0 < density_quantile < 1.0:\n        densities = np.asarray(densities)\n        mask = densities < np.quantile(densities, density_quantile)\n        mesh.remove_vertices_by_mask(mask)\n    mesh.remove_degenerate_triangles()\n    mesh.remove_duplicated_triangles()\n    mesh.remove_duplicated_vertices()\n    mesh.remove_non_manifold_edges()\n    return mesh\n\n\ndef bpa_reconstruction(\n    pcd: o3d.geometry.PointCloud, radii: List[float], tri_angle_deg: float\n) -> o3d.geometry.TriangleMesh:\n    # Open3D BPA uses radii list; ensure ascending and >0\n    radii = sorted([r for r in radii if r > 0.0])\n    if not radii:\n        raise ValueError('bpa_radii must contain positive values')\n    mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(\n        pcd, o3d.utility.DoubleVector(radii)\n    )\n    # Optional: simplify very sharp triangles if angle threshold provided\n    if tri_angle_deg is not None:\n        mesh = mesh.filter_smooth_taubin(number_of_iterations=1)\n    mesh.remove_degenerate_triangles()\n    mesh.remove_duplicated_triangles()\n    mesh.remove_duplicated_vertices()\n    mesh.remove_non_manifold_edges()\n    return mesh\n\n\ndef save_mesh(mesh: o3d.geometry.TriangleMesh, out_dir: str, basename: str, fmt: str) -> str:\n    os.makedirs(out_dir, exist_ok=True)\n    fmt = fmt.lower()\n    if fmt not in ('obj', 'ply'):\n        raise ValueError('output_format must be \"obj\" or \"ply\"')\n    path = os.path.join(out_dir, f'{basename}.{fmt}')\n    o3d.io.write_triangle_mesh(path, mesh)\n    return path\n\n\nclass PointCloudToMeshNode(Node):\n\n    def __init__(self):\n        super().__init__('pointcloud_to_ply_node')\n\n        # Parameters (declare with defaults; override via YAML)\n        self.declare_parameter('pointcloud_topic', '/rc_viscore/points2')\n        self.declare_parameter('output_path', '/tmp/mesh_output')\n        self.declare_parameter('output_basename', 'mesh')\n        self.declare_parameter('output_format', 'obj')\n\n        self.declare_parameter('voxel_downsample_size', 0.0)\n        self.declare_parameter('remove_statistical_outliers', True)\n        self.declare_parameter('nso_nb_neighbors', 20)\n        self.declare_parameter('nso_std_ratio', 2.0)\n\n        self.declare_parameter('normal_radius', 0.05)\n        self.declare_parameter('normal_max_nn', 30)\n\n        self.declare_parameter('reconstruction_method', 'poisson')\n        self.declare_parameter('poisson_depth', 9)\n        self.declare_parameter('poisson_density_quantile', 0.05)\n        self.declare_parameter('bpa_radii', [0.02, 0.04, 0.08])\n        self.declare_parameter('bpa_triangle_angle', 30.0)\n\n        self.declare_parameter('shutdown_after_save', True)\n        self.declare_parameter('log_level_debug', False)\n\n        topic = self.get_parameter('pointcloud_topic').get_parameter_value().string_value\n\n        # Should match the topic's qos profile\n        qos = QoSProfile(\n            reliability=ReliabilityPolicy.BEST_EFFORT,\n            durability=DurabilityPolicy.VOLATILE,\n            history=HistoryPolicy.KEEP_LAST,\n            depth=10,\n        )\n\n        self.subscription = self.create_subscription(\n            PointCloud2, topic, self._callback, qos\n        )\n        self._done = False\n\n        self.get_logger().info(f'Subscribed to {topic}')\n\n    def _callback(self, msg: PointCloud2):\n        if self._done:\n            return\n        self._done = True\n\n        try:\n            self.get_logger().info('Received point cloud; converting to numpy...')\n            points = cloud_to_numpy(msg)\n            self.get_logger().info(f'Point count: {points.shape[0]}')\n\n            pcd = numpy_to_o3d_pointcloud(points)\n\n            # Preprocess\n            pcd = preprocess_pointcloud(\n                pcd=pcd,\n                voxel_downsample_size=self.get_parameter('voxel_downsample_size').value,\n                remove_statistical_outliers=self.get_parameter(\n                    'remove_statistical_outliers'\n                ).value,\n                nso_nb_neighbors=self.get_parameter('nso_nb_neighbors').value,\n                nso_std_ratio=self.get_parameter('nso_std_ratio').value,\n            )\n\n            # Normals\n            estimate_normals(\n                pcd,\n                self.get_parameter('normal_radius').value,\n                self.get_parameter('normal_max_nn').value,\n            )\n\n            # Reconstruction method\n            method = self.get_parameter('reconstruction_method').value.lower()\n            if method == 'poisson':\n                depth = int(self.get_parameter('poisson_depth').value)\n                dq = float(self.get_parameter('poisson_density_quantile').value)\n                mesh = poisson_reconstruction(pcd, depth, dq)\n                self.get_logger().info(f'Poisson reconstruction complete (depth={depth})')\n            elif method == 'bpa':\n                radii = list(self.get_parameter('bpa_radii').value)\n                tri_angle = float(self.get_parameter('bpa_triangle_angle').value)\n                mesh = bpa_reconstruction(pcd, radii, tri_angle)\n                self.get_logger().info(f'BPA reconstruction complete (radii={radii})')\n            else:\n                raise ValueError('reconstruction_method must be \"poisson\" or \"bpa\"')\n\n            out_dir = self.get_parameter('output_path').value\n            basename = self.get_parameter('output_basename').value\n            fmt = self.get_parameter('output_format').value\n            out_path = save_mesh(mesh, out_dir, basename, fmt)\n            self.get_logger().info(f'Saved mesh to: {out_path}')\n\n        except Exception as e:\n            self.get_logger().error(f'Failed to create/save mesh: {e}')\n        finally:\n            if self.get_parameter('shutdown_after_save').value:\n                self.get_logger().info('Shutting down node.')\n                rclpy.shutdown()\n\n\ndef main(args=None):\n    rclpy.init(args=args)\n    node = PointCloudToMeshNode()\n    rclpy.spin(node)\n    node.destroy_node()\n    rclpy.shutdown()\n\n\nif __name__ == '__main__':\n    main()\n"],
+    is_executable = True,
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/params.yaml",
+        "launch/ply_to_xyz_transframer.launch.xml",
+        "launch/pointcloud_to_ply.launch.xml",
+        "launch/xyz_to_ply_transframer.launch.xml",
+    ],
+    lib_data = [
+        ":ply_to_xyz_transframer_interface_node",
+        ":xyz_to_ply_transframer_interface_node",
+        ":ply_to_xyz_transframer_lib",
+        ":xyz_to_ply_transframer_lib",
+        ":gen_extra_2",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@pcl_conversions//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@sensor_msgs_py//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@yaml_cpp_vendor//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [":ament_index"],
+        deps = [":pointcloud_to_ply"],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    package_xml = "package.xml",
+    python = [":pointcloud_to_ply"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@pcl_conversions//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@sensor_msgs_py//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@yaml_cpp_vendor//:ament_package",
+    ],
+)

@@ -1,0 +1,180 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@depthai_ros_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+    "@vision_msgs//:cc",
+    "@visualization_msgs//:cc",
+]
+
+cc_library(
+    name = "depthai_filters_library",
+    srcs = [
+        "src/detection2d_overlay.cpp",
+        "src/feature_tracker_overlay.cpp",
+        "src/features_3d.cpp",
+        "src/segmentation_overlay.cpp",
+        "src/spatial_bb.cpp",
+        "src/thermal_temp.cpp",
+        "src/utils.cpp",
+        "src/wls_filter.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_opencv2_ximgproc_disparity_filter_hpp"],
+    copts = ["-std=c++20"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/depthai_filters",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "depthai_filters",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":depthai_filters_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "depthai_filters_components",
+    component = ":depthai_filters",
+    plugins = [
+        "depthai_filters::Detection2DOverlay",
+        "depthai_filters::SegmentationOverlay",
+        "depthai_filters::WLSFilter",
+        "depthai_filters::SpatialBB",
+        "depthai_filters::FeatureTrackerOverlay",
+        "depthai_filters::Features3D",
+        "depthai_filters::ThermalTemp",
+    ],
+)
+
+write_file(
+    name = "gen_opencv2_ximgproc_disparity_filter_hpp",
+    out = "_gen/include/opencv2/ximgproc/disparity_filter.hpp",
+    content = ["#ifndef RCR_OPENCV2_XIMGPROC_DISPARITY_FILTER_HPP_\n#define RCR_OPENCV2_XIMGPROC_DISPARITY_FILTER_HPP_\n#include <opencv2/core.hpp>\nnamespace cv {\nnamespace ximgproc {\nclass DisparityWLSFilter : public Algorithm {\n public:\n  virtual void setLambda(double) {}\n  virtual void setSigmaColor(double) {}\n  virtual void filter(InputArray disparity_map_left, InputArray, OutputArray filtered_disparity_map, InputArray = Mat(), Rect = Rect(), InputArray = Mat()) {\n    disparity_map_left.copyTo(filtered_disparity_map);\n  }\n};\ninline Ptr<DisparityWLSFilter> createDisparityWLSFilterGeneric(bool) {\n  return makePtr<DisparityWLSFilter>();\n}\n}  // namespace ximgproc\n}  // namespace cv\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":depthai_filters_components"],
+    data = [
+        "config/detection.yaml",
+        "config/feature_tracker.yaml",
+        "config/spatial_bb.rviz",
+        "config/spatial_bb.yaml",
+        "config/usb_cam_overlay.yaml",
+        "config/wls.yaml",
+        "launch/det2d_usb_cam_overlay.launch.py",
+        "launch/example_det2d_overlay.launch.py",
+        "launch/example_feature_3d.launch.py",
+        "launch/example_feature_tracker.launch.py",
+        "launch/example_seg_overlay.launch.py",
+        "launch/example_wls_filter.launch.py",
+        "launch/spatial_bb.launch.py",
+        "launch/thermal_temp.launch.py",
+    ],
+    libraries = [":depthai_filters"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_auto//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@depthai_ros_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@image_transport//:ament_package",
+        "@message_filters//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@vision_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    libraries = [":depthai_filters"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_auto//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@depthai_ros_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@image_transport//:ament_package",
+        "@message_filters//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@vision_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

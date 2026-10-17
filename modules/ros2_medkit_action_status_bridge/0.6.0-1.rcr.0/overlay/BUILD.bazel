@@ -1,0 +1,235 @@
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@ros2_medkit_fault_reporter//:fault_reporter_lib": "@ros2_medkit_fault_reporter//:fault_reporter_lib_library",
+}
+
+CC_DEPS = [
+    "@action_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@ros2_medkit_msgs//:cc",
+]
+
+cc_library(
+    name = "action_status_bridge_lib_library",
+    srcs = ["src/action_status_bridge_node.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_action_status_bridge",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "action_status_bridge_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":action_status_bridge_lib_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":action_status_bridge_lib"],
+)
+
+cc_binary(
+    name = "action_status_bridge_node",
+    srcs = ["src/main.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_action_status_bridge",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":action_status_bridge_lib_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/action_status_bridge.yaml",
+        "launch/action_status_bridge.launch.py",
+        "test/test_action_status_bridge.cpp",
+        "test/test_integration.test.py",
+    ],
+    lib_data = [":action_status_bridge_node"],
+    libraries = [":action_status_bridge_lib"],
+    package_xml = "package.xml",
+    deps = [
+        "@action_msgs//:ament_package",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_clang_tidy//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros2_medkit_cmake//:ament_package",
+        "@ros2_medkit_fault_manager//:ament_package",
+        "@ros2_medkit_fault_reporter//:ament_package",
+        "@ros2_medkit_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_action_status_bridge",
+    srcs = ["test/test_action_status_bridge.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_action_status_bridge",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":action_status_bridge_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_test(
+    name = "test_integration",
+    src = "test/test_integration.test.py",
+    data = [
+        ":action_status_bridge_node",
+        ":ament_index",
+    ],
+    deps = [
+        "@action_msgs//:py",
+        "@ros2_medkit_msgs//:py",
+    ],
+)
+
+launch_ros_binary(
+    name = "action_status_bridge.launch.py",
+    src = "launch/action_status_bridge.launch.py",
+    data = [":ament_index"],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "action_msgs",
+        "ros2_medkit_msgs",
+        "ros2_medkit_fault_reporter",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_ros2_medkit_action_status_bridge",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":action_status_bridge_lib"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@action_msgs//:ament_package",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_clang_tidy//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros2_medkit_cmake//:ament_package",
+        "@ros2_medkit_fault_manager//:ament_package",
+        "@ros2_medkit_fault_reporter//:ament_package",
+        "@ros2_medkit_msgs//:ament_package",
+    ],
+)

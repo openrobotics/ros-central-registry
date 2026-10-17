@@ -1,0 +1,112 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rcl_logging_interface//:rcl_logging_interface": "@rcl_logging_interface//:rcl_logging_interface_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:fmt",
+    "@rosdistro//cc:spdlog",
+]
+
+cc_library(
+    name = "rcl_logging_syslog_library",
+    srcs = ["src/rcl_logging_syslog.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = ["."],
+    local_defines = ros_local_defines() + ["RCL_LOGGING_INTERFACE_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rcl_logging_syslog",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":rcl_logging_syslog_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rcl_logging_syslog"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":rcl_logging_syslog"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@performance_test_fixture//:ament_package",
+        "@rcl_logging_interface//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "test_logging_interface",
+    srcs = ["test/test_logging_interface.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["."],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rcl_logging_syslog_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    libraries = [":rcl_logging_syslog"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@performance_test_fixture//:ament_package",
+        "@rcl_logging_interface//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+    ],
+)

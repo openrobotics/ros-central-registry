@@ -1,0 +1,230 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+### LIBRARIES
+
+HEADERS = glob(["include/**/*.hpp"])
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+}
+
+cc_library(
+    name = "sdformat_urdf_library",
+    srcs = ["src/sdformat_urdf.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["SDFORMAT_URDF_BUILDING_LIBRARY"],
+    deps = [
+        "@rcutils//:rcutils_library",
+        "@rosdistro//cc:sdformat",
+        "@urdf//:urdf_library",
+    ],
+)
+
+cc_shared_library(
+    name = "sdformat_urdf",
+    dynamic_deps = [
+        "@rcutils//:rcutils",
+        "@urdf//:urdf",
+    ],
+    exports_filter = [
+        ":sdformat_urdf_library",
+        "@@gz-math+//:__subpackages__",
+        "@@gz-utils+//:__subpackages__",
+        "@@sdformat+//:__subpackages__",
+    ],
+    deps = [":sdformat_urdf_library"],
+)
+
+cc_library(
+    name = "sdformat_urdf_plugin_library",
+    srcs = ["src/sdformat_urdf_plugin.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["SDFORMAT_URDF_PLUGIN_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + [
+        ":sdformat_urdf_library",
+        "@rosdistro//cc:sdformat",
+        "@urdf_parser_plugin//:urdf_parser_plugin_library",
+    ],
+)
+
+cc_shared_library(
+    name = "sdformat_urdf_plugin",
+    dynamic_deps = DEPENDENCIES.keys() + [":sdformat_urdf"],
+    exports_filter = [":sdformat_urdf_plugin_library"],
+    deps = [":sdformat_urdf_plugin_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":sdformat_urdf",
+        ":sdformat_urdf_plugin",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+### TESTS
+
+MODELS = [
+    "geometry_box",
+    "geometry_cylinder",
+    "geometry_heightmap",
+    "geometry_mesh_collada",
+    "geometry_mesh_obj",
+    "geometry_mesh_scaled",
+    "geometry_mesh_stl",
+    "geometry_plane",
+    "geometry_sphere",
+    "graph_chain",
+    "graph_chain_non_canonical_root",
+    "graph_four_bar",
+    "graph_loop",
+    "graph_tree",
+    "graph_tree_non_canonical_root",
+    "joint_ball",
+    "joint_continuous",
+    "joint_fixed",
+    "joint_gearbox",
+    "joint_prismatic",
+    "joint_prismatic_no_axis",
+    "joint_revolute",
+    "joint_revolute2",
+    "joint_revolute_axis",
+    "joint_revolute_axis_in_frame",
+    "joint_revolute_default_limits",
+    "joint_revolute_two_joints_two_links",
+    "joint_screw",
+    "joint_universal",
+    "link_inertia",
+    "link_light_point",
+    "link_multiple_collisions",
+    "link_multiple_visuals",
+    "link_sensor_imu",
+    "material_blinn_phong",
+    "material_dynamic_lights",
+    "model_two_models",
+    "model_zero_models",
+    "pose_chain",
+    "pose_collision",
+    "pose_collision_in_frame",
+    "pose_inertial",
+    "pose_inertial_in_frame",
+    "pose_joint",
+    "pose_joint_all",
+    "pose_joint_in_frame",
+    "pose_link",
+    "pose_link_all",
+    "pose_link_in_frame",
+    "pose_model",
+    "pose_visual",
+    "pose_visual_in_frame",
+]
+
+cmake_configure_file(
+    name = "sdf_paths_hpp",
+    src = "test/sdf_paths.hpp.in",
+    out = "generated_includes/sdf_paths.hpp",
+    defines = [
+        "path_to_sdf_{}=../sdformat_test_files+/models/{}/{}.sdf".format(m, m, m)
+        for m in MODELS
+    ],
+)
+
+cc_library(
+    name = "test_headers",
+    hdrs = glob(["test/include/**/*.hpp"]) + [":sdf_paths_hpp"],
+    includes = [
+        "generated_includes",
+        "test/include",
+    ],
+)
+
+[
+    cc_test(
+        name = "sdf_{}_tests".format(test_name),
+        srcs = ["test/{}_tests.cpp".format(test_name)],
+        data = ["@sdformat_test_files//:models"],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        deps = [
+            ":sdformat_urdf_library",
+            ":test_headers",
+            "@rcutils//:rcutils_library",
+            "@rosdistro//cc:googletest",
+            "@rosdistro//cc:sdformat",
+            "@urdf//:urdf_library",
+        ],
+    )
+    for test_name in [
+        "geometry",
+        "graph",
+        "joint",
+        "link",
+        "material",
+        "model",
+        "pose",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies_list = [
+        "pluginlib",
+        "rcutils",
+        "sdformat_vendor",
+        "tinyxml2",
+        "urdf_parser_plugin",
+        "urdfdom_headers",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "sdformat_urdf-export",
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [
+        ":sdformat_urdf",
+        ":sdformat_urdf_plugin",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "urdf_parser_plugin",
+    plugins = ["sdformat_urdf_plugin.xml"],
+    deps = [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sdformat_test_files//:ament_package",
+        "@sdformat_vendor//:ament_package",
+        "@urdf//:ament_package",
+        "@urdf_parser_plugin//:ament_package",
+    ],
+)

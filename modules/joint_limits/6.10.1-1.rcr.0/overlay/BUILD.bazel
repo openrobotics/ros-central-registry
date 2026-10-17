@@ -1,0 +1,567 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+}
+
+CC_DEPS = [
+    "@lifecycle_msgs//:cc",
+    "@generate_parameter_library//:generate_parameter_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:fmt",
+    "@trajectory_msgs//:cc",
+]
+
+cc_library(
+    name = "joint_limiter_interface_library",
+    srcs = ["src/joint_limiter_interface.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_8"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/joint_limits",
+        "_gen/include/joint_limits/joint_limits",
+        "include",
+        "include/joint_limits",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "joint_limiter_interface",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":joint_limiter_interface_library"],
+)
+
+cc_library(
+    name = "joint_limits_helpers_library",
+    srcs = ["src/joint_limits_helpers.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_8"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/joint_limits",
+        "_gen/include/joint_limits/joint_limits",
+        "include",
+        "include/joint_limits",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "joint_limits_helpers",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":joint_limits_helpers_library"],
+)
+
+cc_library(
+    name = "joint_saturation_limiter_library",
+    srcs = [
+        "src/joint_range_limiter.cpp",
+        "src/joint_saturation_limiter.cpp",
+        "src/joint_soft_limiter.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_8"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/joint_limits",
+        "_gen/include/joint_limits/joint_limits",
+        "include",
+        "include/joint_limits",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limiter_interface_library",
+        ":joint_limits_helpers_library",
+    ],
+)
+
+cc_shared_library(
+    name = "joint_saturation_limiter",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":joint_saturation_limiter_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "_bin/joint_limits_rosparam_test",
+    srcs = ["test/joint_limits_rosparam_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_8"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/joint_limits",
+        "_gen/include/joint_limits/joint_limits",
+        "include",
+        "include/joint_limits",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "PARAMETERS_FILE_PATH=\\\"test/\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + ["@rosdistro//cc:googletest"],
+)
+
+write_file(
+    name = "gen_extra_8",
+    out = "_gen/include/joint_limits/joint_limits/version.h",
+    content = ["// Copyright 2015 Open Source Robotics Foundation, Inc.\n//\n// Licensed under the Apache License, Version 2.0 (the \"License\");\n// you may not use this file except in compliance with the License.\n// You may obtain a copy of the License at\n//\n//     http://www.apache.org/licenses/LICENSE-2.0\n//\n// Unless required by applicable law or agreed to in writing, software\n// distributed under the License is distributed on an \"AS IS\" BASIS,\n// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n// See the License for the specific language governing permissions and\n// limitations under the License.\n\n#ifndef JOINT_LIMITS__VERSION_H_\n#define JOINT_LIMITS__VERSION_H_\n\n/// \\def JOINT_LIMITS_VERSION_MAJOR\n/// Defines JOINT_LIMITS major version number\n#define JOINT_LIMITS_VERSION_MAJOR (6)\n\n/// \\def JOINT_LIMITS_VERSION_MINOR\n/// Defines JOINT_LIMITS minor version number\n#define JOINT_LIMITS_VERSION_MINOR (10)\n\n/// \\def JOINT_LIMITS_VERSION_PATCH\n/// Defines JOINT_LIMITS version patch number\n#define JOINT_LIMITS_VERSION_PATCH (1)\n\n/// \\def JOINT_LIMITS_VERSION_STR\n/// Defines JOINT_LIMITS version string\n#define JOINT_LIMITS_VERSION_STR \"6.10.1\"\n\n/// \\def JOINT_LIMITS_VERSION_GTE\n/// Defines a macro to check whether the version of JOINT_LIMITS is greater than or equal to\n/// the given version triple.\n#define JOINT_LIMITS_VERSION_GTE(major, minor, patch) ( \\\n     (major < JOINT_LIMITS_VERSION_MAJOR) ? true \\\n     : ((major > JOINT_LIMITS_VERSION_MAJOR) ? false \\\n     : ((minor < JOINT_LIMITS_VERSION_MINOR) ? true \\\n     : ((minor > JOINT_LIMITS_VERSION_MINOR) ? false \\\n     : ((patch < JOINT_LIMITS_VERSION_PATCH) ? true \\\n     : ((patch > JOINT_LIMITS_VERSION_PATCH) ? false \\\n     : true))))))\n\n#endif  // JOINT_LIMITS__VERSION_H_\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "test/joint_limits_rosparam.yaml",
+        "test/joint_saturation_limiter_param.yaml",
+    ],
+    lib_data = [
+        ":_bin/joint_limits_rosparam_test",
+    ],
+    libraries = [
+        ":joint_limiter_interface",
+        ":joint_limits_helpers",
+        ":joint_saturation_limiter",
+    ],
+    package_xml = "package.xml",
+    plugins = ["joint_limiters.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@backward_ros//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@realtime_tools//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@trajectory_msgs//:ament_package",
+        "@urdf//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "joint_limits_rosparam_test",
+    srcs = ["test/joint_limits_rosparam_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_8"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/joint_limits",
+        "_gen/include/joint_limits/joint_limits",
+        "include",
+        "include/joint_limits",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "PARAMETERS_FILE_PATH=\\\"test/\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limiter_interface_library",
+        ":joint_limits_helpers_library",
+        ":joint_saturation_limiter_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "joint_limits_urdf_test",
+    srcs = ["test/joint_limits_urdf_test.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_8"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/joint_limits",
+        "_gen/include/joint_limits/joint_limits",
+        "include",
+        "include/joint_limits",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limiter_interface_library",
+        ":joint_limits_helpers_library",
+        ":joint_saturation_limiter_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_joint_range_limiter",
+    srcs = ["test/test_joint_range_limiter.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_8"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/joint_limits",
+        "_gen/include/joint_limits/joint_limits",
+        "include",
+        "include/joint_limits",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limiter_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_joint_saturation_limiter",
+    srcs = ["test/test_joint_saturation_limiter.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_8"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/joint_limits",
+        "_gen/include/joint_limits/joint_limits",
+        "include",
+        "include/joint_limits",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limiter_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_joint_soft_limiter",
+    srcs = ["test/test_joint_soft_limiter.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_extra_8"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/joint_limits",
+        "_gen/include/joint_limits/joint_limits",
+        "include",
+        "include/joint_limits",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":joint_limiter_interface_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_test(
+    name = "test_joint_limits_rosparam.launch.py",
+    src = "test/joint_limits_rosparam.launch.py",
+    data = [
+        ":_bin/joint_limits_rosparam_test",
+        ":ament_index",
+    ],
+    deps = ["@trajectory_msgs//:py"],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "pluginlib",
+        "realtime_tools",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "trajectory_msgs",
+        "urdf",
+        "fmt",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_joint_limits",
+    headers = [
+        "include/joint_limits/data_structures.hpp",
+        "include/joint_limits/joint_limiter_interface.hpp",
+        "include/joint_limits/joint_limits.hpp",
+        "include/joint_limits/joint_limits_helpers.hpp",
+        "include/joint_limits/joint_limits_rosparam.hpp",
+        "include/joint_limits/joint_limits_urdf.hpp",
+        "include/joint_limits/joint_saturation_limiter.hpp",
+        "include/joint_limits/joint_soft_limiter.hpp",
+        ":gen_extra_8",
+    ],
+    libraries = [
+        ":joint_limiter_interface",
+        ":joint_limits_helpers",
+        ":joint_saturation_limiter",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@backward_ros//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@realtime_tools//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@trajectory_msgs//:ament_package",
+        "@urdf//:ament_package",
+    ],
+)

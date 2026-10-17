@@ -1,0 +1,174 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@mrpt_gui//:mrpt_gui_library",
+    "@mrpt_gui//:mrpt_nanogui_library",
+    "@mrpt_nav//:mrpt_nav_library",
+    "@mrpt_path_planning_core//:mrpt_path_planning_library",
+    "@mvsim//:mvsim-comms_library",
+    "@mvsim//:mvsim-msgs_library",
+    "@mvsim//:mvsim-raytracer_library",
+    "@mvsim//:mvsim-simulator_library",
+    "@mvsim//:pymvsim_comms.cpython-314-x86_64-linux-gnu_library",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "mrpt_path_planning_viz_library",
+    srcs = [":gen_mrpt_path_planning_apps_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "mrpt_path_planning_viz/include",
+        "mrpt_path_planning_viz/src",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_path_planning_viz",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":mrpt_path_planning_viz_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "_bin/path-planner-cli",
+    srcs = [":gen_mrpt_path_planning_apps_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "mrpt_path_planning_viz/include",
+        "mrpt_path_planning_viz/src",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_path_planning_viz_library"],
+)
+
+write_file(
+    name = "gen_mrpt_path_planning_apps_stub_cpp",
+    out = "_gen/mrpt_path_planning_apps_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "share/costmap-obstacles.yaml",
+        "share/costmap-prefer-waypoints.yaml",
+        "share/map01.png",
+        "share/map02.png",
+        "share/map03.png",
+        "share/map04.png",
+        "share/maps.pptx",
+        "share/mvsim-demo.xml",
+        "share/mvsim-demo-astar-planner-params.yaml",
+        "share/mvsim-demo-astar-planner-params-ackermann.yaml",
+        "share/mvsim-demo-rrtstar-planner-params.yaml",
+        "share/mvsim-demo-waypoints01.yaml",
+        "share/mvsim-demo-waypoints02.yaml",
+        "share/nav-engine-params.yaml",
+        "share/obstacles_01.txt",
+        "share/ptgs_ackermann_vehicle.ini",
+        "share/ptgs_holonomic_robot.ini",
+    ],
+    data_strip_prefix = "share",
+    libraries = [
+        ":mrpt_path_planning_viz",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_path_planning_viz": [
+            "libmrpt_path_planning_viz.so.2.0",
+            "libmrpt_path_planning_viz.so.2.0.0",
+        ],
+    },
+    deps = [
+        "@mrpt_gui//:ament_package",
+        "@mrpt_nav//:ament_package",
+        "@mrpt_path_planning_core//:ament_package",
+        "@mvsim//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        "mrpt_path_planning_viz/include/mpp/algos/viz.h",
+    ],
+    headers_strip_prefix = "mrpt_path_planning_viz/include",
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_path_planning_viz",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        ":_bin/path-planner-cli",
+    ],
+    sonames = {
+        "mrpt_path_planning_viz": [
+            "libmrpt_path_planning_viz.so.2.0",
+            "libmrpt_path_planning_viz.so.2.0.0",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_gui//:ament_package",
+        "@mrpt_nav//:ament_package",
+        "@mrpt_path_planning_core//:ament_package",
+        "@mvsim//:ament_package",
+    ],
+)

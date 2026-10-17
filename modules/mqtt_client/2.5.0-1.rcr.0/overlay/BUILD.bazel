@@ -1,0 +1,144 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rosx_introspection//:rosx_introspection": "@rosx_introspection//:rosx_introspection_library",
+}
+
+CC_DEPS = [
+    "@mqtt_client_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:fmt",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "mqtt_client_lib_library",
+    srcs = [":gen_mqtt_client_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/mqtt_client",
+    ],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "span_CONFIG_SELECT_SPAN=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mqtt_client_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":mqtt_client_lib_library"],
+)
+
+rclcpp_components_register_node(
+    name = "mqtt_client",
+    component = ":mqtt_client_lib",
+    node_name = "mqtt_client",
+    plugin = "mqtt_client::MqttClient",
+)
+
+write_file(
+    name = "gen_mqtt_client_stub_cpp",
+    out = "_gen/mqtt_client_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":mqtt_client_record"],
+    data = [
+        "config/params.aws.yaml",
+        "config/params.fixed-type-and-qos.yaml",
+        "config/params.json.yaml",
+        "config/params.primitive.yaml",
+        "config/params.primitive-fixed-type-and-qos.yaml",
+        "config/params.yaml",
+        "launch/standalone.launch.xml",
+    ],
+    lib_data = [":mqtt_client"],
+    libraries = [":mqtt_client_lib"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@mqtt_client_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rosx_introspection//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+launch_ros_binary(
+    name = "standalone.launch.xml",
+    src = "launch/standalone.launch.xml",
+    data = [
+        ":ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    libraries = [":mqtt_client_lib"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@mqtt_client_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rosx_introspection//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

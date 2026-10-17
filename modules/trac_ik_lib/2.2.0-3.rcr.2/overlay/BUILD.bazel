@@ -1,0 +1,122 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@kdl_parser//:kdl_parser": "@kdl_parser//:kdl_parser_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "trac_ik_library",
+    srcs = [
+        "src/kdl_tl.cpp",
+        "src/nlopt_ik.cpp",
+        "src/trac_ik.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_nlopt_hpp"],
+    copts = ["-std=c++20"],
+    includes = [
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["NLOPT_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "trac_ik",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":trac_ik_library"],
+)
+
+write_file(
+    name = "gen_nlopt_hpp",
+    out = "_gen/include/nlopt.hpp",
+    content = ["#ifndef RCR_NLOPT_HPP_\n#define RCR_NLOPT_HPP_\n#include <algorithm>\n#include <cmath>\n#include <vector>\nnamespace nlopt {\nenum algorithm { LN_COBYLA = 0, LD_MMA = 1, LD_SLSQP = 2, LN_BOBYQA = 3, LN_NELDERMEAD = 4 };\nenum result { FAILURE = -1, INVALID_ARGS = -2, OUT_OF_MEMORY = -3, ROUNDOFF_LIMITED = -4, FORCED_STOP = -5, SUCCESS = 1, STOPVAL_REACHED = 2, FTOL_REACHED = 3, XTOL_REACHED = 4, MAXEVAL_REACHED = 5, MAXTIME_REACHED = 6 };\nusing vfunc = double (*)(const std::vector<double> &, std::vector<double> &, void *);\nusing mfunc = void (*)(unsigned int, double *, unsigned int, const double *, double *, void *);\nclass opt {\n public:\n  opt() : n_(0) {}\n  opt(algorithm, unsigned int n) : n_(n), lb_(n, -1e9), ub_(n, 1e9) {}\n  void set_min_objective(vfunc f, void * f_data) { f_ = f; f_data_ = f_data; }\n  void set_lower_bounds(const std::vector<double> & lb) { lb_ = lb; }\n  void set_upper_bounds(const std::vector<double> & ub) { ub_ = ub; }\n  void set_xtol_rel(double t) { xtol_rel_ = t; }\n  void set_xtol_abs(double) {}\n  void set_xtol_abs(const std::vector<double> &) {}\n  void set_ftol_rel(double t) { ftol_rel_ = t; }\n  void set_maxeval(int m) { maxeval_ = m; }\n  void set_maxtime(double t) { maxtime_ = t; }\n  void add_equality_mconstraint(mfunc, void *, const std::vector<double> &) {}\n  void add_inequality_mconstraint(mfunc, void *, const std::vector<double> &) {}\n  void force_stop() {}\n  result optimize(std::vector<double> & x, double & opt_f) {\n    if (!f_) return FAILURE;\n    std::vector<double> grad;\n    for (unsigned int i = 0; i < n_ && i < x.size(); ++i)\n      x[i] = std::clamp(x[i], lb_[i], ub_[i]);\n    opt_f = f_(x, grad, f_data_);\n    double step = 0.2;\n    int evals = 1;\n    for (int iter = 0; iter < 25 && evals < maxeval_; ++iter) {\n      bool improved = false;\n      for (unsigned int i = 0; i < n_ && i < x.size(); ++i) {\n        double orig = x[i];\n        for (double dir : {1.0, -1.0}) {\n          x[i] = std::clamp(orig + dir * step, lb_[i], ub_[i]);\n          double val = f_(x, grad, f_data_);\n          ++evals;\n          if (val < opt_f) { opt_f = val; orig = x[i]; improved = true; break; }\n          x[i] = orig;\n        }\n      }\n      if (!improved) step *= 0.5;\n      if (step < xtol_rel_) break;\n    }\n    return SUCCESS;\n  }\n private:\n  unsigned int n_;\n  std::vector<double> lb_, ub_;\n  vfunc f_{nullptr};\n  void * f_data_{nullptr};\n  double xtol_rel_{1e-3}, ftol_rel_{1e-3}, maxtime_{1.0};\n  int maxeval_{500};\n};\n}  // namespace nlopt\n#endif\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":trac_ik"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@kdl_parser//:ament_package",
+        "@rclcpp//:ament_package",
+        "@urdf//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "geometry_msgs",
+        "urdf",
+        "kdl_parser",
+        "NLopt",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_trac_ik_lib",
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [":trac_ik"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@kdl_parser//:ament_package",
+        "@rclcpp//:ament_package",
+        "@urdf//:ament_package",
+    ],
+)

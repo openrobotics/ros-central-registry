@@ -1,0 +1,148 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@iceoryx_hoofs//:iceoryx_hoofs": "@iceoryx_hoofs//:iceoryx_hoofs_library",
+    "@iceoryx_hoofs//:iceoryx_platform": "@iceoryx_hoofs//:iceoryx_platform_library",
+    "@iceoryx_posh//:iceoryx_posh": "@iceoryx_posh//:iceoryx_posh_library",
+}
+
+CC_DEPS = [
+]
+
+cc_library(
+    name = "iceoryx_introspection_library",
+    srcs = [
+        "source/iceoryx_introspection_app.cpp",
+        "source/introspection_app.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_ncurses_h"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/iceoryx_introspection",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "iceoryx_introspection",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":iceoryx_introspection_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":iceoryx_introspection"],
+)
+
+cc_binary(
+    name = "iox-introspection-client",
+    srcs = ["source/introspection_main.cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_ncurses_h"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/iceoryx_introspection",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":iceoryx_introspection_library"],
+)
+
+write_file(
+    name = "gen_ncurses_h",
+    out = "_gen/include/ncurses.h",
+    content = ["#pragma once\n#include <cstdint>\nstruct WINDOW {};\n#define A_NORMAL 0U\n#define A_UNDERLINE (1U << 17)\n#define A_BOLD (1U << 21)\n#define COLOR_PAIR(n) (static_cast<uint32_t>(n) << 8)\n#define COLOR_BLACK 0\n#define COLOR_RED 1\n#define COLOR_WHITE 7\n#ifndef TRUE\n#define TRUE 1\n#endif\n#ifndef FALSE\n#define FALSE 0\n#endif\n#define LINES 24\n#define COLS 80\n#define KEY_DOWN 0402\n#define KEY_UP 0403\n#define KEY_LEFT 0404\n#define KEY_RIGHT 0405\ninline WINDOW * initscr() { return nullptr; }\ninline int curs_set(int) { return 0; }\ninline int start_color() { return 0; }\ninline int init_pair(short, short, short) { return 0; }\ninline WINDOW * newpad(int, int) { return nullptr; }\ninline int keypad(WINDOW *, bool) { return 0; }\ninline int nodelay(WINDOW *, bool) { return 0; }\ninline int wclrtobot(WINDOW *) { return 0; }\ninline int endwin() { return 0; }\ninline int prefresh(WINDOW *, int, int, int, int, int, int) { return 0; }\ninline int wmove(WINDOW *, int, int) { return 0; }\ninline int getmaxy(const WINDOW *) { return 24; }\ninline int getmaxx(const WINDOW *) { return 80; }\ninline int wgetch(WINDOW *) { return -1; }\ninline int wattron(WINDOW *, int) { return 0; }\ninline int wattroff(WINDOW *, int) { return 0; }\ninline int wprintw(WINDOW *, const char *, ...) { return 0; }\n"],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "cmake/iceoryx_introspectionConfig.cmake",
+    ],
+    prefix = "lib/cmake/iceoryx_introspection",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+    ],
+    libraries = [
+        ":iceoryx_introspection",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@iceoryx_hoofs//:ament_package",
+        "@iceoryx_posh//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        "include/iceoryx_introspection/iceoryx_introspection_app.hpp",
+        "include/iceoryx_introspection/introspection_app.hpp",
+        "include/iceoryx_introspection/introspection_types.hpp",
+    ],
+    include_prefix = "iceoryx/v2.0.6",
+    install_package_xml = False,
+    libraries = [
+        ":iceoryx_introspection",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        ":iox-introspection-client",
+    ],
+    deps = [":ament_index"] + [
+        "@iceoryx_hoofs//:ament_package",
+        "@iceoryx_posh//:ament_package",
+    ],
+)

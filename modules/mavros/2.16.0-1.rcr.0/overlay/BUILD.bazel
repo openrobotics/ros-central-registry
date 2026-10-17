@@ -1,0 +1,798 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+)
+
+DEPENDENCIES = {
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@libmavconn//:mavconn": "@libmavconn//:mavconn_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcl//:rcl": "@rcl//:rcl_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_ros//:static_transform_broadcaster_node": "@tf2_ros//:static_transform_broadcaster_node_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@angles//:angles",
+    "@diagnostic_msgs//:cc",
+    "@eigen_stl_containers//:eigen_stl_containers",
+    "@geographic_msgs//:cc",
+    "@geographic_msgs//:validation",
+    "@geometry_msgs//:cc",
+    "@mavros_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@rcl//:wait_for_entity_helpers",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@std_srvs//:cc",
+    "@trajectory_msgs//:cc",
+]
+
+cc_library(
+    name = "mavros_library",
+    srcs = [":gen_mavros_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mavros",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":mavros_library"],
+)
+
+cc_library(
+    name = "mavros_plugins_library",
+    srcs = [":gen_mavros_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mavros_library"],
+)
+
+cc_shared_library(
+    name = "mavros_plugins",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":mavros_plugins_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "mavros_components",
+    component = ":mavros",
+    plugins = [
+        "mavros::router::Router",
+        "mavros::uas::UAS",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "mavros_node",
+    srcs = [":gen_mavros_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [
+        ":gen_geocentric_h",
+        ":gen_geographiclib_local_cartesian_hpp",
+    ],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines() + [
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mavros_library"],
+)
+
+py_library(
+    name = "mavros_py",
+    srcs = glob(["mavros/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@angles//:angles_py",
+        "@diagnostic_msgs//:py",
+        "@diagnostic_updater//:diagnostic_updater_py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@mavros_msgs//:py",
+        "@message_filters//:message_filters_py",
+        "@nav_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+        "@std_srvs//:py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+write_file(
+    name = "gen_mavros_stub_cpp",
+    out = "_gen/mavros_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+write_file(
+    name = "gen_geographiclib_local_cartesian_hpp",
+    out = "_gen/include/GeographicLib/LocalCartesian.hpp",
+    content = ["#ifndef RCR_GEOGRAPHICLIB_LOCAL_CARTESIAN_HPP_\n#define RCR_GEOGRAPHICLIB_LOCAL_CARTESIAN_HPP_\n#include <cmath>\nnamespace GeographicLib {\nclass Geocentric {\npublic:\n  Geocentric() = default;\n  Geocentric(double, double) {}\n  static const Geocentric & WGS84() { static Geocentric g; return g; }\n  void Forward(double, double, double, double & X, double & Y, double & Z) const { X = 0; Y = 0; Z = 0; }\n  void Reverse(double, double, double, double & lat, double & lon, double & h) const { lat = 0; lon = 0; h = 0; }\n};\nclass LocalCartesian {\n public:\n  LocalCartesian() = default;\n  LocalCartesian(double lat0, double lon0, double h0 = 0.0, const Geocentric & = Geocentric::WGS84()) : lat0_(lat0), lon0_(lon0), h0_(h0) {}\n  explicit LocalCartesian(const Geocentric &) {}\n  void Reset(double lat0, double lon0, double h0 = 0.0) { lat0_ = lat0; lon0_ = lon0; h0_ = h0; }\n  double LatitudeOrigin() const { return lat0_; }\n  double LongitudeOrigin() const { return lon0_; }\n  double HeightOrigin() const { return h0_; }\n  void Forward(double lat, double lon, double h, double & x, double & y, double & z) const {\n    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;\n    constexpr double kR = 6378137.0;\n    x = (lon - lon0_) * kDegToRad * kR * std::cos(lat0_ * kDegToRad);\n    y = (lat - lat0_) * kDegToRad * kR;\n    z = h - h0_;\n  }\n  void Reverse(double x, double y, double z, double & lat, double & lon, double & h) const {\n    constexpr double kRadToDeg = 180.0 / 3.14159265358979323846;\n    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;\n    constexpr double kR = 6378137.0;\n    lat = lat0_ + (y / kR) * kRadToDeg;\n    lon = lon0_ + (x / (kR * std::cos(lat0_ * kDegToRad))) * kRadToDeg;\n    h = h0_ + z;\n  }\n private:\n  double lat0_{0.0}, lon0_{0.0}, h0_{0.0};\n};\n}  // namespace GeographicLib\n#endif\n"],
+)
+
+write_file(
+    name = "gen_geocentric_h",
+    out = "_gen/include/GeographicLib/Geocentric.hpp",
+    content = ["#pragma once\n#include \"GeographicLib/LocalCartesian.hpp\"\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":mavros_components"],
+    data = [
+        "launch/apm.launch",
+        "launch/apm_config.yaml",
+        "launch/apm_pluginlists.yaml",
+        "launch/apm_with_terrain.launch",
+        "launch/multi_uas.launch",
+        "launch/node.launch",
+        "launch/px4.launch",
+        "launch/px4_config.yaml",
+        "launch/px4_pluginlists.yaml",
+        "launch/test_compose.launch.py",
+    ],
+    lib_data = [
+        ":mavros_node",
+        "scripts/install_geographiclib_datasets.sh",
+        "scripts/mav",
+    ],
+    libraries = [
+        ":mavros",
+        ":mavros_plugins",
+    ],
+    package_xml = "package.xml",
+    plugins = ["mavros_plugins.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_google_benchmark//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@eigen_stl_containers//:ament_package",
+        "@geographic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@libmavconn//:ament_package",
+        "@mavlink//:ament_package",
+        "@mavros_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcl//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@trajectory_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "libmavros-frame-conversions-test",
+    srcs = [":gen_mavros_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "libmavros-quaternion-utils-test",
+    srcs = [":gen_mavros_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "libmavros-sensor-orientation-test",
+    srcs = [":gen_mavros_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "mavros-plugin-command",
+    srcs = [":gen_mavros_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "mavros-plugin-mission",
+    srcs = [":gen_mavros_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "mavros-plugin-param",
+    srcs = [":gen_mavros_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "mavros-plugin-params-test",
+    srcs = [":gen_mavros_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "TEST_PLUGIN_PARAMS_YAML=\\\"test/test_plugin_params.yaml\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "mavros-router-e2e",
+    srcs = [":gen_mavros_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "mavros-router-test",
+    srcs = [":gen_mavros_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "mavros-uas-test",
+    srcs = [":gen_mavros_stub_cpp"],
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mavros_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_binary(
+    name = "test_compose.launch.py",
+    src = "launch/test_compose.launch.py",
+    data = [
+        ":ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+    deps = [":mavros_py"],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "eigen3_cmake_module",
+        "Eigen3",
+    ],
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":mavros",
+        ":mavros_plugins",
+    ],
+    package_xml = "package.xml",
+    python = [":mavros_py"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_google_benchmark//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@eigen_stl_containers//:ament_package",
+        "@geographic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@libmavconn//:ament_package",
+        "@mavlink//:ament_package",
+        "@mavros_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcl//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@trajectory_msgs//:ament_package",
+    ],
+)

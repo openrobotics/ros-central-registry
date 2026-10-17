@@ -1,0 +1,416 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_qt//:qt.bzl", "qt_cc_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@rules_qt//:qt_core",
+    "@rules_qt//:qt_gui",
+    "@rules_qt//:qt_svg",
+    "@rules_qt//:qt_widgets",
+]
+
+qt_cc_library(
+    name = "_bin_moc_library",
+    srcs = [":gen_qrc_resources_cpp"],
+    hdrs = [
+        "src/bridge_client.hpp",
+        "src/main_window.hpp",
+        "src/processor_chain_widget.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+        "-Isrc",
+    ],
+    includes = [
+        "_gen/include",
+        "src",
+    ],
+    normal_hdrs = [":gen_rcr_qt_libc_shim_hpp"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "ros2_unbag_gui",
+    srcs = [
+        "src/bridge_client.cpp",
+        "src/main.cpp",
+        "src/main_window.cpp",
+        "src/processor_chain_widget.cpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ) + [":gen_rcr_qt_libc_shim_hpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "rcr_qt_libc_shim.hpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":_bin_moc_library"],
+)
+
+py_library(
+    name = "ros2_unbag",
+    srcs = glob(["ros2_unbag/**/*.py"]),
+    imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+write_file(
+    name = "gen_rcr_qt_libc_shim_hpp",
+    out = "_gen/include/rcr_qt_libc_shim.hpp",
+    content = ["#pragma once\n#ifdef __cplusplus\n#include <QByteArray>\n#include <QJsonObject>\n#include <QJsonValue>\n#include <QObject>\n#include <QString>\n#include <QTimer>\n#include <chrono>\n#include <initializer_list>\n#include <string>\n#include <utility>\ninline QByteArray QByteArray::fromStdString(const std::string &s) { return QByteArray(s.data(), s.size()); }\ninline std::string QByteArray::toStdString() const { return std::string(constData(), size()); }\ninline QJsonObject::QJsonObject(std::initializer_list<std::pair<QString, QJsonValue>> args) : QJsonObject() {\n  for (const auto &arg : args) { insert(arg.first, arg.second); }\n}\nextern \"C\" void _ZN6QTimer14singleShotImplENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEEN2Qt9TimerTypeEPK7QObjectPN9QtPrivate15QSlotObjectBaseE(\n    long ns, Qt::TimerType timerType, const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj);\ninline void QTimer::singleShotImpl(std::chrono::nanoseconds ns, Qt::TimerType timerType, const QObject *receiver, QtPrivate::QSlotObjectBase *slotObj) {\n  _ZN6QTimer14singleShotImplENSt6chrono8durationIlSt5ratioILl1ELl1000000000EEEEN2Qt9TimerTypeEPK7QObjectPN9QtPrivate15QSlotObjectBaseE(\n      ns.count(), timerType, receiver, slotObj);\n}\n#endif\n"],
+)
+
+genrule(
+    name = "gen_qrc_resources_cpp",
+    srcs = [
+        "qt_resources/resources.qrc",
+        "qt_resources/assets/badge.svg",
+        "qt_resources/assets/loading.gif",
+        "qt_resources/assets/title.png",
+        "qt_resources/gui.qss",
+    ],
+    outs = ["_gen/qrc_resources.cpp"],
+    cmd = select({
+        "@rules_qt//:linux_x86_64": "$(location @qt_linux_x86_64//:rcc) --name resources --output $@ $(location qt_resources/resources.qrc)",
+        "@rules_qt//:linux_aarch64": "$(location @qt_linux_aarch64//:rcc) --name resources --output $@ $(location qt_resources/resources.qrc)",
+        "@platforms//os:windows": "$(location @qt_windows_x86_64//:rcc) --name resources --output $@ $(location qt_resources/resources.qrc)",
+        "@rules_qt//:osx_x86_64": "$(location @qt_mac_x86_64//:rcc) --name resources --output $@ $(location qt_resources/resources.qrc)",
+        "@rules_qt//:osx_arm64": "$(location @qt_mac_aarch64//:rcc) --name resources --output $@ $(location qt_resources/resources.qrc)",
+    }),
+    tools = select({
+        "@rules_qt//:linux_x86_64": ["@qt_linux_x86_64//:rcc"],
+        "@rules_qt//:linux_aarch64": ["@qt_linux_aarch64//:rcc"],
+        "@platforms//os:windows": ["@qt_windows_x86_64//:rcc"],
+        "@rules_qt//:osx_arm64": ["@qt_mac_aarch64//:rcc"],
+        "@rules_qt//:osx_x86_64": ["@qt_mac_x86_64//:rcc"],
+    }),
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":ros2_unbag_gui",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclpy//:ament_package",
+        "@ros2cli//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosidl_runtime_py//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+    ],
+)
+
+py_pytest(
+    name = "test_bag_utils",
+    srcs = ["tests/test_bag_utils.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_bridge",
+    srcs = ["tests/test_bridge.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_exporter_processors",
+    srcs = ["tests/test_exporter_processors.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_file_utils",
+    srcs = ["tests/test_file_utils.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_image_exports",
+    srcs = ["tests/test_image_exports.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_image_utils",
+    srcs = ["tests/test_image_utils.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_master_timestamp",
+    srcs = ["tests/test_master_timestamp.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_pointcloud_exports",
+    srcs = ["tests/test_pointcloud_exports.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_processors_base",
+    srcs = ["tests/test_processors_base.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_processors_docs",
+    srcs = ["tests/test_processors_docs.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_routines_base",
+    srcs = ["tests/test_routines_base.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_routines_persistent_storage",
+    srcs = ["tests/test_routines_persistent_storage.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_video_utils",
+    srcs = ["tests/test_video_utils.py"],
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":ros2_unbag",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    package_xml = "package.xml",
+    python = [":ros2_unbag"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclpy//:ament_package",
+        "@ros2cli//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosidl_runtime_py//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+    ],
+)

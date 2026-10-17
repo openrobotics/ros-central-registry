@@ -46,6 +46,31 @@ class TestParseModuleTokens(unittest.TestCase):
         self.assertEqual(result, ["rclcpp"])
 
 
+class TestClearVendoredModule(unittest.TestCase):
+
+    def setUp(self):
+        self.workspace_dir = Path(tempfile.mkdtemp())
+        (self.workspace_dir / "vendor").mkdir()
+
+    def tearDown(self):
+        shutil.rmtree(self.workspace_dir)
+
+    def test_removes_tree_and_marker(self):
+        vendor = self.workspace_dir / "vendor"
+        (vendor / "rclcpp+" / "src").mkdir(parents=True)
+        (vendor / "rclcpp+" / "src" / "a.cpp").write_text("x")
+        (vendor / "@rclcpp+.marker").write_text("hash")
+        (vendor / "other+").mkdir()
+        self.assertTrue(vendor_modules.clear_vendored_module(self.workspace_dir, "rclcpp"))
+        self.assertFalse((vendor / "rclcpp+").exists())
+        self.assertFalse((vendor / "@rclcpp+.marker").exists())
+        # Unrelated modules are untouched.
+        self.assertTrue((vendor / "other+").exists())
+
+    def test_noop_when_not_vendored(self):
+        self.assertFalse(vendor_modules.clear_vendored_module(self.workspace_dir, "rclcpp"))
+
+
 class TestModulesForVariant(unittest.TestCase):
 
     def setUp(self):
@@ -127,6 +152,15 @@ class TestDeclaredModuleNames(unittest.TestCase):
             'bazel_dep(name = "rules_cc", version = "0.2.22")\n')
         result = vendor_modules.declared_module_names(module_dot_bazel, self.modules_dir)
         self.assertEqual(result, {"rclcpp", "rules_cc"})
+
+    def test_rcr_only_excludes_bcr_deps(self):
+        module_dot_bazel = self.tmp_dir / "MODULE.bazel"
+        module_dot_bazel.write_text(
+            'bazel_dep(name = "rclcpp", version = "1.0.0")\n'
+            'bazel_dep(name = "rules_cc", version = "0.2.22")\n'
+            'bazel_dep(name = "platforms", version = "1.0.0")\n')
+        result = vendor_modules.declared_rcr_module_names(module_dot_bazel, self.modules_dir)
+        self.assertEqual(result, {"rclcpp"})
 
 
 class TestEnsureVendorDirFlag(unittest.TestCase):
@@ -272,11 +306,14 @@ class TestMain(unittest.TestCase):
             (version_dir / "MODULE.bazel").write_text(
                 f'module(\n    name = "{name}",\n    version = "1.0.0",\n)\n')
         self.target_workspace.mkdir(parents=True)
+        # `platforms` is a BCR dep (no modules/platforms/ directory) that a
+        # real `bazel vendor` never materializes; see the --all tests below.
         (self.target_workspace / "MODULE.bazel").write_text(
             'bazel_dep(name = "rclcpp", version = "1.0.0")\n'
             'bazel_dep(name = "rclcpp_action", version = "1.0.0")\n'
             'bazel_dep(name = "rclcpp_lifecycle", version = "1.0.0")\n'
-            'bazel_dep(name = "rcutils", version = "1.0.0")\n')
+            'bazel_dep(name = "rcutils", version = "1.0.0")\n'
+            'bazel_dep(name = "platforms", version = "1.0.0")\n')
         (self.target_workspace / ".bazelrc").write_text("common --foo=bar\n")
         (self.target_workspace / "ros-core.txt").write_text(
             "@rcutils//...\n@rclcpp//...\n")
@@ -288,6 +325,10 @@ class TestMain(unittest.TestCase):
         self.recorded_cmds = []
         self.original_run = subprocess.run
 
+        # Repos a real `bazel vendor` silently declines to materialize while
+        # still exiting 0 (built-in modules such as `platforms`).
+        self.unvendorable = {"platforms"}
+
         def _fake_run(cmd, cwd=None, check=None):
             self.recorded_cmds.append(cmd)
             # Simulate what a real "bazel vendor" would materialize, so the
@@ -295,6 +336,8 @@ class TestMain(unittest.TestCase):
             for arg in cmd:
                 if arg.startswith("--repo=@"):
                     name = arg[len("--repo=@"):]
+                    if name in self.unvendorable:
+                        continue
                     module_dir = self.target_workspace / "vendor" / f"{name}+"
                     module_dir.mkdir(parents=True, exist_ok=True)
                     (module_dir / "MODULE.bazel").write_text(
@@ -346,12 +389,29 @@ class TestMain(unittest.TestCase):
         repos = [a for a in self.recorded_cmds[0] if a.startswith("--repo=")]
         self.assertEqual(repos, ["--repo=@rcutils", "--repo=@rclcpp"])
 
-    def test_all_flag_vendors_every_declared_module(self):
+    def test_all_flag_vendors_every_declared_rcr_module(self):
         self.run_main(["--all"])
         repos = {a for a in self.recorded_cmds[0] if a.startswith("--repo=")}
+        # The BCR dep `platforms` is declared but is not an RCR package, so
+        # --all must not try to vendor it.
         self.assertEqual(
             repos,
             {"--repo=@rclcpp", "--repo=@rclcpp_action", "--repo=@rclcpp_lifecycle", "--repo=@rcutils"})
+        for name in ["rclcpp", "rclcpp_action", "rclcpp_lifecycle", "rcutils"]:
+            self.assertTrue(
+                (self.target_workspace / vendor_modules.VENDOR_MANIFEST_DIR_NAME / f"{name}.json").exists())
+
+    def test_unvendored_module_is_skipped_without_aborting_the_rest(self):
+        # An explicitly requested BCR module that bazel vendor doesn't
+        # materialize must not crash the manifest bookkeeping for the modules
+        # sorted after it.
+        self.run_main(["platforms", "rcutils"])
+        self.assertFalse(
+            (self.target_workspace / vendor_modules.VENDOR_MANIFEST_DIR_NAME / "platforms.json").exists())
+        self.assertTrue(
+            (self.target_workspace / vendor_modules.VENDOR_MANIFEST_DIR_NAME / "rcutils.json").exists())
+        self.assertTrue(
+            (self.target_workspace / vendor_modules.VENDOR_SNAPSHOT_DIR_NAME / "rcutils+" / "src.c").exists())
 
     def test_all_combined_with_modules_is_rejected(self):
         with self.assertRaises(SystemExit):

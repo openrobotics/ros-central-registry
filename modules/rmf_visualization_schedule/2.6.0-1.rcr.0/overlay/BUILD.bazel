@@ -1,0 +1,255 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:asio": "@rosdistro//cc:asio_library",
+    "@rosdistro//cc:boringssl": "@rosdistro//cc:boringssl_crypto_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+}
+
+CC_DEPS = [
+    "@std_msgs//:cc",
+    "@builtin_interfaces//:cc",
+    "@geometry_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rmf_traffic//:rmf_traffic_library",
+    "@rmf_traffic_msgs//:cc",
+    "@rmf_traffic_ros2//:rmf_traffic_ros2_library",
+    "@rmf_utils//:rmf_utils_library",
+    "@rmf_visualization_msgs//:cc",
+    "@rosdistro//cc:boringssl_ssl_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:nlohmann_json",
+    "@rosdistro//cc:websocketpp",
+    "@visualization_msgs//:cc",
+]
+
+cc_library(
+    name = "rmf_visualization_schedule_library",
+    srcs = [":gen_rmf_visualization_schedule_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/rmf_visualization_schedule",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rmf_visualization_schedule",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":rmf_visualization_schedule_library"],
+)
+
+cc_library(
+    name = "schedule_visualizer_library",
+    srcs = [":gen_rmf_visualization_schedule_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/rmf_visualization_schedule",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":rmf_visualization_schedule_library"],
+)
+
+cc_shared_library(
+    name = "schedule_visualizer",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":schedule_visualizer_library"],
+)
+
+rclcpp_components_register_node(
+    name = "schedule_visualizer_node",
+    component = ":schedule_visualizer",
+    node_name = "schedule_visualizer_node",
+    plugin = "ScheduleVisualizer",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "test_submit_trajectory",
+    srcs = [":gen_rmf_visualization_schedule_stub_cpp"] + glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/rmf_visualization_schedule",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+write_file(
+    name = "gen_rmf_visualization_schedule_stub_cpp",
+    out = "_gen/rmf_visualization_schedule_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":schedule_visualizer_node_record"],
+    data = ["config/rmf.rviz"],
+    lib_data = [
+        ":schedule_visualizer_node",
+        ":test_submit_trajectory",
+    ],
+    libraries = [
+        ":rmf_visualization_schedule",
+        ":schedule_visualizer",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rmf_traffic//:ament_package",
+        "@rmf_traffic_msgs//:ament_package",
+        "@rmf_traffic_ros2//:ament_package",
+        "@rmf_utils//:ament_package",
+        "@rmf_visualization_msgs//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@std_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rmf_traffic",
+        "rmf_traffic_ros2",
+        "rclcpp",
+        "rmf_traffic_msgs",
+        "websocketpp",
+        "OpenSSL",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_libraries = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":rmf_visualization_schedule",
+        ":schedule_visualizer",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rmf_traffic//:ament_package",
+        "@rmf_traffic_msgs//:ament_package",
+        "@rmf_traffic_ros2//:ament_package",
+        "@rmf_utils//:ament_package",
+        "@rmf_visualization_msgs//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@std_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

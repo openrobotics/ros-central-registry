@@ -1,0 +1,178 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = glob([
+    "include/*.hpp",
+    "include/*.h",
+])
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+}
+
+MSG_DEPENDENCIES = [
+    "@sensor_msgs//:cc",
+    "@std_srvs//:cc",
+]
+
+# The bundled Slamtec RPLIDAR SDK (sdk/), built into the node library the
+# way upstream's CMakeLists.txt globs it (linux arch only).
+cc_library(
+    name = "rplidar_sdk",
+    srcs = glob([
+        "sdk/src/*.cpp",
+        "sdk/src/arch/linux/*.cpp",
+        "sdk/src/hal/*.cpp",
+    ]),
+    hdrs = glob([
+        "sdk/include/*.h",
+        "sdk/src/*.h",
+        "sdk/src/arch/linux/*.h",
+        "sdk/src/arch/linux/*.hpp",
+        "sdk/src/hal/*.h",
+    ]),
+    includes = [
+        "sdk/include",
+        "sdk/src",
+    ],
+    linkopts = ["-lpthread"],
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "rplidar_composition_node_library",
+    srcs = ["src/rplidar_node.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + MSG_DEPENDENCIES + [
+        ":rplidar_sdk",
+    ],
+)
+
+cc_shared_library(
+    name = "rplidar_composition_node",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [
+        ":rplidar_composition_node_library",
+        ":rplidar_sdk",
+    ],
+    deps = [":rplidar_composition_node_library"],
+)
+
+### COMPONENTS
+
+rclcpp_components_register_nodes(
+    name = "rplidar_composition_node_nodes",
+    component = ":rplidar_composition_node",
+    plugins = ["rplidar_ros::rplidar_node"],
+)
+
+### EXECUTABLES
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rplidar_composition_node"],
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "rplidar_composition",
+    srcs = ["src/standalone_rplidar.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + MSG_DEPENDENCIES + [
+        ":rplidar_composition_node_library",
+    ],
+)
+
+### AMENT INDEX
+
+DATA = glob([
+    "launch/**",
+    "rviz/**",
+])
+
+ament_index(
+    name = "ament_index",
+    components = [":rplidar_composition_node_nodes"],
+    data = DATA,
+    executables = [":rplidar_composition"],
+    libraries = [":rplidar_composition_node"],
+    package_xml = "package.xml",
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "sensor_msgs",
+        "std_srvs",
+        "rclcpp_components",
+    ],
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    components = [":rplidar_composition_node_nodes"],
+    data = DATA,
+    executables = [":rplidar_composition"],
+    headers = HEADERS,
+    libraries = [":rplidar_composition_node"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+    ],
+)

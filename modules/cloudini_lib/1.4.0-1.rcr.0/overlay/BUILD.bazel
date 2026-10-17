@@ -1,0 +1,197 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+    "@rosdistro//cc:zstd": "@rosdistro//cc:zstd_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:pcl_common",
+    "@rosdistro//cc:pcl_io",
+    "@rosdistro//cc:pcl_octree",
+]
+
+cc_library(
+    name = "cloudini_lib_library",
+    srcs = [
+        "src/chunk_writer.cpp",
+        "src/cloudini.cpp",
+        "src/codec_common.cpp",
+        "src/field_decoder.cpp",
+        "src/field_encoder.cpp",
+        "src/pcl_conversion.cpp",
+        "src/ros_msg_utils.cpp",
+        "src/v4_codec.cpp",
+        "src/v5_codec.cpp",
+        "src/v6_codec.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    includes = [
+        "include",
+        "include/cloudini_lib",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "cloudini_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":cloudini_lib_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":cloudini_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+    ],
+)
+
+write_file(
+    name = "gen_data_path_hpp",
+    out = "_gen/include/data_path.hpp",
+    content = [
+        "#pragma once\n",
+        "#include <string>\n",
+        "namespace Cloudini::tests {\n",
+        "static const std::string DATA_PATH = \"samples/\";\n",
+        "}  // namespace Cloudini::tests\n",
+    ],
+)
+
+cc_test(
+    name = "test_cloudini",
+    srcs = [
+        "test/test_field_encoders.cpp",
+        "test/test_header.cpp",
+        "test/test_intrinsics.cpp",
+        "test/test_pcl.cpp",
+        "test/test_ros_msg.cpp",
+        "test/test_v6.cpp",
+        ":gen_data_path_hpp",
+    ] + glob(
+        [
+            "**/*.h",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++20"],
+    data = [
+        ":ament_index",
+    ] + glob(
+        [
+            "samples/**",
+            "test/**",
+            "tests/**",
+        ],
+        allow_empty = True,
+        exclude = [
+            "**/*.cpp",
+            "**/*.cc",
+            "**/*.c",
+            "**/*.h",
+            "**/*.hpp",
+        ],
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/cloudini_lib",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":cloudini_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "PCL",
+        "Threads",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    libraries = [
+        ":cloudini_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+    ],
+)

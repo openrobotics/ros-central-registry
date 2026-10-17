@@ -1,0 +1,169 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+}
+
+CC_DEPS = [
+    "@rmf_task_msgs//:cc",
+    "@rmf_fleet_adapter//:rmf_fleet_adapter_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:nlohmann_json",
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "rmf_adapter.cpython-314-x86_64-linux-gnu_library",
+    srcs = [":gen_rmf_fleet_adapter_python_stub_cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = [
+        "-std=c++20",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/rmf_fleet_adapter_python",
+    ],
+    local_defines = ros_local_defines() + [
+        "BUILT_AGAINST_NUMPY_VERSION=\\\"2.3.5\\\"",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rmf_adapter.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "rmf_adapter.so",
+    deps = [":rmf_adapter.cpython-314-x86_64-linux-gnu_library"],
+)
+
+write_file(
+    name = "gen_rmf_fleet_adapter_python_stub_cpp",
+    out = "_gen/rmf_fleet_adapter_python_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        ":rmf_adapter.cpython-314-x86_64-linux-gnu",
+    ],
+    prefix = "lib/python/site-packages",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_1",
+    files = [
+        "scripts/__init__.py",
+    ],
+    prefix = "lib/python/site-packages/rmf_fleet_adapter_python",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+    ],
+    lib_data = [
+        "scripts/rmf_msg_observer.py",
+        "scripts/schedule_blockade_nodes.py",
+        "scripts/test_adapter.py",
+        "scripts/test_delivery.py",
+        "scripts/test_loop.py",
+        "scripts/test_utils.py",
+        "scripts/traffic_light.py",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_pytest//:ament_package",
+        "@pybind11_vendor//:ament_package",
+        "@rclpy//:ament_package",
+        "@rmf_fleet_adapter//:ament_package",
+        "@rmf_task_msgs//:ament_package",
+    ],
+)
+
+py_pytest(
+    name = "test_geometry",
+    srcs = ["tests/unit/test_geometry.py"],
+    data = [":ament_index"],
+    deps = ["@rclpy"],
+)
+
+py_pytest(
+    name = "test_graph",
+    srcs = ["tests/unit/test_graph.py"],
+    data = [":ament_index"],
+    deps = ["@rclpy"],
+)
+
+py_pytest(
+    name = "test_RobotCommandHandle",
+    srcs = ["tests/unit/test_RobotCommandHandle.py"],
+    data = [":ament_index"],
+    deps = ["@rclpy"],
+)
+
+py_pytest(
+    name = "test_types",
+    srcs = ["tests/unit/test_types.py"],
+    data = [":ament_index"],
+    deps = ["@rclpy"],
+)
+
+py_pytest(
+    name = "test_vehicletraits",
+    srcs = ["tests/unit/test_vehicletraits.py"],
+    data = [":ament_index"],
+    deps = ["@rclpy"],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_pytest//:ament_package",
+        "@pybind11_vendor//:ament_package",
+        "@rclpy//:ament_package",
+        "@rmf_fleet_adapter//:ament_package",
+        "@rmf_task_msgs//:ament_package",
+    ],
+)

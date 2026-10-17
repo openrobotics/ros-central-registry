@@ -1,0 +1,183 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+    "@rosdistro//cc:zstd": "@rosdistro//cc:zstd_library",
+}
+
+CC_DEPS = [
+    "@mrpt_serialization//:mrpt_serialization_library",
+    "@mrpt_system//:mrpt_system_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "mrpt_io_library",
+    srcs = [
+        "src/CCompressedInputStream.cpp",
+        "src/CCompressedOutputStream.cpp",
+        "src/CFileGZInputStream.cpp",
+        "src/CFileGZOutputStream.cpp",
+        "src/CFileInputStream.cpp",
+        "src/CFileOutputStream.cpp",
+        "src/CFileStream.cpp",
+        "src/CMemoryStream.cpp",
+        "src/CPipe.cpp",
+        "src/CStream.cpp",
+        "src/CTextFileLinesParser.cpp",
+        "src/detect_compression.cpp",
+        "src/lazy_load_path.cpp",
+        "src/vector_loadsave.cpp",
+        "src/zip.cpp",
+    ],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_io",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":mrpt_io_library"],
+)
+
+cc_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu_library",
+    srcs = ["python_bindings/mrpt_io_py.cpp"],
+    hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.hxx",
+            "**/*.ipp",
+            "**/*.inl",
+            "**/*.txx",
+            "**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_io_library"],
+)
+
+cc_shared_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "mrpt/io/_bindings.so",
+    deps = [":_bindings.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "mrpt",
+    srcs = glob(["python/mrpt/**/*.py"]),
+    imports = ["python"],
+    deps = [
+        "@mrpt_serialization//:mrpt",
+        "@mrpt_system//:mrpt",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mrpt_io",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_io": [
+            "libmrpt_io.so.3.3",
+            "libmrpt_io.so.3.3.1",
+        ],
+    },
+    deps = [
+        "@mrpt_common//:ament_package",
+        "@mrpt_serialization//:ament_package",
+        "@mrpt_system//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = glob(
+        [
+            "include/**/*.h",
+            "include/**/*.hh",
+            "include/**/*.hpp",
+            "include/**/*.hxx",
+            "include/**/*.ipp",
+            "include/**/*.inl",
+            "include/**/*.txx",
+            "include/**/*.tcc",
+        ],
+        allow_empty = True,
+    ),
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_io",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":mrpt",
+        ":_bindings.cpython-314-x86_64-linux-gnu",
+    ],
+    python_strip_prefix = "python",
+    sonames = {
+        "mrpt_io": [
+            "libmrpt_io.so.3.3",
+            "libmrpt_io.so.3.3.1",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_common//:ament_package",
+        "@mrpt_serialization//:ament_package",
+        "@mrpt_system//:ament_package",
+    ],
+)

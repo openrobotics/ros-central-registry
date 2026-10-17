@@ -1,0 +1,149 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+}
+
+CC_DEPS = [
+    "@libtorch_vendor//:libtorch_vendor_library",
+    "@tensor_msgs//:cc",
+]
+
+cc_library(
+    name = "renderer_component_library",
+    srcs = [":gen_robot_arm_demo_stub_cpp"],
+    hdrs = glob(
+        [
+            "src/*.hpp",
+        ],
+        allow_empty = True,
+    ),
+    includes = ["src"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "renderer_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":renderer_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "renderer_node",
+    component = ":renderer_component",
+    node_name = "renderer_node",
+    plugin = "RendererNode",
+)
+
+cc_library(
+    name = "display_component_library",
+    srcs = [":gen_robot_arm_demo_stub_cpp"],
+    hdrs = glob(
+        [
+            "src/*.hpp",
+        ],
+        allow_empty = True,
+    ),
+    includes = ["src"],
+    local_defines = ros_local_defines() + ["USE_CUDA_GL_INTEROP"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "display_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":display_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "display_node",
+    component = ":display_component",
+    node_name = "display_node",
+    plugin = "DisplayNode",
+)
+
+write_file(
+    name = "gen_robot_arm_demo_stub_cpp",
+    out = "_gen/robot_arm_demo_stub.cpp",
+    content = ["int main() { return 0; }\n"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":display_node_record",
+        ":renderer_node_record",
+    ],
+    data = glob(["launch/*.launch.py"]),
+    libraries = [
+        ":display_component",
+        ":renderer_component",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@libtorch_vendor//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@tensor_msgs//:ament_package",
+        "@torch_conversions//:ament_package",
+    ],
+)
+
+[
+    launch_ros_binary(
+        name = f.split("/")[-1],
+        src = f,
+        data = [
+            ":ament_index",
+            "@rclcpp_components//:ament_index",
+        ],
+    )
+    for f in glob(["launch/**"])
+]
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    executables = [
+        ":display_node",
+        ":renderer_node",
+    ],
+    libraries = [
+        ":display_component",
+        ":renderer_component",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@libtorch_vendor//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@tensor_msgs//:ament_package",
+        "@torch_conversions//:ament_package",
+    ],
+)
