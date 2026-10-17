@@ -254,7 +254,9 @@ of these, so check both before considering a change done:
   There's no `ruff.toml`/`pyproject.toml` in this repo, so it runs with
   ruff's defaults.
 
-## Licensing
+## Licensing and Copyright Headers
+
+**Copyright headers must always precede `load()` statements**: Every `BUILD.bazel`, `.bzl`, and `MODULE.bazel` file must start with its `# Copyright ...` header comment block at the very top of the file (starting on line 1), *before* any `load(...)` statements. Never place or insert a `load(...)` statement above the `# Copyright` block (doing so causes `buildifier` to split the `load()` block around the comment and breaks `ament_copyright` checks).
 
 `rules_license` is already a default `bazel_dep` on every module (see
 `BCR_DEPS` in `tools/ci/bootstrap_release.py`), so it never needs adding —
@@ -264,6 +266,20 @@ files added via `create_patch`, or a package's own `msg`/`srv`/`action`
 existing pattern (e.g. `modules/rosidl_parser/*/overlay/BUILD.bazel`):
 
 ```python
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 load("@rules_license//rules:license.bzl", "license")
 
 package(

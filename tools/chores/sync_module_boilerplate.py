@@ -123,15 +123,29 @@ def _render_load(label: str, entries: Iterable[str]) -> str:
     return f'load("{label}", {", ".join(uniq)})'
 
 
+_LEADING_LOADS_BEFORE_COPYRIGHT_RE = re.compile(
+    r"\A((?:load\((?:[^()]|\([^()]*\))*\)[ \t]*\n)+)"
+    r"((?:#[ \t]*Copyright[^\n]*\n(?:#[^\n]*\n)*)\n*)",
+    re.I,
+)
+
+
 def migrate_loads(text: str) -> Tuple[str, List[str]]:
     """
     Rewrite load()s per LOAD_MIGRATIONS, in place (nothing between load
     statements -- license headers, comments -- is disturbed).  If the file
     already loads from the replacement label, the migrated symbols are
-    merged into that statement.  Returns (new_text, unsupported) where
-    `unsupported` lists symbols left on the old label because the new one
-    doesn't provide them.  Statement ordering is left to buildifier.
+    merged into that statement.  Also moves any load() statements that
+    erroneously precede the leading `# Copyright` comment block below it.
+    Returns (new_text, unsupported) where `unsupported` lists symbols left
+    on the old label because the new one doesn't provide them.  Statement
+    ordering is left to buildifier.
     """
+    m_hdr = _LEADING_LOADS_BEFORE_COPYRIGHT_RE.match(text)
+    if m_hdr:
+        pre_loads, copyright_block = m_hdr.group(1), m_hdr.group(2).rstrip("\n") + "\n\n"
+        text = copyright_block + pre_loads + text[m_hdr.end():]
+
     unsupported: List[str] = []
     loads = list(_LOAD_RE.finditer(text))
     old = [m for m in loads if m.group(1) in LOAD_MIGRATIONS]

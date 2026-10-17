@@ -107,14 +107,33 @@ class MigrateLoadsTest(unittest.TestCase):
     def test_alias_and_content_between_loads_preserved(self):
         text = (
             'load("@aspect_rules_py//py:defs.bzl", _py_test = "py_test")\n'
-            "# Copyright header that someone put between the loads\n"
+            "# Some comment that someone put between the loads\n"
             'load("@rules_license//rules:license.bzl", "license")\n'
         )
         new, unsupported = sync.migrate_loads(text)
         self.assertEqual(
             new,
             'load("@rules_python//python:defs.bzl", _py_test = "py_test")\n'
-            "# Copyright header that someone put between the loads\n"
+            "# Some comment that someone put between the loads\n"
+            'load("@rules_license//rules:license.bzl", "license")\n',
+        )
+        self.assertEqual(unsupported, [])
+
+    def test_leading_loads_before_copyright_moved_after_header(self):
+        text = (
+            'load("@aspect_rules_py//py:defs.bzl", _py_test = "py_test")\n'
+            "# Copyright 2026 Open Source Robotics Foundation, Inc.\n"
+            "#\n"
+            '# Licensed under the Apache License, Version 2.0 (the "License");\n\n'
+            'load("@rules_license//rules:license.bzl", "license")\n'
+        )
+        new, unsupported = sync.migrate_loads(text)
+        self.assertEqual(
+            new,
+            "# Copyright 2026 Open Source Robotics Foundation, Inc.\n"
+            "#\n"
+            '# Licensed under the Apache License, Version 2.0 (the "License");\n\n'
+            'load("@rules_python//python:defs.bzl", _py_test = "py_test")\n'
             'load("@rules_license//rules:license.bzl", "license")\n',
         )
         self.assertEqual(unsupported, [])
