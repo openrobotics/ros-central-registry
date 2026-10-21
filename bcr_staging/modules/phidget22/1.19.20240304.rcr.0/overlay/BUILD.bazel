@@ -1,0 +1,116 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+    ],
+    license_text = "COPYING",
+)
+
+genrule(
+    name = "libusb_compat_header",
+    outs = ["_libusb_compat/libusb-1.0/libusb.h"],
+    cmd = "printf '#pragma once\\n#include <libusb.h>\\n' > $@",
+)
+
+cc_library(
+    name = "libusb_prefixed_headers",
+    hdrs = [":libusb_compat_header"],
+    includes = ["_libusb_compat"],
+)
+
+genrule(
+    name = "p22_ver_header",
+    outs = ["_p22_ver/_p22_ver.h"],
+    cmd = "printf '#pragma once\\n#define P22_LIB_VERSION \"1.19\"\\n' > $@",
+)
+
+cc_library(
+    name = "p22_ver_lib",
+    hdrs = [":p22_ver_header"],
+    includes = ["_p22_ver"],
+)
+
+cc_library(
+    name = "phidget22",
+    srcs = glob(
+        [
+            "src/*.c",
+            "src/class/*.c",
+            "src/device/*.c",
+            "src/ext/*.c",
+            "src/ext/mos/*.c",
+            "src/ext/mos/kv/*.c",
+            "src/network/*.c",
+            "src/plat/linux/usblinux.c",
+            "src/util/*.c",
+        ],
+        exclude = [
+            "src/bridge.gen.c",
+            "src/class/*.gen.c",
+            "src/devices.gen.c",
+            "src/structio.gen.c",
+            "src/vintpackets.gen.c",
+        ],
+    ),
+    hdrs = ["include/libphidget22/phidget22.h"],
+    copts = [
+        "-include",
+        "_p22_ver.h",
+        "-Wno-switch",
+    ],
+    includes = [
+        "include",
+        "include/libphidget22",
+        "src",
+        "src/ext",
+        "src/ext/include",
+    ],
+    linkopts = [
+        "-ldl",
+        "-lm",
+        "-lpthread",
+    ],
+    local_defines = [
+        "_HOST_CPU=x86_64",
+        "_MACHINE=x86_64",
+        "MOS_BYTE_ORDER=MOS_LITTLE_ENDIAN",
+        "_MOS_PTHREADS=1",
+        "UNIX=1",
+        "_LINUX=1",
+        "Linux=1",
+        "LIBUSB_ASYNC=1",
+        "NDEBUG=1",
+        "THREAD_LOCALE_LOCALE_H=1",
+    ],
+    textual_hdrs = glob([
+        "src/**/*.h",
+        "src/**/*.gen.c",
+    ]),
+    deps = [
+        ":libusb_prefixed_headers",
+        ":p22_ver_lib",
+        "@libusb",
+    ],
+)

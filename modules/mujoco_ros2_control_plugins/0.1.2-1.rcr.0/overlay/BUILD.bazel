@@ -29,12 +29,40 @@ license(
     ],
 )
 
+# Map of shared library (key) to its static library (value).
 DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
     "@rosdistro//cc:glfw": "@rosdistro//cc:glfw_library",
+    "@rosdistro//cc:mujoco": "@rosdistro//cc:mujoco_library",
 }
 
 CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@mujoco_ros2_control_msgs//:cc",
+    "@rosdistro//cc:opengl_headers",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@std_srvs//:cc",
+    "@visualization_msgs//:cc",
 ]
+
+COPTS = [
+    "-Wno-missing-template-arg-list-after-template-kw",
+]
+
+# Header-only interface for external plugin implementations (upstream
+# INTERFACE target mujoco_ros2_control_plugins).
+cc_library(
+    name = "mujoco_ros2_control_plugins",
+    hdrs = ["include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"],
+    includes = ["include"],
+    deps = [
+        "@rclcpp//:rclcpp_library",
+        "@rosdistro//cc:mujoco_library",
+    ],
+)
 
 cc_library(
     name = "mujoco_ros2_control_plugins_impl_library",
@@ -47,38 +75,39 @@ cc_library(
         "src/mujoco_3d_lidar_plugin.cpp",
         "src/rangefinder_lidar_plugin.cpp",
     ],
-    hdrs = ["include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp"] + [
+    hdrs = [
+        "src/base_velocity_plugin.hpp",
+        "src/camera_plugin.hpp",
+        "src/external_wrench_plugin.hpp",
+        "src/free_joint_state_publisher_plugin.hpp",
+        "src/heartbeat_publisher_plugin.hpp",
+        "src/mujoco_3d_lidar_plugin.hpp",
+        "src/rangefinder_lidar_plugin.hpp",
     ],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    includes = [
-        ".",
-        "_gen/include",
-        "include",
-        "include/mujoco_ros2_control_plugins",
-        "src",
-    ],
+    copts = COPTS,
+    includes = ["src"],
     local_defines = ros_local_defines() + [
         "REALTIME_TOOLS_VERSION_MAJOR=5",
-        "_FILE_OFFSET_BITS=64",
     ],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mujoco_ros2_control_plugins"],
+    alwayslink = True,
 )
 
 cc_shared_library(
     name = "mujoco_ros2_control_plugins_impl",
     dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    exports_filter = ["//:__subpackages__"],
     deps = [":mujoco_ros2_control_plugins_impl_library"],
 )
 
+TEST_DYNAMIC_DEPS = DEPENDENCIES.keys() + [
+    ":mujoco_ros2_control_plugins_impl",
+    "@ament_index_cpp//:ament_index_cpp",
+]
+
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = TEST_DYNAMIC_DEPS,
 )
 
 ament_index(
@@ -108,145 +137,28 @@ ament_index(
     ],
 )
 
-cc_test(
-    name = "test_3d_lidar_plugin",
-    srcs = ["test/test_3d_lidar_plugin.cpp"],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    data = [
-        ":ament_index",
-    ],
-    dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        ".",
-        "_gen/include",
-        "include",
-        "include/mujoco_ros2_control_plugins",
-        "src",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":mujoco_ros2_control_plugins_impl_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
+TEST_DEPS = DEPENDENCIES.values() + CC_DEPS + [
+    ":mujoco_ros2_control_plugins_impl_library",
+    "@ament_index_cpp//:ament_index_cpp_library",
+    "@rosdistro//cc:bazel_test_helper",
+    "@rosdistro//cc:googletest",
+]
 
-cc_test(
-    name = "test_base_velocity_plugin",
-    srcs = ["test/test_base_velocity_plugin.cpp"],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    data = [
-        ":ament_index",
-    ],
+[cc_test(
+    name = name,
+    srcs = ["test/%s.cpp" % name],
+    copts = COPTS,
+    data = [":ament_index"],
     dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        ".",
-        "_gen/include",
-        "include",
-        "include/mujoco_ros2_control_plugins",
-        "src",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":mujoco_ros2_control_plugins_impl_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
-
-cc_test(
-    name = "test_camera_plugin",
-    srcs = ["test/test_camera_plugin.cpp"],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    data = [
-        ":ament_index",
-    ],
-    dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        ".",
-        "_gen/include",
-        "include",
-        "include/mujoco_ros2_control_plugins",
-        "src",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":mujoco_ros2_control_plugins_impl_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
-
-cc_test(
-    name = "test_external_wrench_plugin",
-    srcs = ["test/test_external_wrench_plugin.cpp"],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    data = [
-        ":ament_index",
-    ],
-    dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        ".",
-        "_gen/include",
-        "include",
-        "include/mujoco_ros2_control_plugins",
-        "src",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":mujoco_ros2_control_plugins_impl_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
-
-cc_test(
-    name = "test_free_joint_state_publisher_plugin",
-    srcs = ["test/test_free_joint_state_publisher_plugin.cpp"],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    data = [
-        ":ament_index",
-    ],
-    dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        ".",
-        "_gen/include",
-        "include",
-        "include/mujoco_ros2_control_plugins",
-        "src",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":mujoco_ros2_control_plugins_impl_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = TEST_DEPS,
+) for name in [
+    "test_3d_lidar_plugin",
+    "test_base_velocity_plugin",
+    "test_camera_plugin",
+    "test_external_wrench_plugin",
+    "test_free_joint_state_publisher_plugin",
+]]
 
 ament_package(
     cmake_export_dependencies_list = [

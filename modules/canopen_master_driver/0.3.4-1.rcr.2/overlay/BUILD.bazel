@@ -28,29 +28,45 @@ license(
     license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
 )
 
-DEPENDENCIES = {}
+HEADERS = [
+    "include/canopen_master_driver/lely_master_bridge.hpp",
+    "include/canopen_master_driver/lifecycle_master_driver.hpp",
+    "include/canopen_master_driver/master_driver.hpp",
+    "include/canopen_master_driver/node_interfaces/node_canopen_basic_master.hpp",
+    "include/canopen_master_driver/node_interfaces/node_canopen_basic_master_impl.hpp",
+    "include/canopen_master_driver/visibility_control.h",
+]
 
-CC_DEPS = []
+# Map of shared library (key) to its static library (value).
+DEPENDENCIES = {
+    "@canopen_core//:node_canopen_driver": "@canopen_core//:node_canopen_driver_library",
+    "@canopen_core//:node_canopen_master": "@canopen_core//:node_canopen_master_library",
+    "@lely_core_libraries//:lely-can": "@lely_core_libraries//:lely-can_library",
+    "@lely_core_libraries//:lely-co": "@lely_core_libraries//:lely-co_library",
+    "@lely_core_libraries//:lely-coapp": "@lely_core_libraries//:lely-coapp_library",
+    "@lely_core_libraries//:lely-ev": "@lely_core_libraries//:lely-ev_library",
+    "@lely_core_libraries//:lely-io2": "@lely_core_libraries//:lely-io2_library",
+    "@lely_core_libraries//:lely-libc": "@lely_core_libraries//:lely-libc_library",
+    "@lely_core_libraries//:lely-util": "@lely_core_libraries//:lely-util_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+}
+
+CC_DEPS = [
+    "@canopen_interfaces//:cc",
+]
+
+COPTS = [
+    "-Wno-missing-template-arg-list-after-template-kw",
+]
 
 cc_library(
     name = "lely_master_bridge_library",
     srcs = ["src/lely_master_bridge.cpp"],
-    hdrs = [
-        "include/canopen_master_driver/lely_master_bridge.hpp",
-        "include/canopen_master_driver/lifecycle_master_driver.hpp",
-        "include/canopen_master_driver/master_driver.hpp",
-        "include/canopen_master_driver/node_interfaces/node_canopen_basic_master.hpp",
-        "include/canopen_master_driver/node_interfaces/node_canopen_basic_master_impl.hpp",
-        "include/canopen_master_driver/visibility_control.h",
-    ],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    includes = [
-        "include",
-        "include/canopen_master_driver",
-        "test",
-    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS,
 )
@@ -58,109 +74,72 @@ cc_library(
 cc_shared_library(
     name = "lely_master_bridge",
     dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    exports_filter = ["//:__subpackages__"],
     deps = [":lely_master_bridge_library"],
 )
 
 cc_library(
     name = "node_canopen_basic_master_library",
     srcs = ["src/node_interfaces/node_canopen_basic_master.cpp"],
-    hdrs = [
-        "include/canopen_master_driver/lely_master_bridge.hpp",
-        "include/canopen_master_driver/lifecycle_master_driver.hpp",
-        "include/canopen_master_driver/master_driver.hpp",
-        "include/canopen_master_driver/node_interfaces/node_canopen_basic_master.hpp",
-        "include/canopen_master_driver/node_interfaces/node_canopen_basic_master_impl.hpp",
-        "include/canopen_master_driver/visibility_control.h",
-    ],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    includes = [
-        "include",
-        "include/canopen_master_driver",
-        "test",
-    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
     local_defines = ros_local_defines(),
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [":lely_master_bridge_library"],
 )
 
 cc_shared_library(
     name = "node_canopen_basic_master",
-    dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    dynamic_deps = DEPENDENCIES.keys() + [":lely_master_bridge"],
+    exports_filter = ["//:__subpackages__"],
     deps = [":node_canopen_basic_master_library"],
 )
 
 cc_library(
     name = "lifecycle_master_driver_library",
     srcs = ["src/lifecycle_master_driver.cpp"],
-    hdrs = [
-        "include/canopen_master_driver/lely_master_bridge.hpp",
-        "include/canopen_master_driver/lifecycle_master_driver.hpp",
-        "include/canopen_master_driver/master_driver.hpp",
-        "include/canopen_master_driver/node_interfaces/node_canopen_basic_master.hpp",
-        "include/canopen_master_driver/node_interfaces/node_canopen_basic_master_impl.hpp",
-        "include/canopen_master_driver/visibility_control.h",
-    ],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    includes = [
-        "include",
-        "include/canopen_master_driver",
-        "test",
-    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
     local_defines = ros_local_defines() + ["CANOPEN_MASTER_DRIVER_BUILDING_LIBRARY"],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":lely_master_bridge_library",
+        ":node_canopen_basic_master_library",
+    ],
+    alwayslink = True,
 )
 
 cc_shared_library(
     name = "lifecycle_master_driver",
-    dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":lely_master_bridge",
+        ":node_canopen_basic_master",
     ],
+    exports_filter = ["//:__subpackages__"],
     deps = [":lifecycle_master_driver_library"],
 )
 
 cc_library(
     name = "master_driver_library",
     srcs = ["src/master_driver.cpp"],
-    hdrs = [
-        "include/canopen_master_driver/lely_master_bridge.hpp",
-        "include/canopen_master_driver/lifecycle_master_driver.hpp",
-        "include/canopen_master_driver/master_driver.hpp",
-        "include/canopen_master_driver/node_interfaces/node_canopen_basic_master.hpp",
-        "include/canopen_master_driver/node_interfaces/node_canopen_basic_master_impl.hpp",
-        "include/canopen_master_driver/visibility_control.h",
-    ],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    includes = [
-        "include",
-        "include/canopen_master_driver",
-        "test",
-    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
     local_defines = ros_local_defines() + ["CANOPEN_MASTER_DRIVER_BUILDING_LIBRARY"],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":lely_master_bridge_library",
+        ":node_canopen_basic_master_library",
+    ],
+    alwayslink = True,
 )
 
 cc_shared_library(
     name = "master_driver",
-    dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":lely_master_bridge",
+        ":node_canopen_basic_master",
     ],
+    exports_filter = ["//:__subpackages__"],
     deps = [":master_driver_library"],
 )
 
@@ -178,7 +157,12 @@ rclcpp_components_register_nodes(
 
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":lely_master_bridge",
+        ":node_canopen_basic_master",
+        "@canopen_core//:device_container",
+        "@rclcpp_components//:component_manager",
+    ],
 )
 
 ament_index(
@@ -217,14 +201,7 @@ ament_package(
         "rclcpp_lifecycle",
     ],
     cmake_export_name = "export_canopen_master_driver",
-    headers = [
-        "include/canopen_master_driver/lely_master_bridge.hpp",
-        "include/canopen_master_driver/lifecycle_master_driver.hpp",
-        "include/canopen_master_driver/master_driver.hpp",
-        "include/canopen_master_driver/node_interfaces/node_canopen_basic_master.hpp",
-        "include/canopen_master_driver/node_interfaces/node_canopen_basic_master_impl.hpp",
-        "include/canopen_master_driver/visibility_control.h",
-    ],
+    headers = HEADERS,
     include_prefix = "",
     libraries = [
         ":lely_master_bridge",

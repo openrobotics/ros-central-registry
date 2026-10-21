@@ -31,7 +31,9 @@ license(
 # Shared library -> static library for every precompiled third-party
 # dependency, so gtsam's own cc_shared_library targets link them dynamically.
 DEPENDENCIES = {
+    "@rosdistro//cc:boost.filesystem_shared": "@rosdistro//cc:boost.filesystem_library",
     "@rosdistro//cc:boost.serialization_shared": "@rosdistro//cc:boost.serialization",
+    "@rosdistro//cc:boost.timer_shared": "@rosdistro//cc:boost.timer_library",
     "@rosdistro//cc:tbb": "@rosdistro//cc:tbb_library",
 }
 
@@ -118,7 +120,6 @@ cc_library(
         "gtsam/3rdparty/cephes/cephes/psi.c",
         "gtsam/3rdparty/cephes/cephes/rgamma.c",
         "gtsam/3rdparty/cephes/cephes/round.c",
-        "gtsam/3rdparty/cephes/cephes/scipy_iv.c",
         "gtsam/3rdparty/cephes/cephes/sf_error.c",
         "gtsam/3rdparty/cephes/cephes/shichi.c",
         "gtsam/3rdparty/cephes/cephes/sici.c",
@@ -126,7 +127,6 @@ cc_library(
         "gtsam/3rdparty/cephes/cephes/sinpi.c",
         "gtsam/3rdparty/cephes/cephes/spence.c",
         "gtsam/3rdparty/cephes/cephes/stdtr.c",
-        "gtsam/3rdparty/cephes/cephes/struve.c",
         "gtsam/3rdparty/cephes/cephes/tandg.c",
         "gtsam/3rdparty/cephes/cephes/tukey.c",
         "gtsam/3rdparty/cephes/cephes/unity.c",
@@ -1087,7 +1087,10 @@ cc_library(
         "gtsam_unstable/slam/TransformBtwRobotsUnaryFactorEM.h",
     ] + [":gtsam_unstable_dllexport_h"],
     includes = ["_gen/include"],
-    deps = [":gtsam_library"],
+    deps = [
+        ":_metis_private_hdrs",
+        ":gtsam_library",
+    ],
 )
 
 cc_shared_library(
@@ -1165,7 +1168,7 @@ cmake_configure_file(
         "GTSAM_USE_SYSTEM_EIGEN=1",
         "GTSAM_EIGEN_VERSION_WORLD=3",
         "GTSAM_EIGEN_VERSION_MAJOR=5",
-        "GTSAM_ALLOCATOR_TBB=1",
+        "GTSAM_ALLOCATOR_STL=1",
         "GTSAM_THROW_CHEIRALITY_EXCEPTION=1",
         "GTSAM_ALLOW_DEPRECATED_SINCE_V43=1",
         "GTSAM_SUPPORT_NESTED_DISSECTION=1",
@@ -1181,7 +1184,7 @@ cmake_configure_file(
         "GTSAM_USE_EIGEN_MKL_OPENMP",
         "GTSAM_EIGEN_VERSION_MINOR",
         "GTSAM_ALLOCATOR_BOOSTPOOL",
-        "GTSAM_ALLOCATOR_STL",
+        "GTSAM_ALLOCATOR_TBB",
         "GTSAM_USE_SYSTEM_METIS",
         "GTSAM_SLOW_BUT_CORRECT_BETWEENFACTOR",
         "GTSAM_SLOW_BUT_CORRECT_EXPMAP",
@@ -1311,6 +1314,16 @@ cc_library(
         "gtsam/symbolic/tests/symbolicExampleGraphs.h",
     ],
     visibility = ["//visibility:private"],
+)
+
+# Example helpers used by tests (tests/ and gtsam*/tests include them as
+# <examples/...> relative to the source root).
+cc_library(
+    name = "_example_hdrs",
+    testonly = True,
+    hdrs = ["examples/SFMdata.h"],
+    includes = ["."],
+    visibility = ["//:__subpackages__"],
 )
 
 collect_transitive_dynamic_deps(
@@ -1615,10 +1628,16 @@ GTSAM_UNSTABLE_TESTS = [
         name = src.removesuffix(".cpp"),
         size = "medium",
         srcs = [src],
-        data = [":example_data"],
+        data = [":example_data"] + (
+            glob(["gtsam_unstable/discrete/examples/**"]) if src.startswith("gtsam_unstable/discrete/") else []
+        ),
         dynamic_deps = [":transitive_dynamic_deps"],
+        local_defines = [
+            "TOPSRCDIR=\\\"{}\\\"".format(GTSAM_SOURCE_DIR),
+        ] if src.startswith("gtsam_unstable/discrete/") else [],
         deps = [
             ":CppUnitLite_library",
+            ":_example_hdrs",
             ":_test_hdrs",
             ":gtsam_library",
         ] + ([":gtsam_unstable_library"] if src.startswith("gtsam_unstable/") else []),

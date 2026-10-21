@@ -40,9 +40,19 @@ def _collect_transitive_dynamic_deps_impl(ctx):
                 if lib.dynamic_library:
                     files_to_propagate.append(lib.dynamic_library)
 
+    user_link_flags = []
+    additional_inputs = []
+    for dep in ctx.attr.extra_link_deps:
+        if CcInfo in dep:
+            for li in dep[CcInfo].linking_context.linker_inputs.to_list():
+                user_link_flags.extend(li.user_link_flags)
+                additional_inputs.extend(li.additional_inputs)
+
     linker_input = cc_common.create_linker_input(
         owner = ctx.label,
         libraries = depset(direct = transitive_libs, order = "topological"),
+        user_link_flags = depset(direct = user_link_flags),
+        additional_inputs = depset(direct = additional_inputs),
     )
 
     return [
@@ -73,7 +83,7 @@ def _collect_transitive_dynamic_deps_impl(ctx):
         ),
     ]
 
-collect_transitive_dynamic_deps = rule(
+_collect_transitive_dynamic_deps_rule = rule(
     implementation = _collect_transitive_dynamic_deps_impl,
     attrs = {
         "dynamic_deps": attr.label_list(
@@ -83,9 +93,24 @@ collect_transitive_dynamic_deps = rule(
             providers = [CcSharedLibraryInfo],
             allow_files = False,
         ),
+        "extra_link_deps": attr.label_list(
+            providers = [CcInfo],
+            allow_files = False,
+        ),
     },
     provides = [CcSharedLibraryInfo],
 )
+
+def collect_transitive_dynamic_deps(name, dynamic_deps = [], **kwargs):
+    _collect_transitive_dynamic_deps_rule(
+        name = name,
+        dynamic_deps = dynamic_deps,
+        extra_link_deps = select({
+            Label("@platforms//os:linux"): [Label("@qtbase//:glvnd_stubs")],
+            "//conditions:default": [],
+        }),
+        **kwargs
+    )
 
 def _cc_public_headers_impl(ctx):
     headers = []
