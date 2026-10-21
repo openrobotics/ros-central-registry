@@ -317,15 +317,29 @@ MODULE_OVERRIDES = (
             ),
         ),
     ),
+    ModuleOverride(
+        module="rules_cc_autoconf",
+        version="0.27.0",
+        reason=(
+            "Not a direct dependency: pulled in by ffmpeg/xkbcommon/dbus/libusb/libzip/sdl2,...\n"
+            "Pinned because < 0.27.0 fails to compile its config checker with libc++ on a\n"
+            "Windows host (std::ifstream from std::wstring), and patched so macOS's\n"
+            "`-Wl,-undefined,dynamic_lookup` linkopt does not make every `AC_CHECK_FUNC`\n"
+            "link probe succeed unconditionally."
+        ),
+        patches=(
+            (
+                "macos_strip_dynamic_lookup.patch",
+                "Strips `-Wl,-undefined,dynamic_lookup` from `ctx.fragments.cpp.linkopts`\n"
+                "when constructing autoconf link check flags.",
+            ),
+        ),
+    ),
 )
 
 # Plain (unpatched) version pins added to the generated root MODULE.bazel.
-EXTRA_ROOT_PINS = (
-    # Not a direct dependency: pulled in by ffmpeg/xkbcommon/dbus/... but
-    # pinned because < 0.27.0 fails to compile its config checker with libc++
-    # on a Windows host (std::ifstream from std::wstring).
-    ("rules_cc_autoconf", "0.27.0"),
-)
+EXTRA_ROOT_PINS = ()
+
 
 # From-source Qt 6 modules (staged under bcr_staging/modules/, served via the
 # bcr_staging registry -- see BAZELRC_TEMPLATE). These replace the prebuilt
@@ -694,6 +708,14 @@ build:ci --jobs=4
 # Note: this only applies to developer builds because github runners are
 #       in proceswrapper-sandbox and run 1 test at a time.
 test --sandbox_default_allow_network=false
+
+# Unlike linux-sandbox (which creates an isolated CLONE_NEWNET loopback
+# namespace per test), darwin-sandbox blocks all network and POSIX SHM IPC
+# with sandbox-exec '(deny network*)' / '(deny default)', which breaks DDS
+# participant discovery and shared-memory transport. Run tests standalone one
+# at a time on macOS, matching the CI configuration below.
+test:macos --local_test_jobs=1
+test:macos --strategy=TestRunner=standalone
 
 # Don't allow a flaky test to fail the entire run.
 test:ci --flaky_test_attempts=3

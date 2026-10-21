@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "objc_library")
 load("@rules_license//rules:license.bzl", "license")
 
 package(default_visibility = ["//visibility:public"])
@@ -183,6 +183,51 @@ genrule(
           "echo '#endif' >> $@",
 )
 
+objc_library(
+    name = "OgreMain_osx_objc",
+    hdrs = glob([
+        "OgreMain/include/*.h",
+        "OgreMain/include/Threading/*.h",
+        "OgreMain/src/*.h",
+        "OgreMain/src/OSX/*.h",
+    ]) + [
+        ":OgreBuildSettings_h",
+        ":OgreComponents_h",
+        ":OgreExports_h",
+        ":OgreRTShaderConfig_h",
+    ],
+    copts = [
+        "-std=c++17",
+        "-fno-objc-arc",
+        "-Wno-inconsistent-missing-override",
+        "-Wno-implicit-const-int-float-conversion",
+        "-Wno-deprecated-declarations",
+        "-D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION",
+    ],
+    defines = [
+        "OGRE_BUILD_RENDERSYSTEM_D3D9=0",
+        "OGRE_BUILD_RENDERSYSTEM_D3D11=0",
+        "OGRE_BUILD_RENDERSYSTEM_GL3PLUS=1",
+        "OGRE_BUILD_RENDERSYSTEM_GL=1",
+        "OGRE_BUILD_RENDERSYSTEM_GLES2=0",
+        "OGRE_BUILD_RENDERSYSTEM_METAL=0",
+    ],
+    includes = [
+        "OgreMain/include",
+        "OgreMain/include/Threading",
+        "OgreMain/src",
+        "OgreMain/src/OSX",
+        "include",
+    ],
+    non_arc_srcs = glob(["OgreMain/src/OSX/*.mm"]),
+    sdk_frameworks = [
+        "CoreFoundation",
+        "Foundation",
+    ],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:osx"],
+)
+
 cc_library(
     name = "OgreMain_library",
     srcs = glob(
@@ -191,6 +236,7 @@ cc_library(
             "OgreMain/src/*.h",
         ],
         allow_empty = True,
+        exclude = ["OgreMain/src/OgreFileSystemLayerNoOp.cpp"],
     ) + [
         "OgreMain/src/Threading/OgreDefaultWorkQueueStandard.cpp",
     ] + select({
@@ -199,7 +245,7 @@ cc_library(
             "OgreMain/src/OSX/*.cpp",
             "OgreMain/src/OSX/*.h",
         ]),
-        "//conditions:default": [],
+        "//conditions:default": ["OgreMain/src/OgreFileSystemLayerNoOp.cpp"],
     }),
     hdrs = glob(
         [
@@ -242,12 +288,31 @@ cc_library(
         "OgreMain/include/Threading",
         "OgreMain/src",
         "include",
-    ],
+    ] + select({
+        "@platforms//os:osx": ["OgreMain/src/OSX"],
+        "//conditions:default": [],
+    }),
+    linkopts = select({
+        "@platforms//os:osx": [
+            "-framework",
+            "CoreFoundation",
+            "-framework",
+            "Foundation",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = select({
+        "@platforms//os:osx": [":OgreMain_osx_objc"],
+        "//conditions:default": [],
+    }),
 )
 
 cc_shared_library(
     name = "OgreMain",
-    exports_filter = [":OgreMain_library"],
+    exports_filter = [":OgreMain_library"] + select({
+        "@platforms//os:osx": [":OgreMain_osx_objc"],
+        "//conditions:default": [],
+    }),
     deps = [":OgreMain_library"],
 )
 
@@ -642,20 +707,57 @@ cc_library(
     target_compatible_with = ["@platforms//os:linux"],
 )
 
+objc_library(
+    name = "RenderSystem_GLSupport_osx_objc",
+    hdrs = glob([
+        "RenderSystems/GLSupport/include/EGL/*.h",
+        "RenderSystems/GLSupport/include/GLSL/*.h",
+        "RenderSystems/GLSupport/include/*.h",
+        "RenderSystems/GLSupport/include/OSX/*.h",
+    ]) + [
+        ":OgreGLSupportPrerequisites_h",
+    ],
+    copts = [
+        "-fno-objc-arc",
+        "-Wno-cast-qual",
+        "-Wno-deprecated-declarations",
+    ],
+    includes = [
+        "RenderSystems/GLSupport/include",
+        "RenderSystems/GLSupport/include/EGL",
+        "RenderSystems/GLSupport/include/GLSL",
+        "RenderSystems/GLSupport/include/OSX",
+    ],
+    non_arc_srcs = glob(["RenderSystems/GLSupport/src/OSX/*.mm"]),
+    sdk_frameworks = [
+        "AppKit",
+        "Cocoa",
+        "CoreGraphics",
+        "Foundation",
+        "OpenGL",
+        "QuartzCore",
+    ],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:osx"],
+    deps = [
+        ":OgreMain_library",
+        "@egl-registry//:EGL_headers",
+        "@opengl-registry//:OpenGL_headers",
+    ],
+)
+
 cc_library(
     name = "RenderSystem_GLSupport",
     srcs = glob([
-        "RenderSystems/GLSupport/src/EGL/*.cpp",
         "RenderSystems/GLSupport/src/GLSL/*.cpp",
         "RenderSystems/GLSupport/src/*.cpp",
     ]) + select({
         "@platforms//os:windows": glob([
+            "RenderSystems/GLSupport/src/EGL/*.cpp",
             "RenderSystems/GLSupport/src/win32/*.cpp",
         ]),
-        "@platforms//os:osx": glob([
-            "RenderSystems/GLSupport/src/OSX/*.cpp",
-        ]),
         "@platforms//os:linux": glob([
+            "RenderSystems/GLSupport/src/EGL/*.cpp",
             "RenderSystems/GLSupport/src/GLX/*.cpp",
         ]),
         "//conditions:default": [],
@@ -676,6 +778,13 @@ cc_library(
         "@platforms//os:linux": glob([
             "RenderSystems/GLSupport/include/GLX/*.h",
         ]),
+        "//conditions:default": [],
+    }),
+    copts = select({
+        "@platforms//os:osx": [
+            "-Wno-cast-qual",
+            "-Wno-deprecated-declarations",
+        ],
         "//conditions:default": [],
     }),
     implementation_deps = [
@@ -701,19 +810,32 @@ cc_library(
     linkopts = select({
         "@platforms//os:osx": [
             "-framework",
-            "OpenGL",
+            "AppKit",
             "-framework",
             "Cocoa",
+            "-framework",
+            "CoreGraphics",
+            "-framework",
+            "Foundation",
+            "-framework",
+            "OpenGL",
+            "-framework",
+            "QuartzCore",
         ],
         "//conditions:default": [],
     }),
     deps = [
         ":OgreMain_library",
-        "@libx11",
-        "@libxcb",
-        "@libxrandr",
     ] + select({
-        "@platforms//os:linux": [":glx_headers"],
+        "@platforms//os:osx": [
+            ":RenderSystem_GLSupport_osx_objc",
+        ],
+        "@platforms//os:linux": [
+            ":glx_headers",
+            "@libx11",
+            "@libxcb",
+            "@libxrandr",
+        ],
         "//conditions:default": [],
     }),
 )
@@ -760,7 +882,10 @@ cc_shared_library(
     exports_filter = [
         ":RenderSystem_GL_library",
         ":RenderSystem_GLSupport",
-    ],
+    ] + select({
+        "@platforms//os:osx": [":RenderSystem_GLSupport_osx_objc"],
+        "//conditions:default": [],
+    }),
     deps = [":RenderSystem_GL_library"],
 )
 
@@ -794,7 +919,10 @@ cc_shared_library(
     exports_filter = [
         ":RenderSystem_GL3Plus_library",
         ":RenderSystem_GLSupport",
-    ],
+    ] + select({
+        "@platforms//os:osx": [":RenderSystem_GLSupport_osx_objc"],
+        "//conditions:default": [],
+    }),
     deps = [":RenderSystem_GL3Plus_library"],
 )
 
