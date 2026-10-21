@@ -35,7 +35,28 @@
  
  #if defined(__APPLE__)
    const char * image_name = NULL;
-@@ -152,6 +166,17 @@
+@@ -104,11 +118,17 @@
+     // Iterate in reverse as the library is likely near the end of the list.
+     const char * candidate_name = _dyld_get_image_name(image_count - i - 1);
+     if (NULL == candidate_name) {
+-      RCUTILS_SET_ERROR_MSG("dyld image index out of range");
+-      ret = RCUTILS_RET_ERROR;
+-      goto fail;
++      // Index out of range: images were unloaded concurrently. Skip it.
++      continue;
+     }
+     void * handle = dlopen(candidate_name, RTLD_LAZY | RTLD_NOLOAD);
++    if (NULL == handle) {
++      // The image list isn't stable while other threads load/unload libraries:
++      // this candidate may have been unloaded since _dyld_image_count() was
++      // read. It can't be the library we just opened (we hold a reference to
++      // it), so skip it rather than failing on dlclose(NULL).
++      continue;
++    }
+     if (handle == lib->lib_pointer) {
+       image_name = candidate_name;
+     }
+@@ -152,6 +172,17 @@
  #else
    HMODULE module = LoadLibrary(library_path);
    if (!module) {

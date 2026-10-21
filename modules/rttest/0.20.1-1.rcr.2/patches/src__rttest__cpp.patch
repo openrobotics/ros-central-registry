@@ -1,10 +1,61 @@
 --- a/src/rttest.cpp
 +++ b/src/rttest.cpp
-@@ -17,6 +17,7 @@
+@@ -16,11 +16,18 @@
+ 
  #include <alloca.h>
  #include <limits.h>
++#ifndef __APPLE__
  #include <malloc.h>
++#endif
 +#include <pthread.h>
  #include <sys/mman.h>
  #include <sys/resource.h>
  #include <string.h>
+ #include <unistd.h>
++
++#ifndef RUSAGE_THREAD
++#define RUSAGE_THREAD RUSAGE_SELF
++#endif
+ 
+ #include <algorithm>
+ #include <cassert>
+@@ -607,6 +614,7 @@
+     return -1;
+   }
+ 
++#ifndef __APPLE__
+   // Turn off malloc trimming.
+   if (mallopt(M_TRIM_THRESHOLD, -1) == 0) {
+     perror("mallopt for trim threshold failed");
+@@ -621,6 +629,7 @@
+     munlockall();
+     return -1;
+   }
++#endif
+ 
+   struct rusage usage;
+   size_t page_size = sysconf(_SC_PAGESIZE);
+@@ -650,8 +659,10 @@
+         delete[] ptr;
+       }
+ 
++#ifndef __APPLE__
+       mallopt(M_TRIM_THRESHOLD, 128 * 1024);
+       mallopt(M_MMAP_MAX, 65536);
++#endif
+       munlockall();
+       return -1;
+     }
+@@ -712,8 +723,12 @@
+ 
+   param.sched_priority = sched_priority;
+ 
++#ifdef __APPLE__
++  return pthread_setschedparam(pthread_self(), policy, &param);
++#else
+   // note that sched_setscheduler can set the priority of an arbitrary process
+   return sched_setscheduler(0, policy, &param);
++#endif
+ }
+ 
+ int Rttest::accumulate_statistics(size_t iteration)

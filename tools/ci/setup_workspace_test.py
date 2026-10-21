@@ -42,6 +42,12 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertIn("build --per_file_copt=external/.*fastdds.*@-std=c++17", content)
         self.assertIn("build --per_file_copt=external/.*popf.*@-std=c++17", content)
 
+    def test_macos_test_sandbox_options(self):
+        content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
+        self.assertIn("test --sandbox_default_allow_network=false", content)
+        self.assertIn("test:macos --local_test_jobs=1", content)
+        self.assertIn("test:macos --strategy=TestRunner=standalone", content)
+
 
 class TestPlatforms(unittest.TestCase):
 

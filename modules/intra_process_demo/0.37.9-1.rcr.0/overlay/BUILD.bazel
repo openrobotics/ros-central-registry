@@ -36,37 +36,59 @@ HEADERS = [
     "include/image_pipeline/watermark_node.hpp",
 ]
 
-DEPENDENCIES = {
+PIPELINE_DEPENDENCIES = {
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+}
+
+IMAGE_PIPELINE_DEPENDENCIES = PIPELINE_DEPENDENCIES | {
     "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
     "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
 }
 
 collect_transitive_dynamic_deps(
-    name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
+    name = "pipeline_transitive_dynamic_deps",
+    dynamic_deps = PIPELINE_DEPENDENCIES.keys(),
 )
 
-EXECUTABLES = {
-    "camera_node": "src/image_pipeline/camera_node.cpp",
+collect_transitive_dynamic_deps(
+    name = "image_pipeline_transitive_dynamic_deps",
+    dynamic_deps = IMAGE_PIPELINE_DEPENDENCIES.keys(),
+)
+
+# Mirrors upstream CMakeLists.txt: these only link rclcpp + example_interfaces.
+PIPELINE_EXECUTABLES = {
     "cyclic_pipeline": "src/cyclic_pipeline/cyclic_pipeline.cpp",
+    "two_node_pipeline": "src/two_node_pipeline/two_node_pipeline.cpp",
+}
+
+IMAGE_PIPELINE_EXECUTABLES = {
+    "camera_node": "src/image_pipeline/camera_node.cpp",
     "image_pipeline_all_in_one": "src/image_pipeline/image_pipeline_all_in_one.cpp",
     "image_pipeline_with_two_image_view": "src/image_pipeline/image_pipeline_with_two_image_view.cpp",
     "image_view_node": "src/image_pipeline/image_view_node.cpp",
-    "two_node_pipeline": "src/two_node_pipeline/two_node_pipeline.cpp",
     "watermark_node": "src/image_pipeline/watermark_node.cpp",
 }
+
+EXECUTABLES = PIPELINE_EXECUTABLES | IMAGE_PIPELINE_EXECUTABLES
+
+[cc_binary(
+    name = name,
+    srcs = [src],
+    dynamic_deps = [":pipeline_transitive_dynamic_deps"],
+    deps = PIPELINE_DEPENDENCIES.values() + [
+        "@example_interfaces//:cc",
+    ],
+) for name, src in PIPELINE_EXECUTABLES.items()]
 
 [cc_binary(
     name = name,
     srcs = HEADERS + [src],
-    dynamic_deps = [":transitive_dynamic_deps"],
+    dynamic_deps = [":image_pipeline_transitive_dynamic_deps"],
     includes = ["include"],
-    deps = DEPENDENCIES.values() + [
-        "@example_interfaces//:cc",
+    deps = IMAGE_PIPELINE_DEPENDENCIES.values() + [
         "@sensor_msgs//:cc",
     ],
-) for name, src in EXECUTABLES.items()]
+) for name, src in IMAGE_PIPELINE_EXECUTABLES.items()]
 
 write_file(
     name = "rmw_test_fixture_implementation_py",
