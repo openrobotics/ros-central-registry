@@ -128,6 +128,40 @@ build --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
 # are used in several places around the ROS Bazel workspace/
 build --@llvm//config:experimental_stub_libgcc_s=True
 
+# The workspace builds all C++ universally as C++23 to guarantee a uniform
+# language standard and prevent C++ standard-level ABI incompatibilities across
+# targets. Set the language standard once for every C++ compile, in both the
+# target and exec (host tool) configurations. NEVER specify `-std=c++*` in
+# per-target `copts` or `cxxopts` inside `BUILD.bazel` files.
+build --cxxopt=-std=c++23
+build --host_cxxopt=-std=c++23
+
+# ==============================================================================
+# WARNING: PER-FILE C++ STANDARD EXCEPTIONS
+# ==============================================================================
+# Mixing C++ standards across translation units risks subtle ODR and ABI
+# incompatibilities. Do NOT add entries here unless an upstream or third-party
+# package uses language or standard-library constructs that were hard-removed in
+# C++20/C++23 and cannot be cleanly patched in source. Every exception below
+# MUST document the exact symbol/construct and reason it cannot compile as C++23:
+#
+# 1. @fastdds (eProsima Fast-DDS 3.4.2):
+#    Reason: `include/fastdds/utils/collections/impl/node-sizes/FixedSizeQueue.hpp`
+#    invokes `std::allocator<T>::construct()` and `std::allocator<T>::destroy()`,
+#    which were deprecated in C++17 and removed in C++20 (`libc++` gates them
+#    strictly behind `#if _LIBCPP_STD_VER <= 17`).
+build --per_file_copt=external/.*fastdds.*@-std=c++17
+build --host_per_file_copt=external/.*fastdds.*@-std=c++17
+#
+# 2. @popf (POPF PDDL planner 0.0.20):
+#    Reason: Legacy 2010 C++98/03 codebase (`src/VALfiles/`, `src/popf/`) that
+#    heavily relies on `std::auto_ptr`, `std::unary_function`, `std::binary_function`,
+#    `std::bind1st`, `std::bind2nd`, `std::ptr_fun`, and `std::mem_fun`, which
+#    were removed from `<functional>`/`<memory>` in C++17/C++20.
+build --per_file_copt=external/.*popf.*@-std=c++17
+build --host_per_file_copt=external/.*popf.*@-std=c++17
+# ==============================================================================
+
 # ld64's two-level namespace requires every undefined symbol in a .dylib to
 # be resolvable among the libraries passed directly to its link command.
 # Our rosidl-generated cc_shared_library targets commonly need symbols from

@@ -112,7 +112,18 @@ jobs:
             // comment, and re-runs update the same comment instead of
             // piling up duplicates.
             const marker = `<!-- module-diff: ${directory} -->`;
-            const body = `${marker}\n${diff}`;
+            const maxLen = 65536;
+            let body = `${marker}\n${diff}`;
+            if (body.length > maxLen) {
+              const notice = `\n\n_Module diff truncated (full diff is ${diff.length} characters, exceeding GitHub's ${maxLen}-character comment limit). See the workflow run artifact for the complete diff._`;
+              const budget = maxLen - marker.length - 1 - notice.length;
+              let truncated = diff.slice(0, budget);
+              const lastDetailsClose = truncated.lastIndexOf('</details>');
+              if (lastDetailsClose !== -1) {
+                truncated = truncated.slice(0, lastDetailsClose + '</details>'.length);
+              }
+              body = `${marker}\n${truncated}${notice}`;
+            }
             const existing = comments.find((c) => c.body.includes(marker));
 
             if (existing) {

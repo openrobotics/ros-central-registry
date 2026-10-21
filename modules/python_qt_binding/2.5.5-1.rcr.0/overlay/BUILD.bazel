@@ -1,0 +1,82 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### PYTHON MODULE
+
+genrule(
+    name = "generate_version_py",
+    outs = ["src/python_qt_binding/version.py"],
+    cmd = "echo \"QT_MAJOR_VERSION = 6\" > $@",
+)
+
+py_library(
+    name = "python_qt_binding",
+    srcs = [
+        "src/python_qt_binding/__init__.py",
+        "src/python_qt_binding/binding_helper.py",
+    ] + [
+        ":generate_version_py",
+    ],
+    imports = ["src"],
+    deps = [
+        requirement("PySide6-Essentials"),
+    ],
+)
+
+### PACKAGING
+
+genrule(
+    name = "python_qt_binding_extras_cmake",
+    outs = ["cmake/python_qt_binding-extras.cmake"],
+    cmd = "echo 'set(python_qt_binding_QT_MAJOR_VERSION \"6\" CACHE STRING \"The major version of Qt to use (5 or 6)\")' > $@",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake = [
+        "cmake/pyproject.toml.in",
+        "cmake/shiboken_helper.cmake",
+        "cmake/sip_helper.cmake",
+        ":python_qt_binding_extras_cmake",
+    ],
+    cmake_extras = ["python_qt_binding-extras.cmake"],
+    cmake_strip_prefix = "cmake",
+    package_xml = "package.xml",
+    python = [":python_qt_binding"],
+    python_strip_prefix = "src",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

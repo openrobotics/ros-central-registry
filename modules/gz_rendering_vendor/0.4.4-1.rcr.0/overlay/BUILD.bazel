@@ -1,0 +1,122 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# gz_rendering_vendor: vendors gz-rendering (version 10) from the Bazel
+# Central Registry module `gz-rendering` (shared library wrappers live in
+# @rosdistro//cc/gz) and installs it like colcon's ament_vendor() does
+# (opt/gz_rendering_vendor/...). Only the ogre2 (ogre-next) render engine is
+# part of the BCR module; the ogre (1.x) engine plugin is not available.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc/gz:defs.bzl", "gz_install_files", "gz_install_headers", "gz_vendor_hooks")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES (gz-rendering::core)
+
+alias(
+    name = "gz_rendering",
+    actual = "@rosdistro//cc/gz:gz-rendering",
+)
+
+alias(
+    name = "gz_rendering_library",
+    actual = "@rosdistro//cc/gz:gz-rendering_library",
+)
+
+alias(
+    name = "engine_plugins",
+    actual = "@rosdistro//cc/gz:libgz-rendering-ogre2.so",
+)
+
+### INSTALL LAYOUT (opt/gz_rendering_vendor/...)
+
+VENDOR = "gz_rendering_vendor"
+
+PREFIX = "opt/" + VENDOR
+
+gz_install_headers(
+    name = "install_headers",
+    prefix = PREFIX + "/include/gz/rendering10",
+    deps = [":gz_rendering_library"],
+)
+
+gz_install_files(
+    name = "install_libraries",
+    srcs = [":gz_rendering"],
+    flatten = True,
+    prefix = PREFIX + "/lib",
+)
+
+gz_install_files(
+    name = "install_engine_plugins",
+    srcs = [":engine_plugins"],
+    flatten = True,
+    prefix = PREFIX + "/lib/gz-rendering-10/engine-plugins",
+)
+
+# Materials, shaders and other media of the ogre2 engine.
+gz_install_files(
+    name = "install_media",
+    srcs = ["@rosdistro//cc/gz:gz-rendering-ogre2_media"],
+    prefix = PREFIX + "/share/gz/gz-rendering/ogre2",
+    strip_prefixes = ["ogre2/src"],
+)
+
+ENV_HOOKS = gz_vendor_hooks(
+    name = "install_hooks",
+    pythonpath = False,
+    vendor = VENDOR,
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    env_hooks = ENV_HOOKS,
+    install = [
+        ":install_engine_plugins",
+        ":install_headers",
+        ":install_hooks",
+        ":install_libraries",
+        ":install_media",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_copyright//:ament_package",
+        "@ament_cmake_core//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_test//:ament_package",
+        "@ament_cmake_vendor_package//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@gz_cmake_vendor//:ament_package",
+        "@gz_common_vendor//:ament_package",
+        "@gz_math_vendor//:ament_package",
+        "@gz_ogre_next_vendor//:ament_package",
+        "@gz_plugin_vendor//:ament_package",
+        "@gz_utils_vendor//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

@@ -1,0 +1,68 @@
+--- a/include/rosbag2_test_common/process_execution_helpers_unix.hpp
++++ b/include/rosbag2_test_common/process_execution_helpers_unix.hpp
+@@ -25,6 +25,9 @@
+ #include <cstdlib>
+ #include <vector>
+ #include <string>
++#include <filesystem>
++
++namespace fs = std::filesystem;
+ 
+ using namespace ::testing;  // NOLINT
+ 
+@@ -56,11 +59,41 @@
+     return EXIT_FAILURE;
+   }
+ 
++  auto abs_mock_ros2_dir = (fs::path(previous_dir) / "../ros2bag+");
++  std::string new_path = abs_mock_ros2_dir.generic_string() + ":" + getenv("PATH");
++  setenv("PATH", new_path.c_str(), 1);
++
++  const char* ld_lib_path = getenv("LD_LIBRARY_PATH");
++  if (ld_lib_path != nullptr) {
++    std::string new_ld_path = (fs::path(previous_dir) / "lib").generic_string() + ":" + ld_lib_path;
++    setenv("LD_LIBRARY_PATH", new_ld_path.c_str(), 1);
++  }
++  const char* ament_prefix_path = getenv("AMENT_PREFIX_PATH");
++  if (ament_prefix_path != nullptr && std::string(ament_prefix_path) == ".") {
++    setenv("AMENT_PREFIX_PATH", previous_dir, 1);
++  }
++
++  std::string full_command = command;
++  if (command.substr(0, 5) == "ros2 ") {
++    auto abs_mock_ros2 = (fs::path(previous_dir) / "../ros2bag+/ros2").generic_string();
++    full_command = abs_mock_ros2 + command.substr(4);
++  }
++
+   auto ret_ch_dir = chdir(path.c_str());
+   if (ret_ch_dir != 0) {
+     return EXIT_FAILURE;
+   }
+-  auto status = std::system(command.c_str());
++  FILE* pipe = popen((full_command + " 2>&1").c_str(), "r");
++  if (!pipe) {
++    return EXIT_FAILURE;
++  }
++  char buffer[128];
++  while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
++    std::cout << buffer;
++    std::cerr << buffer;
++  }
++  int status = pclose(pipe);
++
+   ret_ch_dir = chdir(previous_dir);
+   if (ret_ch_dir != 0) {
+     return EXIT_FAILURE;
+@@ -75,6 +108,12 @@
+ 
+ ProcessHandle start_execution(const std::string & command)
+ {
++  const char* test_srcdir = getenv("TEST_SRCDIR");
++  if (test_srcdir != nullptr) {
++    std::string new_path = std::string(test_srcdir) + "/ros2bag+:" + getenv("PATH");
++    setenv("PATH", new_path.c_str(), 1);
++  }
++
+   auto process_id = fork();
+   if (process_id == -1) {
+     throw std::runtime_error("Failed to start process via fork()");

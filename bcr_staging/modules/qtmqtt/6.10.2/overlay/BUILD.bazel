@@ -1,0 +1,106 @@
+load("@qt//:qt.bzl", "common_copts")
+load("@qt//:qt_internal_library.bzl", "qt_internal_library")
+load("@qt//:qt_tools.bzl", "qt_export_header", "qt_sync_headers")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:GPL-3.0-only"],
+    license_text = "LICENSES/GPL-3.0-only.txt",
+)
+
+exports_files(["MODULE.bazel"])
+
+_COMMON_DEFINES = [
+    "QT_ASCII_CAST_WARNINGS",
+    "QT_BUILDING_QT",
+    "QT_DEPRECATED_WARNINGS",
+    "QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH",
+    "QT_MOC_COMPAT",
+    "QT_NO_CAST_TO_ASCII",
+    "QT_NO_CONTEXTLESS_CONNECT=1",
+    "QT_NO_DEBUG",
+    "QT_NO_EXCEPTIONS",
+    "QT_NO_FOREACH=1",
+    "QT_NO_JAVA_STYLE_ITERATORS",
+    "QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+    "QT_NO_QASCONST=1",
+    "QT_NO_QEXCHANGE",
+    "QT_NO_QSNPRINTF",
+    "QT_USE_NODISCARD_FILE_OPEN=1",
+    "QT_USE_QSTRINGBUILDER",
+    "_GLIBCXX_ASSERTIONS",
+    "_LARGEFILE64_SOURCE",
+    "_LARGEFILE_SOURCE",
+]
+
+# Upstream builds the WebSocket transports whenever Qt::WebSockets is
+# available (src/mqtt/CMakeLists.txt); it always is here.
+MQTT_HDRS = glob([
+    "src/mqtt/*.h",
+    "src/mqtt/transportLayers/*.h",
+])
+
+qt_export_header(
+    name = "mqtt_exports_h",
+    out = "generated_exports/qtmqttexports.h",
+    module_infix = "MQTT",
+)
+
+qt_sync_headers(
+    name = "mqtt_sync_headers",
+    hdrs = MQTT_HDRS,
+    dep_modules = [
+        "QtCore",
+        "QtNetwork",
+    ],
+    generated_public_hdrs = [":mqtt_exports_h"],
+    module_name = "QtMqtt",
+    source_dir = "src/mqtt",
+)
+
+qt_internal_library(
+    name = "mqtt",
+    srcs = glob([
+        "src/mqtt/*.cpp",
+        "src/mqtt/transportLayers/*.cpp",
+    ]),
+    hdrs = MQTT_HDRS,
+    copts = common_copts + ["-std=gnu++20"],
+    create_shared = True,
+    defines = ["QT_MQTT_LIB"],
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+        "@qtbase//:network_shared",
+        "@qtwebsockets//:websockets_shared",
+    ],
+    includes = [
+        "src/mqtt",
+        "src/mqtt/transportLayers",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_MQTT_LIB",
+        "QT_MQTT_WITH_WEBSOCKETS",
+    ],
+    moc_hdrs = [
+        "src/mqtt/qmqttclient.h",
+        "src/mqtt/qmqttconnection_p.h",
+        "src/mqtt/qmqttmessage.h",
+        "src/mqtt/qmqttsubscription.h",
+        "src/mqtt/transportLayers/mqtt_secure_websocket_io_p.h",
+        "src/mqtt/transportLayers/mqtt_websocket_io_base_p.h",
+        "src/mqtt/transportLayers/mqtt_websocket_io_p.h",
+    ],
+    moc_unity = True,
+    deps = [
+        ":mqtt_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:network",
+        "@qtwebsockets//:websockets",
+    ],
+)

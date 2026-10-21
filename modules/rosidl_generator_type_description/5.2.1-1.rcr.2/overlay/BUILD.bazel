@@ -1,0 +1,100 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package", "register_ament_resource")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+exports_files(["defs.bzl"])
+
+filegroup(
+    name = "templates",
+    srcs = ["resource/HashedTypeDescription.schema.json"],
+)
+
+py_library(
+    name = "rosidl_generator_type_description",
+    srcs = [
+        "rosidl_generator_type_description/__init__.py",
+        "rosidl_generator_type_description/cli.py",
+    ],
+    deps = [
+        "@ament_index_python",
+        "@rosidl_cli",
+        "@rosidl_parser",
+    ],
+)
+
+genrule(
+    name = "rosidl_generator_rename",
+    srcs = ["bin/rosidl_generator_type_description"],
+    outs = ["bin/rosidl_generator_type_description.py"],
+    cmd = "cp $(location :bin/rosidl_generator_type_description) $(location :bin/rosidl_generator_type_description.py)",
+)
+
+py_binary(
+    name = "rosidl_generator",
+    srcs = [":bin/rosidl_generator_type_description.py"],
+    main = ":bin/rosidl_generator_type_description.py",
+    deps = [":rosidl_generator_type_description"],
+)
+
+genrule(
+    name = "extras_cmake",
+    srcs = ["rosidl_generator_type_description-extras.cmake.in"],
+    outs = ["rosidl_generator_type_description-extras.cmake"],
+    cmd = "sed -e 's|@PROJECT_NAME@|rosidl_generator_type_description|g' -e 's|@PYTHON_INSTALL_DIR@|lib/python3.14/site-packages|g' $< > $@",
+)
+
+register_ament_resource(
+    name = "res_rosidl_generator_packages",
+    category = "rosidl_generator_packages",
+    content = "",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake = [":extras_cmake"] + ["cmake/rosidl_generator_type_description_generate_interfaces.cmake"],
+    cmake_extras = ["rosidl_generator_type_description-extras.cmake"],
+    data = [":res_rosidl_generator_packages"] + ["resource/HashedTypeDescription.schema.json"],
+    lib_data = ["bin/rosidl_generator_type_description"],
+    package_xml = "package.xml",
+    python = [
+        "rosidl_generator_type_description/__init__.py",
+        "rosidl_generator_type_description/cli.py",
+        "rosidl_generator_type_description/py.typed",
+    ],
+    deps = [
+        "@ament_cmake_core//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_cmake_ros_core//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_cli//:ament_package",
+        "@rosidl_parser//:ament_package",
+    ],
+)

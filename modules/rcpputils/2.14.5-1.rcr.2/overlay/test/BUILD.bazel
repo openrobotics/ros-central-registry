@@ -1,0 +1,161 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "test_asserts_ndebug",
+    srcs = ["test_asserts.cpp"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ["NDEBUG"],
+    deps = [
+        "//:rcpputils_library",
+        "@rcutils//:rcutils_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_asserts_debug",
+    srcs = ["test_asserts.cpp"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    deps = [
+        "//:rcpputils_library",
+        "@rcutils//:rcutils_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_env",
+    srcs = ["test_env.cpp"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    env = {
+        "EMPTY_TEST": "",
+        "NORMAL_TEST": "foo",
+    },
+    deps = [
+        "//:rcpputils_library",
+        "@rcutils//:rcutils_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+[cc_test(
+    name = test,
+    srcs = [test + ".cpp"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    deps = [
+        "//:rcpputils_library",
+        "@rcutils//:rcutils_library",
+        "@rosdistro//cc:googletest",
+    ],
+) for test in [
+    "test_accumulator",
+    "test_endian",
+    "test_filesystem_helper",
+    "test_filesystem_helper_std",
+    "test_find_and_replace",
+    "test_join",
+    "test_pointer_traits",
+    "test_process",
+    "test_scope_exit",
+    "test_split",
+    "test_thread_name",
+    "test_thread_safety_annotations",
+    "test_time",
+    "test_unique_lock",
+]]
+
+cc_library(
+    name = "dummy_shared_library_lib",
+    srcs = [
+        "dummy_shared_library/dummy_shared_library.c",
+        "dummy_shared_library/dummy_shared_library.h",
+    ],
+)
+
+cc_shared_library(
+    name = "dummy_shared_library",
+    exports_filter = [":dummy_shared_library_lib"],
+    deps = [":dummy_shared_library_lib"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "test_shared_library_dynamic_deps",
+    dynamic_deps = [
+        ":dummy_shared_library",
+        "//:rcpputils",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_shared_library",
+    srcs = ["test_shared_library.cpp"],
+    data = [":dummy_shared_library"],
+    dynamic_deps = [":test_shared_library_dynamic_deps"],
+    linkopts = ["-Wl,--no-as-needed"],
+    deps = [
+        ":dummy_shared_library_lib",
+        "//:rcpputils_library",
+        "@rcutils//:rcutils_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_library(
+    name = "test_library_lib",
+    srcs = ["test_library.cpp"],
+    deps = ["//:rcpputils_library"],
+)
+
+cc_shared_library(
+    name = "test_library",
+    dynamic_deps = ["//:rcpputils"],
+    exports_filter = [":test_library_lib"],
+    deps = [":test_library_lib"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "test_find_library_dynamic_deps",
+    dynamic_deps = [
+        "//:rcpputils",
+        ":test_library",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_find_library",
+    srcs = ["test_find_library.cpp"],
+    data = [":test_library"],
+    dynamic_deps = [":test_find_library_dynamic_deps"],
+    env = {
+        "_TEST_LIBRARY": "../rcpputils+/test/libtest_library.so",
+        "_TEST_LIBRARY_DIR": "../rcpputils+/test",
+    },
+    deps = [
+        ":test_library_lib",
+        "//:rcpputils_library",
+        "@rcutils//:rcutils_library",
+        "@rosdistro//cc:googletest",
+    ],
+)

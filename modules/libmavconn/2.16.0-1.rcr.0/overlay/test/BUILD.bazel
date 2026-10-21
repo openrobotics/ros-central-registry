@@ -1,0 +1,79 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:asio": "@rosdistro//cc:asio_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+CC_DEPS = ["@mavlink"]
+
+cc_test(
+    name = "test_mavconn",
+    srcs = ["test_mavconn.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = ["//:ament_index"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    includes = ["."],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        "//:mavconn_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# add_library(mavconn_e2e_shim SHARED test/e2e/mavconn_e2e_shim.cpp)
+cc_library(
+    name = "mavconn_e2e_shim_library",
+    srcs = ["e2e/mavconn_e2e_shim.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + ["//:mavconn_library"],
+)
+
+cc_shared_library(
+    name = "mavconn_e2e_shim",
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":mavconn_e2e_shim_library"],
+)
+
+# ament_add_pytest_test(libmavconn_pymavlink_e2e test/e2e ...). The test skips
+# itself cleanly when pymavlink (a pip-only test dependency) is unavailable.
+py_pytest(
+    name = "libmavconn_pymavlink_e2e",
+    srcs = ["e2e/test_libmavconn_e2e.py"],
+    data = [
+        ":mavconn_e2e_shim",
+        "//:ament_index",
+    ],
+    env = {"MAVCONN_E2E_SHIM": "$(rootpath :mavconn_e2e_shim)"},
+)

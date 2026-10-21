@@ -1,0 +1,105 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARY
+
+HEADERS = [
+    "include/rosidl_dynamic_typesupport/api/dynamic_data.h",
+    "include/rosidl_dynamic_typesupport/api/dynamic_type.h",
+    "include/rosidl_dynamic_typesupport/api/serialization_support.h",
+    "include/rosidl_dynamic_typesupport/api/serialization_support_interface.h",
+    "include/rosidl_dynamic_typesupport/dynamic_message_type_support_struct.h",
+    "include/rosidl_dynamic_typesupport/identifier.h",
+    "include/rosidl_dynamic_typesupport/macros.h",
+    "include/rosidl_dynamic_typesupport/types.h",
+    "include/rosidl_dynamic_typesupport/uchar.h",
+    "include/rosidl_dynamic_typesupport/visibility_control.h",
+]
+
+DEPENDENCIES = {
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosidl_runtime_c//:rosidl_runtime_c": "@rosidl_runtime_c//:rosidl_runtime_c_library",
+}
+
+cc_library(
+    name = "rosidl_dynamic_typesupport_library",
+    srcs = [
+        "src/api/dynamic_data.c",
+        "src/api/dynamic_type.c",
+        "src/api/serialization_support.c",
+        "src/dynamic_message_type_support_struct.c",
+        "src/identifier.c",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "rosidl_dynamic_typesupport",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rosidl_dynamic_typesupport_library"],
+)
+
+### TRANSITIVELY COLLECT ALL DYNAMIC DEPS TO ENSURE LINKING WORKS
+
+# This is a workaround for the fact that dynamic_deps does not work transitively.
+# So, if you have a (foo -> bar -> baz) dynamic_dep dep chain, the symbols from
+# foo will not be available to baz at compile-time. This resolves that by running
+# an aspect over the dynamic_deps attribute to collect everything in the chain.
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rosidl_dynamic_typesupport"],
+    visibility = ["//visibility:private"],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "rosidl_dynamic_typesupport-export",
+    headers = HEADERS,
+    libraries = [":rosidl_dynamic_typesupport"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_ros_core//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_runtime_c//:ament_package",
+    ],
+)

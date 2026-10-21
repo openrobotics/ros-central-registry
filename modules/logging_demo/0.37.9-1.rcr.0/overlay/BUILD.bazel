@@ -1,0 +1,175 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosidl_default_generators//:defs.bzl", "default_generators", "rosidl_ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+default_generators(
+    package_xml = "package.xml",
+    deps = ["//srv:ConfigLogger"],
+)
+
+cc_library(
+    name = "logger_config_component_library",
+    srcs = ["src/logger_config_component.cpp"],
+    hdrs = [
+        "include/logging_demo/logger_config_component.hpp",
+        "include/logging_demo/logger_usage_component.hpp",
+        "include/logging_demo/visibility_control.h",
+    ],
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["LOGGING_DEMO_BUILDING_DLL"],
+    deps = [
+        ":cc",
+        "@rclcpp//:rclcpp_library",
+        "@rclcpp_components//:rclcpp_components_library",
+    ],
+)
+
+cc_shared_library(
+    name = "logger_config_component",
+    dynamic_deps = [
+        "@rclcpp",
+        "@rclcpp_components",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":logger_config_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "node_logger_config",
+    component = ":logger_config_component",
+    executor = "SingleThreadedExecutor",
+    node_name = "logger_config_node",
+    plugin = "logging_demo::LoggerConfig",
+)
+
+cc_library(
+    name = "logger_usage_component_library",
+    srcs = ["src/logger_usage_component.cpp"],
+    hdrs = [
+        "include/logging_demo/logger_config_component.hpp",
+        "include/logging_demo/logger_usage_component.hpp",
+        "include/logging_demo/visibility_control.h",
+    ],
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["LOGGING_DEMO_BUILDING_DLL"],
+    deps = [
+        "@example_interfaces//:cc",
+        "@rclcpp//:rclcpp_library",
+        "@rclcpp_components//:rclcpp_components_library",
+    ],
+)
+
+cc_shared_library(
+    name = "logger_usage_component",
+    dynamic_deps = [
+        "@rclcpp",
+        "@rclcpp_components",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":logger_usage_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "node_logger_usage",
+    component = ":logger_usage_component",
+    executor = "SingleThreadedExecutor",
+    node_name = "logger_usage_node",
+    plugin = "logging_demo::LoggerUsage",
+)
+
+cc_binary(
+    name = "logging_demo_main",
+    srcs = ["src/logging_demo_main.cpp"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":logger_config_component_library",
+        ":logger_usage_component_library",
+        "@rclcpp//:rclcpp_library",
+    ],
+)
+
+write_file(
+    name = "rmw_test_fixture_implementation_py",
+    out = "rmw_test_fixture_implementation.py",
+    content = [
+        "def rmw_test_isolation_start(): pass",
+        "def rmw_test_isolation_stop(): pass",
+    ],
+)
+
+py_library(
+    name = "rmw_test_fixture_implementation",
+    srcs = [":rmw_test_fixture_implementation_py"],
+    imports = ["."],
+)
+
+launch_ros_test(
+    name = "test_logging_demo",
+    src = "//test:test_logging_demo_py",
+    data = [
+        ":logging_demo_main",
+        "//test:logging_demo_main_debug_severity.txt",
+        "//test:logging_demo_main_default_severity.txt",
+    ],
+    deps = [
+        ":rmw_test_fixture_implementation",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+rosidl_ament_package(
+    name = "ament_package",
+    components = [
+        ":node_logger_config_record",
+        ":node_logger_usage_record",
+    ],
+    executables = [":logging_demo_main"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@example_interfaces//:ament_package",
+        "@launch//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw_implementation_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+    ],
+)

@@ -1,0 +1,654 @@
+load(
+    "@qt//:qt.bzl",
+    "qt_cc_library",
+    "qt_config_header",
+    "qt_dbus_interface",
+    "qt_export_header",
+    "qt_module_headers",
+)
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+        "@rules_license//licenses/spdx:GPL-2.0-only",
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+    license_text = "LICENSES/LGPL-3.0-only.txt",
+)
+
+# ============================================================================
+# Qt6Bluetooth (BlueZ on Linux, CoreBluetooth/IOBluetooth on macOS, Dummy fallback)
+# ============================================================================
+
+qt_export_header(
+    name = "bluetooth_export",
+    module_Header = "Bluetooth",
+    module_name = "bluetooth",
+)
+
+qt_config_header(
+    name = "bluetooth_config",
+    out = "qtbluetooth-config.h",
+    content = """#pragma once
+#if defined(__linux__)
+#define QT_FEATURE_bluez 1
+#else
+#define QT_FEATURE_bluez -1
+#endif
+""",
+)
+
+qt_config_header(
+    name = "bluetooth_private_config",
+    out = "qtbluetooth-config_p.h",
+    content = """#pragma once
+#include "qtbluetooth-config.h"
+#if defined(__linux__)
+#define QT_FEATURE_bluez_le 1
+#define QT_FEATURE_linux_crypto_api 1
+#else
+#define QT_FEATURE_bluez_le -1
+#define QT_FEATURE_linux_crypto_api -1
+#endif
+#define QT_FEATURE_winrt_bt -1
+""",
+)
+
+BLUETOOTH_COMMON_HEADERS = [
+    "src/bluetooth/lecmaccalculator_p.h",
+    "src/bluetooth/qbluetooth.h",
+    "src/bluetooth/qbluetoothaddress.h",
+    "src/bluetooth/qbluetoothdevicediscoveryagent.h",
+    "src/bluetooth/qbluetoothdevicediscoveryagent_p.h",
+    "src/bluetooth/qbluetoothdeviceinfo.h",
+    "src/bluetooth/qbluetoothdeviceinfo_p.h",
+    "src/bluetooth/qbluetoothhostinfo.h",
+    "src/bluetooth/qbluetoothhostinfo_p.h",
+    "src/bluetooth/qbluetoothlocaldevice.h",
+    "src/bluetooth/qbluetoothlocaldevice_p.h",
+    "src/bluetooth/qbluetoothserver.h",
+    "src/bluetooth/qbluetoothserver_p.h",
+    "src/bluetooth/qbluetoothservicediscoveryagent.h",
+    "src/bluetooth/qbluetoothservicediscoveryagent_p.h",
+    "src/bluetooth/qbluetoothserviceinfo.h",
+    "src/bluetooth/qbluetoothserviceinfo_p.h",
+    "src/bluetooth/qbluetoothsocket.h",
+    "src/bluetooth/qbluetoothsocketbase_p.h",
+    "src/bluetooth/qbluetoothuuid.h",
+    "src/bluetooth/qlowenergyadvertisingdata.h",
+    "src/bluetooth/qlowenergyadvertisingparameters.h",
+    "src/bluetooth/qlowenergycharacteristic.h",
+    "src/bluetooth/qlowenergycharacteristicdata.h",
+    "src/bluetooth/qlowenergyconnectionparameters.h",
+    "src/bluetooth/qlowenergycontroller.h",
+    "src/bluetooth/qlowenergycontrollerbase_p.h",
+    "src/bluetooth/qlowenergydescriptor.h",
+    "src/bluetooth/qlowenergydescriptordata.h",
+    "src/bluetooth/qlowenergyservice.h",
+    "src/bluetooth/qlowenergyservicedata.h",
+    "src/bluetooth/qlowenergyserviceprivate_p.h",
+    "src/bluetooth/qprivatelinearbuffer_p.h",
+    "src/bluetooth/qtbluetoothglobal.h",
+    "src/bluetooth/qtbluetoothglobal_p.h",
+]
+
+BLUETOOTH_LINUX_HEADERS = [
+    "src/bluetooth/bluez/adapter1_bluez5_p.h",
+    "src/bluetooth/bluez/battery1_p.h",
+    "src/bluetooth/bluez/bluetoothmanagement_p.h",
+    "src/bluetooth/bluez/bluez5_helper_p.h",
+    "src/bluetooth/bluez/bluez_data_p.h",
+    "src/bluetooth/bluez/bluezperipheralapplication_p.h",
+    "src/bluetooth/bluez/bluezperipheralconnectionmanager_p.h",
+    "src/bluetooth/bluez/bluezperipheralobjects_p.h",
+    "src/bluetooth/bluez/device1_bluez5_p.h",
+    "src/bluetooth/bluez/gattchar1_p.h",
+    "src/bluetooth/bluez/gattcharacteristic1adaptor_p.h",
+    "src/bluetooth/bluez/gattdesc1_p.h",
+    "src/bluetooth/bluez/gattdescriptor1adaptor_p.h",
+    "src/bluetooth/bluez/gattmanager1_p.h",
+    "src/bluetooth/bluez/gattservice1_p.h",
+    "src/bluetooth/bluez/gattservice1adaptor_p.h",
+    "src/bluetooth/bluez/hcimanager_p.h",
+    "src/bluetooth/bluez/leadvertisement1adaptor_p.h",
+    "src/bluetooth/bluez/leadvertisingmanager1_p.h",
+    "src/bluetooth/bluez/objectmanager_p.h",
+    "src/bluetooth/bluez/objectmanageradaptor_p.h",
+    "src/bluetooth/bluez/profile1_p.h",
+    "src/bluetooth/bluez/profile1context_p.h",
+    "src/bluetooth/bluez/profilemanager1_p.h",
+    "src/bluetooth/bluez/properties_p.h",
+    "src/bluetooth/bluez/propertiesadaptor_p.h",
+    "src/bluetooth/bluez/remotedevicemanager_p.h",
+    "src/bluetooth/bluez/servicemap_p.h",
+    "src/bluetooth/qbluetoothsocket_bluez_p.h",
+    "src/bluetooth/qbluetoothsocket_bluezdbus_p.h",
+    "src/bluetooth/qleadvertiser_bluez_p.h",
+    "src/bluetooth/qleadvertiser_bluezdbus_p.h",
+    "src/bluetooth/qlowenergycontroller_bluez_p.h",
+    "src/bluetooth/qlowenergycontroller_bluezdbus_p.h",
+]
+
+BLUETOOTH_MACOS_HEADERS = [
+    "src/bluetooth/darwin/btcentralmanager_p.h",
+    "src/bluetooth/darwin/btconnectionmonitor_p.h",
+    "src/bluetooth/darwin/btdelegates_p.h",
+    "src/bluetooth/darwin/btdeviceinquiry_p.h",
+    "src/bluetooth/darwin/btdevicepair_p.h",
+    "src/bluetooth/darwin/btgcdtimer_p.h",
+    "src/bluetooth/darwin/btl2capchannel_p.h",
+    "src/bluetooth/darwin/btledeviceinquiry_p.h",
+    "src/bluetooth/darwin/btnotifier_p.h",
+    "src/bluetooth/darwin/btperipheralmanager_p.h",
+    "src/bluetooth/darwin/btraii_p.h",
+    "src/bluetooth/darwin/btrfcommchannel_p.h",
+    "src/bluetooth/darwin/btsdpinquiry_p.h",
+    "src/bluetooth/darwin/btservicerecord_p.h",
+    "src/bluetooth/darwin/btsocketlistener_p.h",
+    "src/bluetooth/darwin/btutility_p.h",
+    "src/bluetooth/darwin/uistrings_p.h",
+    "src/bluetooth/qbluetoothsocket_macos_p.h",
+    "src/bluetooth/qlowenergycontroller_darwin_p.h",
+]
+
+BLUETOOTH_DUMMY_HEADERS = [
+    "src/bluetooth/dummy/dummy_helper_p.h",
+    "src/bluetooth/qbluetoothsocket_dummy_p.h",
+    "src/bluetooth/qlowenergycontroller_dummy_p.h",
+]
+
+qt_module_headers(
+    name = "bluetooth_headers",
+    hdrs = BLUETOOTH_COMMON_HEADERS + BLUETOOTH_LINUX_HEADERS + BLUETOOTH_DUMMY_HEADERS + BLUETOOTH_MACOS_HEADERS,
+    extra_deps = [
+        ":bluetooth_config",
+        ":bluetooth_export",
+        ":bluetooth_private_config",
+    ],
+    extra_hdrs = [":bluetooth_config"],
+    extra_private_hdrs = [":bluetooth_private_config"],
+    module_name = "Bluetooth",
+)
+
+qt_cc_library(
+    name = "bluetooth",
+    srcs = [
+        "src/bluetooth/qbluetooth.cpp",
+        "src/bluetooth/qbluetoothaddress.cpp",
+        "src/bluetooth/qbluetoothdevicediscoveryagent.cpp",
+        "src/bluetooth/qbluetoothdeviceinfo.cpp",
+        "src/bluetooth/qbluetoothhostinfo.cpp",
+        "src/bluetooth/qbluetoothlocaldevice.cpp",
+        "src/bluetooth/qbluetoothserver.cpp",
+        "src/bluetooth/qbluetoothservicediscoveryagent.cpp",
+        "src/bluetooth/qbluetoothserviceinfo.cpp",
+        "src/bluetooth/qbluetoothsocket.cpp",
+        "src/bluetooth/qbluetoothsocketbase.cpp",
+        "src/bluetooth/qbluetoothuuid.cpp",
+        "src/bluetooth/qlowenergyadvertisingdata.cpp",
+        "src/bluetooth/qlowenergyadvertisingparameters.cpp",
+        "src/bluetooth/qlowenergycharacteristic.cpp",
+        "src/bluetooth/qlowenergycharacteristicdata.cpp",
+        "src/bluetooth/qlowenergyconnectionparameters.cpp",
+        "src/bluetooth/qlowenergycontroller.cpp",
+        "src/bluetooth/qlowenergycontrollerbase.cpp",
+        "src/bluetooth/qlowenergydescriptor.cpp",
+        "src/bluetooth/qlowenergydescriptordata.cpp",
+        "src/bluetooth/qlowenergyservice.cpp",
+        "src/bluetooth/qlowenergyservicedata.cpp",
+        "src/bluetooth/qlowenergyserviceprivate.cpp",
+        "src/bluetooth/removed_api.cpp",
+    ] + select({
+        "@platforms//os:linux": [
+            "src/bluetooth/bluez/adapter1_bluez5.cpp",
+            "src/bluetooth/bluez/battery1.cpp",
+            "src/bluetooth/bluez/bluetoothmanagement.cpp",
+            "src/bluetooth/bluez/bluez5_helper.cpp",
+            "src/bluetooth/bluez/bluez_data.cpp",
+            "src/bluetooth/bluez/bluezperipheralapplication.cpp",
+            "src/bluetooth/bluez/bluezperipheralconnectionmanager.cpp",
+            "src/bluetooth/bluez/bluezperipheralobjects.cpp",
+            "src/bluetooth/bluez/device1_bluez5.cpp",
+            "src/bluetooth/bluez/gattchar1.cpp",
+            "src/bluetooth/bluez/gattcharacteristic1adaptor.cpp",
+            "src/bluetooth/bluez/gattdesc1.cpp",
+            "src/bluetooth/bluez/gattdescriptor1adaptor.cpp",
+            "src/bluetooth/bluez/gattmanager1.cpp",
+            "src/bluetooth/bluez/gattservice1.cpp",
+            "src/bluetooth/bluez/gattservice1adaptor.cpp",
+            "src/bluetooth/bluez/hcimanager.cpp",
+            "src/bluetooth/bluez/leadvertisement1adaptor.cpp",
+            "src/bluetooth/bluez/leadvertisingmanager1.cpp",
+            "src/bluetooth/bluez/objectmanager.cpp",
+            "src/bluetooth/bluez/objectmanageradaptor.cpp",
+            "src/bluetooth/bluez/profile1.cpp",
+            "src/bluetooth/bluez/profile1context.cpp",
+            "src/bluetooth/bluez/profilemanager1.cpp",
+            "src/bluetooth/bluez/properties.cpp",
+            "src/bluetooth/bluez/propertiesadaptor.cpp",
+            "src/bluetooth/bluez/remotedevicemanager.cpp",
+            "src/bluetooth/bluez/servicemap.cpp",
+            "src/bluetooth/lecmaccalculator.cpp",
+            "src/bluetooth/qbluetoothdevicediscoveryagent_bluez.cpp",
+            "src/bluetooth/qbluetoothlocaldevice_bluez.cpp",
+            "src/bluetooth/qbluetoothserver_bluez.cpp",
+            "src/bluetooth/qbluetoothservicediscoveryagent_bluez.cpp",
+            "src/bluetooth/qbluetoothserviceinfo_bluez.cpp",
+            "src/bluetooth/qbluetoothsocket_bluez.cpp",
+            "src/bluetooth/qbluetoothsocket_bluezdbus.cpp",
+            "src/bluetooth/qleadvertiser_bluez.cpp",
+            "src/bluetooth/qleadvertiser_bluezdbus.cpp",
+            "src/bluetooth/qlowenergycontroller_bluez.cpp",
+            "src/bluetooth/qlowenergycontroller_bluezdbus.cpp",
+        ],
+        "@platforms//os:macos": [
+            "src/bluetooth/darwin/btcentralmanager.mm",
+            "src/bluetooth/darwin/btconnectionmonitor.mm",
+            "src/bluetooth/darwin/btdelegates.cpp",
+            "src/bluetooth/darwin/btdeviceinquiry.mm",
+            "src/bluetooth/darwin/btdevicepair.mm",
+            "src/bluetooth/darwin/btgcdtimer.mm",
+            "src/bluetooth/darwin/btl2capchannel.mm",
+            "src/bluetooth/darwin/btledeviceinquiry.mm",
+            "src/bluetooth/darwin/btnotifier.cpp",
+            "src/bluetooth/darwin/btperipheralmanager.mm",
+            "src/bluetooth/darwin/btraii.mm",
+            "src/bluetooth/darwin/btrfcommchannel.mm",
+            "src/bluetooth/darwin/btsdpinquiry.mm",
+            "src/bluetooth/darwin/btservicerecord.mm",
+            "src/bluetooth/darwin/btsocketlistener.mm",
+            "src/bluetooth/darwin/btutility.mm",
+            "src/bluetooth/darwin/uistrings.cpp",
+            "src/bluetooth/qbluetoothdevicediscoveryagent_darwin.mm",
+            "src/bluetooth/qbluetoothlocaldevice_macos.mm",
+            "src/bluetooth/qbluetoothserver_macos.mm",
+            "src/bluetooth/qbluetoothservicediscoveryagent_macos.mm",
+            "src/bluetooth/qbluetoothserviceinfo_macos.mm",
+            "src/bluetooth/qbluetoothsocket_macos.mm",
+            "src/bluetooth/qbluetoothuuid_darwin.mm",
+            "src/bluetooth/qlowenergycontroller_darwin.mm",
+        ],
+        "//conditions:default": [
+            "src/bluetooth/dummy/dummy_helper.cpp",
+            "src/bluetooth/qbluetoothdevicediscoveryagent_p.cpp",
+            "src/bluetooth/qbluetoothlocaldevice_p.cpp",
+            "src/bluetooth/qbluetoothserver_p.cpp",
+            "src/bluetooth/qbluetoothservicediscoveryagent_p.cpp",
+            "src/bluetooth/qbluetoothserviceinfo_p.cpp",
+            "src/bluetooth/qbluetoothsocket_dummy.cpp",
+            "src/bluetooth/qlowenergycontroller_dummy.cpp",
+        ],
+    }),
+    hdrs = BLUETOOTH_COMMON_HEADERS + select({
+        "@platforms//os:linux": BLUETOOTH_LINUX_HEADERS,
+        "@platforms//os:macos": BLUETOOTH_MACOS_HEADERS,
+        "//conditions:default": BLUETOOTH_DUMMY_HEADERS,
+    }),
+    copts = ["-w"],
+    create_shared = True,
+    dynamic_deps = [
+        "@qtbase//:network_shared",
+        "@qtbase//:core_shared",
+    ] + select({
+        "@platforms//os:linux": ["@qtbase//:dbus_shared"],
+        "//conditions:default": [],
+    }),
+    included_moc_hdrs = [
+        "src/bluetooth/qbluetooth.h",
+        "src/bluetooth/qbluetoothdevicediscoveryagent.h",
+        "src/bluetooth/qbluetoothlocaldevice.h",
+        "src/bluetooth/qbluetoothserver.h",
+        "src/bluetooth/qbluetoothservicediscoveryagent.h",
+        "src/bluetooth/qbluetoothsocket.h",
+        "src/bluetooth/qbluetoothsocketbase_p.h",
+        "src/bluetooth/qlowenergycontroller.h",
+        "src/bluetooth/qlowenergycontrollerbase_p.h",
+        "src/bluetooth/qlowenergyservice.h",
+        "src/bluetooth/qlowenergyserviceprivate_p.h",
+    ] + select({
+        "@platforms//os:linux": [],
+        "@platforms//os:macos": [],
+        "//conditions:default": [
+            "src/bluetooth/qbluetoothdevicediscoveryagent_p.h",
+            "src/bluetooth/qbluetoothservicediscoveryagent_p.h",
+            "src/bluetooth/qbluetoothserviceinfo_p.h",
+        ],
+    }),
+    includes = [
+        "src/bluetooth",
+        "src/bluetooth/bluez",
+        "src/bluetooth/darwin",
+        "src/bluetooth/dummy",
+    ],
+    linkopts = select({
+        "@platforms//os:macos": [
+            "-framework",
+            "CoreBluetooth",
+            "-framework",
+            "Foundation",
+            "-framework",
+            "IOBluetooth",
+        ],
+        "//conditions:default": [],
+    }),
+    local_defines = [
+        "QT_BUILDING_QT",
+        "QT_BUILD_BLUETOOTH_LIB",
+        "QT_NO_CONTEXTLESS_CONNECT",
+    ] + select({
+        "@platforms//os:linux": ["CONFIG_LINUX_CRYPTO_API"],
+        "@platforms//os:macos": ["QT_OSX_BLUETOOTH"],
+        "//conditions:default": [],
+    }),
+    moc_hdrs = select({
+        "@platforms//os:linux": [
+            "src/bluetooth/bluez/adapter1_bluez5_p.h",
+            "src/bluetooth/bluez/battery1_p.h",
+            "src/bluetooth/bluez/bluetoothmanagement_p.h",
+            "src/bluetooth/bluez/bluez5_helper_p.h",
+            "src/bluetooth/bluez/bluez_data_p.h",
+            "src/bluetooth/bluez/bluezperipheralapplication_p.h",
+            "src/bluetooth/bluez/bluezperipheralconnectionmanager_p.h",
+            "src/bluetooth/bluez/bluezperipheralobjects_p.h",
+            "src/bluetooth/bluez/device1_bluez5_p.h",
+            "src/bluetooth/bluez/gattchar1_p.h",
+            "src/bluetooth/bluez/gattcharacteristic1adaptor_p.h",
+            "src/bluetooth/bluez/gattdesc1_p.h",
+            "src/bluetooth/bluez/gattdescriptor1adaptor_p.h",
+            "src/bluetooth/bluez/gattmanager1_p.h",
+            "src/bluetooth/bluez/gattservice1_p.h",
+            "src/bluetooth/bluez/gattservice1adaptor_p.h",
+            "src/bluetooth/bluez/hcimanager_p.h",
+            "src/bluetooth/bluez/leadvertisement1adaptor_p.h",
+            "src/bluetooth/bluez/leadvertisingmanager1_p.h",
+            "src/bluetooth/bluez/objectmanager_p.h",
+            "src/bluetooth/bluez/objectmanageradaptor_p.h",
+            "src/bluetooth/bluez/profile1_p.h",
+            "src/bluetooth/bluez/profile1context_p.h",
+            "src/bluetooth/bluez/profilemanager1_p.h",
+            "src/bluetooth/bluez/properties_p.h",
+            "src/bluetooth/bluez/propertiesadaptor_p.h",
+            "src/bluetooth/bluez/remotedevicemanager_p.h",
+            "src/bluetooth/bluez/servicemap_p.h",
+            "src/bluetooth/qbluetoothlocaldevice_p.h",
+            "src/bluetooth/qbluetoothserviceinfo_p.h",
+            "src/bluetooth/qbluetoothsocket_bluez_p.h",
+            "src/bluetooth/qbluetoothsocket_bluezdbus_p.h",
+            "src/bluetooth/qleadvertiser_bluez_p.h",
+            "src/bluetooth/qleadvertiser_bluezdbus_p.h",
+            "src/bluetooth/qlowenergycontroller_bluez_p.h",
+            "src/bluetooth/qlowenergycontroller_bluezdbus_p.h",
+        ],
+        "@platforms//os:macos": [
+            "src/bluetooth/darwin/btnotifier_p.h",
+            "src/bluetooth/qbluetoothdevicediscoveryagent_p.h",
+            "src/bluetooth/qbluetoothservicediscoveryagent_p.h",
+            "src/bluetooth/qbluetoothserviceinfo_p.h",
+            "src/bluetooth/qlowenergycontroller_darwin_p.h",
+        ],
+        "//conditions:default": [
+            "src/bluetooth/qbluetoothsocket_dummy_p.h",
+            "src/bluetooth/qlowenergycontroller_dummy_p.h",
+        ],
+    }),
+    deps = [
+        ":bluetooth_config",
+        ":bluetooth_export",
+        ":bluetooth_headers",
+        ":bluetooth_private_config",
+        "@qtbase//:core",
+        "@qtbase//:network",
+    ] + select({
+        "@platforms//os:linux": ["@qtbase//:dbus"],
+        "//conditions:default": [],
+    }),
+)
+
+# ============================================================================
+# Qt6Nfc (Neard on Linux, PCSCLite on macOS/Windows)
+# ============================================================================
+
+qt_export_header(
+    name = "nfc_export",
+    module_Header = "Nfc",
+    module_name = "nfc",
+)
+
+qt_config_header(
+    name = "nfc_config",
+    out = "qtnfc-config.h",
+    content = """#pragma once
+#if defined(__linux__)
+#define QT_FEATURE_pcsclite -1
+#define QT_FEATURE_neard 1
+#elif defined(__APPLE__) || defined(_WIN32)
+#define QT_FEATURE_pcsclite 1
+#define QT_FEATURE_neard -1
+#else
+#define QT_FEATURE_pcsclite -1
+#define QT_FEATURE_neard -1
+#endif
+""",
+)
+
+qt_config_header(
+    name = "nfc_private_config",
+    out = "qtnfc-config_p.h",
+    content = """#pragma once
+#include "qtnfc-config.h"
+""",
+)
+
+qt_dbus_interface(
+    name = "nfc_neard_dbus",
+    srcs = [
+        "src/nfc/neard/org.freedesktop.dbus.objectmanager.xml",
+        "src/nfc/neard/org.freedesktop.dbus.properties.xml",
+        "src/nfc/neard/org.neard.Adapter.xml",
+        "src/nfc/neard/org.neard.Tag.xml",
+    ],
+    flags = [
+        "-i",
+        "neard/neard_dbus_types_p.h",
+        "--namespace",
+        "QtNfcPrivate",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+filegroup(
+    name = "nfc_neard_dbus_hdrs",
+    srcs = [":nfc_neard_dbus"],
+    output_group = "headers",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+filegroup(
+    name = "nfc_neard_dbus_srcs",
+    srcs = [":nfc_neard_dbus"],
+    output_group = "sources",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+NFC_COMMON_HEADERS = [
+    "src/nfc/qndeffilter.h",
+    "src/nfc/qndefmessage.h",
+    "src/nfc/qndefnfcsmartposterrecord.h",
+    "src/nfc/qndefnfcsmartposterrecord_p.h",
+    "src/nfc/qndefnfctextrecord.h",
+    "src/nfc/qndefnfcurirecord.h",
+    "src/nfc/qndefrecord.h",
+    "src/nfc/qndefrecord_p.h",
+    "src/nfc/qnearfieldmanager.h",
+    "src/nfc/qnearfieldmanager_generic_p.h",
+    "src/nfc/qnearfieldmanager_p.h",
+    "src/nfc/qnearfieldtarget.h",
+    "src/nfc/qnearfieldtarget_p.h",
+    "src/nfc/qtnfcglobal.h",
+    "src/nfc/qtnfcglobal_p.h",
+]
+
+NFC_LINUX_HEADERS = [
+    "src/nfc/neard/neard_dbus_types_p.h",
+    "src/nfc/neard/neard_helper_p.h",
+    "src/nfc/qnearfieldmanager_neard_p.h",
+    "src/nfc/qnearfieldtarget_neard_p.h",
+]
+
+NFC_PCSC_HEADERS = [
+    "src/nfc/ndef/qndefaccessfsm_p.h",
+    "src/nfc/ndef/qnfctagtype4ndeffsm_p.h",
+    "src/nfc/pcsc/qpcsc_p.h",
+    "src/nfc/pcsc/qpcsccard_p.h",
+    "src/nfc/pcsc/qpcscmanager_p.h",
+    "src/nfc/pcsc/qpcscslot_p.h",
+    "src/nfc/qapduutils_p.h",
+    "src/nfc/qnearfieldmanager_pcsc_p.h",
+    "src/nfc/qnearfieldtarget_pcsc_p.h",
+]
+
+qt_module_headers(
+    name = "nfc_headers",
+    hdrs = NFC_COMMON_HEADERS + NFC_LINUX_HEADERS + NFC_PCSC_HEADERS,
+    extra_deps = [
+        ":nfc_config",
+        ":nfc_export",
+        ":nfc_private_config",
+    ],
+    extra_hdrs = [":nfc_config"],
+    extra_private_hdrs = [":nfc_private_config"],
+    module_name = "Nfc",
+)
+
+qt_cc_library(
+    name = "nfc",
+    srcs = [
+        "src/nfc/qndeffilter.cpp",
+        "src/nfc/qndefmessage.cpp",
+        "src/nfc/qndefnfcsmartposterrecord.cpp",
+        "src/nfc/qndefnfctextrecord.cpp",
+        "src/nfc/qndefnfcurirecord.cpp",
+        "src/nfc/qndefrecord.cpp",
+        "src/nfc/qnearfieldmanager.cpp",
+        "src/nfc/qnearfieldtarget.cpp",
+        "src/nfc/qnearfieldtarget_p.cpp",
+    ] + select({
+        "@platforms//os:linux": [
+            "src/nfc/neard/neard_helper.cpp",
+            "src/nfc/qnearfieldmanager_neard.cpp",
+            "src/nfc/qnearfieldtarget_neard_p.cpp",
+            ":nfc_neard_dbus_srcs",
+        ],
+        "@platforms//os:macos": [
+            "src/nfc/ndef/qnfctagtype4ndeffsm.cpp",
+            "src/nfc/pcsc/qpcsc.cpp",
+            "src/nfc/pcsc/qpcsccard.cpp",
+            "src/nfc/pcsc/qpcscmanager.cpp",
+            "src/nfc/pcsc/qpcscslot.cpp",
+            "src/nfc/qapduutils.cpp",
+            "src/nfc/qnearfieldmanager_pcsc.cpp",
+            "src/nfc/qnearfieldtarget_pcsc.cpp",
+        ],
+        "@platforms//os:windows": [
+            "src/nfc/ndef/qnfctagtype4ndeffsm.cpp",
+            "src/nfc/pcsc/qpcsc.cpp",
+            "src/nfc/pcsc/qpcsccard.cpp",
+            "src/nfc/pcsc/qpcscmanager.cpp",
+            "src/nfc/pcsc/qpcscslot.cpp",
+            "src/nfc/qapduutils.cpp",
+            "src/nfc/qnearfieldmanager_pcsc.cpp",
+            "src/nfc/qnearfieldtarget_pcsc.cpp",
+        ],
+        "//conditions:default": [
+            "src/nfc/qnearfieldmanager_generic.cpp",
+        ],
+    }),
+    hdrs = NFC_COMMON_HEADERS + select({
+        "@platforms//os:linux": NFC_LINUX_HEADERS + [":nfc_neard_dbus_hdrs"],
+        "@platforms//os:macos": NFC_PCSC_HEADERS,
+        "@platforms//os:windows": NFC_PCSC_HEADERS,
+        "//conditions:default": [],
+    }),
+    copts = ["-w"],
+    create_shared = True,
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+    ] + select({
+        "@platforms//os:linux": ["@qtbase//:dbus_shared"],
+        "//conditions:default": [],
+    }),
+    included_moc_hdrs = [
+        "src/nfc/qnearfieldmanager.h",
+        "src/nfc/qnearfieldmanager_p.h",
+        "src/nfc/qnearfieldtarget.h",
+        "src/nfc/qnearfieldtarget_p.h",
+    ],
+    includes = [
+        "src/nfc",
+        "src/nfc/ndef",
+        "src/nfc/neard",
+        "src/nfc/pcsc",
+    ],
+    linkopts = select({
+        "@platforms//os:macos": [
+            "-framework",
+            "PCSC",
+        ],
+        "@platforms//os:windows": [
+            "-lwinscard",
+        ],
+        "//conditions:default": [],
+    }),
+    local_defines = [
+        "QT_BUILDING_QT",
+        "QT_BUILD_NFC_LIB",
+        "QT_NO_CONTEXTLESS_CONNECT",
+    ] + select({
+        "@platforms//os:linux": ["NEARD_NFC"],
+        "@platforms//os:macos": ["PCSC_NFC"],
+        "@platforms//os:windows": ["PCSC_NFC"],
+        "//conditions:default": [],
+    }),
+    moc_hdrs = select({
+        "@platforms//os:linux": [
+            "src/nfc/neard/neard_helper_p.h",
+            "src/nfc/qnearfieldmanager_neard_p.h",
+            ":nfc_neard_dbus_hdrs",
+        ],
+        "@platforms//os:macos": [
+            "src/nfc/pcsc/qpcsccard_p.h",
+            "src/nfc/pcsc/qpcscmanager_p.h",
+            "src/nfc/pcsc/qpcscslot_p.h",
+            "src/nfc/qnearfieldmanager_pcsc_p.h",
+            "src/nfc/qnearfieldtarget_pcsc_p.h",
+        ],
+        "@platforms//os:windows": [
+            "src/nfc/pcsc/qpcsccard_p.h",
+            "src/nfc/pcsc/qpcscmanager_p.h",
+            "src/nfc/pcsc/qpcscslot_p.h",
+            "src/nfc/qnearfieldmanager_pcsc_p.h",
+            "src/nfc/qnearfieldtarget_pcsc_p.h",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":nfc_config",
+        ":nfc_export",
+        ":nfc_headers",
+        ":nfc_private_config",
+        "@qtbase//:core",
+    ] + select({
+        "@platforms//os:linux": [
+            ":nfc_neard_dbus",
+            "@qtbase//:dbus",
+        ],
+        "//conditions:default": [],
+    }),
+)

@@ -1,0 +1,266 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:asio": "@rosdistro//cc:asio_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@ublox_msgs//:ublox_msgs_lib": "@ublox_msgs//:ublox_msgs_lib_library",
+}
+
+CC_DEPS = [
+    "@diagnostic_msgs//:cc",
+    "@geometry_msgs//:cc",
+    "@nmea_msgs//:cc",
+    "@rcl_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rtcm_msgs//:cc",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+    "@ublox_msgs//:c",
+    "@ublox_msgs//:cc",
+]
+
+cc_library(
+    name = "ublox_gps_library",
+    srcs = [
+        "src/adr_udr_product.cpp",
+        "src/gnss.cpp",
+        "src/gps.cpp",
+        "src/hp_pos_rec_product.cpp",
+        "src/hpg_ref_product.cpp",
+        "src/hpg_rov_product.cpp",
+        "src/mkgmtime.c",
+        "src/node.cpp",
+        "src/raw_data_pa.cpp",
+        "src/raw_data_product.cpp",
+        "src/tim_product.cpp",
+        "src/ublox_firmware.cpp",
+        "src/ublox_firmware6.cpp",
+        "src/ublox_firmware7.cpp",
+        "src/ublox_firmware8.cpp",
+        "src/ublox_firmware9.cpp",
+    ],
+    hdrs = [
+        "include/ublox_gps/adr_udr_product.hpp",
+        "include/ublox_gps/async_worker.hpp",
+        "include/ublox_gps/callback.hpp",
+        "include/ublox_gps/component_interface.hpp",
+        "include/ublox_gps/fix_diagnostic.hpp",
+        "include/ublox_gps/fts_product.hpp",
+        "include/ublox_gps/gnss.hpp",
+        "include/ublox_gps/gps.hpp",
+        "include/ublox_gps/hp_pos_rec_product.hpp",
+        "include/ublox_gps/hpg_ref_product.hpp",
+        "include/ublox_gps/hpg_rov_product.hpp",
+        "include/ublox_gps/mkgmtime.h",
+        "include/ublox_gps/node.hpp",
+        "include/ublox_gps/raw_data_pa.hpp",
+        "include/ublox_gps/raw_data_product.hpp",
+        "include/ublox_gps/rtcm.hpp",
+        "include/ublox_gps/tim_product.hpp",
+        "include/ublox_gps/ublox_firmware.hpp",
+        "include/ublox_gps/ublox_firmware6.hpp",
+        "include/ublox_gps/ublox_firmware7.hpp",
+        "include/ublox_gps/ublox_firmware7plus.hpp",
+        "include/ublox_gps/ublox_firmware8.hpp",
+        "include/ublox_gps/ublox_firmware9.hpp",
+        "include/ublox_gps/ublox_topic_diagnostic.hpp",
+        "include/ublox_gps/utils.hpp",
+        "include/ublox_gps/worker.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ublox_gps",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ublox_gps",
+    dynamic_deps = DEPENDENCIES.keys(),
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":ublox_gps_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "ublox_gps_components",
+    component = ":ublox_gps",
+    plugins = ["ublox_node::UbloxNode"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ublox_gps"],
+)
+
+cc_binary(
+    name = "ublox_gps_node",
+    srcs = ["src/node_main.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ublox_gps",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ublox_gps_library"],
+)
+
+cc_binary(
+    name = "ublox_logger",
+    srcs = [
+        "src/logger_node_pa.cpp",
+        "src/raw_data_pa.cpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/ublox_gps",
+    ],
+    linkopts = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ublox_gps_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":ublox_gps_components"],
+    data = [
+        "config/c94_m8p_base.yaml",
+        "config/c94_m8p_rover.yaml",
+        "config/c94_m8t_base.yaml",
+        "config/c94_m8t_rover.yaml",
+        "config/neo_m8u_rover.yaml",
+        "config/nmea.yaml",
+        "config/zed_f9p.yaml",
+        "//launch:launch_files",
+    ],
+    lib_data = [
+        ":ublox_gps_node",
+        ":ublox_logger",
+    ],
+    libraries = [":ublox_gps"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nmea_msgs//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rtcm_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@ublox_msgs//:ament_package",
+        "@ublox_serialization//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_ublox_gps",
+    headers = [
+        "include/ublox_gps/adr_udr_product.hpp",
+        "include/ublox_gps/async_worker.hpp",
+        "include/ublox_gps/callback.hpp",
+        "include/ublox_gps/component_interface.hpp",
+        "include/ublox_gps/fix_diagnostic.hpp",
+        "include/ublox_gps/fts_product.hpp",
+        "include/ublox_gps/gnss.hpp",
+        "include/ublox_gps/gps.hpp",
+        "include/ublox_gps/hp_pos_rec_product.hpp",
+        "include/ublox_gps/hpg_ref_product.hpp",
+        "include/ublox_gps/hpg_rov_product.hpp",
+        "include/ublox_gps/mkgmtime.h",
+        "include/ublox_gps/node.hpp",
+        "include/ublox_gps/raw_data_pa.hpp",
+        "include/ublox_gps/raw_data_product.hpp",
+        "include/ublox_gps/rtcm.hpp",
+        "include/ublox_gps/tim_product.hpp",
+        "include/ublox_gps/ublox_firmware.hpp",
+        "include/ublox_gps/ublox_firmware6.hpp",
+        "include/ublox_gps/ublox_firmware7.hpp",
+        "include/ublox_gps/ublox_firmware7plus.hpp",
+        "include/ublox_gps/ublox_firmware8.hpp",
+        "include/ublox_gps/ublox_firmware9.hpp",
+        "include/ublox_gps/ublox_topic_diagnostic.hpp",
+        "include/ublox_gps/utils.hpp",
+        "include/ublox_gps/worker.hpp",
+    ],
+    libraries = [":ublox_gps"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nmea_msgs//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rtcm_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@ublox_msgs//:ament_package",
+        "@ublox_serialization//:ament_package",
+    ],
+)

@@ -1,0 +1,194 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":talker",
+        ":listener",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "talker_library",
+    srcs = ["src/talker.cpp"],
+    hdrs = [
+        "include/wait_set/listener.hpp",
+        "include/wait_set/random_listener.hpp",
+        "include/wait_set/random_talker.hpp",
+        "include/wait_set/talker.hpp",
+        "include/wait_set/visibility.h",
+    ],
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["WAIT_SET_DLL"],
+    deps = DEPENDENCIES.values() + [
+        "@example_interfaces//:cc",
+        "@std_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "talker",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":talker_library"],
+)
+
+rclcpp_components_register_node(
+    name = "wait_set_talker",
+    component = ":talker",
+    node_name = "wait_set_talker",
+    plugin = "Talker",
+)
+
+cc_library(
+    name = "listener_library",
+    srcs = ["src/listener.cpp"],
+    hdrs = [
+        "include/wait_set/listener.hpp",
+        "include/wait_set/random_listener.hpp",
+        "include/wait_set/random_talker.hpp",
+        "include/wait_set/talker.hpp",
+        "include/wait_set/visibility.h",
+    ],
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["WAIT_SET_DLL"],
+    deps = DEPENDENCIES.values() + [
+        "@example_interfaces//:cc",
+        "@std_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "listener",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":listener_library"],
+)
+
+rclcpp_components_register_node(
+    name = "wait_set_listener",
+    component = ":listener",
+    node_name = "wait_set_listener",
+    plugin = "Listener",
+)
+
+cc_library(
+    name = "wait_set_headers",
+    hdrs = [
+        "include/wait_set/listener.hpp",
+        "include/wait_set/random_listener.hpp",
+        "include/wait_set/random_talker.hpp",
+        "include/wait_set/talker.hpp",
+        "include/wait_set/visibility.h",
+    ],
+    includes = ["include"],
+)
+
+EXECUTABLES = {
+    "wait_set": "src/wait_set.cpp",
+    "static_wait_set": "src/static_wait_set.cpp",
+    "thread_safe_wait_set": "src/thread_safe_wait_set.cpp",
+    "wait_set_topics_and_timer": "src/wait_set_topics_and_timer.cpp",
+    "wait_set_random_order": "src/wait_set_random_order.cpp",
+    "executor_random_order": "src/executor_random_order.cpp",
+    "wait_set_topics_with_different_rates": "src/wait_set_topics_with_different_rates.cpp",
+}
+
+[
+    cc_binary(
+        name = name,
+        srcs = [src],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        includes = ["include"],
+        local_defines = ros_local_defines(),
+        deps = DEPENDENCIES.values() + [
+            ":wait_set_headers",
+            "@example_interfaces//:cc",
+            "@std_msgs//:cc",
+        ],
+    )
+    for name, src in EXECUTABLES.items()
+]
+
+cc_binary(
+    name = "wait_set_composed",
+    srcs = ["src/wait_set_composed.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":listener_library",
+        ":talker_library",
+        "@rclcpp//:rclcpp_library",
+    ],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    components = [
+        ":wait_set_listener_record",
+        ":wait_set_talker_record",
+    ],
+    executables = [
+        ":wait_set_composed",
+        ":wait_set_listener",
+        ":wait_set_talker",
+    ] + [":" + k for k in EXECUTABLES.keys()],
+    libraries = [
+        ":listener",
+        ":talker",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@example_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

@@ -1,0 +1,217 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@mrpt_rtti//:mrpt_core": "@mrpt_rtti//:mrpt_core_library",
+    "@mrpt_rtti//:mrpt_rtti": "@mrpt_rtti//:mrpt_rtti_library",
+    "@rosdistro//cc:zmq": "@rosdistro//cc:zmq_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+alias(
+    name = "mrpt_rtti",
+    actual = "@mrpt_rtti//:mrpt_rtti",
+)
+
+alias(
+    name = "mrpt_rtti_library",
+    actual = "@mrpt_rtti//:mrpt_rtti_library",
+)
+
+cc_library(
+    name = "mrpt_serialization_library",
+    srcs = [
+        "src/CArchive.cpp",
+        "src/CMessage.cpp",
+        "src/CSchemeArchive.cpp",
+        "src/CSchemeArchiveBase.cpp",
+        "src/CSerializable.cpp",
+    ],
+    hdrs = [
+        "include/mrpt/serialization/CArchive.h",
+        "include/mrpt/serialization/CMessage.h",
+        "include/mrpt/serialization/CSchemeArchive.h",
+        "include/mrpt/serialization/CSchemeArchiveBase.h",
+        "include/mrpt/serialization/CSerializable.h",
+        "include/mrpt/serialization/aligned_serialization.h",
+        "include/mrpt/serialization/archiveFrom_std_streams.h",
+        "include/mrpt/serialization/archiveFrom_std_vector.h",
+        "include/mrpt/serialization/bimap_serialization.h",
+        "include/mrpt/serialization/metaprogramming_serialization.h",
+        "include/mrpt/serialization/optional_serialization.h",
+        "include/mrpt/serialization/registerAllClasses.h",
+        "include/mrpt/serialization/serialization_frwds.h",
+        "include/mrpt/serialization/stl_serialization.h",
+        "include/mrpt/serialization/zmq_serialization.h",
+        "tests/serialization_test_types.h",
+    ] + [":config_h"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_serialization",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":mrpt_serialization_library"],
+)
+
+cc_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu_library",
+    srcs = ["python_bindings/mrpt_serialization_py.cpp"],
+    hdrs = [
+        "include/mrpt/serialization/CArchive.h",
+        "include/mrpt/serialization/CMessage.h",
+        "include/mrpt/serialization/CSchemeArchive.h",
+        "include/mrpt/serialization/CSchemeArchiveBase.h",
+        "include/mrpt/serialization/CSerializable.h",
+        "include/mrpt/serialization/aligned_serialization.h",
+        "include/mrpt/serialization/archiveFrom_std_streams.h",
+        "include/mrpt/serialization/archiveFrom_std_vector.h",
+        "include/mrpt/serialization/bimap_serialization.h",
+        "include/mrpt/serialization/metaprogramming_serialization.h",
+        "include/mrpt/serialization/optional_serialization.h",
+        "include/mrpt/serialization/registerAllClasses.h",
+        "include/mrpt/serialization/serialization_frwds.h",
+        "include/mrpt/serialization/stl_serialization.h",
+        "include/mrpt/serialization/zmq_serialization.h",
+        "tests/serialization_test_types.h",
+    ] + [":config_h"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_serialization_library"],
+)
+
+cc_shared_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys() + [":mrpt_serialization"],
+    shared_lib_name = "mrpt/serialization/_bindings.so",
+    deps = [":_bindings.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "mrpt",
+    srcs = ["python/mrpt/serialization/__init__.py"],
+    imports = ["python"],
+    deps = ["@mrpt_rtti//:mrpt"],
+)
+
+expand_template(
+    name = "config_h",
+    out = "_gen/include/mrpt/serialization/config.h",
+    substitutions = {
+        "${CMAKE_MRPT_HAS_JSONCPP}": "0",
+    },
+    template = "config.h.in",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mrpt_serialization",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_serialization": [
+            "libmrpt_serialization.so.3.3",
+            "libmrpt_serialization.so.3.3.1",
+        ],
+    },
+    deps = [
+        "@mrpt_common//:ament_package",
+        "@mrpt_rtti//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        ":config_h",
+    ] + [
+        "include/mrpt/serialization/CArchive.h",
+        "include/mrpt/serialization/CMessage.h",
+        "include/mrpt/serialization/CSchemeArchive.h",
+        "include/mrpt/serialization/CSchemeArchiveBase.h",
+        "include/mrpt/serialization/CSerializable.h",
+        "include/mrpt/serialization/aligned_serialization.h",
+        "include/mrpt/serialization/archiveFrom_std_streams.h",
+        "include/mrpt/serialization/archiveFrom_std_vector.h",
+        "include/mrpt/serialization/bimap_serialization.h",
+        "include/mrpt/serialization/metaprogramming_serialization.h",
+        "include/mrpt/serialization/optional_serialization.h",
+        "include/mrpt/serialization/registerAllClasses.h",
+        "include/mrpt/serialization/serialization_frwds.h",
+        "include/mrpt/serialization/stl_serialization.h",
+        "include/mrpt/serialization/zmq_serialization.h",
+    ],
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_serialization",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":mrpt",
+        ":_bindings.cpython-314-x86_64-linux-gnu",
+    ],
+    python_strip_prefix = "python",
+    sonames = {
+        "mrpt_serialization": [
+            "libmrpt_serialization.so.3.3",
+            "libmrpt_serialization.so.3.3.1",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_common//:ament_package",
+        "@mrpt_rtti//:ament_package",
+    ],
+)

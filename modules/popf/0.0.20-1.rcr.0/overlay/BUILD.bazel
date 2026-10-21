@@ -1,0 +1,336 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:flex_headers",
+    ":_gen_textual_hdrs",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+VAL_HDRS = [
+    "src/VALfiles/Action.h",
+    "src/VALfiles/Analyser.h",
+    "src/VALfiles/Cascader.h",
+    "src/VALfiles/Environment.h",
+    "src/VALfiles/Evaluator.h",
+    "src/VALfiles/Events.h",
+    "src/VALfiles/Exceptions.h",
+    "src/VALfiles/FastEnvironment.h",
+    "src/VALfiles/FuncAnalysis.h",
+    "src/VALfiles/FuncExp.h",
+    "src/VALfiles/GoalHypSpace.h",
+    "src/VALfiles/InstPropLinker.h",
+    "src/VALfiles/LaTeXSupport.h",
+    "src/VALfiles/Ownership.h",
+    "src/VALfiles/Partitions.h",
+    "src/VALfiles/Plan.h",
+    "src/VALfiles/PlanExecutionTracker.h",
+    "src/VALfiles/Polynomial.h",
+    "src/VALfiles/PrettyPrinter.h",
+    "src/VALfiles/Proposition.h",
+    "src/VALfiles/RelaxTranslator.h",
+    "src/VALfiles/RepairAdvice.h",
+    "src/VALfiles/RobustAnalyse.h",
+    "src/VALfiles/SimpleEval.h",
+    "src/VALfiles/State.h",
+    "src/VALfiles/StateObserver.h",
+    "src/VALfiles/TIM.h",
+    "src/VALfiles/TIMUtilities.h",
+    "src/VALfiles/TimSupport.h",
+    "src/VALfiles/ToFunction.h",
+    "src/VALfiles/TrajectoryConstraints.h",
+    "src/VALfiles/TypeStripWC.h",
+    "src/VALfiles/TypedAnalyser.h",
+    "src/VALfiles/Utils.h",
+    "src/VALfiles/Validator.h",
+    "src/VALfiles/instantiation.h",
+    "src/VALfiles/instantiationIP.h",
+    "src/VALfiles/main.h",
+    "src/VALfiles/misc/AbstractGraph.h",
+    "src/VALfiles/misc/CausalGraph.h",
+    "src/VALfiles/misc/DYNATranslator.h",
+    "src/VALfiles/misc/HowAnalyser.h",
+    "src/VALfiles/misc/LPGPTranslator.h",
+    "src/VALfiles/misc/OptInterface.h",
+    "src/VALfiles/misc/PartialPlan.h",
+    "src/VALfiles/misc/PinguPlanGenerator.h",
+    "src/VALfiles/misc/SASActions.h",
+    "src/VALfiles/misc/SearchSpace.h",
+    "src/VALfiles/misc/graphconstruct.h",
+    "src/VALfiles/oldFlexLexer.h",
+    "src/VALfiles/parsing/DebugWriteController.h",
+    "src/VALfiles/parsing/VisitController.h",
+    "src/VALfiles/parsing/WriteController.h",
+    "src/VALfiles/parsing/macros.h",
+    "src/VALfiles/parsing/parse_error.h",
+    "src/VALfiles/parsing/ptree.h",
+    "src/VALfiles/parsing/sStack.h",
+    "src/VALfiles/random.h",
+    "src/VALfiles/tDistribution.h",
+    "src/VALfiles/typecheck.h",
+    "src/popf/Popf.hpp",
+]
+
+genrule(
+    name = "gen_lex_yy_cc",
+    srcs = ["src/VALfiles/parsing/pddl+.lex"],
+    outs = ["_gen/include/lex.yy.cc"],
+    cmd = "$(location @rosdistro//cc:flex_bin) -+ --outfile=$@ $(location src/VALfiles/parsing/pddl+.lex)",
+    tools = ["@rosdistro//cc:flex_bin"],
+)
+
+genrule(
+    name = "gen_pddl_plus_cpp",
+    srcs = [
+        "src/VALfiles/parsing/pddl+.yacc",
+        ":gen_lex_yy_cc",
+    ],
+    outs = ["_gen/pddl+.cpp"],
+    cmd = "$(location @rosdistro//cc:bison_bin) $(location src/VALfiles/parsing/pddl+.yacc) -o $@",
+    tools = ["@rosdistro//cc:bison_bin"],
+)
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [":gen_lex_yy_cc"],
+)
+
+cc_library(
+    name = "VALGlobals_library",
+    srcs = ["src/VALfiles/VALGlobals.cpp"],
+    hdrs = VAL_HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-fpermissive",
+    ],
+    includes = [
+        "_gen/include",
+        "src/VALfiles",
+        "src/VALfiles/parsing",
+        "src/popf",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "VALGlobals",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":VALGlobals_library"],
+)
+
+cc_library(
+    name = "ParsePDDL_library",
+    srcs = [
+        "src/VALfiles/parsing/DebugWriteController.cpp",
+        "src/VALfiles/parsing/ptree.cpp",
+        ":gen_pddl_plus_cpp",
+    ],
+    hdrs = VAL_HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-fpermissive",
+    ],
+    includes = [
+        "_gen/include",
+        "src/VALfiles",
+        "src/VALfiles/parsing",
+        "src/popf",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":VALGlobals_library"],
+)
+
+cc_shared_library(
+    name = "ParsePDDL",
+    dynamic_deps = DEPENDENCIES.keys() + [":VALGlobals"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":ParsePDDL_library"],
+)
+
+cc_library(
+    name = "Inst_library",
+    srcs = [
+        "src/VALfiles/FastEnvironment.cpp",
+        "src/VALfiles/FuncAnalysis.cpp",
+        "src/VALfiles/SimpleEval.cpp",
+        "src/VALfiles/TIM.cpp",
+        "src/VALfiles/TimSupport.cpp",
+        "src/VALfiles/TypeStripWC.cpp",
+        "src/VALfiles/TypedAnalyser.cpp",
+        "src/VALfiles/instantiation.cpp",
+        "src/VALfiles/typecheck.cpp",
+    ],
+    hdrs = VAL_HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-fpermissive",
+    ],
+    includes = [
+        "_gen/include",
+        "src/VALfiles",
+        "src/VALfiles/parsing",
+        "src/popf",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ParsePDDL_library"],
+)
+
+cc_shared_library(
+    name = "Inst",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":ParsePDDL",
+        ":VALGlobals",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":Inst_library"],
+)
+
+# TODO: popfCommon and popf require Coin-OR CBC/Clp/Osi/Cgl/CoinUtils, which are not yet packaged in BCR.
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":VALGlobals",
+        ":ParsePDDL",
+        ":Inst",
+    ],
+)
+
+cc_binary(
+    name = "parser",
+    srcs = ["src/VALfiles/parse.cpp"] + VAL_HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-fpermissive",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "src/VALfiles",
+        "src/VALfiles/parsing",
+        "src/popf",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ParsePDDL_library",
+        ":VALGlobals_library",
+    ],
+)
+
+cc_binary(
+    name = "validate",
+    srcs = [
+        "src/VALfiles/Action.cpp",
+        "src/VALfiles/Environment.cpp",
+        "src/VALfiles/Events.cpp",
+        "src/VALfiles/FuncExp.cpp",
+        "src/VALfiles/LaTeXSupport.cpp",
+        "src/VALfiles/Ownership.cpp",
+        "src/VALfiles/Plan.cpp",
+        "src/VALfiles/Polynomial.cpp",
+        "src/VALfiles/PrettyPrinter.cpp",
+        "src/VALfiles/Proposition.cpp",
+        "src/VALfiles/RepairAdvice.cpp",
+        "src/VALfiles/RobustAnalyse.cpp",
+        "src/VALfiles/State.cpp",
+        "src/VALfiles/TrajectoryConstraints.cpp",
+        "src/VALfiles/Utils.cpp",
+        "src/VALfiles/Validator.cpp",
+        "src/VALfiles/main.cpp",
+        "src/VALfiles/random.cpp",
+        "src/VALfiles/typecheck.cpp",
+    ] + VAL_HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-fpermissive",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "src/VALfiles",
+        "src/VALfiles/parsing",
+        "src/popf",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ParsePDDL_library",
+        ":VALGlobals_library",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    executables = [
+        ":parser",
+        ":validate",
+    ],
+    libraries = [
+        ":Inst",
+        ":ParsePDDL",
+        ":VALGlobals",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = ["rclcpp"],
+    executables = [
+        ":parser",
+        ":validate",
+    ],
+    headers = ["src/popf/Popf.hpp"],
+    headers_strip_prefix = "src/popf",
+    include_prefix = "popf",
+    libraries = [
+        ":Inst",
+        ":ParsePDDL",
+        ":VALGlobals",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)

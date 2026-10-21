@@ -1,0 +1,70 @@
+--- a/ros_gz_sim/actions/gzserver.py
++++ b/ros_gz_sim/actions/gzserver.py
+@@ -55,7 +55,17 @@
+         gazebo_media_path = []
+ 
+         for package_name in get_package_names():
+-            package_share_path = get_package_share_directory(package_name)
++            package_share_path = get_package_share_directory(
++                package_name, print_warning=False
++            )
++            if os.path.isdir(package_share_path):
++                share_parent = os.path.dirname(package_share_path)
++                if share_parent not in gazebo_model_path:
++                    gazebo_model_path.append(share_parent)
++                for subdir in ('worlds', 'models'):
++                    subpath = os.path.join(package_share_path, subdir)
++                    if os.path.isdir(subpath):
++                        gazebo_model_path.append(subpath)
+             package_file_path = os.path.join(package_share_path, PACKAGE_MANIFEST_FILENAME)
+             if os.path.isfile(package_file_path):
+                 try:
+@@ -219,19 +229,42 @@
+         launch_descriptions: List[Action] = []
+ 
+         model_paths, plugin_paths = GazeboRosPaths.get_paths()
+-        launch_descriptions.append(SetEnvironmentVariable(
++        for env_var in (
+             'GZ_SIM_SYSTEM_PLUGIN_PATH',
+-            os.pathsep.join([
+-                os.environ.get('GZ_SIM_SYSTEM_PLUGIN_PATH', default=''),
+-                os.environ.get('LD_LIBRARY_PATH', default=''),
+-                plugin_paths,
+-            ])))
++            'GZ_SIM_PHYSICS_ENGINE_PATH',
++            'GZ_SIM_RENDER_ENGINE_PATH',
++            'GZ_RENDERING_PLUGIN_PATH',
++            'OGRE2_RESOURCE_PATH',
++        ):
++            launch_descriptions.append(SetEnvironmentVariable(
++                env_var,
++                os.pathsep.join([
++                    os.environ.get(env_var, default=''),
++                    os.environ.get('LD_LIBRARY_PATH', default=''),
++                    plugin_paths,
++                ])))
+         launch_descriptions.append(SetEnvironmentVariable(
+             'GZ_SIM_RESOURCE_PATH',
+             os.pathsep.join([
+                 os.environ.get('GZ_SIM_RESOURCE_PATH', default=''),
+                 model_paths,
+             ])))
++        ros_gz_sim_share = get_package_share_directory(
++            'ros_gz_sim', print_warning=False
++        )
++        if ros_gz_sim_share:
++            server_config = os.path.join(ros_gz_sim_share, 'config', 'server.config')
++            if os.path.isfile(server_config) and not os.environ.get('GZ_SIM_SERVER_CONFIG_PATH'):
++                launch_descriptions.append(SetEnvironmentVariable(
++                    'GZ_SIM_SERVER_CONFIG_PATH', server_config
++                ))
++            rendering_res = os.path.join(
++                os.path.dirname(ros_gz_sim_share), 'gz', 'gz-rendering'
++            )
++            if os.path.isdir(rendering_res) and not os.environ.get('GZ_RENDERING_RESOURCE_PATH'):
++                launch_descriptions.append(SetEnvironmentVariable(
++                    'GZ_RENDERING_RESOURCE_PATH', rendering_res
++                ))
+ 
+         use_composition_eval = perform_typed_substitution(
+             context, self.__use_composition, bool

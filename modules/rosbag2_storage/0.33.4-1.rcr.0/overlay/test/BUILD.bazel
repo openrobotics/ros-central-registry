@@ -1,0 +1,84 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {
+    "@pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp": "@rclcpp//:rclcpp_library",
+    "@rcutils": "@rcutils//:rcutils_library",
+    "@rmw": "@rmw//:rmw_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    "//:rosbag2_storage": "//:rosbag2_storage_library",
+    ":test_plugin": ":test_plugin_library",
+    "@rosbag2_test_common": "@rosbag2_test_common//:rosbag2_test_common_library",
+}
+
+exports_files([
+    "rosbag2_storage/test_constants.hpp",
+    "rosbag2_storage/test_metadata_serialization.cpp",
+    "rosbag2_storage/test_plugin.cpp",
+    "rosbag2_storage/test_plugin.hpp",
+    "rosbag2_storage/test_plugin.xml",
+    "rosbag2_storage/test_qos.cpp",
+    "rosbag2_storage/test_read_only_plugin.cpp",
+    "rosbag2_storage/test_read_only_plugin.hpp",
+    "rosbag2_storage/test_ros_helper.cpp",
+    "rosbag2_storage/test_storage_factory.cpp",
+    "rosbag2_storage/test_storage_options.cpp",
+])
+
+cc_library(
+    name = "test_plugin_library",
+    srcs = [
+        "rosbag2_storage/test_plugin.cpp",
+        "rosbag2_storage/test_read_only_plugin.cpp",
+    ],
+    hdrs = [
+        "rosbag2_storage/test_constants.hpp",
+        "rosbag2_storage/test_plugin.hpp",
+        "rosbag2_storage/test_read_only_plugin.hpp",
+    ],
+    includes = ["rosbag2_storage"],
+    deps = DEPENDENCIES.values() + ["//:rosbag2_storage_library"],
+)
+
+cc_shared_library(
+    name = "test_plugin",
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    exports_filter = [":test_plugin_library"],
+    deps = [":test_plugin_library"],
+)
+
+[cc_test(
+    name = test.removesuffix(".py"),
+    srcs = ["rosbag2_storage/{0}.cpp".format(test)],
+    data = ["//:ament_index"],
+    dynamic_deps = ["//:transitive_dynamic_deps_test"],
+    deps = TEST_DEPENDENCIES.values() + ["@rosdistro//cc:googletest"],
+) for test in [
+    "test_metadata_serialization",
+    "test_qos",
+    "test_ros_helper",
+    "test_storage_factory",
+    "test_storage_options",
+]]

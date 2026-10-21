@@ -1,0 +1,152 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# gz_msgs_vendor: vendors gz-msgs (version 12) from the Bazel Central
+# Registry module `gz-msgs` (shared library wrappers live in
+# @rosdistro//cc/gz) and installs it like colcon's ament_vendor() does
+# (opt/gz_msgs_vendor/...).
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc/gz:defs.bzl", "gz_install_files", "gz_install_headers", "gz_vendor_hooks")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### LIBRARIES (gz-msgs::core)
+
+alias(
+    name = "gz_msgs",
+    actual = "@rosdistro//cc/gz:gz-msgs",
+)
+
+# The message classes (gz/msgs/*.pb.h) and the factory/registry.
+alias(
+    name = "gz_msgs_library",
+    actual = "@rosdistro//cc/gz:gz-msgs_library",
+)
+
+alias(
+    name = "gz_msgs_cc_proto",
+    actual = "@rosdistro//cc/gz:gz-msgs_cc_proto",
+)
+
+alias(
+    name = "gz_msgs_proto",
+    actual = "@rosdistro//cc/gz:gz-msgs_proto",
+)
+
+# Python: gz.msgs.*_pb2 modules.
+alias(
+    name = "gz_msgs_python",
+    actual = "@rosdistro//cc/gz:gz-msgs_py_proto",
+)
+
+### INSTALL LAYOUT (opt/gz_msgs_vendor/...)
+
+VENDOR = "gz_msgs_vendor"
+
+PREFIX = "opt/" + VENDOR
+
+gz_install_headers(
+    name = "install_headers",
+    prefix = PREFIX + "/include/gz/msgs12",
+    strip_prefixes = ["_virtual_imports/gzmsgs_proto"],
+    deps = [
+        ":gz_msgs_cc_proto",
+        ":gz_msgs_library",
+    ],
+)
+
+gz_install_files(
+    name = "install_libraries",
+    srcs = [":gz_msgs"],
+    flatten = True,
+    prefix = PREFIX + "/lib",
+)
+
+# The `gz msgs` command backend.
+gz_install_files(
+    name = "install_libexec",
+    srcs = ["@rosdistro//cc/gz:gz-msgs_cmd"],
+    flatten = True,
+    prefix = PREFIX + "/libexec/gz/msgs",
+)
+
+gz_install_files(
+    name = "install_python",
+    srcs = [":gz_msgs_python"],
+    prefix = PREFIX + "/lib/python",
+    strip_prefixes = ["proto"],
+    suffix_filter = [".py"],
+)
+
+# The .proto sources and the descriptor set used by the dynamic factory.
+gz_install_files(
+    name = "install_protos",
+    srcs = [":gz_msgs_proto"],
+    prefix = PREFIX + "/share/gz/gz-msgs/protos",
+    strip_prefixes = ["proto"],
+    suffix_filter = [".proto"],
+)
+
+gz_install_files(
+    name = "install_descriptor_set",
+    srcs = ["@rosdistro//cc/gz:gz-msgs_descriptor_set"],
+    flatten = True,
+    prefix = PREFIX + "/share/gz/protos",
+)
+
+ENV_HOOKS = gz_vendor_hooks(
+    name = "install_hooks",
+    vendor = VENDOR,
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    env_hooks = ENV_HOOKS,
+    install = [
+        ":install_descriptor_set",
+        ":install_headers",
+        ":install_hooks",
+        ":install_libexec",
+        ":install_libraries",
+        ":install_protos",
+        ":install_python",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_copyright//:ament_package",
+        "@ament_cmake_core//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_cmake_test//:ament_package",
+        "@ament_cmake_vendor_package//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@gz_cmake_vendor//:ament_package",
+        "@gz_math_vendor//:ament_package",
+        "@gz_tools_vendor//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

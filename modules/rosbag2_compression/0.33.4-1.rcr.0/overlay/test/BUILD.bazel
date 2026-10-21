@@ -1,0 +1,123 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosbag2_storage//:rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+}
+
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    "//:rosbag2_compression": "//:rosbag2_compression_library",
+    "@rosbag2_test_common": "@rosbag2_test_common//:rosbag2_test_common_library",
+}
+
+exports_files([
+    "rosbag2_compression/fake_compression_factory.hpp",
+    "rosbag2_compression/fake_compressor.cpp",
+    "rosbag2_compression/fake_compressor.hpp",
+    "rosbag2_compression/fake_decompressor.cpp",
+    "rosbag2_compression/fake_decompressor.hpp",
+    "rosbag2_compression/fake_plugin.xml",
+    "rosbag2_compression/mock_compression.hpp",
+    "rosbag2_compression/mock_compression_factory.hpp",
+    "rosbag2_compression/mock_converter.hpp",
+    "rosbag2_compression/mock_converter_factory.hpp",
+    "rosbag2_compression/mock_metadata_io.hpp",
+    "rosbag2_compression/mock_storage.hpp",
+    "rosbag2_compression/mock_storage_factory.hpp",
+    "rosbag2_compression/test_compression_factory.cpp",
+    "rosbag2_compression/test_compression_options.cpp",
+    "rosbag2_compression/test_sequential_compression_reader.cpp",
+    "rosbag2_compression/test_sequential_compression_writer.cpp",
+])
+
+cc_library(
+    name = "fake_plugin_library",
+    srcs = [
+        "rosbag2_compression/fake_compressor.cpp",
+        "rosbag2_compression/fake_decompressor.cpp",
+    ],
+    hdrs = [
+        "rosbag2_compression/fake_compression_factory.hpp",
+        "rosbag2_compression/fake_compressor.hpp",
+        "rosbag2_compression/fake_decompressor.hpp",
+        "rosbag2_compression/mock_compression.hpp",
+        "rosbag2_compression/mock_compression_factory.hpp",
+        "rosbag2_compression/mock_converter.hpp",
+        "rosbag2_compression/mock_converter_factory.hpp",
+        "rosbag2_compression/mock_metadata_io.hpp",
+        "rosbag2_compression/mock_storage.hpp",
+        "rosbag2_compression/mock_storage_factory.hpp",
+    ],
+    deps = TEST_DEPENDENCIES.values() + ["//:_test_root_headers"],
+)
+
+cc_shared_library(
+    name = "fake_plugin",
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    exports_filter = [":fake_plugin_library"],
+    deps = [":fake_plugin_library"],
+)
+
+cc_library(
+    name = "test_headers",
+    testonly = True,
+    hdrs = [
+        "rosbag2_compression/fake_compression_factory.hpp",
+        "rosbag2_compression/fake_compressor.hpp",
+        "rosbag2_compression/fake_decompressor.hpp",
+        "rosbag2_compression/mock_compression.hpp",
+        "rosbag2_compression/mock_compression_factory.hpp",
+        "rosbag2_compression/mock_converter.hpp",
+        "rosbag2_compression/mock_converter_factory.hpp",
+        "rosbag2_compression/mock_metadata_io.hpp",
+        "rosbag2_compression/mock_storage.hpp",
+        "rosbag2_compression/mock_storage_factory.hpp",
+    ],
+)
+
+[cc_test(
+    name = test.removesuffix(".py"),
+    srcs = [
+        "rosbag2_compression/{0}.cpp".format(test),
+        "rosbag2_compression/fake_compressor.cpp",
+        "rosbag2_compression/fake_decompressor.cpp",
+    ],
+    data = [
+        ":fake_plugin",
+        "//:ament_index",
+    ],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + ['_TEST_RESOURCES_DIR_PATH=\\"test/rosbag2_compression\\"'],
+    deps = TEST_DEPENDENCIES.values() + [
+        ":test_headers",
+        "//:_test_root_headers",
+        "@rosdistro//cc:googletest",
+    ],
+) for test in [
+    "test_compression_factory",
+    "test_compression_options",
+    "test_sequential_compression_reader",
+    "test_sequential_compression_writer",
+]]

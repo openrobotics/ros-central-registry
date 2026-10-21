@@ -1,0 +1,263 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+DEPENDENCIES = {
+    "@roboplan//:roboplan": "@roboplan//:roboplan_library",
+    "@roboplan_example_models//:roboplan_example_models": "@roboplan_example_models//:roboplan_example_models_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:nanobind",
+    ":_gen_textual_hdrs",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:tl_expected",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [
+    ],
+)
+
+cc_library(
+    name = "roboplan_rrt_library",
+    srcs = [
+        "src/constraints.cpp",
+        "src/rrt.cpp",
+    ],
+    hdrs = [
+        "bindings/include/roboplan_rrt_bindings/rrt.hpp",
+        "include/dynotree/KDTree.h",
+        "include/dynotree/StateSpace.h",
+        "include/dynotree/dynotree_macros.h",
+        "include/roboplan_rrt/constraints.hpp",
+        "include/roboplan_rrt/graph.hpp",
+        "include/roboplan_rrt/rrt.hpp",
+    ] + [
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan_rrt",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "roboplan_rrt",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":roboplan_rrt_library"],
+)
+
+cc_library(
+    name = "_rrt_ext.cpython-314-x86_64-linux-gnu_library",
+    srcs = [
+        "bindings/src/rrt.cpp",
+        "bindings/src/rrt_ext.cpp",
+    ],
+    hdrs = [
+        "bindings/include/roboplan_rrt_bindings/rrt.hpp",
+        "include/dynotree/KDTree.h",
+        "include/dynotree/StateSpace.h",
+        "include/dynotree/dynotree_macros.h",
+        "include/roboplan_rrt/constraints.hpp",
+        "include/roboplan_rrt/graph.hpp",
+        "include/roboplan_rrt/rrt.hpp",
+    ] + [
+    ],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan_rrt",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "ROBOPLAN_VERSION=\\\"0.6.1\\\"",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":roboplan_rrt_library"],
+)
+
+cc_shared_library(
+    name = "_rrt_ext.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys() + [":roboplan_rrt"],
+    exports_filter = ["//:__subpackages__"],
+    shared_lib_name = "roboplan/rrt/_rrt_ext.so",
+    deps = [":_rrt_ext.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "roboplan",
+    srcs = ["bindings/python/roboplan/rrt/__init__.py"],
+    imports = ["bindings/python"],
+    deps = [
+        "@roboplan//:roboplan_py",
+        "@roboplan_example_models//:roboplan",
+    ],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "include/roboplan_rrt/constraints.hpp",
+    ],
+    prefix = "lib/cmake/roboplan_rrt",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_1",
+    files = [
+        "include/roboplan_rrt/graph.hpp",
+    ],
+    prefix = "lib/cmake/roboplan_rrt",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_2",
+    files = [
+        "include/roboplan_rrt/rrt.hpp",
+    ],
+    prefix = "lib/cmake/roboplan_rrt",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+        ":ament_files_2",
+    ],
+    libraries = [
+        ":roboplan_rrt",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_example_models//:ament_package",
+    ],
+)
+
+py_pytest(
+    name = "test_rrt",
+    srcs = ["bindings/test/test_rrt.py"],
+    data = [
+        ":_rrt_ext.cpython-314-x86_64-linux-gnu",
+        ":ament_index",
+    ],
+    deps = [
+        ":roboplan",
+        "@roboplan//:roboplan_py",
+        "@roboplan_example_models//:roboplan",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        "include/dynotree/KDTree.h",
+        "include/dynotree/LICENSE.txt",
+        "include/dynotree/README.md",
+        "include/dynotree/StateSpace.h",
+        "include/dynotree/dynotree_macros.h",
+        "include/roboplan_rrt/constraints.hpp",
+        "include/roboplan_rrt/graph.hpp",
+        "include/roboplan_rrt/rrt.hpp",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":roboplan_rrt",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":roboplan",
+        ":_rrt_ext.cpython-314-x86_64-linux-gnu",
+        "bindings/python/roboplan/rrt/_rrt_ext.pyi",
+        "bindings/python/roboplan/rrt/py.typed",
+    ],
+    python_env_hook = False,
+    python_strip_prefix = "bindings/python",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_example_models//:ament_package",
+    ],
+)

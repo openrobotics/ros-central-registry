@@ -1,0 +1,386 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_gazebo//gazebo:headers.bzl", "gz_configure_header", "gz_export_header")
+load("@rules_license//rules:license.bzl", "license")
+load(":gui_plugins.bzl", "GZ_GUI_QT_SHARED_DEPS", "gz_gui_plugin")
+
+package(
+    default_applicable_licenses = [":license"],
+)
+
+license(
+    name = "license",
+    package_name = "gz-gui",
+)
+
+licenses(["notice"])
+
+exports_files([
+    "package.xml",
+    "LICENSE",
+])
+
+gz_export_header(
+    name = "Export",
+    out = "include/gz/gui/Export.hh",
+    export_base = "GZ_GUI",
+    lib_name = "gz-gui",
+)
+
+gz_configure_header(
+    name = "config",
+    src = "include/gz/gui/config.hh.in",
+    package_xml = "package.xml",
+)
+
+moc_headers = [
+    ("moc_Application", "include/gz/gui/Application.hh"),
+    ("moc_Dialog", "include/gz/gui/Dialog.hh"),
+    ("moc_MainWindow", "include/gz/gui/MainWindow.hh"),
+    ("moc_PlottingInterface", "include/gz/gui/PlottingInterface.hh"),
+    ("moc_Plugin", "include/gz/gui/Plugin.hh"),
+]
+
+[
+    genrule(
+        name = name,
+        srcs = [hdr],
+        outs = ["moc_" + hdr.split("/")[-1].replace(".hh", "").replace(".h", "") + ".cpp"],
+        cmd = "$(execpath @qtbase//:moc) $< -o $@",
+        tools = ["@qtbase//:moc"],
+    )
+    for name, hdr in moc_headers
+]
+
+moc_files = [":" + name for name, _ in moc_headers]
+
+genrule(
+    name = "resources_rcc",
+    srcs = [
+        "include/gz/gui/resources.qrc",
+        "include/gz/gui/qtquickcontrols2.conf",
+        "include/gz/gui/qml/qmldir",
+    ] + glob([
+        "include/gz/gui/qml/**/*.qml",
+        "include/gz/gui/qml/images/*",
+    ]),
+    outs = ["resources_rcc.cpp"],
+    cmd = "ROOT=$$PWD && cd $$(dirname $(location include/gz/gui/resources.qrc)) && $$ROOT/$(execpath @qtbase//:rcc) --name gz_gui --output $$ROOT/$@ resources.qrc",
+    tools = ["@qtbase//:rcc"],
+)
+
+genrule(
+    name = "bazel_installation_directories",
+    outs = ["src/bazel/InstallationDirectories.cc"],
+    cmd = """cat << 'EOF' > $@
+#include <gz/gui/InstallationDirectories.hh>
+namespace gz {
+namespace gui {
+inline namespace GZ_GUI_VERSION_NAMESPACE {
+std::string getInstallPrefix() {
+  return ".";
+}
+}
+}
+}
+EOF
+""",
+)
+
+sources = [
+    "src/Application.cc",
+    "src/Conversions.cc",
+    "src/Dialog.cc",
+    "src/DragDropModel.cc",
+    "src/GuiEvents.cc",
+    "src/Helpers.cc",
+    "src/gz.cc",
+    "src/InstallationDirectories.cc",
+    "src/MainWindow.cc",
+    "src/PlottingInterface.cc",
+    "src/Plugin.cc",
+    "src/SearchModel.cc",
+    ":bazel_installation_directories",
+]
+
+public_headers = glob([
+    "include/gz/gui/**/*.hh",
+    "include/gz/gui/**/*.h",
+]) + [
+    "include/gz/gui/config.hh",
+    "include/gz/gui/Export.hh",
+]
+
+cc_library(
+    name = "gz-gui-headers",
+    hdrs = public_headers,
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@gz-common",
+        "@gz-math",
+        "@gz-msgs",
+        "@gz-plugin//:loader",
+        "@gz-transport",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+        "@qtdeclarative//:quickcontrols2",
+        "@tinyxml2",
+    ],
+)
+
+cc_library(
+    name = "gz-gui",
+    srcs = sources + moc_files + [":resources_rcc"],
+    hdrs = public_headers,
+    copts = [
+        "-fPIC",
+    ],
+    data = [
+        "@ogre-next//:RenderSystem_GL3Plus.so",
+    ],
+    defines = select({
+        "@platforms//os:windows": [
+            'SHARED_LIBRARY_PREFIX=\\"\\"',
+            'SHARED_LIBRARY_SUFFIX=\\".dll\\"',
+        ],
+        "@platforms//os:macos": [
+            'SHARED_LIBRARY_PREFIX=\\"lib\\"',
+            'SHARED_LIBRARY_SUFFIX=\\".dylib\\"',
+        ],
+        "//conditions:default": [
+            'SHARED_LIBRARY_PREFIX=\\"lib\\"',
+            'SHARED_LIBRARY_SUFFIX=\\".so\\"',
+        ],
+    }),
+    includes = ["include"],
+    local_defines = [
+        'GZ_GUI_PLUGIN_RELATIVE_INSTALL_DIR=\\"\\"',
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@gz-common",
+        "@gz-common//events",
+        "@gz-math",
+        "@gz-msgs",
+        "@gz-plugin//:loader",
+        "@gz-rendering//ogre2:gz-rendering-ogre2-engine-static",
+        "@gz-transport",
+        "@libx11",
+        "@libxrandr",
+        "@opengl-registry//:OpenGL_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:opengl",
+        "@qtbase//:openglwidgets",
+        "@qtbase//:widgets",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:qmlmeta",
+        "@qtdeclarative//:qmlworkerscript",
+        "@qtdeclarative//:quick",
+        "@qtdeclarative//:quickcontrols2",
+        "@qtdeclarative//:quickcontrols2impl",
+        "@qtdeclarative//:quicktemplates2",
+        "@tinyxml2",
+    ],
+    alwayslink = True,
+)
+
+gz_gui_plugin(
+    name = "MinimalScene",
+    srcs = [
+        "src/plugins/minimal_scene/EngineToQtInterface.cc",
+        "src/plugins/minimal_scene/MinimalScene.cc",
+        "src/plugins/minimal_scene/MinimalSceneRhi.cc",
+        "src/plugins/minimal_scene/MinimalSceneRhiOpenGL.cc",
+        "src/plugins/minimal_scene/MinimalSceneRhiVulkan.cc",
+    ],
+    hdrs = [
+        "src/plugins/minimal_scene/EngineToQtInterface.hh",
+        "src/plugins/minimal_scene/MinimalSceneRhi.hh",
+        "src/plugins/minimal_scene/MinimalSceneRhiMetal.hh",
+        "src/plugins/minimal_scene/MinimalSceneRhiOpenGL.hh",
+        "src/plugins/minimal_scene/MinimalSceneRhiVulkan.hh",
+    ],
+    moc_headers = [
+        "src/plugins/minimal_scene/MinimalScene.hh",
+    ],
+    qml = ["src/plugins/minimal_scene/MinimalScene.qml"],
+    qrc = "src/plugins/minimal_scene/MinimalScene.qrc",
+    deps = [
+        "@gz-rendering",
+        "@gz-transport",
+        "@opengl-registry//:OpenGL_headers",
+    ],
+)
+
+gz_gui_plugin(
+    name = "InteractiveViewControl",
+    srcs = [
+        "src/plugins/interactive_view_control/InteractiveViewControl.cc",
+    ],
+    moc_headers = [
+        "src/plugins/interactive_view_control/InteractiveViewControl.hh",
+    ],
+    qml = ["src/plugins/interactive_view_control/InteractiveViewControl.qml"],
+    qrc = "src/plugins/interactive_view_control/InteractiveViewControl.qrc",
+    deps = [
+        "@gz-rendering",
+    ],
+)
+
+gz_gui_plugin(
+    name = "MarkerManager",
+    srcs = [
+        "src/plugins/marker_manager/MarkerManager.cc",
+    ],
+    moc_headers = [
+        "src/plugins/marker_manager/MarkerManager.hh",
+    ],
+    qml = ["src/plugins/marker_manager/MarkerManager.qml"],
+    qrc = "src/plugins/marker_manager/MarkerManager.qrc",
+    deps = [
+        "@gz-common//profiler",
+        "@gz-rendering",
+    ],
+)
+
+gz_gui_plugin(
+    name = "WorldControl",
+    srcs = [
+        "src/plugins/world_control/WorldControl.cc",
+        "src/plugins/world_control/WorldControlEventListener.cc",
+    ],
+    moc_headers = [
+        "src/plugins/world_control/WorldControl.hh",
+        "src/plugins/world_control/WorldControlEventListener.hh",
+    ],
+    qml = ["src/plugins/world_control/WorldControl.qml"],
+    qrc = "src/plugins/world_control/WorldControl.qrc",
+)
+
+gz_gui_plugin(
+    name = "WorldStats",
+    srcs = [
+        "src/plugins/world_stats/WorldStats.cc",
+    ],
+    moc_headers = [
+        "src/plugins/world_stats/WorldStats.hh",
+    ],
+    qml = ["src/plugins/world_stats/WorldStats.qml"],
+    qrc = "src/plugins/world_stats/WorldStats.qrc",
+)
+
+gz_gui_plugin(
+    name = "Screenshot",
+    srcs = [
+        "src/plugins/screenshot/Screenshot.cc",
+    ],
+    moc_headers = [
+        "src/plugins/screenshot/Screenshot.hh",
+    ],
+    qml = [
+        "src/plugins/screenshot/Screenshot.qml",
+        "src/plugins/screenshot/screenshot.png",
+        "src/plugins/screenshot/folder.png",
+    ],
+    qrc = "src/plugins/screenshot/Screenshot.qrc",
+    deps = [
+        "@gz-rendering",
+    ],
+)
+
+gz_gui_plugin(
+    name = "CameraTracking",
+    srcs = [
+        "src/plugins/camera_tracking/CameraTracking.cc",
+    ],
+    moc_headers = [
+        "src/plugins/camera_tracking/CameraTracking.hh",
+    ],
+    qml = ["src/plugins/camera_tracking/CameraTracking.qml"],
+    qrc = "src/plugins/camera_tracking/CameraTracking.qrc",
+    deps = [
+        "@gz-common//profiler",
+        "@gz-rendering",
+    ],
+)
+
+gz_gui_plugin(
+    name = "TransportSceneManager",
+    srcs = [
+        "src/plugins/transport_scene_manager/TransportSceneManager.cc",
+    ],
+    moc_headers = [
+        "src/plugins/transport_scene_manager/TransportSceneManager.hh",
+    ],
+    qml = ["src/plugins/transport_scene_manager/TransportSceneManager.qml"],
+    qrc = "src/plugins/transport_scene_manager/TransportSceneManager.qrc",
+    deps = [
+        "@gz-rendering",
+    ],
+)
+
+genrule(
+    name = "cmdgui_ruby_script",
+    srcs = ["src/cmd/cmdgui.rb.in"],
+    outs = ["src/cmd/cmdgui.rb"],
+    cmd = "sed -e 's|@library_location@|../../libgz-gui-shared.so|g' " +
+          "-e 's|@PROJECT_VERSION_FULL@|10.0.0|g' $< > $@",
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "gui_yaml",
+    srcs = ["conf/gui.yaml.in"],
+    outs = ["conf/gui.yaml"],
+    cmd = "sed -e 's|@PROJECT_NAME_NO_VERSION@|gz-gui|g' " +
+          "-e 's|@PROJECT_VERSION_FULL@|10.0.0|g' " +
+          "-e 's|@gz_library_path@|cmdgui|g' $< > $@",
+    visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "libgz-gui-shared.so",
+    dynamic_deps = GZ_GUI_QT_SHARED_DEPS + [
+        "@qtbase//:xcb_qpa_shared",
+        "@qtdeclarative//:quickcontrols2basic_shared",
+        "@qtdeclarative//:quickcontrols2basicstyleimpl_shared",
+        "@qtdeclarative//:quicklayouts_shared",
+    ],
+    linkshared = True,
+    linkstatic = False,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":gz-gui",
+        # Qt is built from source, so the QPA platform plugins and the QML
+        # modules gz-gui's UI imports are static plugins that have to be
+        # linked into the library Ruby dlopen()s (there is no Qt plugin
+        # directory to discover them from at runtime).
+        "@qtbase//:offscreen",
+        "@qtbase//:xcb",
+        "@qtdeclarative//:qquicklayoutsplugin",
+        "@qtdeclarative//:qtquick2plugin",
+        "@qtdeclarative//:qtquickcontrols2basicstyleimplplugin",
+        "@qtdeclarative//:qtquickcontrols2basicstyleplugin",
+        "@qtdeclarative//:qtquickcontrols2implplugin",
+        "@qtdeclarative//:qtquickcontrols2plugin",
+        "@qtdeclarative//:qtquicktemplates2plugin",
+    ],
+)

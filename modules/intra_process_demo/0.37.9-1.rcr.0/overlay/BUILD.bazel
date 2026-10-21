@@ -1,0 +1,107 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+HEADERS = [
+    "include/image_pipeline/camera_node.hpp",
+    "include/image_pipeline/common.hpp",
+    "include/image_pipeline/image_view_node.hpp",
+    "include/image_pipeline/watermark_node.hpp",
+]
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+EXECUTABLES = {
+    "camera_node": "src/image_pipeline/camera_node.cpp",
+    "cyclic_pipeline": "src/cyclic_pipeline/cyclic_pipeline.cpp",
+    "image_pipeline_all_in_one": "src/image_pipeline/image_pipeline_all_in_one.cpp",
+    "image_pipeline_with_two_image_view": "src/image_pipeline/image_pipeline_with_two_image_view.cpp",
+    "image_view_node": "src/image_pipeline/image_view_node.cpp",
+    "two_node_pipeline": "src/two_node_pipeline/two_node_pipeline.cpp",
+    "watermark_node": "src/image_pipeline/watermark_node.cpp",
+}
+
+[cc_binary(
+    name = name,
+    srcs = HEADERS + [src],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + [
+        "@example_interfaces//:cc",
+        "@sensor_msgs//:cc",
+    ],
+) for name, src in EXECUTABLES.items()]
+
+write_file(
+    name = "rmw_test_fixture_implementation_py",
+    out = "rmw_test_fixture_implementation.py",
+    content = [
+        "def rmw_test_isolation_start(): pass",
+        "def rmw_test_isolation_stop(): pass",
+    ],
+)
+
+py_library(
+    name = "rmw_test_fixture_implementation",
+    srcs = [":rmw_test_fixture_implementation_py"],
+    imports = ["."],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_targets = False,
+    executables = [":{0}".format(e) for e in EXECUTABLES.keys()],
+    headers = HEADERS,
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@example_interfaces//:ament_package",
+        "@launch//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rmw_implementation_cmake//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

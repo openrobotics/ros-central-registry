@@ -1,0 +1,72 @@
+--- a/src/cmd_interface_linux.cpp
++++ b/src/cmd_interface_linux.cpp
+@@ -16,7 +16,8 @@
+ 
+ #include "../include/cmd_interface_linux.hpp"
+ 
+-#include <libudev.h>
++#include <filesystem>
++#include <fstream>
+ #include <sys/file.h>
+ #include <unistd.h>
+ #include <fcntl.h>
+@@ -123,39 +124,28 @@
+   std::vector<std::pair<std::string,
+   std::string>> & device_list)
+ {
+-  struct udev * udev;
+-  struct udev_enumerate * enumerate;
+-  struct udev_list_entry * devices, * dev_list_entry;
+-  struct udev_device * dev;
+-
+-  udev = udev_new();
+-  if (!udev) {
+-    return false;
+-  }
+-  enumerate = udev_enumerate_new(udev);
+-  udev_enumerate_add_match_subsystem(enumerate, "tty");
+-  udev_enumerate_scan_devices(enumerate);
+-  devices = udev_enumerate_get_list_entry(enumerate);
+-  udev_list_entry_foreach(dev_list_entry, devices)
+-  {
+-    const char * path;
+-
+-    path = udev_list_entry_get_name(dev_list_entry);
+-    dev = udev_device_new_from_syspath(udev, path);
+-    std::string dev_path = std::string(udev_device_get_devnode(dev));
+-    dev = udev_device_get_parent_with_subsystem_devtype(dev, "usb", "usb_device");
+-    if (dev) {
+-      std::pair<std::string, std::string> p;
+-      p.first = dev_path;
+-      p.second = udev_device_get_sysattr_value(dev, "product");
+-      device_list.push_back(p);
+-      udev_device_unref(dev);
+-    } else {
++  namespace fs = std::filesystem;
++  std::error_code ec;
++  if (!fs::exists("/sys/class/tty", ec)) {
++    return false;
++  }
++  for (const auto & entry : fs::directory_iterator("/sys/class/tty", ec)) {
++    fs::path dev_dir = fs::canonical(entry.path(), ec);
++    if (ec) {
+       continue;
+     }
+-  }
+-  udev_enumerate_unref(enumerate);
+-  udev_unref(udev);
++    for (fs::path p = dev_dir; p.has_parent_path() && p != p.parent_path(); p = p.parent_path()) {
++      fs::path prod_file = p / "product";
++      if (fs::exists(prod_file, ec)) {
++        std::ifstream ifs(prod_file);
++        std::string product;
++        if (std::getline(ifs, product)) {
++          device_list.emplace_back("/dev/" + entry.path().filename().string(), product);
++        }
++        break;
++      }
++    }
++  }
+   return true;
+ }
+ 

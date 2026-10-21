@@ -1,0 +1,127 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+HEADERS = [
+    "include/diagnostic_updater/diagnostic_status_wrapper.hpp",
+    "include/diagnostic_updater/diagnostic_updater.hpp",
+    "include/diagnostic_updater/publisher.hpp",
+    "include/diagnostic_updater/update_functions.hpp",
+]
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+}
+
+cc_library(
+    name = "diagnostic_updater_library",
+    srcs = ["src/diagnostic_updater.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + ["@diagnostic_msgs//:cc"],
+)
+
+cc_shared_library(
+    name = "diagnostic_updater",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":diagnostic_updater_library"],
+)
+
+py_library(
+    name = "diagnostic_updater_py",
+    srcs = [
+        "diagnostic_updater/__init__.py",
+        "diagnostic_updater/_diagnostic_status_wrapper.py",
+        "diagnostic_updater/_diagnostic_updater.py",
+        "diagnostic_updater/_publisher.py",
+        "diagnostic_updater/_update_functions.py",
+        "diagnostic_updater/example.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@diagnostic_msgs//:py",
+        "@rclpy",
+        "@std_msgs//:py",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        ":diagnostic_updater",
+        "@rclcpp_lifecycle//:rclcpp_lifecycle",
+    ],
+)
+
+cc_binary(
+    name = "example",
+    srcs = ["src/example.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":diagnostic_updater_library",
+        "@diagnostic_msgs//:cc",
+        "@std_msgs//:cc",
+    ],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_name = "diagnostic_updaterTargets",
+    executables = [
+        ":example",
+        "diagnostic_updater/example.py",
+    ],
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [":diagnostic_updater"],
+    package_xml = "package.xml",
+    python = [":diagnostic_updater_py"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@launch//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rclpy//:ament_package",
+        "@rosdistro//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

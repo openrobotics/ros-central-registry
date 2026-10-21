@@ -199,10 +199,10 @@ class ModuleRollup:
 
     @property
     def changed(self) -> bool:
-        if self.module == "rosdistro":
-            old_module_dot_bazel = (self.current_module_dir / "MODULE.bazel").read_text()
-            new_module_dot_bazel = (self.vendor_module_dir / "MODULE.bazel").read_text()
-            if old_module_dot_bazel != new_module_dot_bazel:
+        old_module_path = self.current_module_dir / "MODULE.bazel"
+        new_module_path = self.vendor_module_dir / "MODULE.bazel"
+        if old_module_path.exists() and new_module_path.exists():
+            if old_module_path.read_text() != new_module_path.read_text():
                 return True
         return self.new_patches != self.old_patches or self.new_overlays != self.old_overlays
 
@@ -384,7 +384,7 @@ def apply_rollup(
         overlay_path.write_text(content)
 
     module_file = rollup.new_module_dir / "MODULE.bazel"
-    if rollup.module == "rosdistro":
+    if (rollup.vendor_module_dir / "MODULE.bazel").exists():
         shutil.copy2(rollup.vendor_module_dir / "MODULE.bazel", module_file)
 
     content = module_file.read_text()
@@ -444,7 +444,15 @@ def module_has_local_edits(target_workspace: Path, module: str) -> bool:
     with open(manifest_path, "r") as f:
         manifest = json.load(f)
     vendor_module_dir = target_workspace / "vendor" / f"{module}+"
-    return bzlmod_lib.hash_directory_tree(vendor_module_dir) != manifest
+    if bzlmod_lib.hash_directory_tree(vendor_module_dir) != manifest:
+        return True
+    snapshot_module_bazel = (
+        target_workspace / vendor_modules.VENDOR_SNAPSHOT_DIR_NAME / f"{module}+" / "MODULE.bazel"
+    )
+    vendor_module_bazel = vendor_module_dir / "MODULE.bazel"
+    if snapshot_module_bazel.exists() and vendor_module_bazel.exists():
+        return snapshot_module_bazel.read_text() != vendor_module_bazel.read_text()
+    return False
 
 
 def confirm(prompt: str) -> bool:
