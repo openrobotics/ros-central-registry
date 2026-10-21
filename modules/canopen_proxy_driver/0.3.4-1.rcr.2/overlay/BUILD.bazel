@@ -28,28 +28,38 @@ license(
     license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
 )
 
-DEPENDENCIES = {}
+HEADERS = [
+    "include/canopen_proxy_driver/lifecycle_proxy_driver.hpp",
+    "include/canopen_proxy_driver/node_interfaces/node_canopen_proxy_driver.hpp",
+    "include/canopen_proxy_driver/node_interfaces/node_canopen_proxy_driver_impl.hpp",
+    "include/canopen_proxy_driver/proxy_driver.hpp",
+    "include/canopen_proxy_driver/visibility_control.h",
+]
 
-CC_DEPS = []
+# Map of shared library (key) to its static library (value).
+DEPENDENCIES = {
+    "@canopen_base_driver//:lely_driver_bridge": "@canopen_base_driver//:lely_driver_bridge_library",
+    "@canopen_base_driver//:node_canopen_base_driver": "@canopen_base_driver//:node_canopen_base_driver_library",
+    "@canopen_core//:node_canopen_driver": "@canopen_core//:node_canopen_driver_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+}
+
+CC_DEPS = [
+    "@canopen_interfaces//:cc",
+]
+
+COPTS = [
+    "-Wno-missing-template-arg-list-after-template-kw",
+]
 
 cc_library(
     name = "node_canopen_proxy_driver_library",
     srcs = ["src/node_interfaces/node_canopen_proxy_driver.cpp"],
-    hdrs = [
-        "include/canopen_proxy_driver/lifecycle_proxy_driver.hpp",
-        "include/canopen_proxy_driver/node_interfaces/node_canopen_proxy_driver.hpp",
-        "include/canopen_proxy_driver/node_interfaces/node_canopen_proxy_driver_impl.hpp",
-        "include/canopen_proxy_driver/proxy_driver.hpp",
-        "include/canopen_proxy_driver/visibility_control.h",
-    ],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    includes = [
-        "include",
-        "include/canopen_proxy_driver",
-        "test",
-    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS,
 )
@@ -57,74 +67,43 @@ cc_library(
 cc_shared_library(
     name = "node_canopen_proxy_driver",
     dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    exports_filter = ["//:__subpackages__"],
     deps = [":node_canopen_proxy_driver_library"],
 )
 
 cc_library(
     name = "lifecycle_proxy_driver_library",
     srcs = ["src/lifecycle_proxy_driver.cpp"],
-    hdrs = [
-        "include/canopen_proxy_driver/lifecycle_proxy_driver.hpp",
-        "include/canopen_proxy_driver/node_interfaces/node_canopen_proxy_driver.hpp",
-        "include/canopen_proxy_driver/node_interfaces/node_canopen_proxy_driver_impl.hpp",
-        "include/canopen_proxy_driver/proxy_driver.hpp",
-        "include/canopen_proxy_driver/visibility_control.h",
-    ],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    includes = [
-        "include",
-        "include/canopen_proxy_driver",
-        "test",
-    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
     local_defines = ros_local_defines() + ["CANOPEN_PROXY_DRIVER_BUILDING_LIBRARY"],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [":node_canopen_proxy_driver_library"],
+    alwayslink = True,
 )
 
 cc_shared_library(
     name = "lifecycle_proxy_driver",
-    dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    dynamic_deps = DEPENDENCIES.keys() + [":node_canopen_proxy_driver"],
+    exports_filter = ["//:__subpackages__"],
     deps = [":lifecycle_proxy_driver_library"],
 )
 
 cc_library(
     name = "proxy_driver_library",
     srcs = ["src/proxy_driver.cpp"],
-    hdrs = [
-        "include/canopen_proxy_driver/lifecycle_proxy_driver.hpp",
-        "include/canopen_proxy_driver/node_interfaces/node_canopen_proxy_driver.hpp",
-        "include/canopen_proxy_driver/node_interfaces/node_canopen_proxy_driver_impl.hpp",
-        "include/canopen_proxy_driver/proxy_driver.hpp",
-        "include/canopen_proxy_driver/visibility_control.h",
-    ],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    includes = [
-        "include",
-        "include/canopen_proxy_driver",
-        "test",
-    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
     local_defines = ros_local_defines() + ["CANOPEN_proxy_DRIVER_BUILDING_LIBRARY"],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [":node_canopen_proxy_driver_library"],
+    alwayslink = True,
 )
 
 cc_shared_library(
     name = "proxy_driver",
-    dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    dynamic_deps = DEPENDENCIES.keys() + [":node_canopen_proxy_driver"],
+    exports_filter = ["//:__subpackages__"],
     deps = [":proxy_driver_library"],
 )
 
@@ -142,7 +121,12 @@ rclcpp_components_register_nodes(
 
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":node_canopen_proxy_driver",
+        "@canopen_core//:device_container",
+        "@canopen_core//:node_canopen_master",
+        "@rclcpp_components//:component_manager",
+    ],
 )
 
 ament_index(
@@ -179,13 +163,7 @@ ament_package(
         "rclcpp_lifecycle",
     ],
     cmake_export_name = "export_canopen_proxy_driver",
-    headers = [
-        "include/canopen_proxy_driver/lifecycle_proxy_driver.hpp",
-        "include/canopen_proxy_driver/node_interfaces/node_canopen_proxy_driver.hpp",
-        "include/canopen_proxy_driver/node_interfaces/node_canopen_proxy_driver_impl.hpp",
-        "include/canopen_proxy_driver/proxy_driver.hpp",
-        "include/canopen_proxy_driver/visibility_control.h",
-    ],
+    headers = HEADERS,
     include_prefix = "",
     libraries = [
         ":node_canopen_proxy_driver",

@@ -1,8 +1,21 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -17,14 +30,48 @@ license(
 )
 
 DEPENDENCIES = {
-    "@rosdistro//cc:boost.serialization_shared": "@rosdistro//cc:boost.serialization",
-    "@rosdistro//cc:boost.thread_shared": "@rosdistro//cc:boost.thread",
+    "@ompl//:ompl": "@ompl//:ompl_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
     "@rosdistro//cc:boost.chrono_shared": "@rosdistro//cc:boost.chrono",
     "@rosdistro//cc:boost.container_shared": "@rosdistro//cc:boost.container",
+    "@rosdistro//cc:boost.serialization_shared": "@rosdistro//cc:boost.serialization",
+    "@rosdistro//cc:boost.thread_shared": "@rosdistro//cc:boost.thread",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
 }
 
 CC_DEPS = [
+    "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_constraint_samplers_library",
+    "@moveit_core//:moveit_exceptions_library",
+    "@moveit_core//:moveit_kinematic_constraints_library",
+    "@moveit_core//:moveit_planning_interface_library",
+    "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_utils_library",
+    "@moveit_msgs//:cc",
+    "@moveit_ros_planning//:moveit_constraint_sampler_manager_loader_library",
+    "@moveit_ros_planning//:moveit_planning_scene_monitor_library",
+    "@moveit_ros_planning//:moveit_robot_model_loader_library",
+    "@rosdistro//cc:boost.algorithm",
+    "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.math",
+    "@rosdistro//cc:eigen",
 ]
+
+HEADERS = glob(["ompl_interface/include/**/*.h*"])
+
+INCLUDES = ["ompl_interface/include"]
+
+LOCAL_DEFINES = ros_local_defines() + [
+    "NDEBUG",
+    "_FILE_OFFSET_BITS=64",
+]
+
+COPTS = ["-Wno-missing-template-arg-list-after-template-kw"]
 
 cc_library(
     name = "moveit_ompl_interface_library",
@@ -49,18 +96,10 @@ cc_library(
         "ompl_interface/src/parameterization/work_space/pose_model_state_space_factory.cpp",
         "ompl_interface/src/planning_context_manager.cpp",
     ],
-    hdrs = [
-    ],
-    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
-    includes = [
-        "_gen/include",
-        "ompl_interface",
-        "ompl_interface/include",
-    ],
-    local_defines = ros_local_defines() + [
-        "NDEBUG",
-        "_FILE_OFFSET_BITS=64",
-    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = INCLUDES,
+    local_defines = LOCAL_DEFINES,
     deps = DEPENDENCIES.values() + CC_DEPS,
 )
 
@@ -77,19 +116,10 @@ cc_shared_library(
 cc_library(
     name = "moveit_ompl_planner_plugin_library",
     srcs = ["ompl_interface/src/ompl_planner_manager.cpp"],
-    hdrs = [
-    ],
-    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
-    includes = [
-        "_gen/include",
-        "ompl_interface",
-        "ompl_interface/include",
-    ],
-    local_defines = ros_local_defines() + [
-        "NDEBUG",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    copts = COPTS,
+    local_defines = LOCAL_DEFINES,
+    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_ompl_interface_library"],
+    alwayslink = True,
 )
 
 cc_shared_library(
@@ -102,30 +132,25 @@ cc_shared_library(
     deps = [":moveit_ompl_planner_plugin_library"],
 )
 
+TEST_DEPENDENCIES = DEPENDENCIES
+
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
 )
 
 cc_binary(
     name = "generate_state_database",
     srcs = ["ompl_interface/scripts/generate_state_database.cpp"],
-    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    copts = COPTS,
     dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        "_gen/include",
-        "ompl_interface",
-        "ompl_interface/include",
-    ],
     linkopts = [
         "-Wl,--allow-shlib-undefined",
         "-Wl,--unresolved-symbols=ignore-all",
     ],
-    local_defines = ros_local_defines() + [
-        "NDEBUG",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    local_defines = LOCAL_DEFINES,
+    deps = TEST_DEPENDENCIES.values() + CC_DEPS + [":moveit_ompl_interface_library"],
 )
 
 ament_index(
@@ -163,157 +188,39 @@ ament_index(
     ],
 )
 
-cc_test(
-    name = "test_constrained_planning_state_space",
-    srcs = ["ompl_interface/test/test_constrained_planning_state_space.cpp"],
-    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
-    data = [
-        ":ament_index",
-    ],
-    dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        "_gen/include",
-        "ompl_interface",
-        "ompl_interface/include",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "NDEBUG",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":moveit_ompl_interface_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
-
-cc_test(
-    name = "test_constrained_state_validity_checker",
-    srcs = ["ompl_interface/test/test_constrained_state_validity_checker.cpp"],
-    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
-    data = [
-        ":ament_index",
-    ],
-    dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        "_gen/include",
-        "ompl_interface",
-        "ompl_interface/include",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "NDEBUG",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":moveit_ompl_interface_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
-
-cc_test(
-    name = "test_planning_context_manager",
-    srcs = ["ompl_interface/test/test_planning_context_manager.cpp"],
-    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
-    data = [
-        ":ament_index",
-    ],
-    dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        "_gen/include",
-        "ompl_interface",
-        "ompl_interface/include",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "NDEBUG",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":moveit_ompl_interface_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
-
-cc_test(
-    name = "test_state_space",
-    srcs = ["ompl_interface/test/test_state_space.cpp"],
-    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
-    data = [
-        ":ament_index",
-    ],
-    dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        "_gen/include",
-        "ompl_interface",
-        "ompl_interface/include",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "NDEBUG",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":moveit_ompl_interface_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
-
-cc_test(
-    name = "test_state_validity_checker",
-    srcs = ["ompl_interface/test/test_state_validity_checker.cpp"],
-    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
-    data = [
-        ":ament_index",
-    ],
-    dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        "_gen/include",
-        "ompl_interface",
-        "ompl_interface/include",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "NDEBUG",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":moveit_ompl_interface_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
-
-cc_test(
-    name = "test_threadsafe_state_storage",
-    srcs = ["ompl_interface/test/test_threadsafe_state_storage.cpp"],
-    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
-    data = [
-        ":ament_index",
-    ],
-    dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        "_gen/include",
-        "ompl_interface",
-        "ompl_interface/include",
-    ],
-    local_defines = ros_local_defines() + [
-        "GTEST_HAS_PTHREAD=1",
-        "NDEBUG",
-        "_FILE_OFFSET_BITS=64",
-    ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":moveit_ompl_interface_library",
-        "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
-    ],
-)
+# test_ompl_constraints is disabled upstream (flaky), so it is not ported.
+[
+    cc_test(
+        name = test,
+        srcs = [
+            "ompl_interface/test/%s.cpp" % test,
+            "ompl_interface/test/load_test_robot.hpp",
+        ],
+        copts = COPTS,
+        data = [
+            ":ament_index",
+        ],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        local_defines = LOCAL_DEFINES + ["GTEST_HAS_PTHREAD=1"],
+        deps = TEST_DEPENDENCIES.values() + CC_DEPS + [
+            ":moveit_ompl_interface_library",
+            "@moveit_core//:moveit_test_utils_library",
+            "@rosdistro//cc:bazel_test_helper",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test in [
+        "test_constrained_planning_state_space",
+        "test_constrained_state_validity_checker",
+        "test_planning_context_manager",
+        "test_state_space",
+        "test_state_validity_checker",
+        "test_threadsafe_state_storage",
+    ]
+]
 
 ament_package(
+    name = "ament_package",
     cmake_export_dependencies_list = [
         "moveit_core",
         "ompl",
@@ -322,48 +229,7 @@ ament_package(
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
     cmake_export_targets = False,
-    headers = [
-        "ompl_interface/include/moveit/ompl_interface/detail/constrained_goal_sampler.h",
-        "ompl_interface/include/moveit/ompl_interface/detail/constrained_goal_sampler.hpp",
-        "ompl_interface/include/moveit/ompl_interface/detail/constrained_sampler.h",
-        "ompl_interface/include/moveit/ompl_interface/detail/constrained_sampler.hpp",
-        "ompl_interface/include/moveit/ompl_interface/detail/constraint_approximations.h",
-        "ompl_interface/include/moveit/ompl_interface/detail/constraint_approximations.hpp",
-        "ompl_interface/include/moveit/ompl_interface/detail/constraints_library.h",
-        "ompl_interface/include/moveit/ompl_interface/detail/constraints_library.hpp",
-        "ompl_interface/include/moveit/ompl_interface/detail/goal_union.h",
-        "ompl_interface/include/moveit/ompl_interface/detail/goal_union.hpp",
-        "ompl_interface/include/moveit/ompl_interface/detail/ompl_constraints.h",
-        "ompl_interface/include/moveit/ompl_interface/detail/ompl_constraints.hpp",
-        "ompl_interface/include/moveit/ompl_interface/detail/projection_evaluators.h",
-        "ompl_interface/include/moveit/ompl_interface/detail/projection_evaluators.hpp",
-        "ompl_interface/include/moveit/ompl_interface/detail/state_validity_checker.h",
-        "ompl_interface/include/moveit/ompl_interface/detail/state_validity_checker.hpp",
-        "ompl_interface/include/moveit/ompl_interface/detail/threadsafe_state_storage.h",
-        "ompl_interface/include/moveit/ompl_interface/detail/threadsafe_state_storage.hpp",
-        "ompl_interface/include/moveit/ompl_interface/model_based_planning_context.h",
-        "ompl_interface/include/moveit/ompl_interface/model_based_planning_context.hpp",
-        "ompl_interface/include/moveit/ompl_interface/ompl_interface.h",
-        "ompl_interface/include/moveit/ompl_interface/ompl_interface.hpp",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space.h",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space.hpp",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space_factory.h",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/joint_space/constrained_planning_state_space_factory.hpp",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/joint_space/joint_model_state_space.h",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/joint_space/joint_model_state_space.hpp",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/joint_space/joint_model_state_space_factory.h",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/joint_space/joint_model_state_space_factory.hpp",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/model_based_state_space.h",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/model_based_state_space.hpp",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/model_based_state_space_factory.h",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/model_based_state_space_factory.hpp",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/work_space/pose_model_state_space.h",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/work_space/pose_model_state_space.hpp",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/work_space/pose_model_state_space_factory.h",
-        "ompl_interface/include/moveit/ompl_interface/parameterization/work_space/pose_model_state_space_factory.hpp",
-        "ompl_interface/include/moveit/ompl_interface/planning_context_manager.h",
-        "ompl_interface/include/moveit/ompl_interface/planning_context_manager.hpp",
-    ],
+    headers = HEADERS,
     headers_strip_prefix = "ompl_interface/include",
     include_prefix = "moveit_planners",
     libraries = [
@@ -375,21 +241,5 @@ ament_package(
         "moveit_ompl_interface": ["libmoveit_ompl_interface.so.2.15.2"],
         "moveit_ompl_planner_plugin": ["libmoveit_ompl_planner_plugin.so.2.15.2"],
     },
-    deps = [":ament_index"] + [
-        "@ament_cmake//:ament_package",
-        "@ament_cmake_gtest//:ament_package",
-        "@eigen3_cmake_module//:ament_package",
-        "@moveit_common//:ament_package",
-        "@moveit_core//:ament_package",
-        "@moveit_msgs//:ament_package",
-        "@moveit_resources_fanuc_moveit_config//:ament_package",
-        "@moveit_resources_panda_moveit_config//:ament_package",
-        "@moveit_resources_pr2_description//:ament_package",
-        "@moveit_ros_planning//:ament_package",
-        "@ompl//:ament_package",
-        "@pluginlib//:ament_package",
-        "@rclcpp//:ament_package",
-        "@tf2_eigen//:ament_package",
-        "@tf2_ros//:ament_package",
-    ],
+    deps = [":ament_index"],
 )

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
-load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//cc:defs.bzl", "bison", "collect_transitive_dynamic_deps", "flex", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
 
@@ -105,23 +105,26 @@ VAL_HDRS = [
     "src/popf/Popf.hpp",
 ]
 
-genrule(
+flex(
     name = "gen_lex_yy_cc",
     srcs = ["src/VALfiles/parsing/pddl+.lex"],
     outs = ["_gen/include/lex.yy.cc"],
-    cmd = "$(location @rosdistro//cc:flex_bin) -+ --outfile=$@ $(location src/VALfiles/parsing/pddl+.lex)",
-    tools = ["@rosdistro//cc:flex_bin"],
+    args = [
+        "-+",
+        "--outfile=$(execpath _gen/include/lex.yy.cc)",
+        "$(execpath src/VALfiles/parsing/pddl+.lex)",
+    ],
 )
 
-genrule(
+bison(
     name = "gen_pddl_plus_cpp",
-    srcs = [
-        "src/VALfiles/parsing/pddl+.yacc",
-        ":gen_lex_yy_cc",
-    ],
+    srcs = ["src/VALfiles/parsing/pddl+.yacc"],
     outs = ["_gen/pddl+.cpp"],
-    cmd = "$(location @rosdistro//cc:bison_bin) $(location src/VALfiles/parsing/pddl+.yacc) -o $@",
-    tools = ["@rosdistro//cc:bison_bin"],
+    args = [
+        "$(execpath src/VALfiles/parsing/pddl+.yacc)",
+        "-o",
+        "$(execpath _gen/pddl+.cpp)",
+    ],
 )
 
 cc_library(
@@ -130,14 +133,19 @@ cc_library(
     textual_hdrs = [":gen_lex_yy_cc"],
 )
 
+COPTS = [
+    "-Wno-missing-template-arg-list-after-template-kw",
+    "-fpermissive",
+    "-D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION",
+    "-D_LIBCPP_ENABLE_CXX17_REMOVED_BINDERS",
+    "-D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR",
+]
+
 cc_library(
     name = "VALGlobals_library",
     srcs = ["src/VALfiles/VALGlobals.cpp"],
     hdrs = VAL_HDRS,
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-        "-fpermissive",
-    ],
+    copts = COPTS,
     includes = [
         "_gen/include",
         "src/VALfiles",
@@ -163,10 +171,7 @@ cc_library(
         ":gen_pddl_plus_cpp",
     ],
     hdrs = VAL_HDRS,
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-        "-fpermissive",
-    ],
+    copts = COPTS,
     includes = [
         "_gen/include",
         "src/VALfiles",
@@ -198,10 +203,7 @@ cc_library(
         "src/VALfiles/typecheck.cpp",
     ],
     hdrs = VAL_HDRS,
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-        "-fpermissive",
-    ],
+    copts = COPTS,
     includes = [
         "_gen/include",
         "src/VALfiles",
@@ -236,10 +238,7 @@ collect_transitive_dynamic_deps(
 cc_binary(
     name = "parser",
     srcs = ["src/VALfiles/parse.cpp"] + VAL_HDRS,
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-        "-fpermissive",
-    ],
+    copts = COPTS,
     dynamic_deps = [":transitive_dynamic_deps"],
     includes = [
         "_gen/include",
@@ -277,10 +276,7 @@ cc_binary(
         "src/VALfiles/random.cpp",
         "src/VALfiles/typecheck.cpp",
     ] + VAL_HDRS,
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-        "-fpermissive",
-    ],
+    copts = COPTS,
     dynamic_deps = [":transitive_dynamic_deps"],
     includes = [
         "_gen/include",

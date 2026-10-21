@@ -13,10 +13,9 @@
 # limitations under the License.
 
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 load("@rules_python//python:defs.bzl", "py_library")
 
 package(
@@ -42,47 +41,63 @@ CC_DEPS = [
     "@rules_python//python/cc:current_py_cc_headers",
 ]
 
+# Upstream uses the bundled src/3rdparty/exprtk.hpp unless a system copy is
+# found in /usr/include, which never happens in a hermetic build.
 cc_library(
     name = "mrpt_expr_library",
     srcs = [
-        "include/mrpt/expr/CRuntimeCompiledExpression.h",
-        "include/mrpt/expr/mrpt-expr_export.h",
+        "src/3rdparty/exprtk.hpp",
         "src/CRuntimeCompiledExpression.cpp",
-        "tests/CRuntimeCompiledExpression_unittest.cpp",
     ],
     hdrs = [
         "include/mrpt/expr/CRuntimeCompiledExpression.h",
         "include/mrpt/expr/mrpt-expr_export.h",
-        "src/3rdparty/exprtk.hpp",
     ],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     includes = [
         "include",
         "src",
     ],
-    local_defines = ros_local_defines() + ["MRPT_USE_SYSTEM_EXPRTK"],
+    local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS,
 )
 
 cc_shared_library(
     name = "mrpt_expr",
     dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
     deps = [":mrpt_expr_library"],
+)
+
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    ":mrpt_expr": ":mrpt_expr_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_mrpt_expr",
+    srcs = [
+        "tests/CRuntimeCompiledExpression_unittest.cpp",
+        "@mrpt_common//:common_sources/mrpt_test_main.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ["CMAKE_UNITTEST_BASEDIR=\\\".\\\""],
+    deps = TEST_DEPENDENCIES.values() + [
+        "@mrpt_common//:mrpt_test_common",
+        "@rosdistro//cc:googletest",
+    ],
 )
 
 cc_library(
     name = "_bindings.cpython-314-x86_64-linux-gnu_library",
     srcs = ["python_bindings/mrpt_expr_py.cpp"],
-    hdrs = [
-        "include/mrpt/expr/CRuntimeCompiledExpression.h",
-        "include/mrpt/expr/mrpt-expr_export.h",
-        "src/3rdparty/exprtk.hpp",
-    ],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
-    includes = [
-        "include",
-        "src",
-    ],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_expr_library"],
 )

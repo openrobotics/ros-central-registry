@@ -1,0 +1,73 @@
+--- a/include/ublox_gps/async_worker.hpp
++++ b/include/ublox_gps/async_worker.hpp
+@@ -39,7 +39,8 @@
+ 
+ #include <asio/buffer.hpp>
+ #include <asio/error_code.hpp>
+-#include <asio/io_service.hpp>
++#include <asio/io_context.hpp>
++#include <asio/post.hpp>
+ #include <asio/placeholders.hpp>
+ #include <asio/write.hpp>
+ #include <asio/ip/udp.hpp>
+@@ -63,7 +64,7 @@
+    * @param buffer_size the size of the input and output buffers
+    */
+   explicit AsyncWorker(std::shared_ptr<StreamT> stream,
+-                       std::shared_ptr<asio::io_service> io_service,
++                       std::shared_ptr<asio::io_context> io_service,
+                        std::size_t buffer_size,
+                        int debug,
+                        const rclcpp::Logger& logger);
+@@ -124,7 +125,7 @@
+   void doClose();
+ 
+   std::shared_ptr<StreamT> stream_; //!< The I/O stream
+-  std::shared_ptr<asio::io_service> io_service_; //!< The I/O service
++  std::shared_ptr<asio::io_context> io_service_; //!< The I/O service
+ 
+   std::mutex read_mutex_; //!< Lock for the input buffer
+   std::condition_variable read_condition_;
+@@ -150,7 +151,7 @@
+ 
+ template <typename StreamT>
+ AsyncWorker<StreamT>::AsyncWorker(std::shared_ptr<StreamT> stream,
+-        std::shared_ptr<asio::io_service> io_service,
++        std::shared_ptr<asio::io_context> io_service,
+         std::size_t buffer_size,
+         int debug,
+         const rclcpp::Logger& logger)
+@@ -159,13 +160,13 @@
+ 
+   out_.reserve(buffer_size);
+ 
+-  io_service_->post(std::bind(&AsyncWorker<StreamT>::doRead, this));
++  asio::post(*io_service_, std::bind(&AsyncWorker<StreamT>::doRead, this));
+   background_thread_ = std::make_shared<std::thread>([this]{ io_service_->run(); });
+ }
+ 
+ template <typename StreamT>
+ AsyncWorker<StreamT>::~AsyncWorker() {
+-  io_service_->post(std::bind(&AsyncWorker<StreamT>::doClose, this));
++  asio::post(*io_service_, std::bind(&AsyncWorker<StreamT>::doClose, this));
+   background_thread_->join();
+   //io_service_->reset();
+ }
+@@ -185,7 +186,7 @@
+   }
+   out_.insert(out_.end(), data, data + size);
+ 
+-  io_service_->post(std::bind(&AsyncWorker<StreamT>::doWrite, this));
++  asio::post(*io_service_, std::bind(&AsyncWorker<StreamT>::doWrite, this));
+   return true;
+ }
+ 
+@@ -314,7 +315,7 @@
+   }
+ 
+   if (!stopping_) {
+-    io_service_->post(std::bind(&AsyncWorker<StreamT>::doRead, this));
++    asio::post(*io_service_, std::bind(&AsyncWorker<StreamT>::doRead, this));
+   }
+ }
+ 

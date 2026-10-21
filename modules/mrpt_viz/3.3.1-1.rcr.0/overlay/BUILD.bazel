@@ -14,8 +14,8 @@
 
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:defs.bzl", "py_library")
 
@@ -34,6 +34,7 @@ license(
 DEPENDENCIES = {
     "@mrpt_img//:mrpt_img": "@mrpt_img//:mrpt_img_library",
     "@mrpt_poses//:mrpt_poses": "@mrpt_poses//:mrpt_poses_library",
+    "@rosdistro//cc:assimp_shared": "@rosdistro//cc:assimp_library",
 }
 
 CC_DEPS = [
@@ -149,28 +150,6 @@ cc_library(
         "src/Visualizable.cpp",
         "src/pose_pdfs.cpp",
         "src/registerAllClasses.cpp",
-        "tests/CAnimatedAssimpModel_unittest.cpp",
-        "tests/CAssimpModel_unittest.cpp",
-        "tests/CFileGZStreams_unittest.cpp",
-        "tests/CGeneralizedEllipsoid_unittest.cpp",
-        "tests/COrbitCameraController_unittest.cpp",
-        "tests/CPolyhedron_unittest.cpp",
-        "tests/CSerializable_unittest.cpp",
-        "tests/CVisualObject_unittest.cpp",
-        "tests/MiscVisualObjects2_unittest.cpp",
-        "tests/MiscVisualObjects_unittest.cpp",
-        "tests/PLY_import_export_unittest.cpp",
-        "tests/RayTracingAndBounds_unittest.cpp",
-        "tests/RenderBuffers_unittest.cpp",
-        "tests/Scene_Viewport_unittest.cpp",
-        "tests/SchemeSerialization_unittest.cpp",
-        "tests/StockObjects_unittest.cpp",
-        "tests/Viewport_extra_unittest.cpp",
-        "tests/bimap_serialize_unittest.cpp",
-        "tests/legacy_serialization_unittest.cpp",
-        "tests/pose_pdfs_unittest.cpp",
-        "tests/serializations_unittest.cpp",
-        "tests/stl_serialize_unittest.cpp",
     ],
     hdrs = [
         "include/mrpt/viz/CAnimatedAssimpModel.h",
@@ -228,7 +207,6 @@ cc_library(
         "include/mrpt/viz/registerAllClasses.h",
         "include/mrpt/viz/stock_objects.h",
         "include/mrpt/viz/viz_frwds.h",
-        "tests/legacy_serialization.h",
     ] + [":config_h"],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     includes = [
@@ -245,6 +223,56 @@ cc_shared_library(
     dynamic_deps = DEPENDENCIES.keys(),
     exports_filter = ["//:__subpackages__"],
     deps = [":mrpt_viz_library"],
+)
+
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    ":mrpt_viz": ":mrpt_viz_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_mrpt_viz",
+    srcs = [
+        "tests/CAnimatedAssimpModel_unittest.cpp",
+        "tests/CAssimpModel_unittest.cpp",
+        "tests/CFileGZStreams_unittest.cpp",
+        "tests/CGeneralizedEllipsoid_unittest.cpp",
+        "tests/COrbitCameraController_unittest.cpp",
+        "tests/CPolyhedron_unittest.cpp",
+        "tests/CSerializable_unittest.cpp",
+        "tests/CVisualObject_unittest.cpp",
+        "tests/MiscVisualObjects2_unittest.cpp",
+        "tests/MiscVisualObjects_unittest.cpp",
+        "tests/PLY_import_export_unittest.cpp",
+        "tests/RayTracingAndBounds_unittest.cpp",
+        "tests/RenderBuffers_unittest.cpp",
+        "tests/Scene_Viewport_unittest.cpp",
+        "tests/SchemeSerialization_unittest.cpp",
+        "tests/StockObjects_unittest.cpp",
+        "tests/Viewport_extra_unittest.cpp",
+        "tests/bimap_serialize_unittest.cpp",
+        "tests/legacy_serialization.h",
+        "tests/legacy_serialization_unittest.cpp",
+        "tests/pose_pdfs_unittest.cpp",
+        "tests/serializations_unittest.cpp",
+        "tests/stl_serialize_unittest.cpp",
+        "@mrpt_common//:common_sources/mrpt_test_main.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = [
+        "CMAKE_UNITTEST_BASEDIR=\\\".\\\"",
+        "MRPT_ASSIMP_VERSION_MAJOR=6",
+    ],
+    deps = TEST_DEPENDENCIES.values() + CC_DEPS + [
+        "@mrpt_common//:mrpt_test_common",
+        "@rosdistro//cc:googletest",
+    ],
 )
 
 cc_library(

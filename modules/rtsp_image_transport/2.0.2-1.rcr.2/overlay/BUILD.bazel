@@ -1,3 +1,17 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
@@ -41,6 +55,43 @@ CC_DEPS = [
     "@rclcpp//:type_adapter",
 ]
 
+# Equivalent of CMake's generate_export_header(rtsp_image_transport).
+genrule(
+    name = "export_h",
+    outs = ["_gen/include/rtsp_image_transport_export.h"],
+    cmd = """cat > $@ <<'EOF'
+#ifndef RTSP_IMAGE_TRANSPORT_EXPORT_H
+#define RTSP_IMAGE_TRANSPORT_EXPORT_H
+
+#define RTSP_IMAGE_TRANSPORT_EXPORT __attribute__((visibility("default")))
+#define RTSP_IMAGE_TRANSPORT_NO_EXPORT __attribute__((visibility("hidden")))
+#define RTSP_IMAGE_TRANSPORT_DEPRECATED __attribute__ ((__deprecated__))
+#define RTSP_IMAGE_TRANSPORT_DEPRECATED_EXPORT RTSP_IMAGE_TRANSPORT_EXPORT RTSP_IMAGE_TRANSPORT_DEPRECATED
+#define RTSP_IMAGE_TRANSPORT_DEPRECATED_NO_EXPORT RTSP_IMAGE_TRANSPORT_NO_EXPORT RTSP_IMAGE_TRANSPORT_DEPRECATED
+
+#endif  // RTSP_IMAGE_TRANSPORT_EXPORT_H
+EOF
+""",
+)
+
+# Equivalent of upstream's `ld -r -b binary rtsp_only.png`: embeds the
+# "RTSP Only" test image and defines the _binary_rtsp_only_png_{start,end}
+# symbols the executables reference.
+genrule(
+    name = "rtsp_only_asm",
+    srcs = ["rtsp_only.png"],
+    outs = ["_gen/rtsp_only.S"],
+    cmd = "(" +
+          "echo '.section .rodata'; " +
+          "echo '.global _binary_rtsp_only_png_start'; " +
+          "echo '.global _binary_rtsp_only_png_end'; " +
+          "echo '_binary_rtsp_only_png_start:'; " +
+          "od -An -v -tx1 $< | sed -E -e 's/^ +//' -e 's/ +$$//' -e '/^$$/d' -e 's/ +/,0x/g' -e 's/^/.byte 0x/'; " +
+          "echo '_binary_rtsp_only_png_end:'; " +
+          "echo '.section .note.GNU-stack,\"\",@progbits'" +
+          ") > $@",
+)
+
 cc_library(
     name = "rtsp_image_transport_library",
     srcs = [
@@ -75,6 +126,7 @@ cc_library(
         "src/subscriber_plugin.h",
         "src/video_codec.h",
     ] + [
+        ":export_h",
     ],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     includes = ["_gen/include"],
@@ -106,62 +158,27 @@ collect_transitive_dynamic_deps(
 cc_binary(
     name = "publish_rtsp_stream",
     srcs = [
-        "src/frame_data.h",
-        "src/frame_extractor.h",
-        "src/frame_injector.h",
-        "src/graph_monitor.h",
-        "src/host_override.h",
-        "src/init.h",
-        "src/log_level.h",
         "src/publish_rtsp_stream.cpp",
-        "src/publisher_plugin.h",
-        "src/stream_client.h",
-        "src/stream_decoder.h",
-        "src/stream_encoder.h",
-        "src/stream_server.h",
-        "src/streaming_error.h",
-        "src/subscriber_plugin.h",
-        "src/video_codec.h",
+        ":rtsp_only_asm",
     ],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     dynamic_deps = [":transitive_dynamic_deps"],
-    includes = ["_gen/include"],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    local_defines = ros_local_defines() + [
+        'ROS_PACKAGE_NAME=\\"rtsp_image_transport\\"',
     ],
-    local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS,
 )
 
 cc_binary(
     name = "rtsp_camera_proxy",
     srcs = [
-        "src/frame_data.h",
-        "src/frame_extractor.h",
-        "src/frame_injector.h",
-        "src/graph_monitor.h",
         "src/host_override.cpp",
         "src/host_override.h",
-        "src/init.h",
-        "src/log_level.h",
-        "src/publisher_plugin.h",
         "src/rtsp_camera_proxy.cpp",
-        "src/stream_client.h",
-        "src/stream_decoder.h",
-        "src/stream_encoder.h",
-        "src/stream_server.h",
-        "src/streaming_error.h",
-        "src/subscriber_plugin.h",
-        "src/video_codec.h",
+        ":rtsp_only_asm",
     ],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     dynamic_deps = [":transitive_dynamic_deps"],
-    includes = ["_gen/include"],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS,
 )

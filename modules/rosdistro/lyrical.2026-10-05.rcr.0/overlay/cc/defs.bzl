@@ -12,9 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bison//:bison.bzl", _bison = "bison")
+load("@flex//:flex.bzl", _flex = "flex")
 load(":macros.bzl", _ros_exports_header = "ros_exports_header", _ros_jrl_headers = "ros_jrl_headers", _ros_local_defines = "ros_local_defines", _ros_version_header = "ros_version_header")
 load(":rules.bzl", _cc_public_headers = "cc_public_headers", _collect_transitive_dynamic_deps = "collect_transitive_dynamic_deps")
 
+bison = _bison
+flex = _flex
 ros_exports_header = _ros_exports_header
 ros_jrl_headers = _ros_jrl_headers
 ros_local_defines = _ros_local_defines

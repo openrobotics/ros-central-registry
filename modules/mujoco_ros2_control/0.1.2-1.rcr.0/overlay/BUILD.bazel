@@ -28,9 +28,44 @@ license(
     license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
 )
 
-DEPENDENCIES = {}
+HEADERS = [
+    "include/mujoco_ros2_control/data.hpp",
+    "include/mujoco_ros2_control/mujoco_simulation.hpp",
+    "include/mujoco_ros2_control/mujoco_system_interface.hpp",
+    "include/mujoco_ros2_control/sim_display_text.hpp",
+    "include/mujoco_ros2_control/utils.hpp",
+]
 
-CC_DEPS = []
+# Map of shared library (key) to its static library (value).
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@control_toolbox//:control_toolbox": "@control_toolbox//:control_toolbox_library",
+    "@hardware_interface//:hardware_interface": "@hardware_interface//:hardware_interface_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
+    "@rosdistro//cc:glfw": "@rosdistro//cc:glfw_library",
+    "@rosdistro//cc:mujoco": "@rosdistro//cc:mujoco_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@transmission_interface//:transmission_interface": "@transmission_interface//:transmission_interface_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@mujoco_ros2_control_msgs//:cc",
+    "@mujoco_ros2_control_plugins//:mujoco_ros2_control_plugins",
+    "@nav_msgs//:cc",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@rosgraph_msgs//:cc",
+    "@sensor_msgs//:cc",
+    "@std_msgs//:cc",
+]
+
+COPTS = [
+    "-Wno-missing-template-arg-list-after-template-kw",
+]
 
 alias(
     name = "lodepng_library",
@@ -57,74 +92,58 @@ genrule(
 )
 
 cc_library(
+    name = "src_private_headers",
+    hdrs = ["src/render_loop_exit.hpp"],
+    includes = ["src"],
+    visibility = ["//:__subpackages__"],
+    deps = ["@rclcpp//:rclcpp_library"],
+)
+
+cc_library(
     name = "mujoco_ros2_control_library",
     srcs = [
         "src/mujoco_simulation.cpp",
         "src/mujoco_system_interface.cpp",
+        "src/render_loop_exit.hpp",
     ],
-    hdrs = [
-        "include/mujoco_ros2_control/data.hpp",
-        "include/mujoco_ros2_control/mujoco_simulation.hpp",
-        "include/mujoco_ros2_control/mujoco_system_interface.hpp",
-        "include/mujoco_ros2_control/sim_display_text.hpp",
-        "include/mujoco_ros2_control/utils.hpp",
-    ],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
-    includes = [
-        "_gen/include",
-        "include",
-        "include/mujoco_ros2_control",
-        "src",
-        "tests",
-    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
     local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":lodepng_library",
+        ":simulate_library",
+    ],
+    alwayslink = True,
 )
 
 cc_shared_library(
     name = "mujoco_ros2_control",
     dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    exports_filter = ["//:__subpackages__"],
     deps = [":mujoco_ros2_control_library"],
 )
 
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":mujoco_ros2_control",
+        "@controller_manager//:controller_manager",
+    ],
 )
 
 cc_binary(
     name = "ros2_control_node",
-    srcs = [
-        "include/mujoco_ros2_control/data.hpp",
-        "include/mujoco_ros2_control/mujoco_simulation.hpp",
-        "include/mujoco_ros2_control/mujoco_system_interface.hpp",
-        "include/mujoco_ros2_control/sim_display_text.hpp",
-        "include/mujoco_ros2_control/utils.hpp",
-        "src/mujoco_ros2_control_node.cpp",
-    ],
-    copts = [
-        "-Wno-missing-template-arg-list-after-template-kw",
-    ],
+    srcs = ["src/mujoco_ros2_control_node.cpp"],
+    copts = COPTS,
     dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        "_gen/include",
-        "include",
-        "include/mujoco_ros2_control",
-        "src",
-        "tests",
-    ],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
     local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = [
+        "@controller_manager//:controller_manager_library",
+        "@hardware_interface//:hardware_interface_library",
+        "@rclcpp//:rclcpp_library",
+        "@realtime_tools//:realtime_tools_library",
+    ],
 )
 
 py_library(
