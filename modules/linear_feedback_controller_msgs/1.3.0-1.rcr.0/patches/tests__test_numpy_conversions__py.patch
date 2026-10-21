@@ -1,0 +1,42 @@
+--- a/tests/test_numpy_conversions.py
++++ b/tests/test_numpy_conversions.py
+@@ -1,7 +1,39 @@
+ from copy import deepcopy
++import sys
++import types
+ 
+ import numpy as np
+ from builtin_interfaces.msg import Time as TimeMsg
++
++try:
++    import rclpy.time
++except ImportError:
++    class _Time:
++        def __init__(self, *, seconds: int = 0, nanoseconds: int = 0):
++            self._sec = int(seconds)
++            self._nanosec = int(nanoseconds)
++
++        @classmethod
++        def from_msg(cls, msg: TimeMsg) -> "_Time":
++            return cls(seconds=int(msg.sec), nanoseconds=int(msg.nanosec))
++
++        def to_msg(self) -> TimeMsg:
++            return TimeMsg(sec=int(self._sec), nanosec=int(self._nanosec))
++
++        def __eq__(self, other: object) -> bool:
++            return (
++                isinstance(other, _Time)
++                and self._sec == other._sec
++                and self._nanosec == other._nanosec
++            )
++
++    _rclpy = types.ModuleType("rclpy")
++    _rclpy_time = types.ModuleType("rclpy.time")
++    _rclpy_time.Time = _Time
++    _rclpy.time = _rclpy_time
++    sys.modules["rclpy"] = _rclpy
++    sys.modules["rclpy.time"] = _rclpy_time
++
+ from rclpy.time import Time
+ 
+ from linear_feedback_controller_msgs_py import lfc_py_types

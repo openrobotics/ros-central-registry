@@ -1,0 +1,106 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+HEADERS = [
+    "include/resource_retriever/exception.hpp",
+    "include/resource_retriever/plugins/curl_retriever.hpp",
+    "include/resource_retriever/plugins/filesystem_retriever.hpp",
+    "include/resource_retriever/plugins/retriever_plugin.hpp",
+    "include/resource_retriever/resource.hpp",
+    "include/resource_retriever/retriever.hpp",
+    "include/resource_retriever/visibility_control.hpp",
+]
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@rosdistro//cc:curl": "@rosdistro//cc:curl_library",
+}
+
+cc_library(
+    name = "resource_retriever_library",
+    srcs = [
+        "src/plugins/curl_retriever.cpp",
+        "src/plugins/filesystem_retriever.cpp",
+        "src/plugins/retriever_plugin.cpp",
+        "src/retriever.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["RESOURCE_RETRIEVER_BUILDING_LIBRARY"],
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "resource_retriever",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":resource_retriever_library"],
+)
+
+py_library(
+    name = "resource_retriever_py",
+    srcs = ["src/resource_retriever/__init__.py"],
+    imports = ["src"],
+    deps = ["@ament_index_python"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":resource_retriever"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = ["//test:test.txt"],
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_has_library_target = True,
+    cmake_export_libraries = False,
+    headers = HEADERS,
+    libraries = [":resource_retriever"],
+    package_xml = "package.xml",
+    python = [":resource_retriever_py"],
+    python_strip_prefix = "src",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

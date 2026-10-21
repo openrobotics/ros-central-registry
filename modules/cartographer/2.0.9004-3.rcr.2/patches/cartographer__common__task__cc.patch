@@ -1,0 +1,45 @@
+--- a/cartographer/common/task.cc
++++ b/cartographer/common/task.cc
+@@ -64,13 +64,15 @@
+ }
+ 
+ void Task::AddDependentTask(Task* dependent_task) {
+-  absl::MutexLock locker(&mutex_);
+-  if (state_ == COMPLETED) {
+-    dependent_task->OnDependenyCompleted();
+-    return;
++  {
++    absl::MutexLock locker(&mutex_);
++    if (state_ != COMPLETED) {
++      bool inserted = dependent_tasks_.insert(dependent_task).second;
++      CHECK(inserted) << "Given dependency is already a dependency.";
++      return;
++    }
+   }
+-  bool inserted = dependent_tasks_.insert(dependent_task).second;
+-  CHECK(inserted) << "Given dependency is already a dependency.";
++  dependent_task->OnDependenyCompleted();
+ }
+ 
+ void Task::OnDependenyCompleted() {
+@@ -96,9 +98,17 @@
+     work_item_();
+   }
+ 
+-  absl::MutexLock locker(&mutex_);
+-  state_ = COMPLETED;
+-  for (Task* dependent_task : dependent_tasks_) {
++  // Notify dependents without holding our own mutex, so that task mutexes are
++  // never nested (abseil's deadlock detector otherwise reports lock-order
++  // cycles between tasks). Dependents added after this point observe
++  // COMPLETED in AddDependentTask() and notify themselves.
++  std::set<Task*> dependent_tasks;
++  {
++    absl::MutexLock locker(&mutex_);
++    state_ = COMPLETED;
++    dependent_tasks.swap(dependent_tasks_);
++  }
++  for (Task* dependent_task : dependent_tasks) {
+     dependent_task->OnDependenyCompleted();
+   }
+ }

@@ -76,10 +76,15 @@ jobs:
         done
     - name: Run PR modules check
       run: |
+        EXTRA_ARGS=()
+        if [[ "${{ matrix.directory }}" == "modules" && "${{ contains(github.event.pull_request.labels.*.name, 'permit module deletion') }}" == "true" ]]; then
+          EXTRA_ARGS+=(--permit-module-deletion)
+        fi
         bazel run //tools/ci:check_pr_modules -- \
             --diff-status /tmp/diff_status.txt \
             --old-metadata-dir /tmp/old_metadata \
-            --directory "${{ matrix.directory }}"
+            --directory "${{ matrix.directory }}" \
+            "${EXTRA_ARGS[@]}"
     - name: Generate module diff
       # Always runs, even if the check above failed -- that's exactly when
       # seeing what a new module version actually changed is most useful.
@@ -93,12 +98,19 @@ jobs:
       # Always runs, including for fork PRs: unlike the PR comment below,
       # writing to GITHUB_STEP_SUMMARY needs no token permissions at all,
       # so this is the one place a fork PR's module diff is guaranteed to
-      # be visible for review.
+      # be visible for review. GitHub caps GITHUB_STEP_SUMMARY at 1024 KB.
       if: always()
       run: |
         if [ -s /tmp/module_diff.md ]; then
           echo "### Module diff (${{ matrix.directory }})" >> "$GITHUB_STEP_SUMMARY"
-          cat /tmp/module_diff.md >> "$GITHUB_STEP_SUMMARY"
+          MAX_BYTES=950000
+          FILE_SIZE=$(wc -c < /tmp/module_diff.md)
+          if [ "$FILE_SIZE" -le "$MAX_BYTES" ]; then
+            cat /tmp/module_diff.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            head -c "$MAX_BYTES" /tmp/module_diff.md >> "$GITHUB_STEP_SUMMARY"
+            printf "\n\n</details>\n\n_Module diff truncated (%d bytes total exceeds GitHub's 1024 KB step summary limit). Download the \`module-diff-%s\` workflow artifact for the full diff._\n" "$FILE_SIZE" "$(echo '${{ matrix.directory }}' | tr '/' '-')" >> "$GITHUB_STEP_SUMMARY"
+          fi
         fi
     - name: Post or update module diff PR comment
       # Posts or updates the PR comment directly for non-fork PRs where
@@ -118,7 +130,18 @@ jobs:
 
           const directory = '${{ matrix.directory }}';
           const marker = `<!-- module-diff: ${directory} -->`;
-          const body = `${marker}\n${diff}`;
+          const maxLen = 65536;
+          let body = `${marker}\n${diff}`;
+          if (body.length > maxLen) {
+            const notice = `\n\n_Module diff truncated (full diff is ${diff.length} characters, exceeding GitHub's ${maxLen}-character comment limit). See the workflow run artifact for the complete diff._`;
+            const budget = maxLen - marker.length - 1 - notice.length;
+            let truncated = diff.slice(0, budget);
+            const lastDetailsClose = truncated.lastIndexOf('</details>');
+            if (lastDetailsClose !== -1) {
+              truncated = truncated.slice(0, lastDetailsClose + '</details>'.length);
+            }
+            body = `${marker}\n${truncated}${notice}`;
+          }
 
           const issueNumber = context.payload.pull_request ? context.payload.pull_request.number : context.issue.number;
           if (!issueNumber) return;

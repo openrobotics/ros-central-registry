@@ -1,0 +1,103 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosidl_runtime_c//:rosidl_runtime_c": "@rosidl_runtime_c//:rosidl_runtime_c_library",
+}
+
+[(
+    cc_library(
+        name = "rosidl_typesupport_c__test_type_support{}_library".format(i),
+        testonly = True,
+        srcs = ["test_type_support.c"],
+        deps = ["//:rosidl_typesupport_c_library"],
+        alwayslink = True,
+    ),
+    cc_shared_library(
+        name = "rosidl_typesupport_c__test_type_support{}".format(i),
+        testonly = True,
+        dynamic_deps = ["//:transitive_dynamic_deps"],
+        exports_filter = [":rosidl_typesupport_c__test_type_support{}_library".format(i)],
+        deps = [":rosidl_typesupport_c__test_type_support{}_library".format(i)],
+    ),
+) for i in [
+    1,
+    2,
+]]
+
+cc_test(
+    name = "test_message_type_support",
+    srcs = [
+        "mocking_utils/patch.hpp",
+        "test_message_type_support_dispatch.cpp",
+    ],
+    data = ["//:test_ament_index"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + ["RCUTILS_ENABLE_FAULT_INJECTION"],
+    deps = DEPENDENCIES.values() + [
+        "//:rosidl_typesupport_c_library",
+        "@rosdistro//cc:googletest",
+        "@rosdistro//cc:mimick",
+    ],
+)
+
+cc_test(
+    name = "test_service_type_support",
+    srcs = [
+        "mocking_utils/patch.hpp",
+        "test_service_type_support_dispatch.cpp",
+    ],
+    data = ["//:test_ament_index"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + ["RCUTILS_ENABLE_FAULT_INJECTION"],
+    deps = DEPENDENCIES.values() + [
+        "//:rosidl_typesupport_c_library",
+        "@rosdistro//cc:googletest",
+        "@rosdistro//cc:mimick",
+    ],
+)
+
+cc_test(
+    name = "benchmark_type_support_dispatch",
+    srcs = ["benchmark/benchmark_type_support_dispatch.cpp"],
+    data = ["//:test_ament_index"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    tags = ["manual"],
+    deps = DEPENDENCIES.values() + [
+        "//:rosidl_typesupport_c_library",
+        "@google_benchmark//:benchmark_main",
+        "@performance_test_fixture",
+    ],
+)
+
+py_pytest(
+    name = "test_cli_extension",
+    srcs = ["test_cli_extension.py"],
+    data = ["//test/msg:Test.msg"],
+    deps = [
+        "//:rosidl_typesupport_c_py",
+        "@rosidl_cli",
+    ],
+)

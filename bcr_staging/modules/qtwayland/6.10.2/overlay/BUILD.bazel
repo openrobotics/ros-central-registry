@@ -1,0 +1,1749 @@
+"""Bazel build for @qtwayland (QtWaylandCompositor, QML extensions, and plugins)."""
+
+load("@qt//:qt_internal_library.bzl", "qt_internal_library", "qt_static_plugin")
+load(
+    "@qt//:qt_tools.bzl",
+    "qt_export_header",
+    "qt_generate_qrc",
+    "qt_qml_plugin_gen",
+    "qt_qmldir",
+    "qt_rcc_internal",
+    "qt_sync_headers",
+    "qt_write_file",
+)
+load("@qt//:qt_wayland.bzl", "qt_wayland_client_protocol", "qt_wayland_server_protocol")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+    license_text = "LICENSES/LGPL-3.0-only.txt",
+)
+
+license(
+    name = "license_wayland_ivi_protocol",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+    license_text = "src/3rdparty/protocol/ivi/MIT.txt",
+)
+
+exports_files([
+    "LICENSES/LGPL-3.0-only.txt",
+    "src/3rdparty/protocol/ivi/MIT.txt",
+])
+
+QT_VERSION = "6.10.2"
+
+common_copts = [
+    "-w",
+    "-fPIC",
+    "-DQT_NO_CAST_TO_ASCII",
+    "-DQT_BUILDING_QT",
+]
+
+_COMMON_DEFINES = [
+    "QT_ASCII_CAST_WARNINGS",
+    "QT_BUILDING_QT",
+    "QT_DEPRECATED_WARNINGS",
+    "QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH",
+    "QT_MOC_COMPAT",
+    "QT_NO_CAST_TO_ASCII",
+    "QT_NO_DEBUG",
+    "QT_NO_EXCEPTIONS",
+    "QT_NO_FOREACH",
+    "QT_NO_JAVA_STYLE_ITERATORS",
+    "QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+    "QT_NO_QASCONST",
+    "QT_NO_QEXCHANGE",
+    "QT_NO_QSNPRINTF",
+    "QT_USE_QSTRINGBUILDER",
+    "_GLIBCXX_ASSERTIONS",
+    "_LARGEFILE64_SOURCE",
+    "_LARGEFILE_SOURCE",
+]
+
+# =============================================================================
+# Generated Config & Version Headers
+# =============================================================================
+
+qt_write_file(
+    name = "gen_qtwaylandclient_features_config_h",
+    out = "generated_cfg/QtWaylandClientFeatures/qtwaylandclientfeatures-config.h",
+    content = """#ifndef QTWAYLANDCLIENTFEATURES_CONFIG_H
+#define QTWAYLANDCLIENTFEATURES_CONFIG_H
+
+#endif // QTWAYLANDCLIENTFEATURES_CONFIG_H
+""",
+)
+
+qt_write_file(
+    name = "gen_qtwaylandclient_features_config_p_h",
+    out = "generated_cfg/QtWaylandClientFeatures/private/qtwaylandclientfeatures-config_p.h",
+    content = """#ifndef QTWAYLANDCLIENTFEATURES_CONFIG_P_H
+#define QTWAYLANDCLIENTFEATURES_CONFIG_P_H
+
+#define QT_FEATURE_wayland_client_ivi_shell 1
+#define QT_FEATURE_wayland_client_qt_shell 1
+
+#endif // QTWAYLANDCLIENTFEATURES_CONFIG_P_H
+""",
+)
+
+qt_write_file(
+    name = "gen_qtwaylandcompositor_config_h",
+    out = "generated_cfg/QtWaylandCompositor/qtwaylandcompositor-config.h",
+    content = """#ifndef QTWAYLANDCOMPOSITOR_CONFIG_H
+#define QTWAYLANDCOMPOSITOR_CONFIG_H
+
+#define QT_FEATURE_wayland_server 1
+#define QT_FEATURE_wayland_compositor_quick 1
+
+#endif // QTWAYLANDCOMPOSITOR_CONFIG_H
+""",
+)
+
+qt_write_file(
+    name = "gen_qtwaylandcompositor_config_p_h",
+    out = "generated_cfg/QtWaylandCompositor/private/qtwaylandcompositor-config_p.h",
+    content = """#ifndef QTWAYLANDCOMPOSITOR_CONFIG_P_H
+#define QTWAYLANDCOMPOSITOR_CONFIG_P_H
+
+#include <QtWaylandCompositor/qtwaylandcompositor-config.h>
+#include <QtWaylandGlobal/private/qtwaylandglobal-config_p.h>
+
+#endif // QTWAYLANDCOMPOSITOR_CONFIG_P_H
+""",
+)
+
+qt_export_header(
+    name = "qtwaylandcompositorexports_h",
+    out = "generated_exports/qtwaylandcompositorexports.h",
+    module_infix = "WAYLANDCOMPOSITOR",
+)
+
+# =============================================================================
+# QtWaylandClientFeaturesPrivate (:wayland_client_features_private)
+# =============================================================================
+
+qt_sync_headers(
+    name = "wayland_client_features_sync_headers",
+    hdrs = [],
+    dep_modules = ["QtCore"],
+    generated_private_hdrs = [":gen_qtwaylandclient_features_config_p_h"],
+    generated_public_hdrs = [":gen_qtwaylandclient_features_config_h"],
+    internal_module = True,
+    module_name = "QtWaylandClientFeatures",
+    source_dir = "src/client",
+    version = QT_VERSION,
+    deps = ["@qtbase//:core_sync_headers"],
+)
+
+cc_library(
+    name = "wayland_client_features_private",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_client_features_sync_headers",
+        "@qtbase//:core",
+    ],
+)
+
+# =============================================================================
+# QtWaylandCompositor (:wayland_compositor + :wayland_compositor_shared)
+# =============================================================================
+
+qt_wayland_server_protocol(
+    name = "wayland_compositor_protocols",
+    build_macro = "QT_BUILD_WAYLANDCOMPOSITOR_LIB",
+    include_dir = "QtWaylandCompositor/private",
+    is_for_module = True,
+    protocols = [
+        "src/3rdparty/protocol/ivi/ivi-application.xml",
+        "@qtbase//:src/3rdparty/wayland/extensions/hardware-integration.xml",
+        "@qtbase//:src/3rdparty/wayland/extensions/qt-text-input-method-unstable-v1.xml",
+        "@qtbase//:src/3rdparty/wayland/extensions/qt-texture-sharing-unstable-v1.xml",
+        "@qtbase//:src/3rdparty/wayland/extensions/qt-windowmanager.xml",
+        "@qtbase//:src/3rdparty/wayland/extensions/server-buffer-extension.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/idle-inhibit/idle-inhibit-unstable-v1.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/presentation-time/presentation-time.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/scaler/scaler.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/text-input/v2/text-input-unstable-v2.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/text-input/v3/text-input-unstable-v3.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/viewporter/viewporter.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/wayland/wayland.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/xdg-decoration/xdg-decoration-unstable-v1.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/xdg-dialog/xdg-dialog-v1.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/xdg-output/xdg-output-unstable-v1.xml",
+        "@qtbase//:src/3rdparty/wayland/protocols/xdg-shell/xdg-shell.xml",
+    ],
+)
+
+qt_sync_headers(
+    name = "wayland_compositor_sync_headers",
+    hdrs = glob([
+        "src/compositor/compositor_api/*.h",
+        "src/compositor/extensions/*.h",
+        "src/compositor/global/*.h",
+        "src/compositor/hardware_integration/*.h",
+        "src/compositor/wayland_wrapper/*.h",
+        "src/shared/*.h",
+    ]),
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtOpenGL",
+        "QtQml",
+        "QtQuick",
+    ],
+    generated_private_hdrs = [
+        ":gen_qtwaylandcompositor_config_p_h",
+        ":wayland_compositor_protocols_hdrs",
+    ],
+    generated_public_hdrs = [
+        ":gen_qtwaylandcompositor_config_h",
+        ":qtwaylandcompositorexports_h",
+    ],
+    module_name = "QtWaylandCompositor",
+    source_dir = "src/compositor",
+    version = QT_VERSION,
+    deps = [
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtbase//:opengl_sync_headers",
+        "@qtbase//:wayland_global_private_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+    ],
+)
+
+qt_generate_qrc(
+    name = "compositor_shaders_qrc",
+    srcs = [
+        "src/compositor/shaders/surface.vert.qsb",
+        "src/compositor/shaders/surface_oes_external.frag",
+        "src/compositor/shaders/surface_rgba.frag.qsb",
+        "src/compositor/shaders/surface_rgbx.frag.qsb",
+        "src/compositor/shaders/surface_y_u_v.frag.qsb",
+        "src/compositor/shaders/surface_y_uv.frag.qsb",
+        "src/compositor/shaders/surface_y_xuxv.frag.qsb",
+    ],
+    out = "generated_qrc/compositor/compositor.qrc",
+    prefix = "/qt-project.org/wayland/compositor",
+    strip_prefix = "src/compositor",
+)
+
+qt_rcc_internal(
+    name = "compositor_shaders_rcc",
+    data = [
+        "src/compositor/shaders/surface.vert.qsb",
+        "src/compositor/shaders/surface_oes_external.frag",
+        "src/compositor/shaders/surface_rgba.frag.qsb",
+        "src/compositor/shaders/surface_rgbx.frag.qsb",
+        "src/compositor/shaders/surface_y_u_v.frag.qsb",
+        "src/compositor/shaders/surface_y_uv.frag.qsb",
+        "src/compositor/shaders/surface_y_xuxv.frag.qsb",
+    ],
+    qrc = ":compositor_shaders_qrc",
+    qrc_name = "compositor",
+)
+
+qt_internal_library(
+    name = "wayland_compositor",
+    srcs = [
+        "src/compositor/compat/removed_api.cpp",
+        "src/compositor/compositor_api/qwaylandbufferref.cpp",
+        "src/compositor/compositor_api/qwaylandclient.cpp",
+        "src/compositor/compositor_api/qwaylandcompositor.cpp",
+        "src/compositor/compositor_api/qwaylandcompositorquickextensions.cpp",
+        "src/compositor/compositor_api/qwaylanddestroylistener.cpp",
+        "src/compositor/compositor_api/qwaylanddrag.cpp",
+        "src/compositor/compositor_api/qwaylandinputmethodcontrol.cpp",
+        "src/compositor/compositor_api/qwaylandkeyboard.cpp",
+        "src/compositor/compositor_api/qwaylandkeymap.cpp",
+        "src/compositor/compositor_api/qwaylandmousetracker.cpp",
+        "src/compositor/compositor_api/qwaylandoutput.cpp",
+        "src/compositor/compositor_api/qwaylandoutputmode.cpp",
+        "src/compositor/compositor_api/qwaylandpointer.cpp",
+        "src/compositor/compositor_api/qwaylandquickcompositor.cpp",
+        "src/compositor/compositor_api/qwaylandquickhardwarelayer.cpp",
+        "src/compositor/compositor_api/qwaylandquickitem.cpp",
+        "src/compositor/compositor_api/qwaylandquickoutput.cpp",
+        "src/compositor/compositor_api/qwaylandquicksurface.cpp",
+        "src/compositor/compositor_api/qwaylandresource.cpp",
+        "src/compositor/compositor_api/qwaylandseat.cpp",
+        "src/compositor/compositor_api/qwaylandsurface.cpp",
+        "src/compositor/compositor_api/qwaylandsurfacegrabber.cpp",
+        "src/compositor/compositor_api/qwaylandtouch.cpp",
+        "src/compositor/compositor_api/qwaylandview.cpp",
+        "src/compositor/extensions/qwaylandidleinhibitv1.cpp",
+        "src/compositor/extensions/qwaylandiviapplication.cpp",
+        "src/compositor/extensions/qwaylandivisurface.cpp",
+        "src/compositor/extensions/qwaylandivisurfaceintegration.cpp",
+        "src/compositor/extensions/qwaylandpresentationtime.cpp",
+        "src/compositor/extensions/qwaylandqttextinputmethod.cpp",
+        "src/compositor/extensions/qwaylandqttextinputmethodmanager.cpp",
+        "src/compositor/extensions/qwaylandqtwindowmanager.cpp",
+        "src/compositor/extensions/qwaylandquickshellintegration.cpp",
+        "src/compositor/extensions/qwaylandquickshellsurfaceitem.cpp",
+        "src/compositor/extensions/qwaylandquickxdgoutputv1.cpp",
+        "src/compositor/extensions/qwaylandshell.cpp",
+        "src/compositor/extensions/qwaylandshellsurface.cpp",
+        "src/compositor/extensions/qwaylandtextinput.cpp",
+        "src/compositor/extensions/qwaylandtextinputmanager.cpp",
+        "src/compositor/extensions/qwaylandtextinputmanagerv3.cpp",
+        "src/compositor/extensions/qwaylandtextinputv3.cpp",
+        "src/compositor/extensions/qwaylandviewporter.cpp",
+        "src/compositor/extensions/qwaylandwlshell.cpp",
+        "src/compositor/extensions/qwaylandwlshellintegration.cpp",
+        "src/compositor/extensions/qwaylandxdgdecorationv1.cpp",
+        "src/compositor/extensions/qwaylandxdgdialogv1.cpp",
+        "src/compositor/extensions/qwaylandxdgoutputv1.cpp",
+        "src/compositor/extensions/qwaylandxdgshell.cpp",
+        "src/compositor/extensions/qwaylandxdgshellintegration.cpp",
+        "src/compositor/extensions/qwltexturesharingextension.cpp",
+        "src/compositor/global/qwaylandcompositorextension.cpp",
+        "src/compositor/global/qwaylandquickextension.cpp",
+        "src/compositor/hardware_integration/qwlclientbufferintegration.cpp",
+        "src/compositor/hardware_integration/qwlclientbufferintegrationfactory.cpp",
+        "src/compositor/hardware_integration/qwlclientbufferintegrationplugin.cpp",
+        "src/compositor/hardware_integration/qwlhardwarelayerintegration.cpp",
+        "src/compositor/hardware_integration/qwlhardwarelayerintegrationfactory.cpp",
+        "src/compositor/hardware_integration/qwlhardwarelayerintegrationplugin.cpp",
+        "src/compositor/hardware_integration/qwlhwintegration.cpp",
+        "src/compositor/hardware_integration/qwlserverbufferintegration.cpp",
+        "src/compositor/hardware_integration/qwlserverbufferintegrationfactory.cpp",
+        "src/compositor/hardware_integration/qwlserverbufferintegrationplugin.cpp",
+        "src/compositor/hardware_integration/qwltextureorphanage.cpp",
+        "src/compositor/wayland_wrapper/qwlbuffermanager.cpp",
+        "src/compositor/wayland_wrapper/qwlclientbuffer.cpp",
+        "src/compositor/wayland_wrapper/qwldatadevice.cpp",
+        "src/compositor/wayland_wrapper/qwldatadevicemanager.cpp",
+        "src/compositor/wayland_wrapper/qwldataoffer.cpp",
+        "src/compositor/wayland_wrapper/qwldatasource.cpp",
+        "src/compositor/wayland_wrapper/qwlregion.cpp",
+        "src/shared/qwaylandinputmethodeventbuilder.cpp",
+        "src/shared/qwaylandmimehelper.cpp",
+        ":wayland_compositor_protocols_srcs",
+    ],
+    hdrs = glob([
+        "src/compositor/compositor_api/*.h",
+        "src/compositor/extensions/*.h",
+        "src/compositor/global/*.h",
+        "src/compositor/hardware_integration/*.h",
+        "src/compositor/wayland_wrapper/*.h",
+        "src/shared/*.h",
+    ]) + [":wayland_compositor_sync_headers"],
+    applicable_licenses = [
+        ":license",
+        ":license_wayland_ivi_protocol",
+    ],
+    conlyopts = ["-std=gnu11"],
+    copts = common_copts + [
+        "-DNDEBUG",
+        "-O2",
+        "-fPIC",
+        "-fno-exceptions",
+    ],
+    cxxopts = ["-std=gnu++20"],
+    defines = ["QT_WAYLANDCOMPOSITOR_LIB"],
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    exports_filter = [
+        "@wayland//:wayland_server",
+    ],
+    includes = [
+        "src/compositor",
+        "src/compositor/compositor_api",
+        "src/compositor/extensions",
+        "src/compositor/global",
+        "src/compositor/hardware_integration",
+        "src/compositor/wayland_wrapper",
+        "src/shared",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_WAYLANDCOMPOSITOR_LIB",
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_OPENGL_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK_LIB",
+        "WaylandCompositor_EXPORTS",
+    ],
+    moc_hdrs = [
+        "src/compositor/compositor_api/qwaylandclient.h",
+        "src/compositor/compositor_api/qwaylandcompositor.h",
+        "src/compositor/compositor_api/qwaylandcompositorquickextensions_p.h",
+        "src/compositor/compositor_api/qwaylanddestroylistener.h",
+        "src/compositor/compositor_api/qwaylanddrag.h",
+        "src/compositor/compositor_api/qwaylandinputmethodcontrol.h",
+        "src/compositor/compositor_api/qwaylandkeyboard.h",
+        "src/compositor/compositor_api/qwaylandkeymap.h",
+        "src/compositor/compositor_api/qwaylandmousetracker_p.h",
+        "src/compositor/compositor_api/qwaylandoutput.h",
+        "src/compositor/compositor_api/qwaylandpointer.h",
+        "src/compositor/compositor_api/qwaylandquickcompositor.h",
+        "src/compositor/compositor_api/qwaylandquickhardwarelayer_p.h",
+        "src/compositor/compositor_api/qwaylandquickitem.h",
+        "src/compositor/compositor_api/qwaylandquickoutput.h",
+        "src/compositor/compositor_api/qwaylandquicksurface.h",
+        "src/compositor/compositor_api/qwaylandresource.h",
+        "src/compositor/compositor_api/qwaylandseat.h",
+        "src/compositor/compositor_api/qwaylandsurface.h",
+        "src/compositor/compositor_api/qwaylandsurfacegrabber.h",
+        "src/compositor/compositor_api/qwaylandtouch.h",
+        "src/compositor/compositor_api/qwaylandview.h",
+        "src/compositor/extensions/qwaylandidleinhibitv1.h",
+        "src/compositor/extensions/qwaylandiviapplication.h",
+        "src/compositor/extensions/qwaylandivisurface.h",
+        "src/compositor/extensions/qwaylandivisurfaceintegration_p.h",
+        "src/compositor/extensions/qwaylandpresentationtime_p.h",
+        "src/compositor/extensions/qwaylandpresentationtime_p_p.h",
+        "src/compositor/extensions/qwaylandqttextinputmethod.h",
+        "src/compositor/extensions/qwaylandqttextinputmethodmanager.h",
+        "src/compositor/extensions/qwaylandqtwindowmanager.h",
+        "src/compositor/extensions/qwaylandquickshellintegration.h",
+        "src/compositor/extensions/qwaylandquickshellsurfaceitem.h",
+        "src/compositor/extensions/qwaylandquickshellsurfaceitem_p.h",
+        "src/compositor/extensions/qwaylandquickxdgoutputv1.h",
+        "src/compositor/extensions/qwaylandshell.h",
+        "src/compositor/extensions/qwaylandshellsurface.h",
+        "src/compositor/extensions/qwaylandtextinput.h",
+        "src/compositor/extensions/qwaylandtextinputmanager.h",
+        "src/compositor/extensions/qwaylandtextinputmanagerv3.h",
+        "src/compositor/extensions/qwaylandtextinputv3.h",
+        "src/compositor/extensions/qwaylandviewporter.h",
+        "src/compositor/extensions/qwaylandwlshell.h",
+        "src/compositor/extensions/qwaylandwlshellintegration_p.h",
+        "src/compositor/extensions/qwaylandxdgdecorationv1.h",
+        "src/compositor/extensions/qwaylandxdgdialogv1_p.h",
+        "src/compositor/extensions/qwaylandxdgoutputv1.h",
+        "src/compositor/extensions/qwaylandxdgshell.h",
+        "src/compositor/extensions/qwaylandxdgshellintegration_p.h",
+        "src/compositor/extensions/qwltexturesharingextension_p.h",
+        "src/compositor/global/qwaylandcompositorextension.h",
+        "src/compositor/global/qwaylandquickextension.h",
+        "src/compositor/hardware_integration/qwlclientbufferintegrationplugin_p.h",
+        "src/compositor/hardware_integration/qwlhardwarelayerintegration_p.h",
+        "src/compositor/hardware_integration/qwlhardwarelayerintegrationplugin_p.h",
+        "src/compositor/hardware_integration/qwlserverbufferintegrationplugin_p.h",
+        "src/compositor/hardware_integration/qwltextureorphanage_p.h",
+        "src/compositor/wayland_wrapper/qwldatadevicemanager_p.h",
+    ],
+    moc_srcs = [
+        "src/compositor/extensions/qwltexturesharingextension.cpp",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "foreign_types": [
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "past_major_versions": ["1"],
+        "qml_files": [
+            "src/compositor/qmlfiles/WaylandCursorItem.qml",
+            "src/compositor/qmlfiles/WaylandOutputWindow.qml",
+        ],
+        "qml_strip_prefix": "src/compositor/qmlfiles",
+        "qmldir_content": """module QtWayland.Compositor
+linktarget wayland_compositor
+optional plugin qwaylandcompositorplugin
+classname QWaylandCompositorPlugin
+typeinfo plugins.qmltypes
+depends QtQuick auto
+prefer :/qt-project.org/imports/QtWayland/Compositor/
+WaylandCursorItem 1.0 WaylandCursorItem.qml
+WaylandCursorItem 6.0 WaylandCursorItem.qml
+WaylandOutputWindow 1.0 WaylandOutputWindow.qml
+WaylandOutputWindow 6.0 WaylandOutputWindow.qml
+""",
+        "uri": "QtWayland.Compositor",
+    },
+    rcc_targets = [
+        ":compositor_shaders_rcc",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor_protocols",
+        ":wayland_compositor_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:opengl",
+        "@qtbase//:wayland_global_private",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+        "@wayland//:wayland_server",
+        "@xkbcommon",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qwaylandcompositorplugin_gen",
+    class_name = "QWaylandCompositorPlugin",
+    plugin_name = "qwaylandcompositorplugin",
+    uri = "QtWayland.Compositor",
+)
+
+qt_static_plugin(
+    name = "qwaylandcompositorplugin",
+    srcs = [":qwaylandcompositorplugin_gen"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    local_defines = _COMMON_DEFINES + ["QT_PLUGIN"],
+    moc_srcs = [":qwaylandcompositorplugin_gen"],
+    plugin_class_name = "QWaylandCompositorPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+# =============================================================================
+# QtWaylandEglCompositorHwIntegrationPrivate (:wayland_egl_compositor_hw_integration_private)
+# =============================================================================
+
+qt_sync_headers(
+    name = "wayland_egl_compositor_hw_integration_sync_headers",
+    hdrs = [
+        "src/hardwareintegration/compositor/wayland-egl/waylandeglclientbufferintegration_p.h",
+    ],
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtWaylandCompositor",
+    ],
+    internal_module = True,
+    module_name = "QtWaylandEglCompositorHwIntegration",
+    source_dir = "src/hardwareintegration/compositor/wayland-egl",
+    version = QT_VERSION,
+    deps = [
+        ":wayland_compositor_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "wayland_egl_compositor_hw_integration_private",
+    srcs = [
+        "src/hardwareintegration/compositor/wayland-egl/waylandeglclientbufferintegration.cpp",
+    ],
+    hdrs = [
+        "src/hardwareintegration/compositor/wayland-egl/waylandeglclientbufferintegration_p.h",
+        ":wayland_egl_compositor_hw_integration_sync_headers",
+    ],
+    copts = common_copts + [
+        "-DNDEBUG",
+        "-O2",
+        "-fPIC",
+        "-fno-exceptions",
+    ],
+    cxxopts = ["-std=gnu++20"],
+    defines = ["QT_WAYLANDEGLCOMPOSITORHWINTEGRATION_LIB"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/hardwareintegration/compositor/wayland-egl",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_WAYLANDEGLCOMPOSITORHWINTEGRATION_LIB",
+        "QT_CORE_LIB",
+        "QT_EGL_NO_X11",
+        "QT_GUI_LIB",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+        "WL_EGL_PLATFORM",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        ":wayland_egl_compositor_hw_integration_sync_headers",
+        "@egl-registry//:EGL_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:opengl",
+        "@wayland//:wayland_server",
+    ],
+)
+
+# =============================================================================
+# Compositor QML Extension Modules (src/imports/compositor-extensions/)
+# =============================================================================
+
+qt_internal_library(
+    name = "wayland_compositor_iviapplication",
+    srcs = [
+        "src/imports/compositor-extensions/iviapplication/qwaylandcompositoriviapplicationforeign.cpp",
+    ],
+    hdrs = [
+        "src/imports/compositor-extensions/iviapplication/qwaylandcompositoriviapplicationforeign_p.h",
+    ],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/imports/compositor-extensions/iviapplication",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+    ],
+    moc_hdrs = [
+        "src/imports/compositor-extensions/iviapplication/qwaylandcompositoriviapplicationforeign_p.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "foreign_types": [
+            ":wayland_compositor_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "past_major_versions": ["1"],
+        "qmldir_content": """module QtWayland.Compositor.IviApplication
+linktarget wayland_compositor_iviapplication
+optional plugin qwaylandcompositoriviapplicationplugin
+classname QtWaylandCompositorIviApplicationPlugin
+typeinfo plugins.qmltypes
+prefer :/qt-project.org/imports/QtWayland/Compositor/IviApplication/
+""",
+        "uri": "QtWayland.Compositor.IviApplication",
+    },
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qwaylandcompositoriviapplicationplugin_gen",
+    class_name = "QtWaylandCompositorIviApplicationPlugin",
+    plugin_name = "qwaylandcompositoriviapplicationplugin",
+    uri = "QtWayland.Compositor.IviApplication",
+)
+
+qt_static_plugin(
+    name = "qwaylandcompositoriviapplicationplugin",
+    srcs = [":qwaylandcompositoriviapplicationplugin_gen"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_iviapplication_shared",
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    local_defines = _COMMON_DEFINES + ["QT_PLUGIN"],
+    moc_srcs = [":qwaylandcompositoriviapplicationplugin_gen"],
+    plugin_class_name = "QtWaylandCompositorIviApplicationPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        ":wayland_compositor_iviapplication",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+qt_internal_library(
+    name = "wayland_compositor_presentationtime",
+    srcs = [
+        "src/imports/compositor-extensions/presentationtime/qwaylandcompositorpresentationtimeforeign.cpp",
+    ],
+    hdrs = [
+        "src/imports/compositor-extensions/presentationtime/qwaylandcompositorpresentationtimeforeign_p.h",
+    ],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/imports/compositor-extensions/presentationtime",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+    ],
+    moc_hdrs = [
+        "src/imports/compositor-extensions/presentationtime/qwaylandcompositorpresentationtimeforeign_p.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "foreign_types": [
+            ":wayland_compositor_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "past_major_versions": ["1"],
+        "qmldir_content": """module QtWayland.Compositor.PresentationTime
+linktarget wayland_compositor_presentationtime
+optional plugin qwaylandcompositorpresentationtimeplugin
+classname QtWaylandCompositorPresentationTimePlugin
+typeinfo plugins.qmltypes
+prefer :/qt-project.org/imports/QtWayland/Compositor/PresentationTime/
+""",
+        "uri": "QtWayland.Compositor.PresentationTime",
+    },
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qwaylandcompositorpresentationtimeplugin_gen",
+    class_name = "QtWaylandCompositorPresentationTimePlugin",
+    plugin_name = "qwaylandcompositorpresentationtimeplugin",
+    uri = "QtWayland.Compositor.PresentationTime",
+)
+
+qt_static_plugin(
+    name = "qwaylandcompositorpresentationtimeplugin",
+    srcs = [":qwaylandcompositorpresentationtimeplugin_gen"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_presentationtime_shared",
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    local_defines = _COMMON_DEFINES + ["QT_PLUGIN"],
+    moc_srcs = [":qwaylandcompositorpresentationtimeplugin_gen"],
+    plugin_class_name = "QtWaylandCompositorPresentationTimePlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        ":wayland_compositor_presentationtime",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+qt_wayland_server_protocol(
+    name = "wayland_compositor_qtshell_protocols",
+    protocols = [
+        "src/extensions/qt-shell-unstable-v1.xml",
+    ],
+)
+
+qt_sync_headers(
+    name = "wayland_compositor_qtshell_sync_headers",
+    hdrs = glob(["src/imports/compositor-extensions/qtshell/*.h"]),
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQuick",
+        "QtWaylandCompositor",
+    ],
+    generated_private_hdrs = [
+        ":wayland_compositor_qtshell_protocols_hdrs",
+    ],
+    module_name = "QtWaylandCompositorQtShell",
+    source_dir = "src/imports/compositor-extensions/qtshell",
+    version = QT_VERSION,
+    deps = [
+        ":wayland_compositor_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "wayland_compositor_qtshell",
+    srcs = [
+        "src/imports/compositor-extensions/qtshell/qwaylandqtshell.cpp",
+        "src/imports/compositor-extensions/qtshell/qwaylandqtshellchrome.cpp",
+        "src/imports/compositor-extensions/qtshell/qwaylandqtshellintegration.cpp",
+        ":wayland_compositor_qtshell_protocols_srcs",
+    ],
+    hdrs = glob(["src/imports/compositor-extensions/qtshell/*.h"]) + [
+        ":wayland_compositor_qtshell_sync_headers",
+    ],
+    conlyopts = ["-std=gnu11"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/compositor",
+        "src/imports/compositor-extensions/qtshell",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_WAYLANDCOMPOSITOR_LIB",
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK_LIB",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+    ],
+    moc_hdrs = [
+        "src/imports/compositor-extensions/qtshell/qwaylandqtshell.h",
+        "src/imports/compositor-extensions/qtshell/qwaylandqtshell_p.h",
+        "src/imports/compositor-extensions/qtshell/qwaylandqtshellchrome.h",
+        "src/imports/compositor-extensions/qtshell/qwaylandqtshellintegration_p.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "foreign_types": [
+            ":wayland_compositor_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "past_major_versions": ["1"],
+        "qmldir_content": """module QtWayland.Compositor.QtShell
+linktarget wayland_compositor_qtshell
+optional plugin qwaylandqtshellplugin
+classname QtWaylandCompositorQtShellPlugin
+typeinfo plugins.qmltypes
+depends QtQuick auto
+prefer :/qt-project.org/imports/QtWayland/Compositor/QtShell/
+""",
+        "uri": "QtWayland.Compositor.QtShell",
+    },
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        ":wayland_compositor_qtshell_protocols",
+        ":wayland_compositor_qtshell_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+        "@wayland//:wayland_server",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qwaylandqtshellplugin_gen",
+    class_name = "QtWaylandCompositorQtShellPlugin",
+    plugin_name = "qwaylandqtshellplugin",
+    uri = "QtWayland.Compositor.QtShell",
+)
+
+qt_static_plugin(
+    name = "qwaylandqtshellplugin",
+    srcs = [":qwaylandqtshellplugin_gen"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_qtshell_shared",
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    local_defines = _COMMON_DEFINES + ["QT_PLUGIN"],
+    moc_srcs = [":qwaylandqtshellplugin_gen"],
+    plugin_class_name = "QtWaylandCompositorQtShellPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        ":wayland_compositor_qtshell",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+qt_internal_library(
+    name = "wayland_compositor_wlshell",
+    srcs = [
+        "src/imports/compositor-extensions/wlshell/qwaylandcompositorwlshell.cpp",
+    ],
+    hdrs = [
+        "src/imports/compositor-extensions/wlshell/qwaylandcompositorwlshell_p.h",
+    ],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/imports/compositor-extensions/wlshell",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+    ],
+    moc_hdrs = [
+        "src/imports/compositor-extensions/wlshell/qwaylandcompositorwlshell_p.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "foreign_types": [
+            ":wayland_compositor_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "past_major_versions": ["1"],
+        "qmldir_content": """module QtWayland.Compositor.WlShell
+linktarget wayland_compositor_wlshell
+optional plugin qwaylandcompositorwlshellplugin
+classname QtWaylandCompositorWlShellPlugin
+typeinfo plugins.qmltypes
+prefer :/qt-project.org/imports/QtWayland/Compositor/WlShell/
+""",
+        "uri": "QtWayland.Compositor.WlShell",
+    },
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qwaylandcompositorwlshellplugin_gen",
+    class_name = "QtWaylandCompositorWlShellPlugin",
+    plugin_name = "qwaylandcompositorwlshellplugin",
+    uri = "QtWayland.Compositor.WlShell",
+)
+
+qt_static_plugin(
+    name = "qwaylandcompositorwlshellplugin",
+    srcs = [":qwaylandcompositorwlshellplugin_gen"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        ":wayland_compositor_wlshell_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    local_defines = _COMMON_DEFINES + ["QT_PLUGIN"],
+    moc_srcs = [":qwaylandcompositorwlshellplugin_gen"],
+    plugin_class_name = "QtWaylandCompositorWlShellPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        ":wayland_compositor_wlshell",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+qt_internal_library(
+    name = "wayland_compositor_xdgshell",
+    srcs = [
+        "src/imports/compositor-extensions/xdgshell/qwaylandcompositorxdgshell.cpp",
+    ],
+    hdrs = [
+        "src/imports/compositor-extensions/xdgshell/qwaylandcompositorxdgshell_p.h",
+    ],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/imports/compositor-extensions/xdgshell",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+    ],
+    moc_hdrs = [
+        "src/imports/compositor-extensions/xdgshell/qwaylandcompositorxdgshell_p.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "foreign_types": [
+            ":wayland_compositor_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "past_major_versions": ["1"],
+        "qmldir_content": """module QtWayland.Compositor.XdgShell
+linktarget wayland_compositor_xdgshell
+optional plugin qwaylandcompositorxdgshellplugin
+classname QtWaylandCompositorXdgShellPlugin
+typeinfo plugins.qmltypes
+prefer :/qt-project.org/imports/QtWayland/Compositor/XdgShell/
+""",
+        "uri": "QtWayland.Compositor.XdgShell",
+    },
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qwaylandcompositorxdgshellplugin_gen",
+    class_name = "QtWaylandCompositorXdgShellPlugin",
+    plugin_name = "qwaylandcompositorxdgshellplugin",
+    uri = "QtWayland.Compositor.XdgShell",
+)
+
+qt_static_plugin(
+    name = "qwaylandcompositorxdgshellplugin",
+    srcs = [":qwaylandcompositorxdgshellplugin_gen"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        ":wayland_compositor_xdgshell_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    local_defines = _COMMON_DEFINES + ["QT_PLUGIN"],
+    moc_srcs = [":qwaylandcompositorxdgshellplugin_gen"],
+    plugin_class_name = "QtWaylandCompositorXdgShellPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        ":wayland_compositor_xdgshell",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+# =============================================================================
+# Texture Sharing QML Plugins (src/imports/texture-sharing*)
+# =============================================================================
+
+qt_wayland_client_protocol(
+    name = "wayland_texture_sharing_protocols",
+    protocols = [
+        "@qtbase//:src/3rdparty/wayland/extensions/qt-texture-sharing-unstable-v1.xml",
+    ],
+)
+
+qt_qmldir(
+    name = "wayland_texture_sharing_qmldir_rcc",
+    content = "\n".join([
+        "module QtWayland.Client.TextureSharing",
+        "optional plugin wayland_texture_sharing_plugin",
+        "classname QWaylandTextureSharingPlugin",
+        "prefer :/qt-project.org/imports/QtWayland/Client/TextureSharing/",
+        "",
+    ]),
+    uri = "QtWayland.Client.TextureSharing",
+)
+
+qt_static_plugin(
+    name = "wayland_texture_sharing_plugin",
+    srcs = [
+        "src/imports/texture-sharing/plugin.cpp",
+        "src/imports/texture-sharing/sharedtextureprovider.cpp",
+        "src/imports/texture-sharing/texturesharingextension.cpp",
+        ":wayland_texture_sharing_protocols_srcs",
+    ],
+    hdrs = [
+        "src/imports/texture-sharing/sharedtextureprovider_p.h",
+        "src/imports/texture-sharing/texturesharingextension_p.h",
+    ],
+    conlyopts = ["-std=gnu11"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/imports/texture-sharing",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_OPENGL_LIB",
+        "QT_PLUGIN",
+        "QT_QML_LIB",
+        "QT_QUICK_LIB",
+        "QT_WAYLANDCLIENT_LIB",
+    ],
+    moc_hdrs = [
+        "src/imports/texture-sharing/sharedtextureprovider_p.h",
+        "src/imports/texture-sharing/texturesharingextension_p.h",
+    ],
+    moc_opts = ["-Muri=QtWayland.Client.TextureSharing"],
+    moc_srcs = [
+        "src/imports/texture-sharing/plugin.cpp",
+        "src/imports/texture-sharing/sharedtextureprovider.cpp",
+    ],
+    plugin_class_name = "QWaylandTextureSharingPlugin",
+    rcc_targets = [":wayland_texture_sharing_qmldir_rcc"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_texture_sharing_protocols",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:opengl",
+        "@qtbase//:wayland_client",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+        "@wayland//:wayland_client",
+    ],
+)
+
+qt_qmldir(
+    name = "wayland_texture_sharing_extension_qmldir_rcc",
+    content = "\n".join([
+        "module QtWayland.Compositor.TextureSharingExtension",
+        "optional plugin wayland_texture_sharing_extension_plugin",
+        "classname QWaylandTextureSharingExtensionPlugin",
+        "prefer :/qt-project.org/imports/QtWayland/Compositor/TextureSharingExtension/",
+        "",
+    ]),
+    uri = "QtWayland.Compositor.TextureSharingExtension",
+)
+
+qt_static_plugin(
+    name = "wayland_texture_sharing_extension_plugin",
+    srcs = [
+        "src/imports/texture-sharing-extension/plugin.cpp",
+    ],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/imports/texture-sharing-extension",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_PLUGIN",
+        "QT_QML_LIB",
+        "QT_QUICK_LIB",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+    ],
+    moc_opts = ["-Muri=QtWayland.Compositor.TextureSharingExtension"],
+    moc_srcs = [
+        "src/imports/texture-sharing-extension/plugin.cpp",
+    ],
+    plugin_class_name = "QWaylandTextureSharingExtensionPlugin",
+    rcc_targets = [":wayland_texture_sharing_extension_qmldir_rcc"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":wayland_compositor",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# Client & Compositor Plugins (src/plugins/)
+# =============================================================================
+
+qt_static_plugin(
+    name = "qwayland_adwaita_decoration_plugin",
+    srcs = [
+        "src/plugins/decorations/adwaita/main.cpp",
+        "src/plugins/decorations/adwaita/qwaylandadwaitadecoration.cpp",
+    ],
+    hdrs = [
+        "src/plugins/decorations/adwaita/qwaylandadwaitadecoration_p.h",
+    ],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtsvg//:svg_shared",
+    ],
+    includes = [
+        "src/plugins/decorations/adwaita",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_DBUS_LIB",
+        "QT_GUI_LIB",
+        "QT_PLUGIN",
+        "QT_SVG_LIB",
+        "QT_WAYLANDCLIENT_LIB",
+    ],
+    moc_hdrs = [
+        "src/plugins/decorations/adwaita/qwaylandadwaitadecoration_p.h",
+    ],
+    moc_srcs = [
+        "src/plugins/decorations/adwaita/main.cpp",
+    ],
+    plugin_class_name = "QWaylandAdwaitaDecorationPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    textual_hdrs = [
+        "src/plugins/decorations/adwaita/adwaita.json",
+    ],
+    deps = [
+        "@qtbase//:core",
+        "@qtbase//:dbus",
+        "@qtbase//:gui",
+        "@qtbase//:wayland_client",
+        "@qtsvg//:svg",
+        "@wayland//:wayland_client",
+    ],
+)
+
+qt_wayland_client_protocol(
+    name = "ivi_shell_plugin_protocols",
+    protocols = [
+        "src/3rdparty/protocol/ivi/ivi-application.xml",
+        "src/3rdparty/protocol/ivi/ivi-controller.xml",
+    ],
+)
+
+qt_static_plugin(
+    name = "qwayland_ivi_shell_integration_plugin",
+    srcs = [
+        "src/plugins/shellintegration/ivi-shell/main.cpp",
+        "src/plugins/shellintegration/ivi-shell/qwaylandivishellintegration.cpp",
+        "src/plugins/shellintegration/ivi-shell/qwaylandivisurface.cpp",
+        ":ivi_shell_plugin_protocols_srcs",
+    ],
+    hdrs = [
+        "src/plugins/shellintegration/ivi-shell/qwaylandivishellintegration.h",
+        "src/plugins/shellintegration/ivi-shell/qwaylandivisurface_p.h",
+    ],
+    applicable_licenses = [
+        ":license",
+        ":license_wayland_ivi_protocol",
+    ],
+    conlyopts = ["-std=gnu11"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+    ],
+    includes = [
+        "src/plugins/shellintegration/ivi-shell",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_PLUGIN",
+        "QT_WAYLANDCLIENT_LIB",
+    ],
+    moc_srcs = [
+        "src/plugins/shellintegration/ivi-shell/main.cpp",
+    ],
+    plugin_class_name = "QWaylandIviShellIntegrationPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    textual_hdrs = [
+        "src/plugins/shellintegration/ivi-shell/ivi-shell.json",
+    ],
+    deps = [
+        ":ivi_shell_plugin_protocols",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:wayland_client",
+        "@wayland//:wayland_client",
+        "@xkbcommon",
+    ],
+)
+
+qt_wayland_client_protocol(
+    name = "qt_shell_plugin_protocols",
+    protocols = [
+        "src/extensions/qt-shell-unstable-v1.xml",
+    ],
+)
+
+qt_static_plugin(
+    name = "qwayland_qt_shell_integration_plugin",
+    srcs = [
+        "src/plugins/shellintegration/qt-shell/main.cpp",
+        "src/plugins/shellintegration/qt-shell/qwaylandqtshellintegration.cpp",
+        "src/plugins/shellintegration/qt-shell/qwaylandqtsurface.cpp",
+        ":qt_shell_plugin_protocols_srcs",
+    ],
+    hdrs = [
+        "src/plugins/shellintegration/qt-shell/qwaylandqtshellintegration.h",
+        "src/plugins/shellintegration/qt-shell/qwaylandqtsurface_p.h",
+    ],
+    conlyopts = ["-std=gnu11"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+    ],
+    includes = [
+        "src/plugins/shellintegration/qt-shell",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_PLUGIN",
+        "QT_WAYLANDCLIENT_LIB",
+    ],
+    moc_srcs = [
+        "src/plugins/shellintegration/qt-shell/main.cpp",
+    ],
+    plugin_class_name = "QWaylandQtShellIntegrationPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    textual_hdrs = [
+        "src/plugins/shellintegration/qt-shell/qt-shell.json",
+    ],
+    deps = [
+        ":qt_shell_plugin_protocols",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:wayland_client",
+        "@wayland//:wayland_client",
+        "@xkbcommon",
+    ],
+)
+
+qt_static_plugin(
+    name = "qwayland_egl_compositor_buffer_plugin",
+    srcs = [
+        "src/plugins/hardwareintegration/compositor/wayland-egl/main.cpp",
+    ],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        ":wayland_egl_compositor_hw_integration_private_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/hardwareintegration/compositor/wayland-egl",
+        "src/plugins/hardwareintegration/compositor/wayland-egl",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_EGL_NO_X11",
+        "QT_GUI_LIB",
+        "QT_PLUGIN",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+        "WL_EGL_PLATFORM",
+    ],
+    moc_srcs = [
+        "src/plugins/hardwareintegration/compositor/wayland-egl/main.cpp",
+    ],
+    plugin_class_name = "QWaylandEglClientBufferIntegrationPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    textual_hdrs = [
+        "src/plugins/hardwareintegration/compositor/wayland-egl/wayland-egl.json",
+    ],
+    deps = [
+        ":wayland_compositor",
+        ":wayland_egl_compositor_hw_integration_private",
+        "@egl-registry//:EGL_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:opengl",
+    ],
+)
+
+qt_wayland_server_protocol(
+    name = "shm_emulation_compositor_plugin_protocols",
+    protocols = [
+        "@qtbase//:src/3rdparty/wayland/extensions/shm-emulation-server-buffer.xml",
+    ],
+)
+
+qt_static_plugin(
+    name = "qwayland_shm_emulation_compositor_buffer_plugin",
+    srcs = [
+        "src/hardwareintegration/compositor/shm-emulation-server/shmserverbufferintegration.cpp",
+        "src/plugins/hardwareintegration/compositor/shm-emulation-server/main.cpp",
+        ":shm_emulation_compositor_plugin_protocols_srcs",
+    ],
+    hdrs = [
+        "src/hardwareintegration/compositor/shm-emulation-server/shmserverbufferintegration.h",
+    ],
+    conlyopts = ["-std=gnu11"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/hardwareintegration/compositor/shm-emulation-server",
+        "src/plugins/hardwareintegration/compositor/shm-emulation-server",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_PLUGIN",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+    ],
+    moc_srcs = [
+        "src/plugins/hardwareintegration/compositor/shm-emulation-server/main.cpp",
+    ],
+    plugin_class_name = "ShmServerBufferIntegrationPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    textual_hdrs = [
+        "src/plugins/hardwareintegration/compositor/shm-emulation-server/shm-emulation-server.json",
+    ],
+    deps = [
+        ":shm_emulation_compositor_plugin_protocols",
+        ":wayland_compositor",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:opengl",
+        "@wayland//:wayland_server",
+    ],
+)
+
+qt_wayland_server_protocol(
+    name = "drm_egl_compositor_plugin_protocols",
+    protocols = [
+        "@qtbase//:src/3rdparty/wayland/extensions/drm-egl-server-buffer.xml",
+    ],
+)
+
+qt_static_plugin(
+    name = "qwayland_drm_egl_compositor_buffer_plugin",
+    srcs = [
+        "src/hardwareintegration/compositor/drm-egl-server/drmeglserverbufferintegration.cpp",
+        "src/plugins/hardwareintegration/compositor/drm-egl-server/main.cpp",
+        ":drm_egl_compositor_plugin_protocols_srcs",
+    ],
+    hdrs = [
+        "src/hardwareintegration/compositor/drm-egl-server/drmeglserverbufferintegration.h",
+    ],
+    conlyopts = ["-std=gnu11"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/hardwareintegration/compositor/drm-egl-server",
+        "src/plugins/hardwareintegration/compositor/drm-egl-server",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_EGL_NO_X11",
+        "QT_GUI_LIB",
+        "QT_PLUGIN",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+    ],
+    moc_srcs = [
+        "src/plugins/hardwareintegration/compositor/drm-egl-server/main.cpp",
+    ],
+    plugin_class_name = "DrmEglServerBufferIntegrationPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    textual_hdrs = [
+        "src/plugins/hardwareintegration/compositor/drm-egl-server/drm-egl-server.json",
+    ],
+    deps = [
+        ":drm_egl_compositor_plugin_protocols",
+        ":wayland_compositor",
+        "@egl-registry//:EGL_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:opengl",
+        "@wayland//:wayland_server",
+    ],
+)
+
+qt_wayland_server_protocol(
+    name = "eglstream_compositor_plugin_protocols",
+    protocols = [
+        "@qtbase//:src/3rdparty/wayland/protocols/wl-eglstream/wl-eglstream-controller.xml",
+    ],
+)
+
+qt_static_plugin(
+    name = "qwayland_eglstream_compositor_buffer_plugin",
+    srcs = [
+        "src/hardwareintegration/compositor/wayland-eglstream-controller/waylandeglstreamcontroller.cpp",
+        "src/hardwareintegration/compositor/wayland-eglstream-controller/waylandeglstreamintegration.cpp",
+        "src/plugins/hardwareintegration/compositor/wayland-eglstream-controller/main.cpp",
+        ":eglstream_compositor_plugin_protocols_srcs",
+    ],
+    hdrs = [
+        "src/hardwareintegration/compositor/wayland-eglstream-controller/waylandeglstreamcontroller.h",
+        "src/hardwareintegration/compositor/wayland-eglstream-controller/waylandeglstreamintegration.h",
+    ],
+    conlyopts = ["-std=gnu11"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":wayland_compositor_shared",
+        ":wayland_egl_compositor_hw_integration_private_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:wayland_client_shared",
+        "@qtbase//:x11_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = [
+        "src/hardwareintegration/compositor/wayland-eglstream-controller",
+        "src/plugins/hardwareintegration/compositor/wayland-eglstream-controller",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_CORE_LIB",
+        "QT_EGL_NO_X11",
+        "QT_GUI_LIB",
+        "QT_PLUGIN",
+        "QT_WAYLANDCOMPOSITOR_LIB",
+        "WL_EGL_PLATFORM",
+    ],
+    moc_srcs = [
+        "src/plugins/hardwareintegration/compositor/wayland-eglstream-controller/main.cpp",
+    ],
+    plugin_class_name = "QWaylandEglStreamClientBufferIntegrationPlugin",
+    target_compatible_with = ["@platforms//os:linux"],
+    textual_hdrs = [
+        "src/plugins/hardwareintegration/compositor/wayland-eglstream-controller/wayland-eglstream-controller.json",
+    ],
+    deps = [
+        ":eglstream_compositor_plugin_protocols",
+        ":wayland_compositor",
+        ":wayland_egl_compositor_hw_integration_private",
+        "@egl-registry//:EGL_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:opengl",
+        "@wayland//:wayland_egl",
+        "@wayland//:wayland_server",
+    ],
+)

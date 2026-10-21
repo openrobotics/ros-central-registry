@@ -1,0 +1,179 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:GPL-3.0-only"],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:asio": "@rosdistro//cc:asio_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+CC_DEPS = ["@mavlink"]
+
+cc_library(
+    name = "mavconn_library",
+    srcs = [
+        "src/interface.cpp",
+        "src/serial.cpp",
+        "src/tcp.cpp",
+        "src/udp.cpp",
+    ] + [":mavlink_helpers_cpp"],
+    hdrs = [
+        "include/mavconn/console_bridge_compat.hpp",
+        "include/mavconn/interface.hpp",
+        "include/mavconn/io_context_runner.hpp",
+        "include/mavconn/msgbuffer.hpp",
+        "include/mavconn/serial.hpp",
+        "include/mavconn/tcp.hpp",
+        "include/mavconn/thread_utils.hpp",
+        "include/mavconn/udp.hpp",
+    ] + [":mavlink_dialect_hpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mavconn",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    user_link_flags = [
+        "-Wl,--allow-shlib-undefined",
+        "-Wl,--unresolved-symbols=ignore-all",
+    ],
+    deps = [":mavconn_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":mavconn"],
+)
+
+# MAVLINK_V20_DIALECTS as exported by the mavlink package's CMake config
+# (common first, then the remaining message_definitions/v1.0 dialects).
+MAVLINK_V20_DIALECTS = [
+    "common",
+    "ardupilotmega",
+    "ASLUAV",
+    "AVSSUAS",
+    "all",
+    "csAirLink",
+    "cubepilot",
+    "development",
+    "icarous",
+    "loweheiser",
+    "marsh",
+    "paparazzi",
+    "standard",
+    "stemstudios",
+    "storm32",
+    "uAvionix",
+]
+
+py_binary(
+    name = "em_expand",
+    srcs = ["em_expand.py"],
+    deps = [requirement("empy")],
+)
+
+genrule(
+    name = "mavlink_dialect_hpp",
+    srcs = ["include/mavconn/mavlink_dialect.hpp.em"],
+    outs = ["_gen/include/mavconn/mavlink_dialect.hpp"],
+    cmd = "$(location :em_expand) $@ $(location include/mavconn/mavlink_dialect.hpp.em) " + " ".join(MAVLINK_V20_DIALECTS),
+    tools = [":em_expand"],
+)
+
+genrule(
+    name = "mavlink_helpers_cpp",
+    srcs = ["src/mavlink_helpers.cpp.em"],
+    outs = ["_gen/src/mavlink_helpers.cpp"],
+    cmd = "$(location :em_expand) $@ $(location src/mavlink_helpers.cpp.em) " + " ".join(MAVLINK_V20_DIALECTS),
+    tools = [":em_expand"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":mavconn"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_google_benchmark//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@mavlink//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake = [
+        "cmake/Modules/CheckGeographicLibDatasets.cmake",
+        "cmake/Modules/FindASIO.cmake",
+        "cmake/Modules/em_expand.cmake",
+        "libmavconn-extras.cmake",
+    ],
+    cmake_export_dependencies_list = ["console_bridge"],
+    cmake_export_include_directories = False,
+    cmake_export_targets = False,
+    cmake_extras = ["libmavconn-extras.cmake"],
+    cmake_strip_prefix = "",
+    headers = [":mavlink_dialect_hpp"] + [
+        "include/mavconn/console_bridge_compat.hpp",
+        "include/mavconn/interface.hpp",
+        "include/mavconn/io_context_runner.hpp",
+        "include/mavconn/mavlink_dialect.hpp.em",
+        "include/mavconn/msgbuffer.hpp",
+        "include/mavconn/serial.hpp",
+        "include/mavconn/tcp.hpp",
+        "include/mavconn/thread_utils.hpp",
+        "include/mavconn/udp.hpp",
+    ],
+    include_prefix = "",
+    libraries = [":mavconn"],
+    package_xml = "package.xml",
+    setup_cfg = "setup.cfg",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_google_benchmark//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@mavlink//:ament_package",
+    ],
+)

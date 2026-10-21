@@ -1,0 +1,64 @@
+--- a/test/test_ros2.cpp
++++ b/test/test_ros2.cpp
+@@ -1,5 +1,6 @@
+ #include <gtest/gtest.h>
+ 
++#include <builtin_interfaces/msg/time.hpp>
+ #include <geometry_msgs/msg/pose_stamped.hpp>
+ #include <sensor_msgs/msg/joint_state.hpp>
+ #include <std_msgs/msg/header.hpp>
+@@ -279,29 +280,34 @@
+   ASSERT_EQ(0, pose_stamped_out.pose.orientation.w);
+ }
+ 
+-TEST(ParseROS2, Duration) {
+-  const char* durationA_json = R"({"sec":123,"nanosec":456})";
+-
+-  const std::string topic_type = "builtin_interfaces/Duration";
++// In bazel message dependencies are done at a higher fidelity than in colcon. This test used
++// to exercise builtin_interfaces::msg::Duration, but builtin_interfaces is not a dependency
++// or transitive dependencty of ant message in rosx_introspection, so this test will fail in
++// Bazel. However, we std_msgs::msg::Header transitively pulls in builtin_interfaces::msg::Time
++// so we can test Time instead of Duration; largely the same test.
++TEST(ParseROS2, Time) {
++  const char* timeA_json = R"({"sec":123,"nanosec":456})";
++
++  const std::string topic_type = "builtin_interfaces/Time";
+   Parser parser("", ROSType(topic_type), GetMessageDefinition(topic_type));
+ 
+   // We omitted the effort field and the header.frame_id
+   ROS2_Serializer serializer;
+-  parser.serializeFromJson(durationA_json, &serializer);
+-
+-  auto durationA =
+-      BufferToMessage<builtin_interfaces::msg::Duration>(serializer.getBufferData(), serializer.getBufferSize());
+-
+-  ASSERT_EQ(durationA.sec, 123);
+-  ASSERT_EQ(durationA.nanosec, 456);
++  parser.serializeFromJson(timeA_json, &serializer);
++
++  auto timeA =
++      BufferToMessage<builtin_interfaces::msg::Time>(serializer.getBufferData(), serializer.getBufferSize());
++
++  ASSERT_EQ(timeA.sec, 123);
++  ASSERT_EQ(timeA.nanosec, 456);
+   //------------------------------
+-  const char* durationB_json = R"({"sec":1,"nanosec":234})";
++  const char* timeB_json = R"({"sec":1,"nanosec":234})";
+   serializer.reset();
+-  parser.serializeFromJson(durationB_json, &serializer);
+-
+-  auto durationB =
+-      BufferToMessage<builtin_interfaces::msg::Duration>(serializer.getBufferData(), serializer.getBufferSize());
+-
+-  ASSERT_EQ(durationB.sec, 1);
+-  ASSERT_EQ(durationB.nanosec, 234);
+-}
++  parser.serializeFromJson(timeB_json, &serializer);
++
++  auto timeB =
++      BufferToMessage<builtin_interfaces::msg::Time>(serializer.getBufferData(), serializer.getBufferSize());
++
++  ASSERT_EQ(timeB.sec, 1);
++  ASSERT_EQ(timeB.nanosec, 234);
++}

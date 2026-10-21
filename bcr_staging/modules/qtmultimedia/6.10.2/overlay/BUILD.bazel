@@ -1,0 +1,1649 @@
+load("@platforms//host:constraints.bzl", "HOST_CONSTRAINTS")
+load("@qt//:qt.bzl", "QT_VERSION", "common_copts", "common_defines", "qt_export_header", "qt_internal_library", "qt_qsb", "qt_static_plugin", "qt_sync_headers")
+load("@qt//:qt_tools.bzl", "moc_gen", "moc_out_copts", "qt_cc_library", "qt_write_file")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load(":qtmultimedia_config.bzl", "declare_qtmultimedia_config_targets")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+        "@rules_license//licenses/spdx:GPL-2.0-only",
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+    license_text = "LICENSES/LGPL-3.0-only.txt",
+)
+
+license(
+    name = "license_spatialaudio",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+    license_text = "LICENSES/LGPL-3.0-only.txt",
+)
+
+license(
+    name = "license_dr_libs",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT-0",
+    ],
+    license_text = "src/3rdparty/dr_libs/LICENSE",
+)
+
+license(
+    name = "license_tlsf",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+    license_text = "LICENSES/BSD-3-Clause.txt",
+)
+
+license(
+    name = "license_pffft",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+    license_text = "src/3rdparty/pffft/LICENSE",
+)
+
+license(
+    name = "license_resonance_audio",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+    license_text = "src/3rdparty/resonance-audio/LICENSE",
+)
+
+license(
+    name = "license_signalsmith_stretch",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+    license_text = "src/3rdparty/signalsmith-stretch/LICENSE.txt",
+)
+
+# Vendored PulseAudio v17.0 client headers (pulse/*.h), used on Linux for
+# compile-time type declarations by qpulseaudio_symbolloader.cpp.
+license(
+    name = "license_pulseaudio",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-2.1-or-later",
+    ],
+    license_text = "pulse/version.h",
+)
+
+_COMMON_DEFINES = common_defines + [
+    "QT_BUILDING_QT",
+    "QT_LEAN_HEADERS=1",
+    "QT_NO_QASCONST=1",
+    "QT_NO_FOREACH=1",
+    "QT_NO_CONTEXTLESS_CONNECT=1",
+    "QT_NO_QPAIR=1",
+    "QT_USE_NODISCARD_FILE_OPEN=1",
+]
+
+declare_qtmultimedia_config_targets()
+
+qt_export_header(
+    name = "gen_qtmultimediaexports_h",
+    out = "generated_config/qtmultimediaexports.h",
+    macro_prefix = "Q_MULTIMEDIA",
+    module_name = "QtMultimedia",
+)
+
+qt_export_header(
+    name = "gen_qtmultimediawidgetsexports_h",
+    out = "generated_config/qtmultimediawidgetsexports.h",
+    macro_prefix = "Q_MULTIMEDIAWIDGETS",
+    module_name = "QtMultimediaWidgets",
+)
+
+qt_export_header(
+    name = "gen_qtmultimediaquickexports_h",
+    out = "generated_config/qtmultimediaquickexports.h",
+    macro_prefix = "Q_MULTIMEDIAQUICK",
+    module_name = "QtMultimediaQuick",
+)
+
+qt_export_header(
+    name = "gen_qtspatialaudioexports_h",
+    out = "generated_config/qtspatialaudioexports.h",
+    macro_prefix = "Q_SPATIALAUDIO",
+    module_name = "QtSpatialAudio",
+)
+
+# ---------------------------------------------------------------------------
+# Vendored 3rdparty: TLSF
+# ---------------------------------------------------------------------------
+cc_library(
+    name = "BundledTLSF",
+    srcs = ["src/3rdparty/tlsf/tlsf.cpp"],
+    hdrs = ["src/3rdparty/tlsf/tlsf.h"],
+    applicable_licenses = [":license_tlsf"],
+    copts = common_copts + ["-w"],
+    includes = ["src/3rdparty/tlsf"],
+    deps = ["@qtbase//:core"],
+)
+
+# ---------------------------------------------------------------------------
+# QtMultimedia
+# ---------------------------------------------------------------------------
+qt_sync_headers(
+    name = "multimedia_sync_headers",
+    srcs = glob([
+        "src/multimedia/**/*.h",
+    ]),
+    generated_private_hdrs = [
+        ":gen_qtmultimedia_config_p_h",
+    ],
+    generated_public_hdrs = [
+        ":gen_qtmultimedia_config_h",
+        ":gen_qtmultimediaexports_h",
+    ],
+    module_name = "QtMultimedia",
+    version = QT_VERSION,
+)
+
+_MULTIMEDIA_HDRS = glob([
+    "src/multimedia/*.h",
+    "src/multimedia/audio/*.h",
+    "src/multimedia/camera/*.h",
+    "src/multimedia/darwin/*.h",
+    "src/multimedia/platform/*.h",
+    "src/multimedia/playback/*.h",
+    "src/multimedia/pulseaudio/*.h",
+    "src/multimedia/recording/*.h",
+    "src/multimedia/video/*.h",
+    "src/multimedia/windows/*.h",
+    "src/3rdparty/dr_libs/*.h",
+    "pulse/*.h",
+]) + [":multimedia_sync_headers"]
+
+cc_library(
+    name = "multimedia_ssse3",
+    srcs = ["src/multimedia/video/qvideoframeconversionhelper_ssse3.cpp"],
+    hdrs = _MULTIMEDIA_HDRS,
+    copts = common_copts + ["-mssse3"],
+    includes = [
+        "src/multimedia",
+        "src/multimedia/video",
+    ],
+    local_defines = _COMMON_DEFINES + ["QT_BUILD_MULTIMEDIA_LIB"],
+    target_compatible_with = ["@platforms//cpu:x86_64"],
+    deps = [
+        ":multimedia_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+    ],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "multimedia_avx2",
+    srcs = ["src/multimedia/video/qvideoframeconversionhelper_avx2.cpp"],
+    hdrs = _MULTIMEDIA_HDRS,
+    copts = common_copts + ["-march=haswell"],
+    includes = [
+        "src/multimedia",
+        "src/multimedia/video",
+    ],
+    local_defines = _COMMON_DEFINES + ["QT_BUILD_MULTIMEDIA_LIB"],
+    target_compatible_with = ["@platforms//cpu:x86_64"],
+    deps = [
+        ":multimedia_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+    ],
+    alwayslink = True,
+)
+
+qt_cc_library(
+    name = "multimedia_darwin_arc",
+    srcs = ["src/multimedia/darwin/qdarwinaudiodevices.mm"],
+    hdrs = _MULTIMEDIA_HDRS,
+    copts = common_copts + ["-fobjc-arc"],
+    includes = [
+        "src/multimedia",
+        "src/multimedia/audio",
+        "src/multimedia/darwin",
+        "src/multimedia/platform",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_MULTIMEDIA_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ],
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        ":multimedia_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+    ],
+)
+
+moc_gen(
+    name = "multimedia_win_initguid_moc",
+    srcs = ["src/multimedia/windows/qwindows_wasapi_warmup_client.cpp"],
+    defines = _COMMON_DEFINES + [
+        "QT_BUILD_MULTIMEDIA_LIB",
+        "INITGUID",
+    ],
+    includes = [
+        "src/multimedia",
+        "src/multimedia/audio",
+        "src/multimedia/platform",
+        "src/multimedia/windows",
+    ],
+    other_hdrs = _MULTIMEDIA_HDRS,
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":multimedia_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+    ],
+)
+
+cc_library(
+    name = "multimedia_win_initguid_moc_lib",
+    target_compatible_with = ["@platforms//os:windows"],
+    textual_hdrs = [":multimedia_win_initguid_moc"],
+)
+
+qt_write_file(
+    name = "multimedia_win_ksguid_src",
+    out = "generated_win_hdrs/multimedia_win_ksguid.cpp",
+    content = """\
+#include <windows.h>
+#include <initguid.h>
+DEFINE_GUID(KSDATAFORMAT_SUBTYPE_PCM, 0x00000001, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71);
+DEFINE_GUID(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, 0x00000003, 0x0000, 0x0010, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71);
+DEFINE_GUID(KSCATEGORY_VIDEO_CAMERA, 0xe5323777, 0xf976, 0x4f5b, 0x9b, 0x55, 0xb9, 0x46, 0x99, 0xc4, 0x6e, 0x44);
+""",
+)
+
+cc_library(
+    name = "multimedia_win_initguid",
+    srcs = [
+        "src/multimedia/windows/qwindows_wasapi_warmup_client.cpp",
+        "src/multimedia/windows/qwindowsaudiodevices.cpp",
+        "src/multimedia/windows/qwindowsmultimediautils.cpp",
+        "src/multimedia/windows/qwindowsvideodevices.cpp",
+        ":multimedia_win_ksguid_src",
+    ],
+    hdrs = _MULTIMEDIA_HDRS,
+    copts = common_copts + moc_out_copts("multimedia_win_initguid_moc") + [
+        "-Wa,-mbig-obj",
+        "-Wno-ignored-attributes",
+    ],
+    includes = [
+        "src/multimedia",
+        "src/multimedia/audio",
+        "src/multimedia/camera",
+        "src/multimedia/platform",
+        "src/multimedia/video",
+        "src/multimedia/windows",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_MULTIMEDIA_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+        "INITGUID",
+        "UNICODE",
+        "_UNICODE",
+        "WIN32",
+        "_WIN64",
+        "NOMINMAX",
+        "_USE_MATH_DEFINES",
+        "_WIN32_WINNT=0x0A00",
+        "WINVER=0x0A00",
+    ],
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":multimedia_sync_headers",
+        ":multimedia_win_initguid_moc_lib",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+    ],
+    alwayslink = True,
+)
+
+_VIDEO_FRAG_SHADERS = [
+    "src/multimedia/shaders/abgr.frag",
+    "src/multimedia/shaders/argb.frag",
+    "src/multimedia/shaders/rgba.frag",
+    "src/multimedia/shaders/bgra.frag",
+    "src/multimedia/shaders/y.frag",
+    "src/multimedia/shaders/y16.frag",
+    "src/multimedia/shaders/nv12.frag",
+    "src/multimedia/shaders/nv21.frag",
+    "src/multimedia/shaders/p016.frag",
+    "src/multimedia/shaders/imc2.frag",
+    "src/multimedia/shaders/imc4.frag",
+    "src/multimedia/shaders/uyvy.frag",
+    "src/multimedia/shaders/yuv_triplanar.frag",
+    "src/multimedia/shaders/yuv_triplanar_p10.frag",
+    "src/multimedia/shaders/yvu_triplanar.frag",
+    "src/multimedia/shaders/yuyv.frag",
+    "src/multimedia/shaders/ayuv.frag",
+    "src/multimedia/shaders/nv12_bt2020_pq.frag",
+    "src/multimedia/shaders/nv12_bt2020_hlg.frag",
+]
+
+qt_qsb(
+    name = "multimedia_shaders",
+    srcs = [
+        "src/multimedia/shaders/externalsampler.vert",
+        "src/multimedia/shaders/vertex.vert",
+    ] + _VIDEO_FRAG_SHADERS,
+    hdrs = glob(["src/multimedia/shaders/*.glsl"]),
+    batchable = True,
+    glsl = "100es,120,150",
+    hlsl = "50",
+    msl = "12",
+    prefix = "/qt-project.org/multimedia",
+    qrc_name = "qtmultimedia_shaders",
+    strip_prefix = "src/multimedia",
+)
+
+qt_qsb(
+    name = "multimedia_shaders_linear",
+    srcs = _VIDEO_FRAG_SHADERS,
+    hdrs = glob(["src/multimedia/shaders/*.glsl"]),
+    batchable = True,
+    defines = ["QMM_OUTPUTSURFACE_LINEAR"],
+    glsl = "100es,120,150",
+    hlsl = "50",
+    msl = "12",
+    outputs = [
+        s.replace("src/multimedia/", "").replace(".frag", "_linear.frag.qsb")
+        for s in _VIDEO_FRAG_SHADERS
+    ],
+    prefix = "/qt-project.org/multimedia",
+    qrc_name = "qtmultimedia_shaders_linear",
+    strip_prefix = "src/multimedia",
+)
+
+qt_qsb(
+    name = "multimedia_shaders_gl_macos",
+    srcs = [
+        "src/multimedia/shaders/rectsampler.vert",
+        "src/multimedia/shaders/rectsampler_bgra.frag",
+    ],
+    hdrs = glob(["src/multimedia/shaders/*.glsl"]),
+    batchable = True,
+    glsl = "120,150",
+    hlsl = "",
+    msl = "",
+    prefix = "/qt-project.org/multimedia",
+    qrc_name = "qtmultimedia_shaders_gl_macos",
+    strip_prefix = "src/multimedia",
+)
+
+qt_qsb(
+    name = "multimedia_shaders_gl_macos_linear",
+    srcs = [
+        "src/multimedia/shaders/rectsampler_bgra.frag",
+    ],
+    hdrs = glob(["src/multimedia/shaders/*.glsl"]),
+    batchable = True,
+    defines = ["QMM_OUTPUTSURFACE_LINEAR"],
+    glsl = "120,150",
+    hlsl = "",
+    msl = "",
+    outputs = [
+        "shaders/rectsampler_bgra_linear.frag.qsb",
+    ],
+    prefix = "/qt-project.org/multimedia",
+    qrc_name = "qtmultimedia_shaders_gl_macos_linear",
+    strip_prefix = "src/multimedia",
+)
+
+qt_internal_library(
+    name = "multimedia",
+    srcs = [
+        "src/multimedia/audio/qaudio_dr_wav.cpp",
+        "src/multimedia/audio/qaudiobuffer.cpp",
+        "src/multimedia/audio/qaudiobufferinput.cpp",
+        "src/multimedia/audio/qaudiobufferoutput.cpp",
+        "src/multimedia/audio/qaudiodecoder.cpp",
+        "src/multimedia/audio/qaudiodevice.cpp",
+        "src/multimedia/audio/qaudioformat.cpp",
+        "src/multimedia/audio/qaudiohelpers.cpp",
+        "src/multimedia/audio/qaudioinput.cpp",
+        "src/multimedia/audio/qaudiooutput.cpp",
+        "src/multimedia/audio/qaudiosink.cpp",
+        "src/multimedia/audio/qaudiosource.cpp",
+        "src/multimedia/audio/qaudiosystem.cpp",
+        "src/multimedia/audio/qaudiosystem_platform_stream_support.cpp",
+        "src/multimedia/audio/qmemory_resource_tlsf.cpp",
+        "src/multimedia/audio/qrtaudioengine.cpp",
+        "src/multimedia/audio/qsamplecache_p.cpp",
+        "src/multimedia/audio/qsoundeffect.cpp",
+        "src/multimedia/audio/qsoundeffectsynchronous.cpp",
+        "src/multimedia/audio/qsoundeffectwithplayer.cpp",
+        "src/multimedia/audio/qtaudio.cpp",
+        "src/multimedia/audio/qwavedecoder.cpp",
+        "src/multimedia/camera/qcamera.cpp",
+        "src/multimedia/camera/qcameradevice.cpp",
+        "src/multimedia/camera/qimagecapture.cpp",
+        "src/multimedia/compat/removed_api.cpp",
+        "src/multimedia/platform/qgstreamer_platformspecificinterface.cpp",
+        "src/multimedia/platform/qplatformaudiobufferinput.cpp",
+        "src/multimedia/platform/qplatformaudiodecoder.cpp",
+        "src/multimedia/platform/qplatformaudiodevices.cpp",
+        "src/multimedia/platform/qplatformcamera.cpp",
+        "src/multimedia/platform/qplatformimagecapture.cpp",
+        "src/multimedia/platform/qplatformmediacapture.cpp",
+        "src/multimedia/platform/qplatformmediaformatinfo.cpp",
+        "src/multimedia/platform/qplatformmediaintegration.cpp",
+        "src/multimedia/platform/qplatformmediaplayer.cpp",
+        "src/multimedia/platform/qplatformmediaplugin.cpp",
+        "src/multimedia/platform/qplatformmediarecorder.cpp",
+        "src/multimedia/platform/qplatformsurfacecapture.cpp",
+        "src/multimedia/platform/qplatformvideodevices.cpp",
+        "src/multimedia/platform/qplatformvideoframeinput.cpp",
+        "src/multimedia/platform/qplatformvideosink.cpp",
+        "src/multimedia/platform/qplatformvideosource.cpp",
+        "src/multimedia/playback/qmediaplayer.cpp",
+        "src/multimedia/playback/qplaybackoptions.cpp",
+        "src/multimedia/qmediadevices.cpp",
+        "src/multimedia/qmediaformat.cpp",
+        "src/multimedia/qmediaframeinput.cpp",
+        "src/multimedia/qmediametadata.cpp",
+        "src/multimedia/qmediastoragelocation.cpp",
+        "src/multimedia/qmediatimerange.cpp",
+        "src/multimedia/qmultimediautils.cpp",
+        "src/multimedia/qrhivaluemapper.cpp",
+        "src/multimedia/qthreadlocalrhi.cpp",
+        "src/multimedia/qvideotransformation.cpp",
+        "src/multimedia/recording/qcapturablewindow.cpp",
+        "src/multimedia/recording/qmediacapturesession.cpp",
+        "src/multimedia/recording/qmediarecorder.cpp",
+        "src/multimedia/recording/qscreencapture.cpp",
+        "src/multimedia/recording/qvideoframeinput.cpp",
+        "src/multimedia/recording/qwindowcapture.cpp",
+        "src/multimedia/video/qabstractvideobuffer.cpp",
+        "src/multimedia/video/qhwvideobuffer.cpp",
+        "src/multimedia/video/qimagevideobuffer.cpp",
+        "src/multimedia/video/qmemoryvideobuffer.cpp",
+        "src/multimedia/video/qtvideo.cpp",
+        "src/multimedia/video/qvideoframe.cpp",
+        "src/multimedia/video/qvideoframeconversionhelper.cpp",
+        "src/multimedia/video/qvideoframeconverter.cpp",
+        "src/multimedia/video/qvideoframeformat.cpp",
+        "src/multimedia/video/qvideoframetexturefromsource.cpp",
+        "src/multimedia/video/qvideoframetexturepool.cpp",
+        "src/multimedia/video/qvideooutputorientationhandler.cpp",
+        "src/multimedia/video/qvideosink.cpp",
+        "src/multimedia/video/qvideotexturehelper.cpp",
+        "src/multimedia/video/qvideowindow.cpp",
+        ":multimedia_shaders",
+        ":multimedia_shaders_gl_macos",
+        ":multimedia_shaders_gl_macos_linear",
+        ":multimedia_shaders_linear",
+    ] + select({
+        "@platforms//cpu:x86_64": [
+            "src/multimedia/video/qvideoframeconversionhelper_sse2.cpp",
+        ],
+        "//conditions:default": [],
+    }) + select({
+        "@platforms//os:linux": [
+            "src/multimedia/audio/qautoresetevent_linux.cpp",
+            "src/multimedia/audio/qautoresetevent_pipe.cpp",
+            "src/multimedia/pulseaudio/qpulseaudio_contextmanager.cpp",
+            "src/multimedia/pulseaudio/qpulseaudio_symbolloader.cpp",
+            "src/multimedia/pulseaudio/qpulseaudiodevices.cpp",
+            "src/multimedia/pulseaudio/qpulseaudiosink.cpp",
+            "src/multimedia/pulseaudio/qpulseaudiosource.cpp",
+            "src/multimedia/pulseaudio/qpulsehelpers.cpp",
+            "src/multimedia/qsymbolsresolveutils.cpp",
+        ],
+        "@platforms//os:macos": [
+            "src/multimedia/audio/qautoresetevent_kqueue.cpp",
+            "src/multimedia/audio/qautoresetevent_pipe.cpp",
+            "src/multimedia/darwin/qavfcamerabase.mm",
+            "src/multimedia/darwin/qavfcamerautility.mm",
+            "src/multimedia/darwin/qavfhelpers.mm",
+            "src/multimedia/darwin/qavfvideodevices.mm",
+            "src/multimedia/darwin/qcoreaudioutils.cpp",
+            "src/multimedia/darwin/qdarwinaudiodevice.cpp",
+            "src/multimedia/darwin/qdarwinaudiosink.mm",
+            "src/multimedia/darwin/qdarwinaudiosource.mm",
+            "src/multimedia/darwin/qdarwinintegrationfactory.mm",
+            "src/multimedia/darwin/qmacosaudiodatautils.cpp",
+        ],
+        "@platforms//os:windows": [
+            "src/multimedia/audio/qautoresetevent_win32.cpp",
+            "src/multimedia/windows/qcominitializer.cpp",
+            "src/multimedia/windows/qwindows_propertystore.cpp",
+            "src/multimedia/windows/qwindowsaudiodevice.cpp",
+            "src/multimedia/windows/qwindowsaudiosink.cpp",
+            "src/multimedia/windows/qwindowsaudiosource.cpp",
+            "src/multimedia/windows/qwindowsaudioutils.cpp",
+            "src/multimedia/windows/qwindowsmediafoundation.cpp",
+            "src/multimedia/windows/qwindowsresampler.cpp",
+            "src/multimedia/windows/qwmf_support.cpp",
+        ],
+        "//conditions:default": [],
+    }),
+    hdrs = _MULTIMEDIA_HDRS,
+    applicable_licenses = [
+        ":license",
+        ":license_dr_libs",
+        ":license_pulseaudio",
+    ],
+    defines = ["QT_MULTIMEDIA_LIB"],
+    dynamic_deps = [
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+    ],
+    exports_filter = [
+        ":BundledTLSF",
+        ":multimedia_ssse3",
+        ":multimedia_avx2",
+        ":multimedia_darwin_arc",
+        ":multimedia_win_initguid",
+    ],
+    includes = [
+        ".",
+        "src/3rdparty/dr_libs",
+        "src/multimedia",
+        "src/multimedia/audio",
+        "src/multimedia/camera",
+        "src/multimedia/controls",
+        "src/multimedia/darwin",
+        "src/multimedia/platform",
+        "src/multimedia/playback",
+        "src/multimedia/pulseaudio",
+        "src/multimedia/recording",
+        "src/multimedia/video",
+        "src/multimedia/windows",
+    ],
+    linkopts = select({
+        "@platforms//os:macos": [
+            "-framework",
+            "AppKit",
+            "-framework",
+            "AudioToolbox",
+            "-framework",
+            "AVFoundation",
+            "-framework",
+            "CoreAudio",
+            "-framework",
+            "CoreMedia",
+            "-framework",
+            "CoreVideo",
+            "-framework",
+            "Foundation",
+        ],
+        "@platforms//os:windows": [
+            "-lavrt",
+            "-lksuser",
+            "-lmf",
+            "-lmfplat",
+            "-lole32",
+            "-loleaut32",
+            "-lpowrprof",
+            "-lpropsys",
+            "-luuid",
+            "-lwinmm",
+        ],
+        "//conditions:default": [],
+    }),
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_MULTIMEDIA_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+        "DR_WAV_NO_STDIO",
+    ],
+    moc_hdrs = [
+        "src/multimedia/audio/qaudiobufferinput.h",
+        "src/multimedia/audio/qaudiobufferoutput.h",
+        "src/multimedia/audio/qaudiodecoder.h",
+        "src/multimedia/audio/qaudiodevice.h",
+        "src/multimedia/audio/qaudioinput.h",
+        "src/multimedia/audio/qaudiooutput.h",
+        "src/multimedia/audio/qaudiosink.h",
+        "src/multimedia/audio/qaudiosource.h",
+        "src/multimedia/audio/qaudiosystem_p.h",
+        "src/multimedia/audio/qrtaudioengine_p.h",
+        "src/multimedia/audio/qsoundeffect.h",
+        "src/multimedia/audio/qwavedecoder.h",
+        "src/multimedia/camera/qcamera.h",
+        "src/multimedia/camera/qcameradevice.h",
+        "src/multimedia/camera/qimagecapture.h",
+        "src/multimedia/platform/qplatformaudiobufferinput_p.h",
+        "src/multimedia/platform/qplatformaudiodecoder_p.h",
+        "src/multimedia/platform/qplatformaudiodevices_p.h",
+        "src/multimedia/platform/qplatformcamera_p.h",
+        "src/multimedia/platform/qplatformimagecapture_p.h",
+        "src/multimedia/platform/qplatformmediacapture_p.h",
+        "src/multimedia/platform/qplatformmediaintegration_p.h",
+        "src/multimedia/platform/qplatformmediaplugin_p.h",
+        "src/multimedia/platform/qplatformsurfacecapture_p.h",
+        "src/multimedia/platform/qplatformvideodevices_p.h",
+        "src/multimedia/platform/qplatformvideoframeinput_p.h",
+        "src/multimedia/platform/qplatformvideosink_p.h",
+        "src/multimedia/platform/qplatformvideosource_p.h",
+        "src/multimedia/playback/qmediaplayer.h",
+        "src/multimedia/playback/qplaybackoptions.h",
+        "src/multimedia/qmediadevices.h",
+        "src/multimedia/qmediaformat.h",
+        "src/multimedia/qmediametadata.h",
+        "src/multimedia/recording/qcapturablewindow.h",
+        "src/multimedia/recording/qmediacapturesession.h",
+        "src/multimedia/recording/qmediarecorder.h",
+        "src/multimedia/recording/qscreencapture.h",
+        "src/multimedia/recording/qvideoframeinput.h",
+        "src/multimedia/recording/qwindowcapture.h",
+        "src/multimedia/video/qtvideo.h",
+        "src/multimedia/video/qvideoframe.h",
+        "src/multimedia/video/qvideoframeformat.h",
+        "src/multimedia/video/qvideooutputorientationhandler_p.h",
+        "src/multimedia/video/qvideosink.h",
+        "src/multimedia/video/qvideowindow_p.h",
+    ] + select({
+        "@platforms//os:linux": [
+            "src/multimedia/audio/qautoresetevent_linux_p.h",
+            "src/multimedia/audio/qautoresetevent_pipe_p.h",
+            "src/multimedia/pulseaudio/qpulseaudio_contextmanager_p.h",
+        ],
+        "@platforms//os:macos": [
+            "src/multimedia/audio/qautoresetevent_kqueue_p.h",
+            "src/multimedia/audio/qautoresetevent_pipe_p.h",
+            "src/multimedia/darwin/qavfcamerabase_p.h",
+        ],
+        "@platforms//os:windows": [
+            "src/multimedia/audio/qautoresetevent_win32_p.h",
+        ],
+        "//conditions:default": [],
+    }),
+    moc_unity = True,
+    deps = [
+        ":BundledTLSF",
+        "@qtbase//:concurrent",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:network",
+    ] + select({
+        "@platforms//cpu:x86_64": [
+            ":multimedia_avx2",
+            ":multimedia_ssse3",
+        ],
+        "//conditions:default": [],
+    }) + select({
+        "@platforms//os:macos": [
+            ":multimedia_darwin_arc",
+        ],
+        "@platforms//os:windows": [
+            ":multimedia_win_initguid",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# ---------------------------------------------------------------------------
+# QtMultimediaWidgets
+# ---------------------------------------------------------------------------
+qt_sync_headers(
+    name = "multimediawidgets_sync_headers",
+    srcs = glob([
+        "src/multimediawidgets/*.h",
+    ]),
+    generated_public_hdrs = [
+        ":gen_qtmultimediawidgetsexports_h",
+    ],
+    module_name = "QtMultimediaWidgets",
+    version = QT_VERSION,
+)
+
+qt_internal_library(
+    name = "multimediawidgets",
+    srcs = [
+        "src/multimediawidgets/qgraphicsvideoitem.cpp",
+        "src/multimediawidgets/qvideowidget.cpp",
+    ],
+    hdrs = glob([
+        "src/multimediawidgets/*.h",
+    ]) + [":multimediawidgets_sync_headers"],
+    defines = ["QT_MULTIMEDIAWIDGETS_LIB"],
+    dynamic_deps = [
+        ":multimedia_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:widgets_shared",
+    ],
+    includes = ["src/multimediawidgets"],
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_MULTIMEDIAWIDGETS_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ],
+    moc_hdrs = [
+        "src/multimediawidgets/qgraphicsvideoitem.h",
+        "src/multimediawidgets/qvideowidget.h",
+    ],
+    moc_unity = True,
+    deps = [
+        ":multimedia",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# QtMultimediaQuick + quickmultimedia plugin
+# ---------------------------------------------------------------------------
+qt_sync_headers(
+    name = "multimediaquick_sync_headers",
+    srcs = glob([
+        "src/multimediaquick/*.h",
+    ]),
+    generated_public_hdrs = [
+        ":gen_qtmultimediaquickexports_h",
+    ],
+    module_name = "QtMultimediaQuick",
+    version = QT_VERSION,
+)
+
+qt_internal_library(
+    name = "multimediaquick",
+    srcs = [
+        "src/multimediaquick/qquickimagecapture.cpp",
+        "src/multimediaquick/qquickimagepreviewprovider.cpp",
+        "src/multimediaquick/qquickmediaplayer.cpp",
+        "src/multimediaquick/qquickscreencapture.cpp",
+        "src/multimediaquick/qquicksoundeffect.cpp",
+        "src/multimediaquick/qquickvideooutput.cpp",
+        "src/multimediaquick/qsgvideonode_p.cpp",
+        "src/multimediaquick/qsgvideotexture.cpp",
+        "src/multimediaquick/qtmultimediaquicktypes.cpp",
+    ],
+    hdrs = glob([
+        "src/multimediaquick/*.h",
+    ]) + [":multimediaquick_sync_headers"],
+    defines = ["QT_MULTIMEDIAQUICK_LIB"],
+    dynamic_deps = [
+        ":multimedia_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = ["src/multimediaquick"],
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_MULTIMEDIAQUICK_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ],
+    moc_hdrs = [
+        "src/multimediaquick/qquickimagecapture_p.h",
+        "src/multimediaquick/qquickmediaplayer_p.h",
+        "src/multimediaquick/qquickscreencapture_p.h",
+        "src/multimediaquick/qquicksoundeffect_p.h",
+        "src/multimediaquick/qquickvideooutput_p.h",
+        "src/multimediaquick/qtmultimediaquicktypes_p.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "uri": "QtMultimedia",
+        "version": "6.10",
+        "past_major_versions": ["5"],
+        "qml_files": ["src/multimediaquick/Video.qml"],
+        "qml_strip_prefix": "src/multimediaquick",
+        "foreign_types": [
+            ":multimedia_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "qmldir_content": """module QtMultimedia
+linktarget quickmultimedia
+plugin quickmultimedia
+classname QMultimediaQuickModule
+typeinfo plugins.qmltypes
+depends QtQuick auto
+prefer :/qt-project.org/imports/QtMultimedia/
+Video 6.0 Video.qml
+Video 5.0 Video.qml
+""",
+    },
+    deps = [
+        ":multimedia",
+        "@qtbase//:concurrent",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+    alwayslink = True,
+)
+
+qt_static_plugin(
+    name = "quickmultimedia",
+    srcs = ["src/multimediaquick/multimedia_plugin.cpp"],
+    includes = ["src/multimediaquick"],
+    local_defines = _COMMON_DEFINES,
+    moc_srcs = ["src/multimediaquick/multimedia_plugin.cpp"],
+    plugin_class_name = "QMultimediaQuickModule",
+    deps = [
+        ":multimedia",
+        ":multimediaquick",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# Vendored 3rdparty: PFFFT & ResonanceAudio + QtSpatialAudio
+# ---------------------------------------------------------------------------
+cc_library(
+    name = "pffft_bundled",
+    srcs = ["src/3rdparty/pffft/pffft.c"],
+    hdrs = ["src/3rdparty/pffft/pffft.h"],
+    applicable_licenses = [":license_pffft"],
+    copts = [
+        "-fPIC",
+        "-O2",
+        "-w",
+        "-fvisibility=hidden",
+    ],
+    includes = ["src/3rdparty/pffft"],
+)
+
+cc_library(
+    name = "BundledResonanceAudio",
+    srcs = [
+        "src/3rdparty/resonance-audio/platforms/common/room_effects_utils.cc",
+        "src/3rdparty/resonance-audio/platforms/common/utils.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/ambisonics/ambisonic_binaural_decoder.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/ambisonics/ambisonic_lookup_table.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/ambisonics/associated_legendre_polynomials_generator.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/ambisonics/foa_rotator.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/ambisonics/hoa_rotator.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/ambisonics/stereo_from_soundfield_converter.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/api/binaural_surround_renderer.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/api/resonance_audio_api.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/base/audio_buffer.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/base/channel_view.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/base/misc_math.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/base/simd_utils.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/base/spherical_angle.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/config/source_config.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/biquad_filter.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/channel_converter.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/circular_buffer.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/delay_filter.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/distance_attenuation.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/fft_manager.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/filter_coefficient_generators.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/fir_filter.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/gain.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/gain_mixer.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/gain_processor.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/mixer.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/mono_pole_filter.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/multi_channel_iir.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/near_field_processor.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/occlusion_calculator.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/partitioned_fft_filter.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/reflections_processor.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/resampler.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/reverb_onset_compensator.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/reverb_onset_update_processor.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/sh_hrir_creator.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/shoe_box_room.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/spectral_reverb.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/stereo_panner.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/dsp/utils.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/ambisonic_binaural_decoder_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/ambisonic_mixing_encoder_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/binaural_surround_renderer_impl.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/buffered_source_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/foa_rotator_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/gain_mixer_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/gain_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/graph_manager.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/hoa_rotator_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/mixer_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/mono_from_soundfield_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/near_field_effect_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/occlusion_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/reflections_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/resonance_audio_api_impl.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/reverb_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/source_parameters_manager.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/graph/stereo_mixing_panner_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/node/processing_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/node/sink_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/node/source_node.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/utils/buffer_crossfader.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/utils/buffer_partitioner.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/utils/buffer_unpartitioner.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/utils/lockless_task_queue.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/utils/planar_interleaved_conversion.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/utils/sample_type_conversion.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/utils/sum_and_difference_processor.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/utils/wav.cc",
+        "src/3rdparty/resonance-audio/resonance_audio/utils/wav_reader.cc",
+        "src/3rdparty/resonance-audio/third_party/SADIE_hrtf_database/generated/hrtf_assets.cc",
+        "src/resonance-audio/resonance_audio.cpp",
+    ],
+    hdrs = [
+        "src/resonance-audio/resonance_audio.h",
+    ] + glob(["src/3rdparty/resonance-audio/**/*.h"]),
+    applicable_licenses = [":license_resonance_audio"],
+    copts = common_copts + [
+        "-w",
+        "-fvisibility=hidden",
+    ],
+    includes = [
+        "src/3rdparty/resonance-audio",
+        "src/3rdparty/resonance-audio/resonance_audio",
+        "src/3rdparty/resonance-audio/third_party/SADIE_hrtf_database/generated",
+        "src/resonance-audio",
+    ],
+    local_defines = [
+        "EIGEN_MPL2_ONLY",
+        "_USE_MATH_DEFINES",
+    ],
+    deps = [
+        ":pffft_bundled",
+        "@eigen",
+        "@qtbase//:core",
+    ],
+)
+
+qt_sync_headers(
+    name = "spatialaudio_sync_headers",
+    srcs = glob([
+        "src/spatialaudio/*.h",
+    ]),
+    generated_public_hdrs = [
+        ":gen_qtspatialaudioexports_h",
+    ],
+    module_name = "QtSpatialAudio",
+    version = QT_VERSION,
+)
+
+qt_internal_library(
+    name = "spatialaudio",
+    srcs = [
+        "src/spatialaudio/qambientsound.cpp",
+        "src/spatialaudio/qambisonicdecoder.cpp",
+        "src/spatialaudio/qaudioengine.cpp",
+        "src/spatialaudio/qaudiolistener.cpp",
+        "src/spatialaudio/qaudioroom.cpp",
+        "src/spatialaudio/qspatialsound.cpp",
+    ],
+    hdrs = glob([
+        "src/spatialaudio/*.h",
+    ]) + [":spatialaudio_sync_headers"],
+    applicable_licenses = [":license_spatialaudio"],
+    defines = ["QT_SPATIALAUDIO_LIB"],
+    dynamic_deps = [
+        ":multimedia_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+    ],
+    exports_filter = [
+        ":BundledResonanceAudio",
+        ":pffft_bundled",
+    ],
+    includes = ["src/spatialaudio"],
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_SPATIALAUDIO_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ],
+    moc_hdrs = [
+        "src/spatialaudio/qambientsound.h",
+        "src/spatialaudio/qaudioengine.h",
+        "src/spatialaudio/qaudioroom.h",
+        "src/spatialaudio/qspatialsound.h",
+    ],
+    moc_unity = True,
+    deps = [
+        ":BundledResonanceAudio",
+        ":multimedia",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:network",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# QtQuick3DSpatialAudio + quick3dspatialaudio plugin
+# ---------------------------------------------------------------------------
+qt_sync_headers(
+    name = "spatialaudioquick3d_sync_headers",
+    srcs = glob([
+        "src/spatialaudioquick3d/*.h",
+    ]),
+    module_name = "QtQuick3DSpatialAudio",
+    version = QT_VERSION,
+)
+
+qt_internal_library(
+    name = "spatialaudioquick3d",
+    srcs = [
+        "src/spatialaudioquick3d/qquick3dambientsound.cpp",
+        "src/spatialaudioquick3d/qquick3daudioengine.cpp",
+        "src/spatialaudioquick3d/qquick3daudiolistener.cpp",
+        "src/spatialaudioquick3d/qquick3daudioroom.cpp",
+        "src/spatialaudioquick3d/qquick3dspatialsound.cpp",
+    ],
+    hdrs = glob([
+        "src/spatialaudioquick3d/*.h",
+    ]) + [":spatialaudioquick3d_sync_headers"],
+    applicable_licenses = [":license_spatialaudio"],
+    defines = ["QT_QUICK3DSPATIALAUDIO_LIB"],
+    dynamic_deps = [
+        ":multimedia_shared",
+        ":multimediaquick_shared",
+        ":spatialaudio_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+        "@qtquick3d//:quick3d_shared",
+        "@qtquick3d//:runtimerender_shared",
+        "@qtquick3d//:utils_shared",
+        "@qtshadertools//:shadertools_shared",
+    ],
+    includes = ["src/spatialaudioquick3d"],
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_QUICK3DSPATIALAUDIO_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ],
+    moc_hdrs = [
+        "src/spatialaudioquick3d/qquick3dambientsound_p.h",
+        "src/spatialaudioquick3d/qquick3daudioengine_p.h",
+        "src/spatialaudioquick3d/qquick3daudiolistener_p.h",
+        "src/spatialaudioquick3d/qquick3daudioroom_p.h",
+        "src/spatialaudioquick3d/qquick3dspatialsound_p.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "uri": "QtQuick3D.SpatialAudio",
+        "version": "6.10",
+        "foreign_types": [
+            ":spatialaudio_moc_hdrs",
+            ":multimedia_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+            "@qtquick3d//:quick3d_moc_hdrs",
+        ],
+        "qmldir_content": """module QtQuick3D.SpatialAudio
+linktarget quick3dspatialaudio
+plugin quick3dspatialaudio
+classname QQuick3DAudioModule
+typeinfo plugins.qmltypes
+depends QtQuick auto
+depends QtMultimedia auto
+prefer :/qt-project.org/imports/QtQuick3D/SpatialAudio/
+""",
+    },
+    deps = [
+        ":multimedia",
+        ":multimediaquick",
+        ":spatialaudio",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+        "@qtquick3d//:quick3d",
+    ],
+    alwayslink = True,
+)
+
+qt_static_plugin(
+    name = "quick3dspatialaudio",
+    srcs = ["src/spatialaudioquick3d/qquick3dspatialaudio_plugin.cpp"],
+    applicable_licenses = [":license_spatialaudio"],
+    includes = ["src/spatialaudioquick3d"],
+    local_defines = _COMMON_DEFINES,
+    moc_srcs = ["src/spatialaudioquick3d/qquick3dspatialaudio_plugin.cpp"],
+    plugin_class_name = "QQuick3DAudioModule",
+    deps = [
+        ":spatialaudio",
+        ":spatialaudioquick3d",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# FFmpeg Media Plugin (`ffmpegmediaplugin_impl` + `qffmpegmediaplugin`)
+# ---------------------------------------------------------------------------
+cc_library(
+    name = "ffmpeg_linkable_hint",
+    deps = ["@qt//:runfiles_linkable_hint"],
+)
+
+cc_shared_library(
+    name = "ffmpeg_shared",
+    exports_filter = [
+        "@ffmpeg//:__subpackages__",
+        # FFmpeg links OpenSSL (https/tls protocols); export the single copy so
+        # Qt's OpenSSL TLS backend reuses it.
+        "@openssl//:__subpackages__",
+    ],
+    shared_lib_name = select({
+        "@platforms//os:windows": "libffmpeg_shared.dll",
+        "//conditions:default": "",
+    }),
+    deps = [
+        ":ffmpeg_linkable_hint",
+        "@ffmpeg//:avcodec",
+        "@ffmpeg//:avformat",
+        "@ffmpeg//:avutil",
+        "@ffmpeg//:swresample",
+        "@ffmpeg//:swscale",
+        # Roots are whole-archived, so the full libssl/libcrypto API is
+        # exported for Qt's OpenSSL TLS backend, not just what FFmpeg uses.
+        "@openssl//:crypto",
+        "@openssl//:ssl",
+    ],
+)
+
+qt_sync_headers(
+    name = "ffmpegmediaplugin_impl_sync_headers",
+    srcs = glob([
+        "src/plugins/multimedia/ffmpeg/**/*.h",
+    ]),
+    module_name = "QtFFmpegMediaPluginImpl",
+    version = QT_VERSION,
+)
+
+# qffmpegscreencapture_dxgi.cpp does `#include "D3d11.h"` (capital D) while
+# MinGW ships `d3d11.h`. On a case-sensitive host (Linux cross-compile) we emit
+# a forwarding shim at the package root, found via -iquote. On a case-insensitive
+# host (Windows or macOS) the filesystem finds the real header directly;
+# emitting the shim there is harmful because the package root is also on the
+# -isystem path, so `<d3d11.h>` would resolve to the shim and recurse.
+_HOST_IS_CASE_INSENSITIVE = (
+    "@platforms//os:windows" in HOST_CONSTRAINTS or
+    "@platforms//os:macos" in HOST_CONSTRAINTS or
+    "@platforms//os:osx" in HOST_CONSTRAINTS
+)
+
+qt_write_file(
+    name = "win_d3d11_h",
+    out = "D3d11.h",
+    content = "#include_next <d3d11.h>\n",
+    tags = ["manual"],
+)
+
+_WIN_D3D11_SHIM_HDRS = [] if _HOST_IS_CASE_INSENSITIVE else [":win_d3d11_h"]
+
+qt_write_file(
+    name = "ffmpeg_win_mfuuid_src",
+    out = "generated_win_hdrs/ffmpeg_win_mfuuid.cpp",
+    content = """\
+#include <initguid.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+""",
+)
+
+qt_internal_library(
+    name = "ffmpegmediaplugin_impl",
+    srcs = [
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegaudioframeconverter.cpp",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegaudiorenderer.cpp",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegcodeccontext.cpp",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegdemuxer.cpp",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegmediadataholder.cpp",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegplaybackengineobject.cpp",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegrenderer.cpp",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegstreamdecoder.cpp",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegsubtitlerenderer.cpp",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegtimecontroller.cpp",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegvideorenderer.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpeg.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegaudiodecoder.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegaudioinput.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegavaudioformat.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegcodec.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegcodecstorage.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegconverter.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegencodingformatcontext.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpeghwaccel.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegimagecapture.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegioutils.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegmediacapturesession.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegmediaformatinfo.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegmediaintegration.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegmediametadata.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegmediaplayer.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegmediarecorder.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegplaybackengine.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegresampler.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegsurfacecapturegrabber.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegtextureconverter.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegthread.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegvideobuffer.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegvideosink.cpp",
+        "src/plugins/multimedia/ffmpeg/qgrabwindowsurfacecapture.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegaudioencoder.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegaudioencoderutils.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegencoderoptions.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegencoderthread.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegencodinginitializer.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegmuxer.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegrecordingengine.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegrecordingengineutils.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegvideoencoder.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegvideoencoderutils.cpp",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegvideoframeencoder.cpp",
+    ] + select({
+        "@platforms//os:linux": [
+            "src/plugins/multimedia/ffmpeg/qv4l2camera.cpp",
+            "src/plugins/multimedia/ffmpeg/qv4l2cameradevices.cpp",
+            "src/plugins/multimedia/ffmpeg/qv4l2filedescriptor.cpp",
+            "src/plugins/multimedia/ffmpeg/qv4l2memorytransfer.cpp",
+            # QT_FEATURE_xlib (QtGui) -> X11 screen/window capture.
+            "src/plugins/multimedia/ffmpeg/qx11capturablewindows.cpp",
+            "src/plugins/multimedia/ffmpeg/qx11surfacecapture.cpp",
+        ],
+        "@platforms//os:macos": [
+            "src/plugins/multimedia/ffmpeg/darwin/qavfcamera.mm",
+            "src/plugins/multimedia/ffmpeg/darwin/qavfcamerarotationtracker.mm",
+            "src/plugins/multimedia/ffmpeg/darwin/qavfcapturephotooutputdelegate.mm",
+            "src/plugins/multimedia/ffmpeg/darwin/qavfimagecapture.mm",
+            "src/plugins/multimedia/ffmpeg/darwin/qavfsamplebufferdelegate.mm",
+            "src/plugins/multimedia/ffmpeg/darwin/qavfscreencapture.mm",
+            "src/plugins/multimedia/ffmpeg/darwin/qavfstillphotonotifier.cpp",
+            "src/plugins/multimedia/ffmpeg/darwin/qcgcapturablewindows.mm",
+            "src/plugins/multimedia/ffmpeg/darwin/qcgwindowcapture.mm",
+            "src/plugins/multimedia/ffmpeg/darwin/qcvimagevideobuffer.cpp",
+            "src/plugins/multimedia/ffmpeg/darwin/qffmpeghwaccel_videotoolbox.mm",
+        ],
+        "@platforms//os:windows": [
+            "src/plugins/multimedia/ffmpeg/qffmpeghwaccel_d3d11.cpp",
+            "src/plugins/multimedia/ffmpeg/qffmpegscreencapture_dxgi.cpp",
+            "src/plugins/multimedia/ffmpeg/qgdiwindowcapture.cpp",
+            "src/plugins/multimedia/ffmpeg/qwincapturablewindows.cpp",
+            "src/plugins/multimedia/ffmpeg/qwindowscamera.cpp",
+            ":ffmpeg_win_mfuuid_src",
+        ],
+        "//conditions:default": [],
+    }),
+    hdrs = glob([
+        "src/plugins/multimedia/ffmpeg/*.h",
+        "src/plugins/multimedia/ffmpeg/darwin/*.h",
+        "src/plugins/multimedia/ffmpeg/playbackengine/*.h",
+        "src/plugins/multimedia/ffmpeg/recordingengine/*.h",
+        "src/3rdparty/signalsmith-stretch/**/*.h",
+    ]) + [
+        ":ffmpegmediaplugin_impl_sync_headers",
+    ] + _WIN_D3D11_SHIM_HDRS,
+    applicable_licenses = [
+        ":license",
+        ":license_signalsmith_stretch",
+    ],
+    # qcgwindowcapture.mm calls CGWindowListCreateImage, deprecated since
+    # macOS 14.0: our deployment target, but newer than upstream's, so
+    # upstream never sees the warning.
+    copts = select({
+        "@platforms//os:macos": ["-Wno-deprecated-declarations"],
+        "//conditions:default": [],
+    }),
+    create_shared = False,
+    dynamic_deps = [":ffmpeg_shared"],
+    includes = [
+        "src/3rdparty/signalsmith-stretch",
+        "src/plugins/multimedia/ffmpeg",
+        "src/plugins/multimedia/ffmpeg/darwin",
+        "src/plugins/multimedia/ffmpeg/playbackengine",
+        "src/plugins/multimedia/ffmpeg/recordingengine",
+    ],
+    linkopts = select({
+        "@platforms//os:macos": [
+            "-framework",
+            "AppKit",
+            "-framework",
+            "AudioToolbox",
+            "-framework",
+            "AVFoundation",
+            "-framework",
+            "CoreMedia",
+            "-framework",
+            "CoreVideo",
+            "-framework",
+            "Security",
+        ],
+        "@platforms//os:windows": [
+            "-ld3d11",
+            "-ldxgi",
+            "-lgdi32",
+            "-lmf",
+            "-lmfplat",
+            "-lmfreadwrite",
+            "-luser32",
+        ],
+        "//conditions:default": [],
+    }),
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_FFMPEGMEDIAPLUGINIMPL_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ] + select({
+        # VideoToolbox's OpenGL texture cache interop (as upstream:
+        # GL_SILENCE_DEPRECATION on Apple; CoreVideo has its own switch).
+        "@platforms//os:macos": [
+            "COREVIDEO_SILENCE_GL_DEPRECATION",
+            "GL_SILENCE_DEPRECATION",
+        ],
+        "//conditions:default": [],
+    }),
+    moc_hdrs = [
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegaudiorenderer_p.h",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegdemuxer_p.h",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegplaybackengineobject_p.h",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegrenderer_p.h",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegstreamdecoder_p.h",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegsubtitlerenderer_p.h",
+        "src/plugins/multimedia/ffmpeg/playbackengine/qffmpegvideorenderer_p.h",
+        "src/plugins/multimedia/ffmpeg/qffmpegaudiodecoder_p.h",
+        "src/plugins/multimedia/ffmpeg/qffmpegaudioinput_p.h",
+        "src/plugins/multimedia/ffmpeg/qffmpegimagecapture_p.h",
+        "src/plugins/multimedia/ffmpeg/qffmpegmediacapturesession_p.h",
+        "src/plugins/multimedia/ffmpeg/qffmpegmediaplayer_p.h",
+        "src/plugins/multimedia/ffmpeg/qffmpegmediarecorder_p.h",
+        "src/plugins/multimedia/ffmpeg/qffmpegplaybackengine_p.h",
+        "src/plugins/multimedia/ffmpeg/qffmpegsurfacecapturegrabber_p.h",
+        "src/plugins/multimedia/ffmpeg/qffmpegvideosink_p.h",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegencoderthread_p.h",
+        "src/plugins/multimedia/ffmpeg/recordingengine/qffmpegrecordingengine_p.h",
+    ] + select({
+        "@platforms//os:linux": [
+            "src/plugins/multimedia/ffmpeg/qv4l2camera_p.h",
+            "src/plugins/multimedia/ffmpeg/qv4l2cameradevices_p.h",
+        ],
+        "@platforms//os:macos": [
+            "src/plugins/multimedia/ffmpeg/darwin/qavfcamera_p.h",
+            "src/plugins/multimedia/ffmpeg/darwin/qavfscreencapture_p.h",
+            "src/plugins/multimedia/ffmpeg/darwin/qavfstillphotonotifier_p.h",
+            "src/plugins/multimedia/ffmpeg/darwin/qcgwindowcapture_p.h",
+        ],
+        "@platforms//os:windows": [
+            "src/plugins/multimedia/ffmpeg/qwindowscamera_p.h",
+        ],
+        "//conditions:default": [],
+    }),
+    moc_srcs = [
+        "src/plugins/multimedia/ffmpeg/qffmpegaudiodecoder.cpp",
+        "src/plugins/multimedia/ffmpeg/qffmpegaudioinput.cpp",
+    ],
+    moc_unity = True,
+    deps = [
+        ":multimedia",
+        "@ffmpeg//:avcodec",
+        "@ffmpeg//:avformat",
+        "@ffmpeg//:avutil",
+        "@ffmpeg//:swresample",
+        "@ffmpeg//:swscale",
+        "@qtbase//:concurrent",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:network",
+    ] + select({
+        "@platforms//os:linux": [
+            "@libx11",
+            "@libxext",
+            "@libxrandr",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+qt_static_plugin(
+    name = "qffmpegmediaplugin",
+    srcs = ["src/plugins/multimedia/ffmpeg/qffmpegplugin.cpp"],
+    includes = ["src/plugins/multimedia/ffmpeg"],
+    local_defines = _COMMON_DEFINES,
+    moc_srcs = ["src/plugins/multimedia/ffmpeg/qffmpegplugin.cpp"],
+    plugin_class_name = "QFFmpegMediaPlugin",
+    textual_hdrs = ["src/plugins/multimedia/ffmpeg/ffmpeg.json"],
+    deps = [
+        ":ffmpegmediaplugin_impl",
+        ":multimedia",
+        "@qtbase//:core",
+    ],
+)
+
+qt_static_plugin(
+    name = "qdarwinmediaplugin",
+    srcs = [
+        "src/plugins/multimedia/darwin/avfaudiodecoder.mm",
+        "src/plugins/multimedia/darwin/avfvideobuffer.mm",
+        "src/plugins/multimedia/darwin/avfvideosink.mm",
+        "src/plugins/multimedia/darwin/camera/avfaudiopreviewdelegate.mm",
+        "src/plugins/multimedia/darwin/camera/avfcamera.mm",
+        "src/plugins/multimedia/darwin/camera/avfcamerarenderer.mm",
+        "src/plugins/multimedia/darwin/camera/avfcameraservice.mm",
+        "src/plugins/multimedia/darwin/camera/avfcamerasession.mm",
+        "src/plugins/multimedia/darwin/camera/avfimagecapture.mm",
+        "src/plugins/multimedia/darwin/camera/avfmediaassetwriter.mm",
+        "src/plugins/multimedia/darwin/camera/avfmediaencoder.mm",
+        "src/plugins/multimedia/darwin/common/avfmetadata.mm",
+        "src/plugins/multimedia/darwin/mediaplayer/avfdisplaylink.mm",
+        "src/plugins/multimedia/darwin/mediaplayer/avfmediaplayer.mm",
+        "src/plugins/multimedia/darwin/mediaplayer/avfvideorenderercontrol.mm",
+        "src/plugins/multimedia/darwin/qdarwinformatsinfo.mm",
+        "src/plugins/multimedia/darwin/qdarwinintegration.mm",
+    ],
+    hdrs = glob(["src/plugins/multimedia/darwin/**/*.h"]),
+    copts = common_copts + ["-Wno-c++20-extensions"],
+    includes = [
+        "src/plugins/multimedia/darwin",
+        "src/plugins/multimedia/darwin/audio",
+        "src/plugins/multimedia/darwin/camera",
+        "src/plugins/multimedia/darwin/common",
+        "src/plugins/multimedia/darwin/mediaplayer",
+    ],
+    linkopts = [
+        "-framework",
+        "AppKit",
+        "-framework",
+        "ApplicationServices",
+        "-framework",
+        "AudioToolbox",
+        "-framework",
+        "AudioUnit",
+        "-framework",
+        "AVFoundation",
+        "-framework",
+        "CoreMedia",
+        "-framework",
+        "CoreVideo",
+        "-framework",
+        "Foundation",
+        "-framework",
+        "Metal",
+        "-framework",
+        "QuartzCore",
+        "-framework",
+        "VideoToolbox",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ],
+    moc_hdrs = [
+        "src/plugins/multimedia/darwin/avfaudiodecoder_p.h",
+        "src/plugins/multimedia/darwin/avfvideosink_p.h",
+        "src/plugins/multimedia/darwin/camera/avfcamera_p.h",
+        "src/plugins/multimedia/darwin/camera/avfcamerarenderer_p.h",
+        "src/plugins/multimedia/darwin/camera/avfcameraservice_p.h",
+        "src/plugins/multimedia/darwin/camera/avfcamerasession_p.h",
+        "src/plugins/multimedia/darwin/camera/avfimagecapture_p.h",
+        "src/plugins/multimedia/darwin/camera/avfmediaencoder_p.h",
+        "src/plugins/multimedia/darwin/mediaplayer/avfdisplaylink_p.h",
+        "src/plugins/multimedia/darwin/mediaplayer/avfmediaplayer_p.h",
+        "src/plugins/multimedia/darwin/mediaplayer/avfvideorenderercontrol_p.h",
+    ],
+    moc_srcs = ["src/plugins/multimedia/darwin/qdarwinintegration.mm"],
+    moc_unity = True,
+    plugin_class_name = "QDarwinMediaPlugin",
+    target_compatible_with = ["@platforms//os:macos"],
+    textual_hdrs = ["src/plugins/multimedia/darwin/darwin.json"],
+    deps = [
+        ":multimedia",
+        "@qtbase//:concurrent",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+    ],
+)
+
+# GUID definitions normally taken from MSVC's GUID-only import libraries
+# (mfuuid, strmiids, amstrmid, wmcodecdspuuid), which MinGW sysroots don't ship.
+# Compiling the headers under <initguid.h> emits the definitions instead (same
+# approach as :ffmpeg_win_mfuuid_src).
+qt_write_file(
+    name = "windowsmedia_win_guids_src",
+    out = "generated_win_hdrs/windowsmedia_win_guids.cpp",
+    content = """\
+#include <initguid.h>
+#include <d3d9.h>
+#include <dxva2api.h>
+#include <evr.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <wmcodecdsp.h>
+""",
+)
+
+qt_static_plugin(
+    name = "qwindowsmediaplugin",
+    srcs = [
+        "src/plugins/multimedia/windows/common/mfmetadata.cpp",
+        "src/plugins/multimedia/windows/decoder/mfaudiodecodercontrol.cpp",
+        "src/plugins/multimedia/windows/decoder/mfdecodersourcereader.cpp",
+        "src/plugins/multimedia/windows/decoder/mfdecodersourcereadercallback.cpp",
+        "src/plugins/multimedia/windows/evr/evrcustompresenter.cpp",
+        "src/plugins/multimedia/windows/evr/evrd3dpresentengine.cpp",
+        "src/plugins/multimedia/windows/evr/evrhelpers.cpp",
+        "src/plugins/multimedia/windows/evr/evrvideowindowcontrol.cpp",
+        "src/plugins/multimedia/windows/mediacapture/qwindowscamera.cpp",
+        "src/plugins/multimedia/windows/mediacapture/qwindowsimagecapture.cpp",
+        "src/plugins/multimedia/windows/mediacapture/qwindowsmediacapture.cpp",
+        "src/plugins/multimedia/windows/mediacapture/qwindowsmediadevicereader.cpp",
+        "src/plugins/multimedia/windows/mediacapture/qwindowsmediadevicesession.cpp",
+        "src/plugins/multimedia/windows/mediacapture/qwindowsmediaencoder.cpp",
+        "src/plugins/multimedia/windows/mfstream.cpp",
+        "src/plugins/multimedia/windows/player/mfactivate.cpp",
+        "src/plugins/multimedia/windows/player/mfevrvideowindowcontrol.cpp",
+        "src/plugins/multimedia/windows/player/mfplayercontrol.cpp",
+        "src/plugins/multimedia/windows/player/mfplayersession.cpp",
+        "src/plugins/multimedia/windows/player/mfvideorenderercontrol.cpp",
+        "src/plugins/multimedia/windows/qwindowsformatinfo.cpp",
+        "src/plugins/multimedia/windows/qwindowsintegration.cpp",
+        "src/plugins/multimedia/windows/sourceresolver.cpp",
+        ":windowsmedia_win_guids_src",
+    ],
+    hdrs = glob(["src/plugins/multimedia/windows/**/*.h"]),
+    includes = [
+        "src/plugins/multimedia/windows",
+        "src/plugins/multimedia/windows/audio",
+        "src/plugins/multimedia/windows/common",
+        "src/plugins/multimedia/windows/decoder",
+        "src/plugins/multimedia/windows/evr",
+        "src/plugins/multimedia/windows/mediacapture",
+        "src/plugins/multimedia/windows/player",
+    ],
+    linkopts = [
+        "-ld3d9",
+        "-ldxva2",
+        "-levr",
+        "-lgdi32",
+        "-lksuser",
+        "-lmf",
+        "-lmfcore",
+        "-lmfplat",
+        "-lmfreadwrite",
+        "-lole32",
+        "-loleaut32",
+        "-lpropsys",
+        "-lshlwapi",
+        "-luser32",
+        "-luuid",
+        "-lwinmm",
+    ],
+    local_defines = _COMMON_DEFINES + [
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ],
+    moc_hdrs = [
+        "src/plugins/multimedia/windows/decoder/mfaudiodecodercontrol_p.h",
+        "src/plugins/multimedia/windows/decoder/mfdecodersourcereader_p.h",
+        "src/plugins/multimedia/windows/decoder/mfdecodersourcereadercallback_p.h",
+        "src/plugins/multimedia/windows/evr/evrvideowindowcontrol_p.h",
+        "src/plugins/multimedia/windows/mediacapture/qwindowscamera_p.h",
+        "src/plugins/multimedia/windows/mediacapture/qwindowsimagecapture_p.h",
+        "src/plugins/multimedia/windows/mediacapture/qwindowsmediacapture_p.h",
+        "src/plugins/multimedia/windows/mediacapture/qwindowsmediadevicereader_p.h",
+        "src/plugins/multimedia/windows/mediacapture/qwindowsmediadevicesession_p.h",
+        "src/plugins/multimedia/windows/mediacapture/qwindowsmediaencoder_p.h",
+        "src/plugins/multimedia/windows/mfstream_p.h",
+        "src/plugins/multimedia/windows/player/mfplayersession_p.h",
+        "src/plugins/multimedia/windows/qwindowsintegration_p.h",
+        "src/plugins/multimedia/windows/sourceresolver_p.h",
+    ],
+    moc_srcs = ["src/plugins/multimedia/windows/qwindowsintegration.cpp"],
+    moc_unity = True,
+    plugin_class_name = "QWindowsMediaPlugin",
+    target_compatible_with = ["@platforms//os:windows"],
+    textual_hdrs = ["src/plugins/multimedia/windows/windows.json"],
+    deps = [
+        ":multimedia",
+        "@qtbase//:concurrent",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+    ],
+)
+
+cc_library(
+    name = "multimedia_plugins",
+    deps = [
+        ":qffmpegmediaplugin",
+    ] + select({
+        "@platforms//os:macos": [":qdarwinmediaplugin"],
+        "@platforms//os:windows": [":qwindowsmediaplugin"],
+        "//conditions:default": [],
+    }),
+)

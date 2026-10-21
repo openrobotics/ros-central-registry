@@ -1,0 +1,191 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+exports_files([
+    "defs.bzl",
+    "rules.bzl",
+])
+
+exports_files(["src/node_main.cpp.in"])
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@class_loader//:class_loader": "@class_loader//:class_loader_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+}
+
+cc_library(
+    name = "rclcpp_components_library",
+    hdrs = [
+        "include/rclcpp_components/component_manager.hpp",
+        "include/rclcpp_components/component_manager_isolated.hpp",
+        "include/rclcpp_components/node_factory.hpp",
+        "include/rclcpp_components/node_factory_template.hpp",
+        "include/rclcpp_components/node_instance_wrapper.hpp",
+        "include/rclcpp_components/register_node_macro.hpp",
+        "include/rclcpp_components/visibility_control.hpp",
+    ],
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + [
+        "@composition_interfaces//:cc",
+        "@rcl_interfaces//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "rclcpp_components",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rclcpp_components_library"],
+)
+
+cc_library(
+    name = "component_manager_library",
+    srcs = ["src/component_manager.cpp"],
+    hdrs = [
+        "include/rclcpp_components/component_manager.hpp",
+        "include/rclcpp_components/component_manager_isolated.hpp",
+        "include/rclcpp_components/node_factory.hpp",
+        "include/rclcpp_components/node_factory_template.hpp",
+        "include/rclcpp_components/node_instance_wrapper.hpp",
+        "include/rclcpp_components/register_node_macro.hpp",
+        "include/rclcpp_components/visibility_control.hpp",
+    ],
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["RCLCPP_COMPONENTS_BUILDING_LIBRARY"],
+    deps = DEPENDENCIES.values() + [":rclcpp_components_library"],
+)
+
+cc_shared_library(
+    name = "component_manager",
+    dynamic_deps = DEPENDENCIES.keys() + [":rclcpp_components"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":component_manager_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":component_manager"],
+)
+
+cc_binary(
+    name = "component_container",
+    srcs = ["src/component_container.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [":component_manager_library"],
+)
+
+cc_binary(
+    name = "component_container_event",
+    srcs = ["src/component_container_event.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [":component_manager_library"],
+)
+
+cc_binary(
+    name = "component_container_mt",
+    srcs = ["src/component_container_mt.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [":component_manager_library"],
+)
+
+cc_binary(
+    name = "component_container_isolated",
+    srcs = ["src/component_container_isolated.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [":component_manager_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = ["//test:component_nodes"],
+    executables = [
+        ":component_container",
+        ":component_container_event",
+        ":component_container_isolated",
+        ":component_container_mt",
+    ],
+    package_xml = "package.xml",
+)
+
+genrule(
+    name = "extras_cmake",
+    srcs = ["rclcpp_components-extras.cmake.in"],
+    outs = ["rclcpp_components-extras.cmake"],
+    cmd = "sed -e 's|@PROJECT_NAME@|rclcpp_components|g' -e 's|@PYTHON_INSTALL_DIR@|lib/python3.14/site-packages|g' $< > $@",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake = [
+        "cmake/rclcpp_components_package_hook.cmake",
+        "cmake/rclcpp_components_register_node.cmake",
+        "cmake/rclcpp_components_register_nodes.cmake",
+    ] + [":extras_cmake"],
+    cmake_export_name = "export_rclcpp_components",
+    cmake_extras = ["rclcpp_components-extras.cmake"],
+    data = ["src/node_main.cpp.in"],
+    data_strip_prefix = "src",
+    executables = [
+        ":component_container",
+        ":component_container_event",
+        ":component_container_mt",
+        ":component_container_isolated",
+    ],
+    headers = [
+        "include/rclcpp_components/component_manager.hpp",
+        "include/rclcpp_components/component_manager_isolated.hpp",
+        "include/rclcpp_components/node_factory.hpp",
+        "include/rclcpp_components/node_factory_template.hpp",
+        "include/rclcpp_components/node_instance_wrapper.hpp",
+        "include/rclcpp_components/register_node_macro.hpp",
+        "include/rclcpp_components/visibility_control.hpp",
+    ],
+    libraries = [":component_manager"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_google_benchmark//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@class_loader//:ament_package",
+        "@composition_interfaces//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rmw//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

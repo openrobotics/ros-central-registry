@@ -1,0 +1,159 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@ecl_errors//:ecl_errors": "@ecl_errors//:ecl_errors_library",
+}
+
+CC_DEPS = [
+    "@ecl_config//:ecl_config",
+    "@ecl_config//:ecl_config_library",
+]
+
+cc_library(
+    name = "ecl_filesystem_library",
+    srcs = ["src/lib/realpath.cpp"],
+    hdrs = [
+        "include/ecl/filesystem.hpp",
+        "include/ecl/filesystem/errors.hpp",
+        "include/ecl/filesystem/macros.hpp",
+        "include/ecl/filesystem/realpath.hpp",
+    ] + [":config_hpp"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src/test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ecl_filesystem",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":ecl_filesystem_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ecl_filesystem"],
+)
+
+cmake_configure_file(
+    name = "config_hpp",
+    src = "include/ecl/filesystem/config.hpp.in",
+    out = "_gen/include/ecl/filesystem/config.hpp",
+    defines = [
+        "ECL_PRIVATE_HAS_POSIX_REALPATH=1",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":ecl_filesystem",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "ecl_filesystem": ["libecl_filesystem.so.1.2.1"],
+    },
+    deps = [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@ecl_build//:ament_package",
+        "@ecl_config//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_license//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "ecl_test_realpath",
+    srcs = ["src/test/realpath.cpp"] + [
+        "include/ecl/filesystem.hpp",
+        "include/ecl/filesystem/errors.hpp",
+        "include/ecl/filesystem/macros.hpp",
+        "include/ecl/filesystem/realpath.hpp",
+    ] + [":config_hpp"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src/test",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ecl_filesystem_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ecl_config",
+        "ecl_errors",
+    ],
+    cmake_export_include_directories = False,
+    headers = [
+        ":config_hpp",
+    ] + [
+        "include/CMakeLists.txt",
+        "include/ecl/CMakeLists.txt",
+        "include/ecl/filesystem.hpp",
+        "include/ecl/filesystem/CMakeLists.txt",
+        "include/ecl/filesystem/config.hpp.in",
+        "include/ecl/filesystem/errors.hpp",
+        "include/ecl/filesystem/macros.hpp",
+        "include/ecl/filesystem/realpath.hpp",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":ecl_filesystem",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@ecl_build//:ament_package",
+        "@ecl_config//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_license//:ament_package",
+    ],
+)

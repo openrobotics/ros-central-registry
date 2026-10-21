@@ -1,0 +1,859 @@
+"""Bazel build for @qtgrpc (QtProtobuf, QtProtobufWellKnownTypes, QtProtobufQtCoreTypes, QtProtobufQtGuiTypes, QtProtobufQuick, QtGrpc, QtGrpcQuick, and protoc plugins)."""
+
+load("@qt//:qt_internal_library.bzl", "qt_internal_library", "qt_static_plugin")
+load("@qt//:qt_protobuf.bzl", "qt_protobuf_gen")
+load(
+    "@qt//:qt_tools.bzl",
+    "qt_export_header",
+    "qt_qml_plugin_gen",
+    "qt_sync_headers",
+)
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load(":qtgrpc_config.bzl", "declare_qtgrpc_config_targets")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+    license_text = "LICENSES/GPL-3.0-only.txt",
+)
+
+exports_files([
+    "LICENSES/GPL-3.0-only.txt",
+    "LICENSES/Qt-GPL-exception-1.0.txt",
+])
+
+QT_VERSION = "6.10.2"
+
+common_copts = [
+    "-w",
+    "-fPIC",
+    "-O2",
+    "-DNDEBUG",
+    "-DQT_NO_CAST_TO_ASCII",
+    "-DQT_BUILDING_QT",
+]
+
+common_local_defines = [
+    "QT_ASCII_CAST_WARNINGS",
+    "QT_BUILDING_QT",
+    "QT_DEPRECATED_WARNINGS",
+    "QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH",
+    "QT_MOC_COMPAT",
+    "QT_NO_CAST_TO_ASCII",
+    "QT_NO_CONTEXTLESS_CONNECT=1",
+    "QT_NO_DEBUG",
+    "QT_NO_EXCEPTIONS",
+    "QT_NO_FOREACH=1",
+    "QT_NO_JAVA_STYLE_ITERATORS",
+    "QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+    "QT_NO_QASCONST=1",
+    "QT_NO_QEXCHANGE",
+    "QT_NO_QSNPRINTF",
+    "QT_USE_QSTRINGBUILDER",
+]
+
+declare_qtgrpc_config_targets()
+
+# =============================================================================
+# 1. Host protoc plugins (:qtprotoccommon, :qtprotobufgen, :qtgrpcgen)
+# =============================================================================
+
+cc_library(
+    name = "qtprotoccommon",
+    srcs = [
+        "src/tools/qtprotoccommon/baseprinter.cpp",
+        "src/tools/qtprotoccommon/commontemplates.cpp",
+        "src/tools/qtprotoccommon/generatorbase.cpp",
+        "src/tools/qtprotoccommon/generatorcommon.cpp",
+        "src/tools/qtprotoccommon/options.cpp",
+        "src/tools/qtprotoccommon/utils.cpp",
+    ],
+    hdrs = [
+        "src/tools/qtprotoccommon/baseprinter.h",
+        "src/tools/qtprotoccommon/commontemplates.h",
+        "src/tools/qtprotoccommon/descriptorprinterbase.h",
+        "src/tools/qtprotoccommon/generatorbase.h",
+        "src/tools/qtprotoccommon/generatorcommon.h",
+        "src/tools/qtprotoccommon/options.h",
+        "src/tools/qtprotoccommon/qtprotocdefs.h",
+        "src/tools/qtprotoccommon/utils.h",
+    ],
+    copts = [
+        "-w",
+        "-fPIC",
+        "-O2",
+        "-std=gnu++17",
+    ],
+    includes = ["src/tools/qtprotoccommon"],
+    deps = [
+        "@protobuf",
+        "@protobuf//:protoc_lib",
+    ],
+)
+
+alias(
+    name = "protoc",
+    actual = "@protobuf//:protoc",
+)
+
+cc_binary(
+    name = "qtprotobufgen",
+    srcs = [
+        "src/tools/qtprotobufgen/enumdeclarationprinter.cpp",
+        "src/tools/qtprotobufgen/enumdeclarationprinter.h",
+        "src/tools/qtprotobufgen/enumdefinitionprinter.cpp",
+        "src/tools/qtprotobufgen/enumdefinitionprinter.h",
+        "src/tools/qtprotobufgen/main.cpp",
+        "src/tools/qtprotobufgen/messagedeclarationprinter.cpp",
+        "src/tools/qtprotobufgen/messagedeclarationprinter.h",
+        "src/tools/qtprotobufgen/messagedefinitionprinter.cpp",
+        "src/tools/qtprotobufgen/messagedefinitionprinter.h",
+        "src/tools/qtprotobufgen/qprotobufgenerator.cpp",
+        "src/tools/qtprotobufgen/qprotobufgenerator.h",
+    ],
+    copts = [
+        "-w",
+        "-O2",
+        "-std=gnu++17",
+    ],
+    includes = ["src/tools/qtprotobufgen"],
+    local_defines = [
+        "QT_PROTOBUF_VERSION_MAJOR=6",
+        "QT_PROTOBUF_VERSION_MINOR=10",
+    ],
+    deps = [
+        ":qtprotoccommon",
+        "@protobuf",
+        "@protobuf//:protoc_lib",
+    ],
+)
+
+cc_binary(
+    name = "qtgrpcgen",
+    srcs = [
+        "src/tools/qtgrpcgen/clientdeclarationprinter.cpp",
+        "src/tools/qtgrpcgen/clientdeclarationprinter.h",
+        "src/tools/qtgrpcgen/clientdefinitionprinter.cpp",
+        "src/tools/qtgrpcgen/clientdefinitionprinter.h",
+        "src/tools/qtgrpcgen/grpctemplates.cpp",
+        "src/tools/qtgrpcgen/grpctemplates.h",
+        "src/tools/qtgrpcgen/main.cpp",
+        "src/tools/qtgrpcgen/qgrpcgenerator.cpp",
+        "src/tools/qtgrpcgen/qgrpcgenerator.h",
+        "src/tools/qtgrpcgen/qmlclientdeclarationprinter.cpp",
+        "src/tools/qtgrpcgen/qmlclientdeclarationprinter.h",
+        "src/tools/qtgrpcgen/qmlclientdefinitionprinter.cpp",
+        "src/tools/qtgrpcgen/qmlclientdefinitionprinter.h",
+        "src/tools/qtgrpcgen/serverdeclarationprinter.cpp",
+        "src/tools/qtgrpcgen/serverdeclarationprinter.h",
+    ],
+    copts = [
+        "-w",
+        "-O2",
+        "-std=gnu++17",
+    ],
+    includes = ["src/tools/qtgrpcgen"],
+    deps = [
+        ":qtprotoccommon",
+        "@protobuf",
+        "@protobuf//:protoc_lib",
+    ],
+)
+
+# =============================================================================
+# 2. QtProtobuf (:protobuf + :protobuf_shared)
+# =============================================================================
+
+qt_export_header(
+    name = "qtprotobufexports_h",
+    out = "generated_exports/qtprotobufexports.h",
+    module_infix = "PROTOBUF",
+)
+
+qt_sync_headers(
+    name = "protobuf_sync_headers",
+    hdrs = glob(["src/protobuf/*.h"]),
+    dep_modules = ["QtCore"],
+    generated_private_hdrs = [
+        ":gen_qtprotobuf_config_p_h",
+    ],
+    generated_public_hdrs = [
+        ":gen_qtprotobuf_config_h",
+        ":qtprotobufexports_h",
+    ],
+    module_name = "QtProtobuf",
+    source_dir = "src/protobuf",
+    version = QT_VERSION,
+    deps = [
+        "@qtbase//:core_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "protobuf",
+    srcs = [
+        "src/protobuf/protobufscalarserializers_p.cpp",
+        "src/protobuf/qabstractprotobufserializer.cpp",
+        "src/protobuf/qprotobufdeserializerbase.cpp",
+        "src/protobuf/qprotobufjsonserializer.cpp",
+        "src/protobuf/qprotobufmessage.cpp",
+        "src/protobuf/qprotobufoneof.cpp",
+        "src/protobuf/qprotobufpropertyordering.cpp",
+        "src/protobuf/qprotobufregistration.cpp",
+        "src/protobuf/qprotobufrepeatediterator.cpp",
+        "src/protobuf/qprotobufserializer.cpp",
+        "src/protobuf/qprotobufserializerbase.cpp",
+        "src/protobuf/qtprotobuflogging.cpp",
+        "src/protobuf/qtprotobufserializerhelpers.cpp",
+        "src/protobuf/qtprotobuftypes.cpp",
+    ],
+    hdrs = glob(["src/protobuf/*.h"]) + [":protobuf_sync_headers"],
+    copts = common_copts + ["-std=gnu++20"],
+    defines = ["QT_PROTOBUF_LIB"],
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+    ],
+    includes = ["src/protobuf"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_PROTOBUF_LIB",
+        "QT_CORE_LIB",
+    ],
+    moc_hdrs = [
+        "src/protobuf/qprotobufmessage.h",
+        "src/protobuf/qtprotobuftypes.h",
+    ],
+    deps = [
+        ":protobuf_sync_headers",
+        "@qtbase//:core",
+    ],
+)
+
+# =============================================================================
+# 3. QtProtobufWellKnownTypes (:protobufwellknowntypes + :protobufwellknowntypes_shared)
+# =============================================================================
+
+qt_export_header(
+    name = "qtprotobufwellknowntypesexports_h",
+    out = "generated_exports/qtprotobufwellknowntypesexports.h",
+    module_infix = "PROTOBUFWELLKNOWNTYPES",
+)
+
+qt_protobuf_gen(
+    name = "wellknowntypes_proto_gen",
+    export_macro = "PROTOBUFWELLKNOWNTYPES",
+    export_macro_filename = "protobufwellknowntypes_exports.qpb.h",
+    package_dir = "google/protobuf",
+    plugin_tool = ":qtprotobufgen",
+    proto_strip_prefix = "src",
+    protos = ["@protobuf//:well_known_type_protos"],
+)
+
+qt_sync_headers(
+    name = "protobufwellknowntypes_sync_headers",
+    hdrs = glob(["src/wellknown/*.h"]),
+    dep_modules = [
+        "QtCore",
+        "QtProtobuf",
+    ],
+    generated_public_hdrs = [
+        ":qtprotobufwellknowntypesexports_h",
+        ":wellknowntypes_proto_gen_hdrs",
+    ],
+    module_name = "QtProtobufWellKnownTypes",
+    source_dir = "src/wellknown",
+    version = QT_VERSION,
+    deps = [
+        ":protobuf_sync_headers",
+        "@qtbase//:core_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "protobufwellknowntypes",
+    srcs = [
+        "src/wellknown/qprotobufanysupport.cpp",
+        "src/wellknown/qprotobufwellknowntypesjsonserializers.cpp",
+        ":wellknowntypes_proto_gen_srcs",
+    ],
+    hdrs = glob(["src/wellknown/*.h"]) + [
+        ":protobufwellknowntypes_sync_headers",
+        ":wellknowntypes_proto_gen_hdrs",
+    ],
+    copts = common_copts + ["-std=gnu++20"],
+    defines = [
+        "QT_PROTOBUFWELLKNOWNTYPES_LIB",
+        "QT_USE_PROTOBUF_LIST_ALIASES",
+    ],
+    dynamic_deps = [
+        ":protobuf_shared",
+        "@qtbase//:core_shared",
+    ],
+    includes = ["src/wellknown"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_PROTOBUFWELLKNOWNTYPES_LIB",
+        "QT_CORE_LIB",
+        "QT_PROTOBUF_LIB",
+    ],
+    moc_hdrs = [
+        "src/wellknown/qprotobufanysupport.h",
+        ":wellknowntypes_proto_gen_hdrs",
+    ],
+    deps = [
+        ":protobuf",
+        ":protobufwellknowntypes_sync_headers",
+        ":wellknowntypes_proto_gen",
+        "@qtbase//:core",
+    ],
+)
+
+# =============================================================================
+# 4. QtProtobufQtCoreTypes (:protobufqtcoretypes + :protobufqtcoretypes_shared)
+# =============================================================================
+
+qt_export_header(
+    name = "qtprotobufqtcoretypesexports_h",
+    out = "generated_exports/qtprotobufqtcoretypesexports.h",
+    module_infix = "PROTOBUFQTCORETYPES",
+)
+
+qt_protobuf_gen(
+    name = "protobufqtcoretypes_proto_gen",
+    export_macro = "PROTOBUFQTCORETYPES",
+    export_macro_filename = "protobufqtcoretypes_exports.qpb.h",
+    package_dir = "QtCore",
+    plugin_tool = ":qtprotobufgen",
+    protos = ["src/protobufqttypes/protobufqtcoretypes/QtCore/QtCore.proto"],
+)
+
+qt_sync_headers(
+    name = "protobufqtcoretypes_sync_headers",
+    hdrs = glob(["src/protobufqttypes/protobufqtcoretypes/*.h"]),
+    dep_modules = [
+        "QtCore",
+        "QtProtobuf",
+    ],
+    generated_private_hdrs = [
+        ":protobufqtcoretypes_proto_gen_hdrs",
+    ],
+    generated_public_hdrs = [
+        ":qtprotobufqtcoretypesexports_h",
+    ],
+    module_name = "QtProtobufQtCoreTypes",
+    private_filter = "^.+_p\\.h$|.*\\.qpb\\.h$",
+    source_dir = "src/protobufqttypes/protobufqtcoretypes",
+    version = QT_VERSION,
+    deps = [
+        ":protobuf_sync_headers",
+        "@qtbase//:core_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "protobufqtcoretypes",
+    srcs = [
+        "src/protobufqttypes/protobufqtcoretypes/qtprotobufqtcoretypes.cpp",
+        ":protobufqtcoretypes_proto_gen_srcs",
+    ],
+    hdrs = glob(["src/protobufqttypes/protobufqtcoretypes/*.h"]) + [
+        ":protobufqtcoretypes_proto_gen_hdrs",
+        ":protobufqtcoretypes_sync_headers",
+    ],
+    copts = common_copts + ["-std=gnu++20"],
+    defines = [
+        "QT_PROTOBUFQTCORETYPES_LIB",
+        "QT_USE_PROTOBUF_LIST_ALIASES",
+    ],
+    dynamic_deps = [
+        ":protobuf_shared",
+        "@qtbase//:core_shared",
+    ],
+    includes = ["src/protobufqttypes/protobufqtcoretypes"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_PROTOBUFQTCORETYPES_LIB",
+        "QT_CORE_LIB",
+        "QT_PROTOBUF_LIB",
+    ],
+    moc_hdrs = [
+        ":protobufqtcoretypes_proto_gen_hdrs",
+    ],
+    deps = [
+        ":protobuf",
+        ":protobufqtcoretypes_proto_gen",
+        ":protobufqtcoretypes_sync_headers",
+        "@qtbase//:core",
+    ],
+)
+
+# =============================================================================
+# 5. QtProtobufQtGuiTypes (:protobufqtguitypes + :protobufqtguitypes_shared)
+# =============================================================================
+
+qt_export_header(
+    name = "qtprotobufqtguitypesexports_h",
+    out = "generated_exports/qtprotobufqtguitypesexports.h",
+    module_infix = "PROTOBUFQTGUITYPES",
+)
+
+qt_protobuf_gen(
+    name = "protobufqtguitypes_proto_gen",
+    export_macro = "PROTOBUFQTGUITYPES",
+    export_macro_filename = "protobufqtguitypes_exports.qpb.h",
+    package_dir = "QtGui",
+    plugin_tool = ":qtprotobufgen",
+    protos = ["src/protobufqttypes/protobufqtguitypes/QtGui/QtGui.proto"],
+)
+
+qt_sync_headers(
+    name = "protobufqtguitypes_sync_headers",
+    hdrs = glob(["src/protobufqttypes/protobufqtguitypes/*.h"]),
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtProtobuf",
+    ],
+    generated_private_hdrs = [
+        ":protobufqtguitypes_proto_gen_hdrs",
+    ],
+    generated_public_hdrs = [
+        ":qtprotobufqtguitypesexports_h",
+    ],
+    module_name = "QtProtobufQtGuiTypes",
+    private_filter = "^.+_p\\.h$|.*\\.qpb\\.h$",
+    source_dir = "src/protobufqttypes/protobufqtguitypes",
+    version = QT_VERSION,
+    deps = [
+        ":protobuf_sync_headers",
+        ":protobufqtcoretypes_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "protobufqtguitypes",
+    srcs = [
+        "src/protobufqttypes/protobufqtguitypes/qtprotobufqtguitypes.cpp",
+        ":protobufqtguitypes_proto_gen_srcs",
+    ],
+    hdrs = glob(["src/protobufqttypes/protobufqtguitypes/*.h"]) + [
+        ":protobufqtguitypes_proto_gen_hdrs",
+        ":protobufqtguitypes_sync_headers",
+    ],
+    copts = common_copts + ["-std=gnu++20"],
+    defines = [
+        "QT_PROTOBUFQTGUITYPES_LIB",
+        "QT_USE_PROTOBUF_LIST_ALIASES",
+    ],
+    dynamic_deps = [
+        ":protobuf_shared",
+        ":protobufqtcoretypes_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+    ],
+    includes = ["src/protobufqttypes/protobufqtguitypes"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_PROTOBUFQTGUITYPES_LIB",
+        "QT_CORE_LIB",
+        "QT_GUI_LIB",
+        "QT_PROTOBUFQTCORETYPES_LIB",
+        "QT_PROTOBUF_LIB",
+    ],
+    moc_hdrs = [
+        ":protobufqtguitypes_proto_gen_hdrs",
+    ],
+    deps = [
+        ":protobuf",
+        ":protobufqtcoretypes",
+        ":protobufqtguitypes_proto_gen",
+        ":protobufqtguitypes_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+    ],
+)
+
+# =============================================================================
+# 6. QtProtobufQuick (:protobufquick + :protobufquick_shared + :protobufquickplugin)
+# =============================================================================
+
+qt_export_header(
+    name = "qtprotobufquickexports_h",
+    out = "generated_exports/qtprotobufquickexports.h",
+    module_infix = "PROTOBUFQUICK",
+)
+
+qt_sync_headers(
+    name = "protobufquick_sync_headers",
+    hdrs = glob(["src/protobufquick/*.h"]),
+    dep_modules = [
+        "QtCore",
+        "QtProtobuf",
+        "QtQml",
+    ],
+    generated_public_hdrs = [
+        ":qtprotobufquickexports_h",
+    ],
+    module_name = "QtProtobufQuick",
+    source_dir = "src/protobufquick",
+    version = QT_VERSION,
+    deps = [
+        ":protobuf_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "protobufquick",
+    srcs = [],
+    hdrs = glob(["src/protobufquick/*.h"]) + [":protobufquick_sync_headers"],
+    copts = common_copts + ["-std=gnu++20"],
+    defines = ["QT_PROTOBUFQUICK_LIB"],
+    dynamic_deps = [
+        ":protobuf_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:network_shared",
+        "@qtdeclarative//:qml_shared",
+    ],
+    includes = ["src/protobufquick"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_PROTOBUFQUICK_LIB",
+        "QT_CORE_LIB",
+        "QT_PROTOBUF_LIB",
+        "QT_QML_LIB",
+    ],
+    moc_hdrs = [
+        "src/protobufquick/qqmlprotobuftypes_p.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "foreign_types": [
+            ":protobuf_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+        ],
+        "qmldir_content": """module QtProtobuf
+linktarget protobufquick
+optional plugin protobufquickplugin
+classname ProtobufQuickPlugin
+typeinfo plugins.qmltypes
+depends QtQuick auto
+prefer :/qt-project.org/imports/QtProtobuf/
+""",
+        "uri": "QtProtobuf",
+    },
+    deps = [
+        ":protobuf",
+        ":protobufquick_sync_headers",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "protobufquickplugin_gen",
+    class_name = "ProtobufQuickPlugin",
+    plugin_name = "protobufquickplugin",
+    uri = "QtProtobuf",
+)
+
+qt_static_plugin(
+    name = "protobufquickplugin",
+    srcs = [":protobufquickplugin_gen"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":protobuf_shared",
+        ":protobufquick_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:network_shared",
+        "@qtdeclarative//:qml_shared",
+    ],
+    local_defines = common_local_defines + ["QT_PLUGIN"],
+    moc_srcs = [":protobufquickplugin_gen"],
+    plugin_class_name = "ProtobufQuickPlugin",
+    deps = [
+        ":protobuf",
+        ":protobufquick",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+# =============================================================================
+# 7. QtGrpc (:grpc + :grpc_shared)
+# =============================================================================
+
+qt_export_header(
+    name = "qtgrpcexports_h",
+    out = "generated_exports/qtgrpcexports.h",
+    module_infix = "GRPC",
+)
+
+qt_sync_headers(
+    name = "grpc_sync_headers",
+    hdrs = glob(["src/grpc/*.h"]),
+    dep_modules = [
+        "QtCore",
+        "QtNetwork",
+        "QtProtobuf",
+    ],
+    generated_private_hdrs = [
+        ":gen_qtgrpc_config_p_h",
+    ],
+    generated_public_hdrs = [
+        ":gen_qtgrpc_config_h",
+        ":qtgrpcexports_h",
+    ],
+    module_name = "QtGrpc",
+    source_dir = "src/grpc",
+    version = QT_VERSION,
+    deps = [
+        ":protobuf_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:network_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "grpc",
+    srcs = [
+        "src/grpc/qabstractgrpcchannel.cpp",
+        "src/grpc/qgrpccalloptions.cpp",
+        "src/grpc/qgrpccallreply.cpp",
+        "src/grpc/qgrpcchanneloptions.cpp",
+        "src/grpc/qgrpcclientbase.cpp",
+        "src/grpc/qgrpccommonoptions.cpp",
+        "src/grpc/qgrpchttp2channel.cpp",
+        "src/grpc/qgrpcoperation.cpp",
+        "src/grpc/qgrpcoperationcontext.cpp",
+        "src/grpc/qgrpcserializationformat.cpp",
+        "src/grpc/qgrpcstatus.cpp",
+        "src/grpc/qgrpcstream.cpp",
+        "src/grpc/qtgrpclogging.cpp",
+    ],
+    hdrs = glob(["src/grpc/*.h"]) + [":grpc_sync_headers"],
+    copts = common_copts + ["-std=gnu++20"],
+    defines = ["QT_GRPC_LIB"],
+    dynamic_deps = [
+        ":protobuf_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:network_shared",
+    ],
+    includes = ["src/grpc"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_GRPC_LIB",
+        "QT_CORE_LIB",
+        "QT_NETWORK_LIB",
+        "QT_PROTOBUF_LIB",
+    ],
+    moc_hdrs = [
+        "src/grpc/qgrpccallreply.h",
+        "src/grpc/qgrpcclientbase.h",
+        "src/grpc/qgrpcoperation.h",
+        "src/grpc/qgrpcoperationcontext.h",
+        "src/grpc/qgrpcstatus.h",
+        "src/grpc/qgrpcstream.h",
+        "src/grpc/qtgrpcnamespace.h",
+    ],
+    moc_srcs = [
+        "src/grpc/qgrpchttp2channel.cpp",
+    ],
+    deps = [
+        ":grpc_sync_headers",
+        ":protobuf",
+        "@qtbase//:core",
+        "@qtbase//:network",
+    ],
+)
+
+# =============================================================================
+# 8. QtGrpcQuick (:grpcquick + :grpcquick_shared + :grpcquickplugin)
+# =============================================================================
+
+qt_export_header(
+    name = "qtgrpcquickexports_h",
+    out = "generated_exports/qtgrpcquickexports.h",
+    module_infix = "GRPCQUICK",
+)
+
+qt_sync_headers(
+    name = "grpcquick_sync_headers",
+    hdrs = glob(["src/grpcquick/*.h"]),
+    dep_modules = [
+        "QtCore",
+        "QtGrpc",
+        "QtGui",
+        "QtNetwork",
+        "QtOpenGL",
+        "QtProtobuf",
+        "QtProtobufQuick",
+        "QtQml",
+        "QtQuick",
+    ],
+    generated_public_hdrs = [
+        ":qtgrpcquickexports_h",
+    ],
+    module_name = "QtGrpcQuick",
+    source_dir = "src/grpcquick",
+    version = QT_VERSION,
+    deps = [
+        ":grpc_sync_headers",
+        ":protobuf_sync_headers",
+        ":protobufquick_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtbase//:network_sync_headers",
+        "@qtbase//:opengl_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+        "@qtdeclarative//:qmlmodels_sync_headers",
+        "@qtdeclarative//:qmlnetwork_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "grpcquick",
+    srcs = [
+        "src/grpcquick/qqmlabstractgrpcchannel.cpp",
+        "src/grpcquick/qqmlgrpccalloptions.cpp",
+        "src/grpcquick/qqmlgrpcchanneloptions.cpp",
+        "src/grpcquick/qqmlgrpcfunctionalhandlers.cpp",
+        "src/grpcquick/qqmlgrpchttp2channel.cpp",
+        "src/grpcquick/qqmlgrpcmetadata.cpp",
+        "src/grpcquick/qtgrpcquicklogging.cpp",
+        "src/grpcquick/qtqmlgrpcstreamsender.cpp",
+    ],
+    hdrs = glob(["src/grpcquick/*.h"]) + [":grpcquick_sync_headers"],
+    copts = common_copts + ["-std=gnu++20"],
+    defines = ["QT_GRPCQUICK_LIB"],
+    dynamic_deps = [
+        ":grpc_shared",
+        ":protobuf_shared",
+        ":protobufquick_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlnetwork_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    includes = ["src/grpcquick"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_GRPCQUICK_LIB",
+        "QT_CORE_LIB",
+        "QT_GRPC_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_OPENGL_LIB",
+        "QT_PROTOBUFQUICK_LIB",
+        "QT_PROTOBUF_LIB",
+        "QT_QMLMODELS_LIB",
+        "QT_QMLNETWORK_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_hdrs = [
+        "src/grpcquick/qqmlabstractgrpcchannel.h",
+        "src/grpcquick/qqmlgrpccalloptions.h",
+        "src/grpcquick/qqmlgrpcchanneloptions_p.h",
+        "src/grpcquick/qqmlgrpchttp2channel_p.h",
+        "src/grpcquick/qqmlgrpcmetadata_p.h",
+        "src/grpcquick/qqmlgrpcnamespace_p.h",
+        "src/grpcquick/qtqmlgrpcstreamsender.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "foreign_types": [
+            ":grpc_moc_hdrs",
+            ":protobuf_moc_hdrs",
+            ":protobufquick_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtbase//:network_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:qmlmodels_moc_hdrs",
+            "@qtdeclarative//:qmlnetwork_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "qmldir_content": """module QtGrpc
+linktarget grpcquick
+optional plugin grpcquickplugin
+classname GrpcQuickPlugin
+typeinfo plugins.qmltypes
+depends QtQuick auto
+prefer :/qt-project.org/imports/QtGrpc/
+""",
+        "uri": "QtGrpc",
+    },
+    deps = [
+        ":grpc",
+        ":grpcquick_sync_headers",
+        ":protobuf",
+        ":protobufquick",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:network",
+        "@qtbase//:opengl",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:qmlmodels",
+        "@qtdeclarative//:qmlnetwork",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "grpcquickplugin_gen",
+    class_name = "GrpcQuickPlugin",
+    plugin_name = "grpcquickplugin",
+    uri = "QtGrpc",
+)
+
+qt_static_plugin(
+    name = "grpcquickplugin",
+    srcs = [":grpcquickplugin_gen"],
+    copts = common_copts + ["-std=gnu++20"],
+    dynamic_deps = [
+        ":grpc_shared",
+        ":grpcquick_shared",
+        ":protobuf_shared",
+        ":protobufquick_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlnetwork_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ],
+    local_defines = common_local_defines + ["QT_PLUGIN"],
+    moc_srcs = [":grpcquickplugin_gen"],
+    plugin_class_name = "GrpcQuickPlugin",
+    deps = [
+        ":grpc",
+        ":grpcquick",
+        ":protobuf",
+        ":protobufquick",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)

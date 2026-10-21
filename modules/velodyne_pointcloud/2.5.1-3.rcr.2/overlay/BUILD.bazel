@@ -1,0 +1,235 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+HEADERS = [
+    "include/velodyne_pointcloud/calibration.hpp",
+    "include/velodyne_pointcloud/datacontainerbase.hpp",
+    "include/velodyne_pointcloud/organized_cloudXYZIRT.hpp",
+    "include/velodyne_pointcloud/pointcloudXYZIRT.hpp",
+    "include/velodyne_pointcloud/rawdata.hpp",
+    "include/velodyne_pointcloud/transform.hpp",
+]
+
+RAWDATA_DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+MSG_DEPENDENCIES = [
+    "@geometry_msgs//:cc",
+    "@sensor_msgs//:cc",
+    "@velodyne_msgs//:cc",
+]
+
+STATIC_DEPENDENCIES = [
+    "@angles",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:pcl_common",
+]
+
+cc_library(
+    name = "velodyne_rawdata_library",
+    srcs = [
+        "src/lib/calibration.cpp",
+        "src/lib/rawdata.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = RAWDATA_DEPENDENCIES.values() + MSG_DEPENDENCIES + STATIC_DEPENDENCIES,
+)
+
+cc_shared_library(
+    name = "velodyne_rawdata",
+    dynamic_deps = RAWDATA_DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    # Export PCL's common library from here so velodyne_cloud_types and
+    # transform link against it dynamically rather than each linking their own
+    # static copy.
+    deps = [
+        ":velodyne_rawdata_library",
+        "@rosdistro//cc:pcl_common",
+    ],
+)
+
+CLOUD_TYPES_DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+cc_library(
+    name = "velodyne_cloud_types_library",
+    srcs = [
+        "src/lib/organized_cloudXYZIRT.cpp",
+        "src/lib/pointcloudXYZIRT.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = CLOUD_TYPES_DEPENDENCIES.values() + MSG_DEPENDENCIES + STATIC_DEPENDENCIES,
+)
+
+cc_shared_library(
+    name = "velodyne_cloud_types",
+    dynamic_deps = CLOUD_TYPES_DEPENDENCIES.keys() + [":velodyne_rawdata"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":velodyne_cloud_types_library"],
+)
+
+TRANSFORM_DEPENDENCIES = {
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+}
+
+cc_library(
+    name = "transform_library",
+    srcs = ["src/conversions/transform.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = TRANSFORM_DEPENDENCIES.values() + [
+        ":velodyne_cloud_types_library",
+        ":velodyne_rawdata_library",
+    ],
+)
+
+cc_shared_library(
+    name = "transform",
+    dynamic_deps = dict(RAWDATA_DEPENDENCIES.items() + CLOUD_TYPES_DEPENDENCIES.items() + TRANSFORM_DEPENDENCIES.items()).keys() + [
+        ":velodyne_cloud_types",
+        ":velodyne_rawdata",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":transform_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "transform_nodes",
+    component = ":transform",
+    plugins = ["velodyne_pointcloud::Transform"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":transform"],
+)
+
+cc_binary(
+    name = "velodyne_transform_node",
+    srcs = ["src/conversions/transform_node.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = [":transform_library"],
+)
+
+DATA = [
+    "config/VLP16-velodyne_transform_node-params.yaml",
+    "config/VLP32C-velodyne_transform_node-params.yaml",
+    "config/VLS128-velodyne_transform_node-params.yaml",
+    "params/32db.yaml",
+    "params/64e_s2.1-sztaki.yaml",
+    "params/64e_s3-xiesc.yaml",
+    "params/64e_utexas.yaml",
+    "params/VLP16_hires_db.yaml",
+    "params/VLP16db.yaml",
+    "params/VLS128.yaml",
+    "params/VeloView-VLP-32C.yaml",
+    "params/issue_84_float_intensities.yaml",
+    "params/rviz_points.vcg",
+] + ["//launch:launch_files"]
+
+LIBRARIES = [
+    ":transform",
+    ":velodyne_cloud_types",
+    ":velodyne_rawdata",
+]
+
+ament_index(
+    name = "ament_index",
+    components = [":transform_nodes"],
+    data = DATA,
+    executables = [":velodyne_transform_node"],
+    libraries = LIBRARIES,
+    package_xml = "package.xml",
+)
+
+collect_transitive_dynamic_deps(
+    name = "test_row_step_dynamic_deps",
+    dynamic_deps = [":velodyne_cloud_types"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "test_calibration_dynamic_deps",
+    dynamic_deps = [":velodyne_rawdata"],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies_list = [
+        "diagnostic_updater",
+        "eigen",
+        "geometry_msgs",
+        "message_filters",
+        "pcl",
+        "rclcpp",
+        "sensor_msgs",
+        "tf2",
+        "tf2_ros",
+        "velodyne_msgs",
+    ],
+    cmake_export_name = "velodyne_pointcloud",
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = LIBRARIES,
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@angles//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@velodyne_msgs//:ament_package",
+    ],
+)

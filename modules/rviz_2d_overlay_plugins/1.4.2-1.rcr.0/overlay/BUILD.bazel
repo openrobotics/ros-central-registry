@@ -1,0 +1,178 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@qt//:qt.bzl", "qt_cc_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
+    "@rosdistro//cc:OgreOverlay": "@rosdistro//cc:OgreOverlay_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:curl": "@rosdistro//cc:curl_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
+}
+
+CC_DEPS = [
+    "@qtbase//:widgets",
+    "@rcl_interfaces//:cc",
+    "@rosdistro//cc:boost.algorithm",
+    "@rosdistro//cc:boost.format",
+    "@rosdistro//cc:eigen",
+    "@rviz_2d_overlay_msgs//:cc",
+    "@std_msgs//:cc",
+]
+
+qt_cc_library(
+    name = "rviz_2d_overlay_plugins_library",
+    srcs = [
+        "src/overlay_text_display.cpp",
+        "src/overlay_utils.cpp",
+        "src/pie_chart_display.cpp",
+    ],
+    hdrs = [
+        "include/rviz_2d_overlay_plugins/overlay_text_display.hpp",
+        "include/rviz_2d_overlay_plugins/pie_chart_display.h",
+    ] + [
+        "include/rviz_2d_overlay_plugins/overlay_utils.hpp",
+    ],
+    copts = [
+        "-include",
+        "char_traits_patch.h",
+    ],
+    includes = [
+        "include",
+        "include/rviz_2d_overlay_plugins",
+    ],
+    local_defines = ros_local_defines() + [
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        "_FILE_OFFSET_BITS=64",
+        "rviz_2d_overlay_plugins_BUILDING_LIBRARY",
+    ],
+    moc_hdrs = [
+        "include/rviz_2d_overlay_plugins/overlay_text_display.hpp",
+        "include/rviz_2d_overlay_plugins/pie_chart_display.h",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rviz_2d_overlay_plugins",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        "@qtbase//:widgets_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rviz_2d_overlay_plugins_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rviz_2d_overlay_plugins"],
+)
+
+cc_binary(
+    name = "string_to_overlay_text",
+    srcs = ["src/string_to_overlay_text.cpp"] + [
+        "include/rviz_2d_overlay_plugins/overlay_text_display.hpp",
+        "include/rviz_2d_overlay_plugins/overlay_utils.hpp",
+        "include/rviz_2d_overlay_plugins/pie_chart_display.h",
+    ],
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@qtbase//:widgets_shared",
+    ],
+    includes = [
+        "include",
+        "include/rviz_2d_overlay_plugins",
+    ],
+    linkopts = ["-Wl,--allow-shlib-undefined"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":string_to_overlay_text",
+    ],
+    libraries = [
+        ":rviz_2d_overlay_plugins",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugins_description.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rviz_2d_overlay_msgs//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_ogre_vendor//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake = [
+        "rviz_2d_overlay_plugins-extras.cmake",
+    ],
+    cmake_export_dependencies_list = [
+        "rviz_common",
+        "rviz_ogre_vendor",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_libraries = False,
+    cmake_extras = ["rviz_2d_overlay_plugins-extras.cmake"],
+    cmake_strip_prefix = "",
+    headers = [
+        "include/rviz_2d_overlay_plugins/overlay_text_display.hpp",
+        "include/rviz_2d_overlay_plugins/overlay_utils.hpp",
+        "include/rviz_2d_overlay_plugins/pie_chart_display.h",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":rviz_2d_overlay_plugins",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rviz_2d_overlay_msgs//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_ogre_vendor//:ament_package",
+        "@rviz_rendering//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

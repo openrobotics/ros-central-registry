@@ -1,0 +1,202 @@
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:libusb": "@rosdistro//cc:libusb_library",
+}
+
+CC_DEPS = [
+    "@mrpt_io//:mrpt_io_library",
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "mrpt_comms_library",
+    srcs = [
+        "include/mrpt/comms.h",
+        "include/mrpt/comms/CClientTCPSocket.h",
+        "include/mrpt/comms/CInterfaceFTDI.h",
+        "include/mrpt/comms/CSerialPort.h",
+        "include/mrpt/comms/CServerTCPSocket.h",
+        "include/mrpt/comms/net_utils.h",
+        "include/mrpt/comms/nodelets.h",
+        "include/mrpt/comms/registerAllClasses.h",
+        "src/CClientTCPSocket.cpp",
+        "src/CInterfaceFTDI_LIN.cpp",
+        "src/CInterfaceFTDI_WIN.cpp",
+        "src/CInterfaceFTDI_common.cpp",
+        "src/CSerialPort.cpp",
+        "src/CServerTCPSocket.cpp",
+        "src/CServerTCPSocket_common.cpp",
+        "src/net_utils.cpp",
+        "src/nodelets.cpp",
+        "tests/CSerialPort_extra_unittest.cpp",
+        "tests/CSerialPort_unittest.cpp",
+        "tests/comms_test_server.cpp",
+        "tests/net_utils_unittest.cpp",
+        "tests/nodelets_extra_unittest.cpp",
+        "tests/nodelets_unittest.cpp",
+        "tests/sockets_unittest.cpp",
+        "tests/tcp_sockets_unittest.cpp",
+    ],
+    hdrs = [
+        "include/mrpt/comms.h",
+        "include/mrpt/comms/CClientTCPSocket.h",
+        "include/mrpt/comms/CInterfaceFTDI.h",
+        "include/mrpt/comms/CSerialPort.h",
+        "include/mrpt/comms/CServerTCPSocket.h",
+        "include/mrpt/comms/net_utils.h",
+        "include/mrpt/comms/nodelets.h",
+        "include/mrpt/comms/registerAllClasses.h",
+        "tests/comms_test_server.h",
+    ] + [
+        ":config_h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_comms",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":mrpt_comms_library"],
+)
+
+cc_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu_library",
+    srcs = ["python_bindings/mrpt_comms_py.cpp"],
+    hdrs = [
+        "include/mrpt/comms.h",
+        "include/mrpt/comms/CClientTCPSocket.h",
+        "include/mrpt/comms/CInterfaceFTDI.h",
+        "include/mrpt/comms/CSerialPort.h",
+        "include/mrpt/comms/CServerTCPSocket.h",
+        "include/mrpt/comms/net_utils.h",
+        "include/mrpt/comms/nodelets.h",
+        "include/mrpt/comms/registerAllClasses.h",
+        "tests/comms_test_server.h",
+    ] + [
+        ":config_h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_comms_library"],
+)
+
+cc_shared_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    shared_lib_name = "mrpt/comms/_bindings.so",
+    deps = [":_bindings.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "mrpt",
+    srcs = ["python/mrpt/comms/__init__.py"],
+    imports = ["python"],
+    deps = [
+        "@mrpt_io//:mrpt",
+        "@mrpt_poses//:mrpt",
+    ],
+)
+
+expand_template(
+    name = "config_h",
+    out = "_gen/include/mrpt/comms/config.h",
+    substitutions = {
+        "${CMAKE_MRPT_HAS_FTDI}": "1",
+        "${LIBFTDI_VERSION_MAJOR}": "1",
+        "${LIBFTDI_VERSION_MINOR}": "6",
+    },
+    template = "config.h.in",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mrpt_comms",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_comms": [
+            "libmrpt_comms.so.3.3",
+            "libmrpt_comms.so.3.3.1",
+        ],
+    },
+    deps = [
+        "@mrpt_common//:ament_package",
+        "@mrpt_io//:ament_package",
+        "@mrpt_poses//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        ":config_h",
+    ] + [
+        "include/mrpt/comms.h",
+        "include/mrpt/comms/CClientTCPSocket.h",
+        "include/mrpt/comms/CInterfaceFTDI.h",
+        "include/mrpt/comms/CSerialPort.h",
+        "include/mrpt/comms/CServerTCPSocket.h",
+        "include/mrpt/comms/net_utils.h",
+        "include/mrpt/comms/nodelets.h",
+        "include/mrpt/comms/registerAllClasses.h",
+    ],
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_comms",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":mrpt",
+        ":_bindings.cpython-314-x86_64-linux-gnu",
+    ],
+    python_strip_prefix = "python",
+    sonames = {
+        "mrpt_comms": [
+            "libmrpt_comms.so.3.3",
+            "libmrpt_comms.so.3.3.1",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_common//:ament_package",
+        "@mrpt_io//:ament_package",
+        "@mrpt_poses//:ament_package",
+    ],
+)

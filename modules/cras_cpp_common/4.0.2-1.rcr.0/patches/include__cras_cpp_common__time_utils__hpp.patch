@@ -1,0 +1,44 @@
+--- a/include/cras_cpp_common/time_utils.hpp
++++ b/include/cras_cpp_common/time_utils.hpp
+@@ -117,7 +117,9 @@
+         ::cras::TimeType<T1>::value &&
+         ::cras::TimeType<T2>::value &&
+         !::std::is_same_v<T1, T2> &&
+-        !(::cras::is_time_point_v<T2> && ::cras::is_time_point_v<T1>)
++        !(::cras::is_time_point_v<T2> && ::cras::is_time_point_v<T1>) &&
++        !(::cras::is_time_point_v<T2> && !::cras::is_time_point_v<T1> &&
++          !::std::is_same_v<T2, ::std::chrono::system_clock::time_point>)
+     >* = nullptr
+ >
+ T2 convertTime(const T1& t) = delete;
+@@ -192,7 +194,7 @@
+   typename T, typename D,
+   ::std::enable_if_t<
+     ::cras::TimeType<T>::value &&
+-    !::std::is_same_v<D, ::std::chrono::nanoseconds> &&
++    !::std::is_same_v<D, ::std::chrono::system_clock::duration> &&
+     !::cras::is_time_point_v<T>
+   >* = nullptr
+ >
+@@ -200,7 +202,20 @@
+   if constexpr (::std::is_same_v<T, ::std::chrono::time_point<::std::chrono::system_clock, D>>) {
+     return t;
+   }
+-  return ::cras::convertTime<T>(::std::chrono::time_point_cast<::std::chrono::nanoseconds>(t));
++  return ::cras::convertTime<T>(::std::chrono::time_point_cast<::std::chrono::system_clock::duration>(t));
++}
++
++template<
++  typename T2, typename T1,
++  ::std::enable_if_t<
++    ::cras::TimeType<T1>::value &&
++    ::cras::is_time_point_v<T2> &&
++    !::cras::is_time_point_v<T1> &&
++    !::std::is_same_v<T2, ::std::chrono::system_clock::time_point>
++  >* = nullptr
++>
++T2 convertTime(const T1& t) {
++  return ::cras::convertTime<T2>(::cras::convertTime<::std::chrono::system_clock::time_point>(t));
+ }
+ 
+ template<

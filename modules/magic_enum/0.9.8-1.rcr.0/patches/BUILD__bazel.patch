@@ -1,0 +1,1128 @@
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -1,13 +1,1118 @@
+-load("@rules_cc//cc:defs.bzl", "cc_library")
++# Copyright 2026 Open Source Robotics Foundation, Inc.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
+ 
+-licenses(["notice"])
++load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
++load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
++load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
++load("@rules_license//rules:license.bzl", "license")
++load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+ 
+-exports_files(["LICENSE"])
++package(
++    default_applicable_licenses = [":package_license"],
++    default_visibility = ["//visibility:public"],
++)
++
++license(
++    name = "package_license",
++    license_kinds = [
++        "@rules_license//licenses/spdx:MIT",
++    ],
++)
++
++DEPENDENCIES = {
++}
+ 
+-package(default_visibility = ["//visibility:public"])
++CC_DEPS = [
++    "@rosdistro//cc:fmt",
++]
+ 
+ cc_library(
+-    name = "magic_enum",
+-    hdrs = glob(["include/magic_enum/*.hpp"]),
+-    includes = ["include"],
++    name = "magic_enum_library",
++    hdrs = glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    deps = DEPENDENCIES.values() + CC_DEPS,
++)
++
++collect_transitive_dynamic_deps(
++    name = "transitive_dynamic_deps",
++    dynamic_deps = DEPENDENCIES.keys(),
++)
++
++# GenPkgConfig (cmake/GenPkgConfig) output, with the metadata taken from
++# CMakeLists.txt's project() call.
++genrule(
++    name = "magic_enum_pc",
++    srcs = ["CMakeLists.txt"],
++    outs = ["_gen/share/pkgconfig/magic_enum.pc"],
++    cmd = """
++proj="$$(sed -n '/^project(/,/^)/p' $<)"
++version="$$(printf '%s\\n' "$$proj" | sed -n 's/^ *VERSION "\\(.*\\)"$$/\\1/p')"
++url="$$(printf '%s\\n' "$$proj" | sed -n 's/^ *HOMEPAGE_URL "\\(.*\\)"$$/\\1/p')"
++desc="$$(printf '%s\\n' "$$proj" | sed -n '/DESCRIPTION/{n;s/^ *"\\(.*\\)"$$/\\1/p}')"
++{
++  echo 'prefix=$${pcfiledir}/../..'
++  echo 'includedir=$${prefix}/include'
++  echo
++  echo 'Name: magic_enum'
++  echo "Description: $$desc"
++  echo "URL: $$url"
++  echo "Version: $$version"
++  echo 'Cflags: -I$${includedir}'
++} > $@
++""",
++)
++
++pkg_files(
++    name = "magic_enum_pc_files",
++    srcs = [":magic_enum_pc"],
++    prefix = "share/pkgconfig",
++)
++
++ament_index(
++    name = "ament_index",
++    package_xml = "package.xml",
++)
++
++cc_test(
++    name = "test-cpp17",
++    srcs = ["test/test.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test-cpp20",
++    srcs = ["test/test.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test-cpp23",
++    srcs = ["test/test.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test-cpp26",
++    srcs = ["test/test.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_aliases-cpp17",
++    srcs = ["test/test_aliases.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_aliases-cpp20",
++    srcs = ["test/test_aliases.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_aliases-cpp23",
++    srcs = ["test/test_aliases.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_aliases-cpp26",
++    srcs = ["test/test_aliases.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_containers-cpp17",
++    srcs = ["test/test_containers.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_containers-cpp20",
++    srcs = ["test/test_containers.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_containers-cpp23",
++    srcs = ["test/test_containers.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_containers-cpp26",
++    srcs = ["test/test_containers.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_flags-cpp17",
++    srcs = ["test/test_flags.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_flags-cpp20",
++    srcs = ["test/test_flags.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_flags-cpp23",
++    srcs = ["test/test_flags.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_flags-cpp26",
++    srcs = ["test/test_flags.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_range-cpp17",
++    srcs = ["test/test_range.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_wchar_t-cpp17",
++    srcs = ["test/test_wchar_t.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_wchar_t-cpp20",
++    srcs = ["test/test_wchar_t.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_wchar_t-cpp23",
++    srcs = ["test/test_wchar_t.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++cc_test(
++    name = "test_wchar_t-cpp26",
++    srcs = ["test/test_wchar_t.cpp"] + glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    data = [":ament_index"] + glob(
++        [
++            "test/**",
++            "tests/**",
++        ],
++        allow_empty = True,
++        exclude = [
++            "**/*.cpp",
++            "**/*.cc",
++            "**/*.c",
++            "**/*.h",
++            "**/*.hpp",
++        ],
++    ),
++    dynamic_deps = [":transitive_dynamic_deps"],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++    deps = DEPENDENCIES.values() + CC_DEPS + [
++        ":magic_enum_library",
++        "@rosdistro//cc:bazel_test_helper",
++        "@rosdistro//cc:googletest",
++    ],
++)
++
++ament_package(
++    build_type = "cmake",
++    cmake_export_dependencies = False,
++    cmake_export_include_directories = True,
++    cmake_export_libraries = False,
++    cmake_export_targets = True,
++    headers = glob(
++        [
++            "include/**/*.h",
++            "include/**/*.hh",
++            "include/**/*.hpp",
++            "include/**/*.hxx",
++            "include/**/*.ipp",
++            "include/**/*.inl",
++            "include/**/*.txx",
++            "include/**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    include_prefix = "",
++    install = [":magic_enum_pc_files"],
++    package_xml = "package.xml",
++    deps = [":ament_index"] + [
++    ],
+ )

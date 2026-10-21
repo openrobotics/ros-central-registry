@@ -1,0 +1,86 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### ENTRYPOINTS
+
+py_binary(
+    name = "setup",
+    srcs = ["setup.py"],
+    visibility = ["//visibility:private"],
+    deps = [
+        requirement("setuptools"),
+    ],
+)
+
+genrule(
+    name = "entry_points",
+    srcs = [
+        "CHANGELOG.rst",
+        "ament_lint/__init__.py",
+        "ament_lint/py.typed",
+        "ament_lint/pytest_marker.py",
+        "package.xml",
+        "pytest.ini",
+        "resource/ament_lint",
+        "setup.py",
+    ],
+    outs = [
+        "ament_lint.egg-info/PKG-INFO",
+        "ament_lint.egg-info/entry_points.txt",
+        "ament_lint.egg-info/top_level.txt",
+    ],
+    cmd = "$(location :setup) egg_info --egg-base=. && mkdir -p $(@D)/ament_lint.egg-info && cp -r ament_lint.egg-info/* $(@D)/ament_lint.egg-info/",
+    tools = [":setup"],
+    visibility = ["//visibility:private"],
+)
+
+### PYTHON MODULE
+
+py_library(
+    name = "ament_lint",
+    srcs = [
+        "ament_lint/__init__.py",
+        "ament_lint/pytest_marker.py",
+    ],
+    data = ["ament_lint/py.typed"] + [":entry_points"],
+    imports = ["."],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    package_xml = "package.xml",
+    python = [":ament_lint"] + ["ament_lint/py.typed"],
+    deps = [
+        "@rosdistro//:ament_package",
+    ],
+)

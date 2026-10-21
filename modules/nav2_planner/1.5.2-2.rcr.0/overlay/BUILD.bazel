@@ -1,0 +1,197 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+DEPENDENCIES = {
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@nav2_costmap_2d//:nav2_costmap_2d_client": "@nav2_costmap_2d//:nav2_costmap_2d_client_library",
+    "@nav2_costmap_2d//:nav2_costmap_2d_core": "@nav2_costmap_2d//:nav2_costmap_2d_core_library",
+    "@nav2_util//:nav2_util_core": "@nav2_util//:nav2_util_core_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@lifecycle_msgs//:cc",
+    "@nav2_core//:nav2_core_library",
+    "@nav2_msgs//:cc",
+    "@nav2_ros_common//:nav2_ros_common",
+    "@nav_msgs//:cc",
+    "@rcl_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "planner_server_core_library",
+    srcs = [
+        "src/parameter_handler.cpp",
+        "src/planner_server.cpp",
+    ],
+    hdrs = [
+        "include/nav2_planner/is_path_valid_service.hpp",
+        "include/nav2_planner/parameter_handler.hpp",
+        "include/nav2_planner/planner_server.hpp",
+    ],
+    includes = [
+        "include",
+        "include/nav2_planner",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        'BTCPP_LIBRARY_VERSION=\\"4.10.0\\"',
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "planner_server_core",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":planner_server_core_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "planner_server_core_components",
+    component = ":planner_server_core",
+    plugins = ["nav2_planner::PlannerServer"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":planner_server_core"],
+)
+
+cc_binary(
+    name = "planner_server",
+    srcs = ["src/main.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/nav2_planner",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        'BTCPP_LIBRARY_VERSION=\\"4.10.0\\"',
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":planner_server_core_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":planner_server_core_components"],
+    lib_data = [":planner_server"],
+    libraries = [":planner_server_core"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@backward_ros//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_core//:ament_package",
+        "@nav2_costmap_2d//:ament_package",
+        "@nav2_msgs//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "geometry_msgs",
+        "nav2_core",
+        "nav2_costmap_2d",
+        "nav2_msgs",
+        "nav2_ros_common",
+        "nav2_util",
+        "nav_msgs",
+        "pluginlib",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "tf2_ros",
+    ],
+    cmake_export_targets = False,
+    headers = [
+        "include/nav2_planner/is_path_valid_service.hpp",
+        "include/nav2_planner/parameter_handler.hpp",
+        "include/nav2_planner/planner_server.hpp",
+    ],
+    include_prefix = "",
+    libraries = [":planner_server_core"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@backward_ros//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_core//:ament_package",
+        "@nav2_costmap_2d//:ament_package",
+        "@nav2_msgs//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)

@@ -1,0 +1,158 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("//:defs.bzl", "class_loader_plugin")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+}
+
+class_loader_plugin(
+    name = "class_loader_TestPlugins1",
+    srcs = ["plugins1.cpp"],
+    hdrs = ["base.hpp"],
+    dynamic_deps = ["//:class_loader"],
+    deps = ["//:class_loader_headers"],
+)
+
+class_loader_plugin(
+    name = "class_loader_TestPlugins2",
+    srcs = ["plugins2.cpp"],
+    hdrs = ["base.hpp"],
+    dynamic_deps = ["//:class_loader"],
+    deps = ["//:class_loader_headers"],
+)
+
+class_loader_plugin(
+    name = "class_loader_TestPlugins3",
+    srcs = ["plugins3.cpp"],
+    hdrs = ["base.hpp"],
+    dynamic_deps = ["//:class_loader"],
+    deps = ["//:class_loader_headers"],
+)
+
+ament_index(
+    name = "ament_index_unique_ptr_test",
+    libraries = [
+        ":class_loader_TestPlugins1",
+        ":class_loader_TestPlugins2",
+        ":class_loader_TestPlugins3",
+    ],
+)
+
+cc_test(
+    name = "class_loader_unique_ptr_test",
+    srcs = [
+        "base.hpp",
+        "unique_ptr_test.cpp",
+    ],
+    data = [":ament_index_unique_ptr_test"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        "//:class_loader_headers",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+class_loader_plugin(
+    name = "class_loader_TestGlobalPlugins",
+    srcs = ["global_plugins.cpp"],
+    hdrs = ["base.hpp"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + ["//:class_loader_library"],
+)
+
+ament_index(
+    name = "ament_index_class_loader_utest",
+    libraries = [
+        ":class_loader_TestPlugins1",
+        ":class_loader_TestPlugins2",
+        ":class_loader_TestPlugins3",
+        ":class_loader_TestGlobalPlugins",
+    ],
+)
+
+cc_test(
+    name = "class_loader_utest",
+    srcs = [
+        "base.hpp",
+        "utest.cpp",
+    ],
+    data = [":ament_index_class_loader_utest"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        "//:class_loader_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_library(
+    name = "class_loader_Test_Fviz_library",
+    srcs = ["fviz_case_study/fviz.cpp"],
+    hdrs = [
+        "fviz_case_study/fviz.hpp",
+        "fviz_case_study/fviz_plugin_base.hpp",
+    ],
+    deps = ["//:class_loader_library"],
+)
+
+class_loader_plugin(
+    name = "class_loader_Test_FvizDefaultPlugin",
+    srcs = ["fviz_case_study/fviz_default_plugin.cpp"],
+    hdrs = [
+        "fviz_case_study/fviz.hpp",
+        "fviz_case_study/fviz_plugin_base.hpp",
+    ],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    deps = [
+        ":class_loader_Test_Fviz_library",
+        "//:class_loader_library",
+    ],
+)
+
+ament_index(
+    name = "ament_index_fviz",
+    libraries = [":class_loader_Test_FvizDefaultPlugin"],
+)
+
+cc_binary(
+    name = "class_loader_Test_Fviz_Main",
+    srcs = ["fviz_case_study/fviz_main.cpp"],
+    data = [":ament_index_fviz"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":class_loader_Test_Fviz_library",
+        "//:class_loader_library",
+    ],
+)
+
+cc_test(
+    name = "class_loader_fviz_test",
+    srcs = ["fviz_case_study/fviz_test.cpp"],
+    data = [":class_loader_Test_Fviz_Main"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":class_loader_Test_Fviz_library",
+        "//:class_loader_library",
+        "@rosdistro//cc:googletest",
+    ],
+)

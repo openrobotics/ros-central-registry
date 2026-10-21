@@ -1,0 +1,192 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_resource")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+exports_files([
+    "aspects.bzl",
+    "defs.bzl",
+    "types.bzl",
+])
+
+filegroup(
+    name = "interface_templates",
+    srcs = [
+        "resource/action__type_support.cpp.em",
+        "resource/idl__type_support.cpp.em",
+        "resource/msg__type_support.cpp.em",
+        "resource/srv__type_support.cpp.em",
+    ],
+)
+
+HEADERS = [
+    "include/rosidl_typesupport_cpp/identifier.hpp",
+    "include/rosidl_typesupport_cpp/message_type_support_dispatch.hpp",
+    "include/rosidl_typesupport_cpp/service_type_support_dispatch.hpp",
+    "include/rosidl_typesupport_cpp/visibility_control.h",
+]
+
+DEPENDENCIES = {
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosidl_runtime_c//:rosidl_runtime_c": "@rosidl_runtime_c//:rosidl_runtime_c_library",
+    "@rosidl_typesupport_c//:rosidl_typesupport_c": "@rosidl_typesupport_c//:rosidl_typesupport_c_library",
+    "@rosidl_typesupport_interface//:rosidl_typesupport_interface": "@rosidl_typesupport_interface//:rosidl_typesupport_interface_library",
+}
+
+cc_library(
+    name = "rosidl_typesupport_cpp_library",
+    srcs = [
+        "src/identifier.cpp",
+        "src/message_type_support_dispatch.cpp",
+        "src/service_type_support_dispatch.cpp",
+        "src/type_support_dispatch.hpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "rosidl_typesupport_cpp",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rosidl_typesupport_cpp_library"],
+)
+
+py_library(
+    name = "rosidl_typesupport_cpp_py",
+    srcs = [
+        "rosidl_typesupport_cpp/__init__.py",
+        "rosidl_typesupport_cpp/cli.py",
+    ],
+    deps = [
+        "@ament_index_python",
+        "@rosidl_cli",
+        "@rosidl_generator_cpp",
+        "@rosidl_pycommon",
+    ],
+)
+
+genrule(
+    name = "cli_rename",
+    srcs = ["bin/rosidl_typesupport_cpp"],
+    outs = ["bin/rosidl_typesupport_cpp.py"],
+    cmd = "cp $(location :bin/rosidl_typesupport_cpp) $(location :bin/rosidl_typesupport_cpp.py)",
+)
+
+py_binary(
+    name = "cli",
+    srcs = [":bin/rosidl_typesupport_cpp.py"],
+    main = ":bin/rosidl_typesupport_cpp.py",
+    deps = [":rosidl_typesupport_cpp_py"],
+)
+
+genrule(
+    name = "extras_cmake",
+    srcs = ["rosidl_typesupport_cpp-extras.cmake.in"],
+    outs = ["rosidl_typesupport_cpp-extras.cmake"],
+    cmd = "sed -e 's|@rosidl_typesupport_cpp_LIBRARY_TYPE@|SHARED|g' -e 's|@PROJECT_NAME@|rosidl_typesupport_cpp|g' -e 's|@PYTHON_INSTALL_DIR@|lib/python3.14/site-packages|g' $< > $@",
+)
+
+write_file(
+    name = "test_type_support3",
+    testonly = True,
+    out = "librosidl_typesupport_cpp__test_type_support3.so",
+    content = ["I'm not a shared library, why would you treat me like one?"],
+)
+
+register_ament_resource(
+    name = "res_rosidl_runtime_packages",
+    category = "rosidl_runtime_packages",
+    content = "",
+)
+
+ament_index(
+    name = "test_ament_index",
+    testonly = True,
+    libraries = [
+        "//test:rosidl_typesupport_cpp__test_type_support1",
+        "//test:rosidl_typesupport_cpp__test_type_support2",
+        ":test_type_support3",
+    ],
+    package_xml = "package.xml",
+    deps = [":res_rosidl_runtime_packages"],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake = [":extras_cmake"] + ["cmake/rosidl_typesupport_cpp_generate_interfaces.cmake"],
+    cmake_extras = ["rosidl_typesupport_cpp-extras.cmake"],
+    data = [
+        "resource/action__type_support.cpp.em",
+        "resource/idl__type_support.cpp.em",
+        "resource/msg__type_support.cpp.em",
+        "resource/srv__type_support.cpp.em",
+    ],
+    headers = HEADERS,
+    include_prefix = "",
+    lib_data = ["bin/rosidl_typesupport_cpp"],
+    libraries = [":rosidl_typesupport_cpp"],
+    package_xml = "package.xml",
+    python = [
+        "rosidl_typesupport_cpp/__init__.py",
+        "rosidl_typesupport_cpp/cli.py",
+    ],
+    deps = [
+        "@ament_cmake_core//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_ros_core//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@performance_test_fixture//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_cli//:ament_package",
+        "@rosidl_generator_c//:ament_package",
+        "@rosidl_generator_cpp//:ament_package",
+        "@rosidl_generator_type_description//:ament_package",
+        "@rosidl_pycommon//:ament_package",
+        "@rosidl_runtime_c//:ament_package",
+        "@rosidl_runtime_cpp//:ament_package",
+        "@rosidl_typesupport_c//:ament_package",
+        "@rosidl_typesupport_interface//:ament_package",
+        "@rosidl_typesupport_introspection_cpp//:ament_package",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rosidl_typesupport_cpp"],
+    visibility = ["//visibility:public"],
+)

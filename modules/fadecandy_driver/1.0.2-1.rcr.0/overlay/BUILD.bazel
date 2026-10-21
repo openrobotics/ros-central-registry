@@ -1,0 +1,142 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:libusb": "@rosdistro//cc:libusb_library",
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+}
+
+CC_DEPS = [
+    "@fadecandy_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "fadecandy_driver_library",
+    srcs = [
+        "src/fadecandy_driver.cpp",
+        "src/util.cpp",
+    ],
+    hdrs = [
+        "src/fadecandy_driver.h",
+        "src/ros/fadecandy_driver_ros.h",
+        "src/util.h",
+    ] + [
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = ["_gen/include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "fadecandy_driver",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":fadecandy_driver_library"],
+)
+
+cc_library(
+    name = "fadecandy_driver_ros_library",
+    srcs = ["src/ros/fadecandy_driver_ros.cpp"],
+    hdrs = [
+        "src/fadecandy_driver.h",
+        "src/ros/fadecandy_driver_ros.h",
+        "src/util.h",
+    ] + [
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = ["_gen/include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":fadecandy_driver_library"],
+)
+
+cc_shared_library(
+    name = "fadecandy_driver_ros",
+    dynamic_deps = DEPENDENCIES.keys() + [":fadecandy_driver"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":fadecandy_driver_ros_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":fadecandy_driver",
+        ":fadecandy_driver_ros",
+    ],
+)
+
+cc_binary(
+    name = "fadecandy_node",
+    srcs = ["src/ros/fadecandy_driver_ros_node.cpp"] + [
+        "src/fadecandy_driver.h",
+        "src/ros/fadecandy_driver_ros.h",
+        "src/util.h",
+    ] + [
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["_gen/include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":fadecandy_driver_library",
+        ":fadecandy_driver_ros_library",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":fadecandy_node",
+        "test/example_client",
+    ],
+    libraries = [
+        ":fadecandy_driver",
+        ":fadecandy_driver_ros",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@fadecandy_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    libraries = [
+        ":fadecandy_driver",
+        ":fadecandy_driver_ros",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@fadecandy_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+    ],
+)

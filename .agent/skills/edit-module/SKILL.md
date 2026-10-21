@@ -59,9 +59,27 @@ If `create_patch` refuses because `modules/<package>/<version>/` changed on disk
 
 When creating or modifying a package's `BUILD.bazel` file, keep the following guidelines in mind:
 
-### 1. Declaring Licensing
-Every newly authored or hand-edited `BUILD.bazel` file should declare the package's license using `rules_license`. Ensure the license matches the package's actual upstream license (defined in its `package.xml` `<license>` tag or LICENSE file).
+### 1. Copyright Header and Licensing
+Every newly authored or hand-edited `BUILD.bazel` or `.bzl` file must begin with the `# Copyright ...` header comment block at the very top of the file (starting on line 1), **before** any `load(...)` statements:
+> [!IMPORTANT]
+> Never place or insert a `load(...)` statement before the `# Copyright` header comment block. Placing `load()` above the copyright comment prevents `buildifier` from consolidating `load()` statements and causes `ament_copyright` linter tests to fail.
+
+After the copyright header and `load()` statements, declare the package's license using `rules_license`. Ensure the license matches the package's actual upstream license (defined in its `package.xml` `<license>` tag or LICENSE file).
 ```python
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 load("@rules_license//rules:license.bzl", "license")
 
 package(

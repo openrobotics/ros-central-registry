@@ -21,8 +21,18 @@ from the upstream tag (no `rosdep`/`rosinstall_generator`), creates a bare
 (unpatched) module version for every package whose upstream version changed,
 a `0.0.0` stub for any package that's brand-new to the registry, and migrates
 each to `.rcr.0` while carrying forward existing patches/overlay from its
-previous version. It commits straight to `main` — there's no PR gate, since
-this is purely additive scaffolding nothing published yet depends on.
+previous version. Packages whose upstream version is *unchanged* are pinned
+to their existing `.rcr.N` — unless that version's `MODULE.bazel` boilerplate
+(the canned BCR `bazel_dep` block and module-extension trailer in
+`bootstrap_release.py`) has since changed, in which case a `.rcr.N+1` copy
+with a re-rendered `MODULE.bazel` is minted so every version the release pins
+declares the same third-party deps/extensions as a fresh one. It commits
+straight to `main` — there's no PR gate, since this is purely additive
+scaffolding nothing published yet depends on.
+
+The same re-rendering is available on demand for versions that only exist
+on your branch (so they can be edited in place rather than re-minted):
+`bazel run //tools/chores:sync_module_boilerplate -- --dry-run`.
 
 **You should not run `bootstrap_release` yourself** unless a human has
 specifically asked you to backfill/re-check a particular distro

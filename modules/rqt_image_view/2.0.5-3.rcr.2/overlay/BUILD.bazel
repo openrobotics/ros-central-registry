@@ -1,0 +1,218 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@qt//:qt.bzl", "qt_cc_library", "qt_ui_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+### LIBRARIES
+
+HEADERS = [
+    "include/rqt_image_view/image_view.h",
+    "include/rqt_image_view/image_view.hpp",
+    "include/rqt_image_view/ratio_layouted_frame.h",
+    "include/rqt_image_view/ratio_layouted_frame.hpp",
+]
+
+DEPENDENCIES = {
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+genrule(
+    name = "image_view_rename",
+    srcs = ["src/rqt_image_view/image_view.ui"],
+    outs = ["image_view.ui"],
+    cmd = "cp $(location :src/rqt_image_view/image_view.ui) $(location :image_view.ui)",
+)
+
+qt_ui_library(
+    name = "image_view",
+    src = "image_view.ui",
+    deps = ["@qtbase//:widgets"],
+)
+
+qt_cc_library(
+    name = "rqt_image_view_library",
+    srcs = [
+        "src/rqt_image_view/image_view.cpp",
+        "src/rqt_image_view/ratio_layouted_frame.cpp",
+    ],
+    hdrs = [
+        "include/rqt_image_view/image_view.hpp",
+        "include/rqt_image_view/ratio_layouted_frame.hpp",
+    ] + [
+        "include/rqt_image_view/image_view.h",
+        "include/rqt_image_view/ratio_layouted_frame.h",
+    ],
+    includes = [
+        ".",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    moc_hdrs = [
+        "include/rqt_image_view/image_view.hpp",
+        "include/rqt_image_view/ratio_layouted_frame.hpp",
+    ],
+    deps = DEPENDENCIES.values() + [
+        ":image_view",
+        "@geometry_msgs//:cc",
+        "@qt_gui_cpp",
+        "@qtbase//:widgets",
+        "@rqt_gui_cpp",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "rqt_image_view",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        "@qtbase//:widgets_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rqt_image_view_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rqt_image_view"],
+    visibility = ["//visibility:private"],
+)
+
+### DATA
+
+genrule(
+    name = "qt_gui_resource",
+    outs = ["share/ament_index/resource_index/qt_gui/rqt_image_view"],
+    cmd = "echo 'plugin.xml' > $@",
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        ":rqt_image_view_env_hooks",
+    ],
+    prefix = "environment",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+    ] + ["resource/lena.png"],
+    lib_data = [
+        ":rqt_image_view",
+        "scripts/image_publisher",
+        "scripts/rqt_image_view",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "rqt_gui",
+    plugins = ["plugin.xml"],
+    deps = [
+        "@rqt_gui_cpp//:ament_index",
+    ],
+)
+
+### EXECUTABLES
+
+genrule(
+    name = "gui_rename",
+    srcs = ["scripts/rqt_image_view"],
+    outs = ["scripts/rqt_image_view.py"],
+    cmd = "cp $(location :scripts/rqt_image_view) $(location :scripts/rqt_image_view.py)",
+)
+
+py_binary(
+    name = "gui",
+    srcs = ["scripts/rqt_image_view.py"],
+    args = ["--force-discover"],
+    data = [
+        ":ament_index",
+        ":qt_gui_resource",
+        ":transitive_dynamic_deps",
+    ],
+    main = "scripts/rqt_image_view.py",
+    deps = ["@rqt_gui"],
+)
+
+### PACKAGING
+
+genrule(
+    name = "rqt_image_view_cmake_exports",
+    outs = [
+        "ament_cmake_export_libraries-extras.cmake",
+        "ament_cmake_export_targets-extras.cmake",
+        "rqt_image_viewExport-noconfig.cmake",
+        "rqt_image_viewExport.cmake",
+    ],
+    cmd = "touch $(OUTS)",
+)
+
+genrule(
+    name = "rqt_image_view_env_hooks",
+    outs = [
+        "library_path.dsv",
+        "library_path.sh",
+    ],
+    cmd = "touch $(OUTS)",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake = [
+        ":rqt_image_view_cmake_exports",
+    ],
+    cmake_export_dependencies = False,
+    cmake_export_interface = False,
+    cmake_strip_prefix = "",
+    headers = HEADERS,
+    include_prefix = "",
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@image_transport//:ament_package",
+        "@qt_gui_cpp//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rqt_gui//:ament_package",
+        "@rqt_gui_cpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

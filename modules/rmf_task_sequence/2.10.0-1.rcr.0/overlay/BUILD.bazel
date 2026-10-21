@@ -1,0 +1,182 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+DEPENDENCIES = {
+    "@nlohmann_json_schema_validator_vendor//:nlohmann_json_schema_validator": "@nlohmann_json_schema_validator_vendor//:nlohmann_json_schema_validator_library",
+    "@rmf_task//:rmf_task": "@rmf_task//:rmf_task_library",
+}
+
+CC_DEPS = [
+    "@rmf_api_msgs//:rmf_api_msgs",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:nlohmann_json",
+]
+
+cc_library(
+    name = "rmf_task_sequence_library",
+    srcs = [
+        "src/rmf_task_sequence/Activity.cpp",
+        "src/rmf_task_sequence/Event.cpp",
+        "src/rmf_task_sequence/Phase.cpp",
+        "src/rmf_task_sequence/Task.cpp",
+        "src/rmf_task_sequence/detail/Backup.cpp",
+        "src/rmf_task_sequence/events/Bundle.cpp",
+        "src/rmf_task_sequence/events/DropOff.cpp",
+        "src/rmf_task_sequence/events/GoToPlace.cpp",
+        "src/rmf_task_sequence/events/PayloadTransfer.cpp",
+        "src/rmf_task_sequence/events/PerformAction.cpp",
+        "src/rmf_task_sequence/events/PickUp.cpp",
+        "src/rmf_task_sequence/events/Placeholder.cpp",
+        "src/rmf_task_sequence/events/Sequence.cpp",
+        "src/rmf_task_sequence/events/WaitFor.cpp",
+        "src/rmf_task_sequence/events/utils.cpp",
+        "src/rmf_task_sequence/phases/CancellationPhase.cpp",
+        "src/rmf_task_sequence/phases/SimplePhase.cpp",
+        "src/rmf_task_sequence/schemas/ErrorHandler.cpp",
+    ],
+    hdrs = [
+        "include/rmf_task_sequence/Activity.hpp",
+        "include/rmf_task_sequence/Event.hpp",
+        "include/rmf_task_sequence/Phase.hpp",
+        "include/rmf_task_sequence/Task.hpp",
+        "include/rmf_task_sequence/detail/Backup.hpp",
+        "include/rmf_task_sequence/detail/impl_Event.hpp",
+        "include/rmf_task_sequence/detail/impl_Phase.hpp",
+        "include/rmf_task_sequence/detail/impl_Task.hpp",
+        "include/rmf_task_sequence/events/Bundle.hpp",
+        "include/rmf_task_sequence/events/DropOff.hpp",
+        "include/rmf_task_sequence/events/GoToPlace.hpp",
+        "include/rmf_task_sequence/events/PerformAction.hpp",
+        "include/rmf_task_sequence/events/PickUp.hpp",
+        "include/rmf_task_sequence/events/Placeholder.hpp",
+        "include/rmf_task_sequence/events/WaitFor.hpp",
+        "include/rmf_task_sequence/events/detail/impl_Bundle.hpp",
+        "include/rmf_task_sequence/phases/SimplePhase.hpp",
+        "include/rmf_task_sequence/schemas/ErrorHandler.hpp",
+        "include/rmf_task_sequence/typedefs.hpp",
+        "src/rmf_task_sequence/events/internal_PayloadTransfer.hpp",
+        "src/rmf_task_sequence/events/internal_Sequence.hpp",
+        "src/rmf_task_sequence/events/utils.hpp",
+        "src/rmf_task_sequence/phases/internal_CancellationPhase.hpp",
+    ] + [
+        ":backup_EventSequence_v0_1_hpp",
+        ":backup_PhaseSequenceTask_v0_1_hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rmf_task_sequence",
+        "include",
+        "include/rmf_task_sequence",
+    ],
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rmf_task_sequence",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rmf_task_sequence_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rmf_task_sequence"],
+)
+
+genrule(
+    name = "backup_EventSequence_v0_1_hpp",
+    srcs = ["schemas/backup/backup_EventSequence_v0_1.schema.json"],
+    outs = ["_gen/include/rmf_task_sequence/schemas/backup_EventSequence_v0_1.hpp"],
+    cmd = '(printf \'#ifndef RMF_TASK_SEQUENCE__SCHEMAS__BACKUP_EVENTSEQUENCE_V0_1\\n#define RMF_TASK_SEQUENCE__SCHEMAS__BACKUP_EVENTSEQUENCE_V0_1\\n\\n#include <nlohmann/json.hpp>\\n\\nnamespace rmf_task_sequence {\\nnamespace schemas {\\n\\nstatic const nlohmann::json backup_EventSequence_v0_1 =\\nR"raw_schema(\\n\' && cat $(location schemas/backup/backup_EventSequence_v0_1.schema.json) && printf \')raw_schema"_json;\\n\\n} // namespace schemas\\n} // namespace rmf_task_sequence\\n\\n#endif // RMF_TASK_SEQUENCE__SCHEMAS__BACKUP_EVENTSEQUENCE_V0_1\\n\') > $@',
+)
+
+genrule(
+    name = "backup_PhaseSequenceTask_v0_1_hpp",
+    srcs = ["schemas/backup/backup_PhaseSequenceTask_v0_1.schema.json"],
+    outs = ["_gen/include/rmf_task_sequence/schemas/backup_PhaseSequenceTask_v0_1.hpp"],
+    cmd = '(printf \'#ifndef RMF_TASK_SEQUENCE__SCHEMAS__BACKUP_PHASESEQUENCETASK_V0_1\\n#define RMF_TASK_SEQUENCE__SCHEMAS__BACKUP_PHASESEQUENCETASK_V0_1\\n\\n#include <nlohmann/json.hpp>\\n\\nnamespace rmf_task_sequence {\\nnamespace schemas {\\n\\nstatic const nlohmann::json backup_PhaseSequenceTask_v0_1 =\\nR"raw_schema(\\n\' && cat $(location schemas/backup/backup_PhaseSequenceTask_v0_1.schema.json) && printf \')raw_schema"_json;\\n\\n} // namespace schemas\\n} // namespace rmf_task_sequence\\n\\n#endif // RMF_TASK_SEQUENCE__SCHEMAS__BACKUP_PHASESEQUENCETASK_V0_1\\n\') > $@',
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":rmf_task_sequence"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_catch2//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@nlohmann_json_schema_validator_vendor//:ament_package",
+        "@rmf_api_msgs//:ament_package",
+        "@rmf_task//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        ":backup_EventSequence_v0_1_hpp",
+        ":backup_PhaseSequenceTask_v0_1_hpp",
+    ] + [
+        "include/rmf_task_sequence/Activity.hpp",
+        "include/rmf_task_sequence/Event.hpp",
+        "include/rmf_task_sequence/Phase.hpp",
+        "include/rmf_task_sequence/Task.hpp",
+        "include/rmf_task_sequence/detail/Backup.hpp",
+        "include/rmf_task_sequence/detail/impl_Event.hpp",
+        "include/rmf_task_sequence/detail/impl_Phase.hpp",
+        "include/rmf_task_sequence/detail/impl_Task.hpp",
+        "include/rmf_task_sequence/events/Bundle.hpp",
+        "include/rmf_task_sequence/events/DropOff.hpp",
+        "include/rmf_task_sequence/events/GoToPlace.hpp",
+        "include/rmf_task_sequence/events/PerformAction.hpp",
+        "include/rmf_task_sequence/events/PickUp.hpp",
+        "include/rmf_task_sequence/events/Placeholder.hpp",
+        "include/rmf_task_sequence/events/WaitFor.hpp",
+        "include/rmf_task_sequence/events/detail/impl_Bundle.hpp",
+        "include/rmf_task_sequence/phases/SimplePhase.hpp",
+        "include/rmf_task_sequence/schemas/ErrorHandler.hpp",
+        "include/rmf_task_sequence/typedefs.hpp",
+    ],
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [":rmf_task_sequence"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_catch2//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@nlohmann_json_schema_validator_vendor//:ament_package",
+        "@rmf_api_msgs//:ament_package",
+        "@rmf_task//:ament_package",
+    ],
+)
