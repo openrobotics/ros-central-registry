@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node", "rclcpp_components_register_nodes")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
@@ -35,6 +35,11 @@ DEPENDENCIES = {
     "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
 }
 
+WIIMOTE_DEPENDENCIES = {
+    "@rosdistro//cc:bluez": "@rosdistro//cc:bluez_library",
+    "@rosdistro//cc:cwiid": "@rosdistro//cc:cwiid_library",
+}
+
 CC_DEPS = [
     "@geometry_msgs//:cc",
     "@rclcpp//:node_wrapper",
@@ -49,9 +54,7 @@ cc_library(
     name = "teleop_wiimote_library",
     srcs = ["src/teleop_wiimote.cpp"],
     hdrs = [
-        "include/wiimote/stat_vector_3d.hpp",
         "include/wiimote/teleop_wiimote.hpp",
-        "include/wiimote/wiimote_controller.hpp",
     ],
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
@@ -93,12 +96,12 @@ cc_library(
         "include/wiimote",
     ],
     local_defines = ros_local_defines(),
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + WIIMOTE_DEPENDENCIES.values() + CC_DEPS,
 )
 
 cc_shared_library(
     name = "wiimote_lib",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = DEPENDENCIES.keys() + WIIMOTE_DEPENDENCIES.keys(),
     user_link_flags = [
         "-Wl,--allow-shlib-undefined",
         "-Wl,--unresolved-symbols=ignore-all",
@@ -108,9 +111,9 @@ cc_shared_library(
 
 rclcpp_components_register_node(
     name = "teleop_wiimote_node",
-    component = ":wiimote_lib",
+    component = ":teleop_wiimote",
     node_name = "teleop_wiimote_node",
-    plugin = "WiimoteNode",
+    plugin = "TeleopWiimote",
 )
 
 rclcpp_components_register_node(
@@ -120,18 +123,11 @@ rclcpp_components_register_node(
     plugin = "WiimoteNode",
 )
 
-rclcpp_components_register_nodes(
-    name = "teleop_wiimote_components",
-    component = ":teleop_wiimote",
-    plugins = ["TeleopWiimote"],
-)
-
 ament_index(
     name = "ament_index",
     components = [
         ":teleop_wiimote_node_record",
         ":wiimote_node_record",
-        ":teleop_wiimote_components",
     ],
     data = [
         "config/teleop_wiimote_params.yaml",

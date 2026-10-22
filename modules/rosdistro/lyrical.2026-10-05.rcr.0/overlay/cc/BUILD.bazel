@@ -1185,6 +1185,11 @@ alias(
 )
 
 alias(
+    name = "cxxopts",
+    actual = "@cxxopts",
+)
+
+alias(
     name = "doctest",
     actual = "@doctest",
 )
@@ -1202,6 +1207,17 @@ alias(
 alias(
     name = "poco_foundation",
     actual = "@poco//:PocoFoundation",
+)
+
+cc_shared_library(
+    name = "poco_foundation_shared",
+    dynamic_deps = [":zlib"],
+    exports_filter = [
+        "@@pcre2+//:__subpackages__",
+        "@@utf8proc+//:__subpackages__",
+        "@poco//:__subpackages__",
+    ],
+    deps = [":poco_foundation"],
 )
 
 alias(
@@ -1232,6 +1248,15 @@ alias(
 alias(
     name = "lttng_ust",
     actual = "@lttng-ust",
+)
+
+cc_shared_library(
+    name = "lttng_ust_shared",
+    exports_filter = [
+        "@@lttng-ust+//:__subpackages__",
+        "@@userspace_rcu+//:__subpackages__",
+    ],
+    deps = [":lttng_ust"],
 )
 
 alias(
@@ -1292,9 +1317,45 @@ alias(
     actual = "@fcl",
 )
 
-alias(
+cc_public_headers(
+    name = "fcl_public_headers",
+    deps = ["@fcl"],
+)
+
+genrule(
+    name = "fcl_umbrella_header",
+    srcs = [":fcl_public_headers"],
+    outs = ["include/fcl_umbrella/fcl/fcl.h"],
+    cmd = """
+        {
+          echo '#ifndef FCL_FCL_H_'
+          echo '#define FCL_FCL_H_'
+          for f in $(execpaths :fcl_public_headers); do
+            rel="$${f#*include/}"
+            case "$$rel" in
+              fcl/fcl.h) ;;
+              fcl/*/detail/*|fcl/detail/*|*-inl.h) ;;
+              fcl/*.h) echo "#include \\"$$rel\\"" ;;
+            esac
+          done | sort -u
+          echo '#endif  // FCL_FCL_H_'
+        } > $@
+    """,
+)
+
+cc_library(
+    name = "fcl_umbrella_headers",
+    hdrs = [":fcl_umbrella_header"],
+    includes = ["include/fcl_umbrella"],
+    deps = ["@fcl"],
+)
+
+cc_library(
     name = "fcl_library",
-    actual = "@fcl",
+    deps = [
+        ":fcl_umbrella_headers",
+        "@fcl",
+    ],
 )
 
 cc_shared_library(
@@ -1303,7 +1364,11 @@ cc_shared_library(
         ":ccd_shared",
         ":octomap_shared",
     ],
-    exports_filter = ["@fcl//:__subpackages__"],
+    exports_filter = [
+        ":fcl_library",
+        ":fcl_umbrella_headers",
+        "@fcl//:__subpackages__",
+    ],
     deps = [":fcl_library"],
 )
 
@@ -1443,9 +1508,44 @@ cc_shared_library(
 
 # suitesparse
 
+# BCR @suitesparse//:prefixed_headers keeps the source layout
+# (<suitesparse/CCOLAMD/Include/ccolamd.h>); upstream installs every public
+# header flat as <suitesparse/ccolamd.h>, which is what consumers include.
+cc_public_headers(
+    name = "suitesparse_public_headers",
+    deps = ["@suitesparse//:prefixed_headers"],
+)
+
+genrule(
+    name = "suitesparse_flat_header_files",
+    srcs = [":suitesparse_public_headers"],
+    outs = ["include/suitesparse_flat/suitesparse/" + h for h in [
+        "SuiteSparse_config.h",
+        "amd.h",
+        "btf.h",
+        "camd.h",
+        "ccolamd.h",
+        "cholmod.h",
+        "cholmod_types.h",
+        "colamd.h",
+        "cs.h",
+        "klu.h",
+        "klu_version.h",
+        "ldl.h",
+    ]],
+    cmd = "for f in $(execpaths :suitesparse_public_headers); do cp $$f $(RULEDIR)/include/suitesparse_flat/suitesparse/$$(basename $$f); done",
+)
+
+cc_library(
+    name = "suitesparse_flat_headers",
+    hdrs = [":suitesparse_flat_header_files"],
+    includes = ["include/suitesparse_flat"],
+)
+
 cc_library(
     name = "suitesparse_config",
     deps = [
+        ":suitesparse_flat_headers",
         "@suitesparse//:prefixed_headers",
         "@suitesparse//:suitesparse_config",
     ],
@@ -1454,6 +1554,7 @@ cc_library(
 cc_library(
     name = "suitesparse_amd",
     deps = [
+        ":suitesparse_flat_headers",
         "@suitesparse//:amd",
         "@suitesparse//:prefixed_headers",
     ],
@@ -1462,6 +1563,7 @@ cc_library(
 cc_library(
     name = "suitesparse_btf",
     deps = [
+        ":suitesparse_flat_headers",
         "@suitesparse//:btf",
         "@suitesparse//:prefixed_headers",
     ],
@@ -1470,6 +1572,7 @@ cc_library(
 cc_library(
     name = "suitesparse_camd",
     deps = [
+        ":suitesparse_flat_headers",
         "@suitesparse//:camd",
         "@suitesparse//:prefixed_headers",
     ],
@@ -1478,6 +1581,7 @@ cc_library(
 cc_library(
     name = "suitesparse_ccolamd",
     deps = [
+        ":suitesparse_flat_headers",
         "@suitesparse//:ccolamd",
         "@suitesparse//:prefixed_headers",
     ],
@@ -1486,6 +1590,7 @@ cc_library(
 cc_library(
     name = "suitesparse_colamd",
     deps = [
+        ":suitesparse_flat_headers",
         "@suitesparse//:colamd",
         "@suitesparse//:prefixed_headers",
     ],
@@ -1494,6 +1599,7 @@ cc_library(
 cc_library(
     name = "suitesparse_cholmod",
     deps = [
+        ":suitesparse_flat_headers",
         "@suitesparse//:cholmod",
         "@suitesparse//:prefixed_headers",
     ],
@@ -1502,6 +1608,7 @@ cc_library(
 cc_library(
     name = "suitesparse_cxsparse",
     deps = [
+        ":suitesparse_flat_headers",
         "@suitesparse//:cxsparse",
         "@suitesparse//:prefixed_headers",
     ],
@@ -1510,6 +1617,7 @@ cc_library(
 cc_library(
     name = "suitesparse_klu",
     deps = [
+        ":suitesparse_flat_headers",
         "@suitesparse//:klu",
         "@suitesparse//:prefixed_headers",
     ],
@@ -1518,6 +1626,7 @@ cc_library(
 cc_library(
     name = "suitesparse_ldl",
     deps = [
+        ":suitesparse_flat_headers",
         "@suitesparse//:ldl",
         "@suitesparse//:prefixed_headers",
     ],
@@ -1531,6 +1640,39 @@ alias(
 alias(
     name = "suitesparse_umfpack",
     actual = "@suitesparse//:umfpack",
+)
+
+# All SuiteSparse components in one shared library, so consumers that link
+# several of them (or link them alongside ceres) don't embed them twice.
+cc_shared_library(
+    name = "suitesparse_shared",
+    exports_filter = [
+        ":suitesparse_flat_headers",
+        "@suitesparse//:__subpackages__",
+    ] + [":suitesparse_" + c for c in [
+        "config",
+        "amd",
+        "btf",
+        "camd",
+        "ccolamd",
+        "colamd",
+        "cholmod",
+        "cxsparse",
+        "klu",
+        "ldl",
+    ]],
+    deps = [":suitesparse_" + c for c in [
+        "config",
+        "amd",
+        "btf",
+        "camd",
+        "ccolamd",
+        "colamd",
+        "cholmod",
+        "cxsparse",
+        "klu",
+        "ldl",
+    ]],
 )
 
 # nanoflann, flann, libuuid
@@ -1832,6 +1974,11 @@ alias(
     actual = "@boost.test",
 )
 
+alias(
+    name = "boost.test_main",
+    actual = "@boost.test//:unit_test_main",
+)
+
 # glog
 
 alias(
@@ -1854,11 +2001,11 @@ alias(
 
 cc_shared_library(
     name = "ceres",
-    dynamic_deps = [":glog"],
-    exports_filter = [
-        "@ceres-solver//:__subpackages__",
-        "@suitesparse//:__subpackages__",
+    dynamic_deps = [
+        ":glog",
+        ":suitesparse_shared",
     ],
+    exports_filter = ["@ceres-solver//:__subpackages__"],
     deps = [":ceres_library"],
 )
 
@@ -2145,6 +2292,8 @@ alias(
 cc_shared_library(
     name = "glfw",
     exports_filter = [
+        "@@xkbcommon+//:__subpackages__",
+        "@@xkbcommon-x11+//:__subpackages__",
         "@glfw//:__subpackages__",
         "@libx11//:__subpackages__",
         "@libxau//:__subpackages__",
@@ -2277,22 +2426,25 @@ cc_shared_library(
         "@lodepng//:__subpackages__",
         "@mujoco//:__subpackages__",
     ],
-    deps = [
-        ":mujoco_library",
-        ":mujoco_simulate_library",
-    ],
+    deps = [":mujoco_library"],
 )
 
 # onetbb
 
-alias(
+cc_library(
     name = "tbb_library",
-    actual = "@onetbb//:tbb",
+    deps = [
+        "@onetbb//:tbb",
+        "@onetbb//:tbbmalloc",
+    ],
 )
 
 cc_shared_library(
     name = "tbb",
-    exports_filter = ["@onetbb//:__subpackages__"],
+    exports_filter = [
+        ":tbb_library",
+        "@onetbb//:__subpackages__",
+    ],
     deps = [":tbb_library"],
 )
 
@@ -2452,8 +2604,16 @@ alias(
 
 cc_shared_library(
     name = "boost.program_options_shared",
+    dynamic_deps = [":boost.container_shared"],
     exports_filter = ["@boost.program_options//:__subpackages__"],
     deps = [":boost.program_options_library"],
+)
+
+cc_shared_library(
+    name = "boost.python_shared",
+    dynamic_deps = [":boost.serialization_shared"],
+    exports_filter = ["@boost.python//:__subpackages__"],
+    deps = [":boost.python"],
 )
 
 alias(
@@ -2530,6 +2690,43 @@ cc_shared_library(
     deps = [":ncurses_library"],
 )
 
+cc_public_headers(
+    name = "ncurses_panel_public_headers",
+    deps = ["@ncurses//:panel"],
+)
+
+genrule(
+    name = "ncurses_panel_header",
+    srcs = [":ncurses_panel_public_headers"],
+    outs = ["include/ncurses_panel/panel.h"],
+    cmd = "for f in $(execpaths :ncurses_panel_public_headers); do case $$f in */panel.h) cp $$f $@ && break;; esac; done",
+)
+
+cc_library(
+    name = "ncurses_panel_headers",
+    hdrs = [":ncurses_panel_header"],
+    includes = ["include/ncurses_panel"],
+)
+
+cc_library(
+    name = "ncurses_panel_library",
+    deps = [
+        ":ncurses_panel_headers",
+        "@ncurses//:panel",
+    ],
+)
+
+cc_shared_library(
+    name = "ncurses_panel",
+    dynamic_deps = [":ncurses"],
+    exports_filter = [
+        ":ncurses_panel_headers",
+        ":ncurses_panel_library",
+        "@ncurses//:__subpackages__",
+    ],
+    deps = [":ncurses_panel_library"],
+)
+
 alias(
     name = "nlopt_library",
     actual = "@nlopt//:nlopt",
@@ -2563,8 +2760,9 @@ alias(
 cc_shared_library(
     name = "avahi",
     exports_filter = [
+        "@@dbus+//:__subpackages__",
+        "@@libexpat+//:__subpackages__",
         "@avahi//:__subpackages__",
-        "@dbus//:__subpackages__",
     ],
     deps = [":avahi_library"],
 )
@@ -2664,6 +2862,18 @@ cc_shared_library(
     ],
     exports_filter = ["@libiio//:__subpackages__"],
     deps = [":libiio_library"],
+)
+
+alias(
+    name = "freenect_library",
+    actual = "@libfreenect//:libfreenect",
+)
+
+cc_shared_library(
+    name = "freenect",
+    dynamic_deps = [":libusb"],
+    exports_filter = ["@libfreenect//:__subpackages__"],
+    deps = [":freenect_library"],
 )
 
 alias(

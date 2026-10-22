@@ -23,7 +23,7 @@ foxglove_bridge actually uses: the wrapper statically bundles libfoxglove.a
 never see the Rust static lib on their own link line.
 """
 
-_VERSION = "0.25.1"
+_VERSION = "0.28.0"
 
 _ARCH_MAP = {
     "amd64": "x86_64",
@@ -37,19 +37,19 @@ _ARCH_MAP = {
 _PLATFORMS = {
     ("linux", "x86_64"): struct(
         triple = "x86_64-unknown-linux-gnu",
-        sha256 = "0b9d348df3a8e98d2c2cee2360cc9f52e83bb3445044debd771d1b46dc358be4",
+        sha256 = "1a0d8e03a885f01ae7cfb08dc9076090ba2cf8a15b7f46dda11451e2e2758978",
     ),
     ("linux", "aarch64"): struct(
         triple = "aarch64-unknown-linux-gnu",
-        sha256 = "c70e35c78f0e37f3ba8d0251cd31f353bb10b1fd106200dc6c5f409ed4df1918",
+        sha256 = "9c6efdf3bbc491be3fc5f33a6e2467469786ccb3465554c793a59ee2676c9b57",
     ),
     ("darwin", "x86_64"): struct(
         triple = "x86_64-apple-darwin",
-        sha256 = "3531502efd958be3f9dca06a099c167512dd3006b98ac3eecf8250d376eaa16b",
+        sha256 = "5bae49cac58fb423217e9214452c22faa95b51f5bda7c04469fb1649f8b74ce5",
     ),
     ("darwin", "aarch64"): struct(
         triple = "aarch64-apple-darwin",
-        sha256 = "c9dfa5061d72795af2620c2840a85e695b9dacce19475eaec8caf0102c4940ef",
+        sha256 = "7b7a86a659a86544f23bed793b7913ad71c3f6c595233bbdb20d3968a3ce5a3a",
     ),
 }
 
@@ -95,6 +95,7 @@ _PUBLIC_HDRS = [
     "include/foxglove/parameter_handler.hpp",
     "include/foxglove/playback_control_request.hpp",
     "include/foxglove/playback_state.hpp",
+    "include/foxglove/point_cloud_compression.hpp",
     "include/foxglove/remote_access.hpp",
     "include/foxglove/remote_data_loader_backend.hpp",
     "include/foxglove/schema.hpp",

@@ -52,6 +52,7 @@ def _glvnd_stubs_impl(ctx):
     ]
 
     libraries_to_link = []
+    so_files = []
     for lib_short, soname, src_c in stub_specs:
         (_, comp_outputs) = cc_common.compile(
             name = ctx.label.name + "_" + lib_short,
@@ -71,6 +72,7 @@ def _glvnd_stubs_impl(ctx):
             user_link_flags = ["-Wl,-soname," + soname],
         )
         so_file = link_outputs.library_to_link.resolved_symlink_dynamic_library or link_outputs.library_to_link.dynamic_library
+        so_files.append((lib_short, soname, so_file))
         libraries_to_link.append(
             cc_common.create_library_to_link(
                 actions = ctx.actions,
@@ -79,6 +81,22 @@ def _glvnd_stubs_impl(ctx):
                 dynamic_library = so_file,
             ),
         )
+
+    # A single directory holding every stub under both its SONAME and its
+    # unversioned link name (libGL.so, libEGL.so, ...), for consumers whose
+    # upstream linkopts hard-code -lGL/-lEGL and need a -L search path.
+    libdir = ctx.actions.declare_directory(ctx.label.name + "_libdir")
+    copy_cmds = ["mkdir -p {}".format(libdir.path)]
+    for lib_short, soname, so_file in so_files:
+        copy_cmds.append("cp {} {}/{}".format(so_file.path, libdir.path, soname))
+        copy_cmds.append("cp {} {}/lib{}.so".format(so_file.path, libdir.path, lib_short))
+    ctx.actions.run_shell(
+        inputs = [f for _, _, f in so_files],
+        outputs = [libdir],
+        command = " && ".join(copy_cmds),
+        mnemonic = "GlvndStubLibdir",
+        progress_message = "Assembling libglvnd stub library directory",
+    )
 
     linker_input = cc_common.create_linker_input(
         owner = ctx.label,
@@ -91,7 +109,7 @@ def _glvnd_stubs_impl(ctx):
         linker_inputs = depset([linker_input]),
     )
     return [
-        DefaultInfo(),
+        DefaultInfo(files = depset([libdir])),
         CcInfo(linking_context = linking_context),
     ]
 

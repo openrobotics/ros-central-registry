@@ -12,17 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@qt//:qt.bzl", "qt_cc_test")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(
     default_applicable_licenses = ["//:package_license"],
     default_visibility = ["//visibility:public"],
 )
 
-DEPENDENCIES = {}
+DEPENDENCIES = {
+    "@qml6_ros2_plugin//:qml6_ros2_plugin": "@qml6_ros2_plugin//:qml6_ros2_plugin_library",
+}
 
-CC_DEPS = []
+# Mirrors find_package(Qt6 COMPONENTS QuickTest) + Qt6::Qml/Qt6::Quick.
+CC_DEPS = [
+    "@qtbase//:core",
+    "@qtbase//:gui",
+    "@qtdeclarative//:qml",
+    "@qtdeclarative//:quick",
+    "@qtdeclarative//:quicktest",
+]
 
 exports_files([
     "Utils.qml",
@@ -64,12 +74,22 @@ cc_library(
     visibility = ["//visibility:private"],
 )
 
-cc_test(
+collect_transitive_dynamic_deps(
+    name = "test_dynamic_deps",
+    testonly = True,
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+qt_cc_test(
     name = "test_plugins",
     srcs = [
         "mock_classes.cpp",
         "mock_ros2.cpp",
         "test_plugins.cpp",
+    ],
+    hdrs = [
+        "mock_classes.hpp",
+        "mock_ros2.hpp",
     ],
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
@@ -100,15 +120,21 @@ cc_test(
         "tst_TfTreeViewer.qml",
         "tst_TopicMonitor.qml",
     ],
-    dynamic_deps = ["//:transitive_dynamic_deps"],
+    dynamic_deps = [
+        ":test_dynamic_deps",
+        "//:transitive_dynamic_deps",
+    ],
+    includes = ["."],
     local_defines = ros_local_defines() + [
         'QUICK_TEST_SOURCE_DIR=\\"test\\"',
         "RCLCPP_VERSION_MAJOR=32",
     ],
+    moc_srcs = [
+        "mock_classes.cpp",
+        "test_plugins.cpp",
+    ],
     deps = DEPENDENCIES.values() + CC_DEPS + [
-        ":test_helpers",
         "//:rqml_default_plugins_cpp_library",
         "@rosdistro//cc:bazel_test_helper",
-        "@rosdistro//cc:googletest",
     ],
 )
