@@ -51,13 +51,7 @@ def _glvnd_stubs_impl(ctx):
         ("EGL", "libEGL.so.1", out_egl_c),
     ]
 
-    linked_sos = []
-    stub_dir = ctx.actions.declare_directory(ctx.label.name + "_lib")
-    copy_cmds = [
-        "set -e",
-        'mkdir -p "{}"'.format(stub_dir.path),
-    ]
-
+    libraries_to_link = []
     for lib_short, soname, src_c in stub_specs:
         (_, comp_outputs) = cc_common.compile(
             name = ctx.label.name + "_" + lib_short,
@@ -77,36 +71,27 @@ def _glvnd_stubs_impl(ctx):
             user_link_flags = ["-Wl,-soname," + soname],
         )
         so_file = link_outputs.library_to_link.resolved_symlink_dynamic_library or link_outputs.library_to_link.dynamic_library
-        linked_sos.append(so_file)
-        copy_cmds.append('cp -f "{src}" "{dst}/{soname}"'.format(src = so_file.path, dst = stub_dir.path, soname = soname))
-        copy_cmds.append('ln -sf "{soname}" "{dst}/lib{short}.so"'.format(soname = soname, dst = stub_dir.path, short = lib_short))
-
-    ctx.actions.run_shell(
-        inputs = linked_sos,
-        outputs = [stub_dir],
-        command = "\n".join(copy_cmds),
-        mnemonic = "GlvndStubDir",
-        progress_message = "Staging Khronos libglvnd link-time stub libraries",
-    )
+        libraries_to_link.append(
+            cc_common.create_library_to_link(
+                actions = ctx.actions,
+                feature_configuration = feature_configuration,
+                cc_toolchain = cc_toolchain,
+                dynamic_library = so_file,
+            ),
+        )
 
     linker_input = cc_common.create_linker_input(
         owner = ctx.label,
+        libraries = depset(libraries_to_link),
         user_link_flags = [
-            "-L" + stub_dir.path,
             "-Wl,--no-as-needed",
-            "-lGL",
-            "-lGLX",
-            "-lOpenGL",
-            "-lEGL",
-            "-Wl,--as-needed",
         ],
-        additional_inputs = depset([stub_dir]),
     )
     linking_context = cc_common.create_linking_context(
         linker_inputs = depset([linker_input]),
     )
     return [
-        DefaultInfo(files = depset([stub_dir])),
+        DefaultInfo(),
         CcInfo(linking_context = linking_context),
     ]
 
