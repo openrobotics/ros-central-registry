@@ -5,6 +5,7 @@ load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@qt//:qt.bzl", "qt_cc_library", "qt_resource_via_qrc")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:objc_library.bzl", "objc_library")
 load("@rules_license//rules:license.bzl", "license")
@@ -630,13 +631,22 @@ opencv_module(
         "HAVE_IMGCODEC_HDR",
         "HAVE_IMGCODEC_SUNRASTER",
         "HAVE_IMGCODEC_GIF",
+        "HAVE_WEBP",
     ],
     deps = [
         ":imgproc",
         "@libjpeg_turbo//:jpeg",
         "@libpng",
         "@libtiff//:tiff",
+        "@libwebp",
     ],
+)
+
+# Mirrors modules/ml/CMakeLists.txt: ocv_define_module(ml opencv_core ...).
+# Required by opencv_contrib's datasets, quality and text modules.
+opencv_module(
+    name = "ml",
+    deps = [":core"],
 )
 
 opencv_module(
@@ -820,6 +830,9 @@ write_file(
     name = "_highgui_config.hpp",
     out = "opencv_highgui_config.hpp",
     content = select({
+        ":have_qt": [
+            "#define OPENCV_HIGHGUI_BUILTIN_BACKEND_STR \"QT6\"",
+        ],
         ":have_gtk3": [
             "#define OPENCV_HIGHGUI_BUILTIN_BACKEND_STR \"GTK3\"",
         ],
@@ -838,6 +851,65 @@ write_file(
 # NOTE: HighGUI is not a hermetic module, it depends on system-provided GUI libraries
 # Referencing of system libs based on https://stackoverflow.com/questions/51408079/how-do-i-reference-a-system-library-used-by-an-external-dependency-if-copts-does
 
+# Qt6 highgui backend (--@opencv//:with_qt=True), built against the hermetic
+# from-source @qt/@qtbase modules. Mirrors modules/highgui/CMakeLists.txt's
+# HAVE_QT branch: QT6_ADD_RESOURCES(window_QT.qrc), QT6_WRAP_CPP(window_QT.h),
+# linked against Qt6 Core/Gui/Widgets/Test/Concurrent. HAVE_QT_OPENGL is left
+# undefined, matching an upstream build with WITH_OPENGL=OFF.
+#
+# The resource target must be named "window_QT": rcc's --name is derived from
+# it and window_QT.cpp calls Q_INIT_RESOURCE(window_QT).
+qt_resource_via_qrc(
+    name = "window_QT",
+    files = glob(["modules/highgui/src/files_Qt/Material/*.png"]),
+    qrc_file = "modules/highgui/src/window_QT.qrc",
+    target_compatible_with = select({
+        ":have_qt": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+qt_cc_library(
+    name = "highgui_qt",
+    srcs = [
+        "modules/highgui/src/window_QT.cpp",
+    ],
+    hdrs = [
+        "modules/highgui/src/window_QT.h",
+        "opencv_highgui_config.hpp",
+    ] + glob(
+        [
+            "modules/highgui/include/**/*.hpp",
+            "modules/highgui/include/**/*.h",
+            "modules/highgui/src/**/*.hpp",
+            "modules/highgui/src/**/*.h",
+        ],
+        exclude = ["modules/highgui/src/window_QT.h"],
+    ),
+    copts = OPENCV_COPTS + OPENCV_OPTIMIZATION_COPTS,
+    includes = ["modules/highgui/include"],
+    local_defines = [
+        "HAVE_QT=1",
+        "HAVE_QT6=1",
+    ],
+    moc_hdrs = ["modules/highgui/src/window_QT.h"],
+    target_compatible_with = select({
+        ":have_qt": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":_base_headers",
+        ":imgcodecs",
+        ":videoio",
+        ":window_QT",
+        "@qtbase//:concurrent",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:test",
+        "@qtbase//:widgets",
+    ],
+)
+
 opencv_module(
     name = "highgui",
     compatible_with = select({
@@ -854,6 +926,10 @@ opencv_module(
         "//conditions:default": [],
     }),
     local_defines = select({
+        ":have_qt": [
+            "HAVE_QT=1",
+            "HAVE_QT6=1",
+        ],
         ":have_gtk3": [
             "HAVE_GTK3=1",
             "HAVE_GTK=1",
@@ -880,6 +956,7 @@ opencv_module(
         ":imgcodecs",
         ":videoio",
     ] + select({
+        ":have_qt": [":highgui_qt"],
         ":have_gtk3": [":gtk3"],
         "@platforms//os:macos": [":ocv.3rdparty.cocoa"],
         "//conditions:default": [],
@@ -938,6 +1015,17 @@ bool_flag(
 config_setting(
     name = "have_gtk3",
     flag_values = {":with_gtk3": "True"},
+)
+
+bool_flag(
+    name = "with_qt",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "have_qt",
+    flag_values = {":with_qt": "True"},
+    visibility = ["//visibility:public"],
 )
 
 # TODO: replace with BCR version of GTK3 after https://github.com/bazelbuild/bazel-central-registry/issues/6187 is resolved

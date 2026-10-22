@@ -230,6 +230,23 @@ MODULE_OVERRIDES = (
         patches=(("zlib_shared.patch", "Adds the @zlib//:zlib_shared cc_shared_library."),),
     ),
     ModuleOverride(
+        module="systemd",
+        version="260.1.bcr.2",
+        reason=(
+            "The BCR module's hand-curated config.h hard-codes HAVE_EPOLL_PWAIT2=1,\n"
+            "but epoll_pwait2() only appeared in glibc 2.35 and the hermetic toolchain\n"
+            "targets glibc 2.34 headers (see build:linux in .bazelrc), so\n"
+            "sd-event.c fails to compile with an implicit declaration error."
+        ),
+        patches=(
+            (
+                "glibc_2_34_epoll_pwait2.patch",
+                "Sets HAVE_EPOLL_PWAIT2=0 so sd-event.c uses its built-in epoll_wait()\n"
+                "fallback, upstream's own behavior on libcs older than 2.35.",
+            ),
+        ),
+    ),
+    ModuleOverride(
         module="libjpeg_turbo",
         version="3.1.3.bcr.4",
         reason=(
