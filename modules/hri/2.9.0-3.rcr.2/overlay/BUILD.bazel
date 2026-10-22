@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
@@ -37,12 +38,34 @@ DEPENDENCIES = {
     "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
 }
 
+# Upstream magic_enum's CMake install interface puts include/magic_enum on the
+# include path, so face.cpp does `#include "magic_enum.hpp"`; the BCR module
+# only exposes include/, so forward the flat include to the namespaced one.
+write_file(
+    name = "magic_enum_compat_hpp",
+    out = "_magic_enum_compat/magic_enum.hpp",
+    content = [
+        "#pragma once",
+        "#include <magic_enum/magic_enum.hpp>",
+        "",
+    ],
+)
+
+cc_library(
+    name = "magic_enum_compat",
+    hdrs = [":magic_enum_compat_hpp"],
+    includes = ["_magic_enum_compat"],
+    visibility = ["//visibility:private"],
+    deps = ["@rosdistro//cc:magic_enum"],
+)
+
 CC_DEPS = [
+    ":magic_enum_compat",
     "@geometry_msgs//:cc",
     "@hri_msgs//:cc",
-    "@magic_enum//:magic_enum_library",
     "@rclcpp//:node_wrapper",
     "@rclcpp//:type_adapter",
+    "@rosdistro//cc:magic_enum",
     "@sensor_msgs//:cc",
     "@std_msgs//:cc",
 ]
@@ -81,10 +104,6 @@ cc_library(
 cc_shared_library(
     name = "hri",
     dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
     deps = [":hri_library"],
 )
 
@@ -105,10 +124,6 @@ cc_binary(
         "include/hri",
         "test",
     ],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS + [":hri_library"],
 )
@@ -126,7 +141,6 @@ ament_index(
         "@cv_bridge//:ament_package",
         "@geometry_msgs//:ament_package",
         "@hri_msgs//:ament_package",
-        "@magic_enum//:ament_package",
         "@rclcpp//:ament_package",
         "@rclcpp_lifecycle//:ament_package",
         "@sensor_msgs//:ament_package",
@@ -168,7 +182,6 @@ ament_package(
         "@cv_bridge//:ament_package",
         "@geometry_msgs//:ament_package",
         "@hri_msgs//:ament_package",
-        "@magic_enum//:ament_package",
         "@rclcpp//:ament_package",
         "@rclcpp_lifecycle//:ament_package",
         "@sensor_msgs//:ament_package",
