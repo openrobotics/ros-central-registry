@@ -21,7 +21,7 @@ load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines", "ros_version_header")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -488,24 +488,37 @@ done
 MANIFEST_OUT="$(location _gen/share/auto_apms_behavior_tree/auto_apms/auto_apms_behavior_tree_core/metadata/node_manifest_behavior_tree_nodes.yaml)"
 MODEL_OUT="$(location _gen/share/auto_apms_behavior_tree/auto_apms/auto_apms_behavior_tree_core/metadata/node_model_behavior_tree_nodes.xml)"
 HEADER_OUT="$(location _gen/include/auto_apms_behavior_tree/auto_apms_behavior_tree/behavior_tree_nodes.hpp)"
-OUT_LINES="$$($(location @auto_apms_behavior_tree_core//:create_node_manifest) $(location :standard_nodes_yaml) "$$BUILD_INFOS" auto_apms_behavior_tree "$$MANIFEST_OUT")"
+OUT_LINES="$$($(location :ament_prefix_wrapper) $(location @auto_apms_behavior_tree_core//:create_node_manifest) $(location :standard_nodes_yaml) "$$BUILD_INFOS" auto_apms_behavior_tree "$$MANIFEST_OUT")"
 LIB_PATHS="$$(printf '%s\\n' "$$OUT_LINES" | sed -n '1p')"
 REG_TYPES="$$(printf '%s\\n' "$$OUT_LINES" | sed -n '2p')"
-$(location @auto_apms_behavior_tree_core//:create_node_model) "$$MANIFEST_OUT" "$$LIB_PATHS" "$$REG_TYPES" "$$MODEL_OUT"
-$(location @auto_apms_behavior_tree_core//:create_node_model_header) "$$MANIFEST_OUT" "$$MODEL_OUT" auto_apms_behavior_tree "$$HEADER_OUT"
+$(location :ament_prefix_wrapper) $(location @auto_apms_behavior_tree_core//:create_node_model) "$$MANIFEST_OUT" "$$LIB_PATHS" "$$REG_TYPES" "$$MODEL_OUT"
+$(location :ament_prefix_wrapper) $(location @auto_apms_behavior_tree_core//:create_node_model_header) "$$MANIFEST_OUT" "$$MODEL_OUT" auto_apms_behavior_tree "$$HEADER_OUT"
 """,
     tools = [
+        ":ament_prefix_wrapper",
         "@auto_apms_behavior_tree_core//:create_node_manifest",
         "@auto_apms_behavior_tree_core//:create_node_model",
         "@auto_apms_behavior_tree_core//:create_node_model_header",
     ],
 )
 
+# Upstream runs the auto_apms_behavior_tree_core generators with that
+# package's ament index installed; give the genrule tools the same view.
+py_binary(
+    name = "ament_prefix_wrapper",
+    srcs = ["bazel/ament_prefix_wrapper.py"],
+    data = ["@auto_apms_behavior_tree_core//:ament_index"],
+    main = "bazel/ament_prefix_wrapper.py",
+)
+
 genrule(
     name = "gen_node_model_native",
     outs = ["_gen/share/auto_apms_behavior_tree/auto_apms/auto_apms_behavior_tree_core/metadata/node_model_native.xml"],
-    cmd = "$(location @auto_apms_behavior_tree_core//:create_node_model_for_manifest_resource) $@",
-    tools = ["@auto_apms_behavior_tree_core//:create_node_model_for_manifest_resource"],
+    cmd = "$(location :ament_prefix_wrapper) $(location @auto_apms_behavior_tree_core//:create_node_model_for_manifest_resource) $@",
+    tools = [
+        ":ament_prefix_wrapper",
+        "@auto_apms_behavior_tree_core//:create_node_model_for_manifest_resource",
+    ],
 )
 
 auto_apms_util_register_plugins(

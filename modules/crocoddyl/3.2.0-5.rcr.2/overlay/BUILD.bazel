@@ -258,9 +258,71 @@ ros_jrl_headers(
     ],
 )
 
+# Mirrors crocoddyl.cmake's crocoddyl_generate_cpp_files(): every
+# <file>.cpp.in (SCALAR_TYPES) / <file>.cpp_fptype.in (SCALAR_FPTYPES) template
+# is configured once per scalar into <file>-<scalar>.cpp. Code-generation
+# templates are skipped, as upstream does without BUILD_WITH_CODEGEN_SUPPORT.
+_SCALAR_TYPES = [
+    "double",
+    "float",
+]
+
+_LIB_ETI_TEMPLATES = glob(
+    [
+        "src/**/*.cpp.in",
+        "src/**/*.cpp_fptype.in",
+    ],
+    exclude = ["src/**/codegen/**"],
+)
+
+[
+    expand_template(
+        name = "eti_" + t.replace("/", "_").replace(".", "_").replace("-", "_") + "_" + s,
+        out = "_gen/" + t.rsplit(".", 2)[0] + "-" + s + ".cpp",
+        substitutions = {"@SCALAR_TYPE@": s},
+        template = t,
+    )
+    for t in _LIB_ETI_TEMPLATES
+    for s in _SCALAR_TYPES
+]
+
+_LIB_ETI_SRCS = [
+    "_gen/" + t.rsplit(".", 2)[0] + "-" + s + ".cpp"
+    for t in _LIB_ETI_TEMPLATES
+    for s in _SCALAR_TYPES
+]
+
+# Python bindings: one Boost.Python module per scalar (SCALAR_NAME -> scalar).
+_PYWRAP_SCALARS = {
+    "float32": "float",
+    "float64": "double",
+}
+
+_PYWRAP_ETI_TEMPLATES = glob(
+    ["bindings/python/**/*.cpp.in"],
+    exclude = ["bindings/python/**/codegen/**"],
+)
+
+[
+    expand_template(
+        name = "pywrap_eti_" + t.replace("/", "_").replace(".", "_").replace("-", "_") + "_" + name,
+        out = "_gen/pywrap_" + name + "/" + t.rsplit(".", 2)[0] + "-" + s + ".cpp",
+        substitutions = {
+            "@FP_TYPE@": "TRUE",
+            "@SCALAR_NAME@": name,
+            "@SCALAR_TYPE@": s,
+        },
+        template = t,
+    )
+    for t in _PYWRAP_ETI_TEMPLATES
+    for name, s in _PYWRAP_SCALARS.items()
+]
+
+_PYWRAP_HDRS = glob(["bindings/python/**/*.hpp"])
+
 cc_library(
     name = "crocoddyl_library",
-    srcs = [
+    srcs = _LIB_ETI_SRCS + [
         "src/core/solver-base.cpp",
         "src/core/solvers/box-ddp.cpp",
         "src/core/solvers/box-fddp.cpp",
@@ -310,8 +372,15 @@ cc_shared_library(
 
 cc_library(
     name = "crocoddyl_pywrap_float32.cpython-314-x86_64-linux-gnu_library",
-    srcs = ["bindings/python/crocoddyl/core/core.cpp"],
+    srcs = ["bindings/python/crocoddyl/core/core.cpp"] + _PYWRAP_HDRS + [
+        "_gen/pywrap_float32/" + t.rsplit(".", 2)[0] + "-float.cpp"
+        for t in _PYWRAP_ETI_TEMPLATES
+    ],
     hdrs = _HDRS + [":jrl_headers"],
+    copts = [
+        "-Wno-conversion",
+        "-Wno-deprecated-declarations",
+    ],
     includes = [
         "_gen/include",
         "_gen/include/crocoddyl",
@@ -347,8 +416,15 @@ cc_shared_library(
 
 cc_library(
     name = "crocoddyl_pywrap_float64.cpython-314-x86_64-linux-gnu_library",
-    srcs = ["bindings/python/crocoddyl/core/core.cpp"],
+    srcs = ["bindings/python/crocoddyl/core/core.cpp"] + _PYWRAP_HDRS + [
+        "_gen/pywrap_float64/" + t.rsplit(".", 2)[0] + "-double.cpp"
+        for t in _PYWRAP_ETI_TEMPLATES
+    ],
     hdrs = _HDRS + [":jrl_headers"],
+    copts = [
+        "-Wno-conversion",
+        "-Wno-deprecated-declarations",
+    ],
     includes = [
         "_gen/include",
         "_gen/include/crocoddyl",
@@ -474,7 +550,6 @@ ament_package(
         ":crocoddyl_pywrap_float64.cpython-314-x86_64-linux-gnu",
         "bindings/python/crocoddyl/crocoddyl.launch",
         "bindings/python/crocoddyl/crocoddyl.rviz",
-        "bindings/python/crocoddyl/notebooks/02_optimizing_a_cartpole_swingup.ipynb",
         ":gen_py_4",
     ],
     python_strip_prefix = "bindings/python",

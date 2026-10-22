@@ -1,3 +1,17 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
@@ -17,7 +31,25 @@ license(
 )
 
 DEPENDENCIES = {
+    "@rosdistro//cc:avahi": "@rosdistro//cc:avahi_library",
 }
+
+SAMPLE_DEPENDENCIES = {
+    "@rosdistro//cc:ncurses": "@rosdistro//cc:ncurses_library",
+}
+
+# Platform-specific implementations #included by pomp_loop.c / pomp_timer.c
+# (each guarded by its own POMP_HAVE_* macro); upstream excludes them from
+# direct compilation.
+POMP_PLATFORM_SRCS = [
+    "Sources/pomp_loop_linux.c",
+    "Sources/pomp_loop_posix.c",
+    "Sources/pomp_loop_win32.c",
+    "Sources/pomp_timer_kqueue.c",
+    "Sources/pomp_timer_linux.c",
+    "Sources/pomp_timer_posix.c",
+    "Sources/pomp_timer_win32.c",
+]
 
 CC_DEPS = [
 ]
@@ -45,7 +77,6 @@ cc_library(
         "Sources/ARCONTROLLER_StreamQueue.c",
         "Sources/ARCONTROLLER_StreamSender.c",
         "Sources/ARDISCOVERY_AvahiDiscovery.c",
-        "Sources/ARDISCOVERY_AvahiDiscovery_nodbus.c",
         "Sources/ARDISCOVERY_Connection.c",
         "Sources/ARDISCOVERY_Device.c",
         "Sources/ARDISCOVERY_Discovery.c",
@@ -110,16 +141,9 @@ cc_library(
         "Sources/pomp_encoder.c",
         "Sources/pomp_log.c",
         "Sources/pomp_loop.c",
-        "Sources/pomp_loop_linux.c",
-        "Sources/pomp_loop_posix.c",
-        "Sources/pomp_loop_win32.c",
         "Sources/pomp_msg.c",
         "Sources/pomp_prot.c",
         "Sources/pomp_timer.c",
-        "Sources/pomp_timer_kqueue.c",
-        "Sources/pomp_timer_linux.c",
-        "Sources/pomp_timer_posix.c",
-        "Sources/pomp_timer_win32.c",
         "Sources/rtsp.c",
         "Sources/rtsp_client.c",
         "Sources/rtsp_log.c",
@@ -137,8 +161,6 @@ cc_library(
         "Sources/ulog_write_raw.c",
     ],
     hdrs = [
-        "BebopSample/BebopSample.h",
-        "BebopSample/ihm.h",
         "Includes/futils/dynmbox.h",
         "Includes/futils/fdutils.h",
         "Includes/futils/futils.h",
@@ -224,8 +246,6 @@ cc_library(
         "Includes/ulogger.h",
         "Includes/ulogprint.h",
         "Includes/ulograw.h",
-        "JumpingSumoSample/JumpingSumoSample.h",
-        "JumpingSumoSample/ihm.h",
         "Sources/ARCOMMANDS_ReadWrite.h",
         "Sources/ARCONTROLLER_AudioHeader.h",
         "Sources/ARCONTROLLER_Device.h",
@@ -650,11 +670,11 @@ cc_library(
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     includes = [
         "Includes",
-        "JumpingSumoSample",
         "Sources",
         "include",
     ],
     local_defines = ros_local_defines() + ["HAS_MMSG"],
+    textual_hdrs = POMP_PLATFORM_SRCS,
     deps = DEPENDENCIES.values() + CC_DEPS,
 )
 
@@ -670,14 +690,16 @@ cc_shared_library(
 
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys() + [":ardrone_sdk_lib"],
+    dynamic_deps = DEPENDENCIES.keys() + SAMPLE_DEPENDENCIES.keys() + [":ardrone_sdk_lib"],
 )
 
 cc_binary(
     name = "_bin/JumpingSumoSample",
     srcs = [
         "JumpingSumoSample/JumpingSumoSample.c",
+        "JumpingSumoSample/JumpingSumoSample.h",
         "JumpingSumoSample/ihm.c",
+        "JumpingSumoSample/ihm.h",
     ],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     dynamic_deps = [":transitive_dynamic_deps"],
@@ -692,7 +714,7 @@ cc_binary(
         "-Wl,--unresolved-symbols=ignore-all",
     ],
     local_defines = ros_local_defines(),
-    deps = DEPENDENCIES.values() + CC_DEPS + [":ardrone_sdk_lib_library"],
+    deps = DEPENDENCIES.values() + SAMPLE_DEPENDENCIES.values() + CC_DEPS + [":ardrone_sdk_lib_library"],
 )
 
 pkg_files(
