@@ -13,13 +13,14 @@
 # limitations under the License.
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("@pip_ros//:requirements.bzl", "requirement")
+load("@pip_ros//:requirements.bzl", "requirement", "whl_requirement")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:pip.bzl", "whl_filegroup")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -33,32 +34,69 @@ license(
     ],
 )
 
+whl_filegroup(
+    name = "numpy_includes",
+    pattern = "numpy/.*core/include/numpy",
+    whl = whl_requirement("numpy"),
+)
+
+cc_library(
+    name = "numpy_headers",
+    hdrs = [":numpy_includes"],
+    includes = [
+        "numpy_includes/numpy/_core/include",
+        "numpy_includes/numpy/core/include",
+    ],
+    deps = ["@rules_python//python/cc:current_py_cc_headers"],
+)
+
 DEPENDENCIES = {
-    "@rosdistro//cc:libusb": "@rosdistro//cc:libusb_library",
+    "@rosdistro//cc:bluez": "@rosdistro//cc:bluez_library",
     "@rosdistro//cc:boringssl": "@rosdistro//cc:boringssl_crypto_library",
+    "@rosdistro//cc:boost.asio_shared": "@rosdistro//cc:boost.asio_library",
+    "@rosdistro//cc:boost.chrono_shared": "@rosdistro//cc:boost.chrono_library",
+    "@rosdistro//cc:boost.container_shared": "@rosdistro//cc:boost.container_library",
+    "@rosdistro//cc:boost.filesystem_shared": "@rosdistro//cc:boost.filesystem_library",
+    "@rosdistro//cc:boost.locale_shared": "@rosdistro//cc:boost.locale_library",
+    "@rosdistro//cc:boost.program_options_shared": "@rosdistro//cc:boost.program_options_library",
+    "@rosdistro//cc:boost.thread_shared": "@rosdistro//cc:boost.thread_library",
+    "@rosdistro//cc:dbus": "@rosdistro//cc:dbus_library",
+    "@rosdistro//cc:libusb": "@rosdistro//cc:libusb_library",
 }
 
 CC_DEPS = [
     "@rosdistro//cc:boost.uuid",
-    "@googletest//:gtest",
     "@rosdistro//cc:boost.algorithm",
     "@rosdistro//cc:boost.array",
     "@rosdistro//cc:boost.asio",
     "@rosdistro//cc:boost.assign",
+    "@rosdistro//cc:boost.atomic",
     "@rosdistro//cc:boost.bind",
+    "@rosdistro//cc:boost.chrono",
     "@rosdistro//cc:boost.config",
+    "@rosdistro//cc:boost.container",
     "@rosdistro//cc:boost.date_time",
     "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.foreach",
     "@rosdistro//cc:boost.format",
     "@rosdistro//cc:boost.function",
+    "@rosdistro//cc:boost.interprocess",
+    "@rosdistro//cc:boost.intrusive",
     "@rosdistro//cc:boost.lexical_cast",
+    "@rosdistro//cc:boost.locale",
     "@rosdistro//cc:boost.numeric_conversion",
     "@rosdistro//cc:boost.optional",
     "@rosdistro//cc:boost.predef",
     "@rosdistro//cc:boost.program_options",
+    "@rosdistro//cc:boost.random",
+    "@rosdistro//cc:boost.range",
     "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:boost.scope_exit",
+    "@rosdistro//cc:boost.signals2",
     "@rosdistro//cc:boost.smart_ptr",
     "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:boost.tuple",
+    "@rosdistro//cc:boost.unordered",
     "@rosdistro//cc:boost.utility",
     "@rosdistro//cc:boost.variant",
     "@rosdistro//cc:boringssl_ssl_library",
@@ -75,7 +113,6 @@ cc_library(
         "RobotRaconteurCore/src/AsyncUtils.cpp",
         "RobotRaconteurCore/src/AutoResetEvent.cpp",
         "RobotRaconteurCore/src/BroadcastDownsampler.cpp",
-        "RobotRaconteurCore/src/BrowserWebSocketTransport.cpp",
         "RobotRaconteurCore/src/CallbackMember.cpp",
         "RobotRaconteurCore/src/Client.cpp",
         "RobotRaconteurCore/src/DataTypes.cpp",
@@ -100,7 +137,6 @@ cc_library(
         "RobotRaconteurCore/src/NodeSetup.cpp",
         "RobotRaconteurCore/src/OpenSSLAuthContext.cpp",
         "RobotRaconteurCore/src/PipeMember.cpp",
-        "RobotRaconteurCore/src/RobotRaconteurEmscripten.cpp",
         "RobotRaconteurCore/src/RobotRaconteurNode.cpp",
         "RobotRaconteurCore/src/RobotRaconteurNode_connector.cpp",
         "RobotRaconteurCore/src/RobotRaconteurServiceIndex_stubskel.cpp",
@@ -117,8 +153,6 @@ cc_library(
         "RobotRaconteurCore/src/TcpTransport.cpp",
         "RobotRaconteurCore/src/ThreadPool.cpp",
         "RobotRaconteurCore/src/Timer.cpp",
-        "RobotRaconteurCore/src/Timer_emscripten.cpp",
-        "RobotRaconteurCore/src/TlsSchannelStreamAdapter.cpp",
         "RobotRaconteurCore/src/Transport.cpp",
         "RobotRaconteurCore/src/WireMember.cpp",
     ],
@@ -272,6 +306,7 @@ cc_library(
     name = "_RobotRaconteurPython_library",
     srcs = [
         "RobotRaconteurPython/PythonTypeSupport.cpp",
+        "SWIG/RobotRaconteurWrapped.cpp",
         "generated_src/Python3/swigwordsize64/RobotRaconteurPythonPYTHON_wrap.cxx",
     ],
     hdrs = [
@@ -415,12 +450,16 @@ cc_library(
         "RR_PYTHON",
         "SWIG_TYPE_TABLE=robotraconteur_python",
     ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [":RobotRaconteurCore_library"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":RobotRaconteurCore_library",
+        ":numpy_headers",
+        "@rosdistro//cc:pybind11",
+    ],
 )
 
 cc_shared_library(
     name = "_RobotRaconteurPython",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = DEPENDENCIES.keys() + [":RobotRaconteurCore"],
     shared_lib_name = "RobotRaconteur/_RobotRaconteurPython.so",
     deps = [":_RobotRaconteurPython_library"],
 )
@@ -1024,13 +1063,13 @@ cc_library(
 
 cc_shared_library(
     name = "robotraconteur_test_server_lib",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = DEPENDENCIES.keys() + [":RobotRaconteurCore"],
     deps = [":robotraconteur_test_server_lib_library"],
 )
 
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = DEPENDENCIES.keys() + [":RobotRaconteurCore"],
 )
 
 cc_binary(

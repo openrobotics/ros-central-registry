@@ -1,8 +1,21 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -17,21 +30,97 @@ license(
 )
 
 DEPENDENCIES = {
+    "@mola_kernel//:mola_kernel": "@mola_kernel//:mola_kernel_library",
+    "@mrpt_maps//:mrpt_maps": "@mrpt_maps//:mrpt_maps_library",
+    "@mrpt_obs//:mrpt_obs": "@mrpt_obs//:mrpt_obs_library",
+    "@rosdistro//cc:boost.date_time_shared": "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.filesystem_shared": "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.program_options_shared": "@rosdistro//cc:boost.program_options",
+    "@rosdistro//cc:boost.regex_shared": "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:bzip2": "@rosdistro//cc:bzip2_library",
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
 }
 
 CC_DEPS = [
     "@geometry_msgs//:cc",
-    "@mola_kernel//:mola_kernel_library",
-    "@mrpt_maps//:mrpt_maps_library",
-    "@mrpt_obs//:mrpt_obs_library",
-    "@tf2//:tf2_library",
-    "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
 ]
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    deps = DEPENDENCIES.keys(),
+)
+
+cc_library(
+    name = "rosbag_library",
+    srcs = glob([
+        "ros1/console_bridge/src/*.cpp",
+        "ros1/ros_comm/tools/rosbag_storage/src/*.cpp",
+        "ros1/ros_comm/utilities/roslz4/src/[a-z]*.c",
+        "ros1/roscpp_core/cpp_common/src/*.cpp",
+        "ros1/roscpp_core/roscpp_serialization/src/*.cpp",
+        "ros1/roscpp_core/rostime/src/*.cpp",
+    ]),
+    hdrs = glob([
+        "ros1/**/*.h",
+        "ros1/**/*.hpp",
+    ]),
+    copts = [
+        "-fvisibility=hidden",
+        "-Wno-deprecated-declarations",
+        "-Wno-unused-parameter",
+    ],
+    includes = [
+        "ros1/console_bridge/include",
+        "ros1/include",
+        "ros1/ros_comm/tools/rosbag_storage/include",
+        "ros1/ros_comm/utilities/roslz4/include",
+        "ros1/roscpp_core/cpp_common/include",
+        "ros1/roscpp_core/roscpp_serialization/include",
+        "ros1/roscpp_core/roscpp_traits/include",
+        "ros1/roscpp_core/rostime/include",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_library(
+    name = "mrpt_ros1bridge_library",
+    srcs = [
+        "mrpt_ros_bridge/ros1bridge/src/gps.cpp",
+        "mrpt_ros_bridge/ros1bridge/src/image.cpp",
+        "mrpt_ros_bridge/ros1bridge/src/imu.cpp",
+        "mrpt_ros_bridge/ros1bridge/src/laser_scan.cpp",
+        "mrpt_ros_bridge/ros1bridge/src/point_cloud2.cpp",
+        "mrpt_ros_bridge/ros1bridge/src/pose.cpp",
+        "mrpt_ros_bridge/ros1bridge/src/range.cpp",
+        "mrpt_ros_bridge/ros1bridge/src/time.cpp",
+    ],
+    hdrs = [
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/gps.h",
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/image.h",
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/imu.h",
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/laser_scan.h",
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/logging.h",
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/map.h",
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/point_cloud2.h",
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/pose.h",
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/range.h",
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/stereo_image.h",
+        "mrpt_ros_bridge/ros1bridge/include/mrpt/ros1bridge/time.h",
+    ],
+    includes = [
+        "mrpt_ros_bridge/ros1bridge/include",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rosbag_library",
+    ],
+)
 
 cc_library(
     name = "mola_input_rosbag1_library",
     srcs = [
-        "include/mola_input_rosbag1/Rosbag1Dataset.h",
         "src/Rosbag1Dataset.cpp",
     ],
     hdrs = ["include/mola_input_rosbag1/Rosbag1Dataset.h"],
@@ -42,19 +131,23 @@ cc_library(
         "src",
     ],
     local_defines = ros_local_defines(),
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":mrpt_ros1bridge_library",
+        ":rosbag_library",
+    ],
 )
 
 cc_shared_library(
     name = "mola_input_rosbag1",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = [":transitive_dynamic_deps"],
     deps = [":mola_input_rosbag1_library"],
 )
 
 cc_binary(
     name = "rosbag1-info",
     srcs = ["apps/rosbag1-info.cpp"],
-    deps = [":mola_input_rosbag1_library"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":rosbag_library"],
 )
 
 ament_index(

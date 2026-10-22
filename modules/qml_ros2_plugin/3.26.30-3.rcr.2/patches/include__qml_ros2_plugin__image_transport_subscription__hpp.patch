@@ -1,0 +1,81 @@
+--- a/include/qml_ros2_plugin/image_transport_subscription.hpp
++++ b/include/qml_ros2_plugin/image_transport_subscription.hpp
+@@ -6,10 +6,16 @@
+ 
+ #include "qml_ros2_plugin/qobject_ros2.hpp"
+ 
+-#include <QAbstractVideoSurface>
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  #include <QVideoFrame>
++  #include <QVideoFrameFormat>
++  #include <QVideoSink>
++#else
++  #include <QAbstractVideoSurface>
++  #include <QVideoSurfaceFormat>
++#endif
+ #include <QPointer>
+ #include <QTimer>
+-#include <QVideoSurfaceFormat>
+ 
+ #include <image_transport/image_transport.hpp>
+ #include <image_transport/subscriber.hpp>
+@@ -23,8 +29,14 @@
+ class ImageTransportSubscription : public QObjectRos2
+ {
+   Q_OBJECT
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  //! Interface for QML. This is the videoSink/surface the images are passed to.
++  Q_PROPERTY( QVideoSink *videoSink READ videoSink WRITE setVideoSink )
++  Q_PROPERTY( QVideoSink *videoSurface READ videoSurface WRITE setVideoSurface )
++#else
+   //! Interface for QML. This is the surface the images are passed to.
+   Q_PROPERTY( QAbstractVideoSurface *videoSurface READ videoSurface WRITE setVideoSurface )
++#endif
+   //! The image base topic (without image_raw etc.). This value may change once the subscriber is
+   //! connected and private topic names or remappings were evaluated.
+   Q_PROPERTY( QString topic READ topic WRITE setTopic NOTIFY topicChanged )
+@@ -59,9 +71,21 @@
+ 
+   ImageTransportSubscription();
+ 
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  QVideoSink *videoSink() const;
++  void setVideoSink( QVideoSink *sink );
++  QVideoSink *videoSurface() const { return videoSink(); }
++  void setVideoSurface( QVideoSink *surface ) { setVideoSink( surface ); }
++  void setSupportedPixelFormats( const QList<QVideoFrameFormat::PixelFormat> &formats )
++  {
++    supported_formats_override_ = formats;
++    has_supported_formats_override_ = true;
++  }
++#else
+   QAbstractVideoSurface *videoSurface() const;
+ 
+   void setVideoSurface( QAbstractVideoSurface *surface );
++#endif
+ 
+   QString topic() const;
+ 
+@@ -134,12 +158,22 @@
+   void shutdownSubscriber();
+ 
+   QTimer no_image_timer_;
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  QVideoFrameFormat format_;
++#else
+   QVideoSurfaceFormat format_;
++#endif
+   QString topic_;
+   QString default_transport_;
+   QVideoFrame last_frame_;
+   std::shared_ptr<ImageTransportSubscriptionHandle> subscription_;
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  QPointer<QVideoSink> surface_;
++  QList<QVideoFrameFormat::PixelFormat> supported_formats_override_;
++  bool has_supported_formats_override_ = false;
++#else
+   QPointer<QAbstractVideoSurface> surface_;
++#endif
+   rclcpp::Clock clock_;
+   rclcpp::Time last_frame_timestamp_;
+   std::string encoding_;
