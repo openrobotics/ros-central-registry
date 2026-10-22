@@ -220,6 +220,7 @@ MODULES_COMMON = [
     "flann",
     "imgcodecs",
     "imgproc",
+    "ml",
     "objdetect",
     "photo",
     "stitching",
@@ -278,8 +279,7 @@ def opencv_module(
         local_defines = [],
         compatible_with = [],
         srcs_excludes_globs = [],
-        sources = None  # reserved for modules that list sources explicitly, such as videoio or highgui
-):
+        sources = None):  # reserved for modules that list sources explicitly, such as videoio or highgui
     """
     Creates a Bazel rule for an OpenCV module.
 

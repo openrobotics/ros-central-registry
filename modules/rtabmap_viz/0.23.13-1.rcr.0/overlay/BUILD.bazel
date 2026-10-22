@@ -1,6 +1,21 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 load("@qt//:qt.bzl", "qt_cc_binary")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
@@ -49,10 +64,21 @@ CC_DEPS = [
     "@std_srvs//:cc",
 ]
 
-MOC_HDRS = [
-    "include/rtabmap_viz/PreferencesDialogROS.h",
-    "include/rtabmap_viz/rgbd_image_viewer.hpp",
-]
+# cc_binary has no `includes`, so the package's own headers (included as
+# <rtabmap_viz/...>) are exposed through a header-only library.
+cc_library(
+    name = "rtabmap_viz_headers",
+    hdrs = glob([
+        "include/rtabmap_viz/*.h",
+        "include/rtabmap_viz/*.hpp",
+    ]),
+    includes = [
+        "include",
+        "include/rtabmap_viz",
+    ],
+    visibility = ["//visibility:private"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
 
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
@@ -71,17 +97,13 @@ qt_cc_binary(
     ],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        "include",
-        "include/rtabmap_viz",
-    ],
     local_defines = ros_local_defines() + [
         "GLAD_API_CALL_EXPORT",
         "kiss_fft_scalar=double",
     ],
-    moc_hdrs = MOC_HDRS,
+    moc_hdrs = ["include/rtabmap_viz/rgbd_image_viewer.hpp"],
     moc_srcs = [],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [":rtabmap_viz_headers"],
 )
 
 qt_cc_binary(
@@ -97,17 +119,13 @@ qt_cc_binary(
     ],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     dynamic_deps = [":transitive_dynamic_deps"],
-    includes = [
-        "include",
-        "include/rtabmap_viz",
-    ],
     local_defines = ros_local_defines() + [
         "GLAD_API_CALL_EXPORT",
         "kiss_fft_scalar=double",
     ],
-    moc_hdrs = MOC_HDRS,
+    moc_hdrs = ["include/rtabmap_viz/PreferencesDialogROS.h"],
     moc_srcs = [],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [":rtabmap_viz_headers"],
 )
 
 ament_index(

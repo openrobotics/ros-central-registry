@@ -1060,9 +1060,22 @@ cc_shared_library(
         ":libjpeg",
         ":libpng",
         ":libtiff",
+        ":libwebp",
         ":protobuf",
         ":zlib",
-    ],
+    ] + select({
+        # Qt is LGPL: when OpenCV's Qt6 highgui backend is enabled
+        # (--@opencv//:with_qt=True), link Qt dynamically rather than letting
+        # it be embedded statically in libopencv.so.
+        "@opencv//:have_qt": [
+            "@qtbase//:concurrent_shared",
+            "@qtbase//:core_shared",
+            "@qtbase//:gui_shared",
+            "@qtbase//:test_shared",
+            "@qtbase//:widgets_shared",
+        ],
+        "//conditions:default": [],
+    }),
     exports_filter = ["@opencv//:__subpackages__"],
     user_link_flags = select({
         "@platforms//os:macos": ["-Wl,-all_load"],
@@ -2294,6 +2307,16 @@ cc_shared_library(
     deps = [":g2o_library"],
 )
 
+# libx11
+
+# Headers for packages that call Xlib directly. The library itself is linked
+# (and exported) once by @qtbase//:x11_shared, so consumers list that in
+# dynamic_deps alongside this target to avoid a second static copy.
+alias(
+    name = "libx11_library",
+    actual = "@libx11",
+)
+
 # glfw
 
 alias(
@@ -3230,7 +3253,7 @@ cc_shared_library(
 
 alias(
     name = "magic_enum",
-    actual = "@magic_enum//:magic_enum",
+    actual = "@magic_enum//:magic_enum_library",
 )
 
 alias(
