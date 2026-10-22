@@ -70,6 +70,10 @@ cc_library(
             "Foundation/src/Timezone_*.cpp",
         ],
     ),
+    copts = [
+        "-isystem",
+        "external/utf8proc+",
+    ],
     # Mirrors upstream CMake's POCO_UNBUNDLED configuration: Foundation's
     # zlib/utf8proc/pcre2 users switch to the system headers and link the
     # corresponding external libraries instead of the bundled sources.

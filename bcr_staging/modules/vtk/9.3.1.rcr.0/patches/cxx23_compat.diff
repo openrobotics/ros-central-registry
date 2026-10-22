@@ -1,0 +1,120 @@
+--- Common/ExecutionModel/vtkAlgorithm.cxx
++++ Common/ExecutionModel/vtkAlgorithm.cxx
+@@ -1072,7 +1072,7 @@
+   // The connection is not present.
+   vtkDebugMacro("Setting connection to input port index "
+     << consumerPort << " from output port index " << producerPort << " on algorithm "
+-    << (producer ? producer->GetObjectDescription() : nullptr) << ".");
++    << (producer ? producer->GetObjectDescription() : "nullptr") << ".");
+ 
+   // Add this consumer to the new input's list of consumers.
+   if (newInfo)
+--- Common/DataModel/vtkDataSetAttributesFieldList.cxx
++++ Common/DataModel/vtkDataSetAttributesFieldList.cxx
+@@ -13,6 +13,7 @@
+ #include <algorithm>
+ #include <array>
+ #include <functional>
++#include <iterator>
+ #include <map>
+ #include <set>
+ #include <string>
+--- Common/DataModel/vtkDataAssemblyUtilities.cxx
++++ Common/DataModel/vtkDataAssemblyUtilities.cxx
+@@ -17,6 +17,7 @@
+ 
+ #include <cassert>
+ #include <functional>
++#include <iterator>
+ #include <set>
+ #include <tuple>
+ 
+--- Filters/General/vtkMergeTimeFilter.cxx
++++ Filters/General/vtkMergeTimeFilter.cxx
+@@ -14,6 +14,7 @@
+ #include "vtkStreamingDemandDrivenPipeline.h"
+ 
+ #include <algorithm>
++#include <iterator>
+ 
+ VTK_ABI_NAMESPACE_BEGIN
+ vtkStandardNewMacro(vtkMergeTimeFilter);
+--- Filters/Modeling/vtkImprintFilter.cxx
++++ Filters/Modeling/vtkImprintFilter.cxx
+@@ -26,6 +26,7 @@
+ #include "vtkStaticPointLocator.h"
+ #include "vtkStreamingDemandDrivenPipeline.h"
+ 
++#include <iterator>
+ #include <map>
+ #include <memory>
+ #include <mutex>
+--- Charts/Core/vtkChartXY.cxx
++++ Charts/Core/vtkChartXY.cxx
+@@ -48,6 +48,7 @@
+ 
+ // My STL containers
+ #include <algorithm>
++#include <iterator>
+ #include <unordered_map>
+ #include <utility>
+ #include <vector>
+--- Rendering/Core/vtkCompositePolyDataMapperDelegator.cxx
++++ Rendering/Core/vtkCompositePolyDataMapperDelegator.cxx
+@@ -5,6 +5,8 @@
+ #include "vtkCompositePolyDataMapper.h"
+ #include "vtkObjectFactory.h"
+ 
++#include <exception>
++
+ VTK_ABI_NAMESPACE_BEGIN
+ //------------------------------------------------------------------------------
+ vtkAbstractObjectFactoryNewMacro(vtkCompositePolyDataMapperDelegator);
+--- ThirdParty/diy2/vtkdiy2/include/vtkdiy2/chobo/small_vector.hpp
++++ ThirdParty/diy2/vtkdiy2/include/vtkdiy2/chobo/small_vector.hpp
+@@ -178,7 +178,24 @@
+ namespace chobo
+ {
+ 
+-template<typename T, size_t StaticCapacity = 16, size_t RevertToStaticSize = 0, class Alloc = std::allocator<T>>
++template<typename T>
++struct default_allocator : std::allocator<T>
++{
++    using value_type = T;
++    using size_type = std::size_t;
++    using difference_type = std::ptrdiff_t;
++    using reference = T&;
++    using const_reference = const T&;
++    using pointer = T*;
++    using const_pointer = const T*;
++    template<typename U, typename... Args>
++    void construct(U* p, Args&&... args) { ::new (static_cast<void*>(p)) U(std::forward<Args>(args)...); }
++    template<typename U>
++    void destroy(U* p) { p->~U(); }
++    size_type max_size() const noexcept { return std::allocator_traits<std::allocator<T>>::max_size(*this); }
++};
++
++template<typename T, size_t StaticCapacity = 16, size_t RevertToStaticSize = 0, class Alloc = default_allocator<T>>
+ struct small_vector: Alloc
+ {
+     static_assert(RevertToStaticSize <= StaticCapacity + 1, "chobo::small_vector: the revert-to-static size shouldn't exceed the static capacity by more than one");
+--- IO/Geometry/vtkGLTFDocumentLoaderInternals.cxx
++++ IO/Geometry/vtkGLTFDocumentLoaderInternals.cxx
+@@ -1300,7 +1300,7 @@
+     // used to fill extensionsUsedByLoader.
+     if (!std::any_of(supportedExtensions.begin(), supportedExtensions.end(),
+           [&extensionRequiredByModel](
+-            const std::string& value) { return value == extensionRequiredByModel; }))
++            const std::string& value) { return value == extensionRequiredByModel.get<std::string>(); }))
+     {
+       vtkErrorWithObjectMacro(this->Self,
+         "glTF extension "
+@@ -1319,7 +1319,7 @@
+     }
+     if (std::any_of(supportedExtensions.begin(), supportedExtensions.end(),
+           [&extensionUsedByModel](
+-            const std::string& value) { return value == extensionUsedByModel; }))
++            const std::string& value) { return value == extensionUsedByModel.get<std::string>(); }))
+     {
+       extensionsUsedByLoader.push_back(extensionUsedByModel);
+     }

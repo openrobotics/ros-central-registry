@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
@@ -28,43 +29,44 @@ license(
     license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
 )
 
+expand_template(
+    name = "extra_configs_cmake",
+    out = "extra_configs.cmake",
+    substitutions = {
+        "@RTABMAP_SYNC_MULTI_RGBD_CONF@": "0",
+        "@RTABMAP_SYNC_USER_DATA_CONF@": "0",
+    },
+    template = "cmake/extra_configs.cmake.in",
+)
+
 DEPENDENCIES = {
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
     "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
     "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
     "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:boost.filesystem_shared": "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.iostreams_shared": "@rosdistro//cc:boost.iostreams",
     "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
     "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:pcl": "@rosdistro//cc:pcl_library",
     "@rosdistro//cc:protobuf": "@rosdistro//cc:protobuf_library",
     "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+    "@rtabmap//:rtabmap_core": "@rtabmap//:rtabmap_core_library",
+    "@rtabmap//:rtabmap_utilite": "@rtabmap//:rtabmap_utilite_library",
+    "@rtabmap_conversions//:rtabmap_conversions": "@rtabmap_conversions//:rtabmap_conversions_library",
 }
 
 CC_DEPS = [
     "@diagnostic_msgs//:cc",
-    "@cv_bridge//:cv_bridge_library",
-    "@message_filters//:message_filters_library",
     "@nav_msgs//:cc",
     "@rclcpp//:node_wrapper",
     "@rclcpp//:type_adapter",
-    "@rosdistro//cc:boost.filesystem",
-    "@rosdistro//cc:boost.iostreams",
     "@rosdistro//cc:boost.regex",
     "@rosdistro//cc:eigen",
-    "@rosdistro//cc:opencv_library",
-    "@rosdistro//cc:pcl_common",
-    "@rosdistro//cc:pcl_features",
-    "@rosdistro//cc:pcl_filters",
-    "@rosdistro//cc:pcl_io",
-    "@rosdistro//cc:pcl_kdtree",
-    "@rosdistro//cc:pcl_ml",
-    "@rosdistro//cc:pcl_octree",
-    "@rosdistro//cc:pcl_registration",
-    "@rosdistro//cc:pcl_sample_consensus",
-    "@rosdistro//cc:pcl_search",
-    "@rosdistro//cc:pcl_segmentation",
-    "@rosdistro//cc:pcl_surface",
-    "@rosdistro//cc:pcl_visualization",
-    "@rtabmap_conversions//:rtabmap_conversions_library",
+    "@rtabmap//:_gen_textual_hdrs",
     "@rtabmap_msgs//:cc",
     "@sensor_msgs//:cc",
 ]
@@ -150,7 +152,7 @@ cc_library(
 
 cc_shared_library(
     name = "rtabmap_sync_plugins",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = DEPENDENCIES.keys() + [":rtabmap_sync"],
     deps = [":rtabmap_sync_plugins_library"],
 )
 
@@ -167,12 +169,15 @@ rclcpp_components_register_nodes(
 
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":rtabmap_sync",
+        ":rtabmap_sync_plugins",
+    ],
 )
 
 cc_binary(
     name = "rgb_sync",
-    srcs = ["src/nodelets/rgb_sync.cpp"],
+    srcs = ["src/RGBSyncNode.cpp"],
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
@@ -195,7 +200,7 @@ cc_binary(
 
 cc_binary(
     name = "rgbd_sync",
-    srcs = ["src/nodelets/rgbd_sync.cpp"],
+    srcs = ["src/RGBDSyncNode.cpp"],
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
@@ -218,7 +223,7 @@ cc_binary(
 
 cc_binary(
     name = "rgbdx_sync",
-    srcs = ["src/nodelets/rgbdx_sync.cpp"],
+    srcs = ["src/RGBDXSyncNode.cpp"],
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
@@ -241,7 +246,7 @@ cc_binary(
 
 cc_binary(
     name = "stereo_sync",
-    srcs = ["src/nodelets/stereo_sync.cpp"],
+    srcs = ["src/StereoSyncNode.cpp"],
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
