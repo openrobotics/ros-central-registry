@@ -83,7 +83,9 @@ def gz_gui_plugin(name, srcs = [], hdrs = [], qrc = None, qml = [], moc_headers 
             "-Iexternal/gz-gui+",
             "-I$(GENDIR)/external/gz-gui+",
         ] if dir_name else ["-fPIC"],
-        dynamic_deps = GZ_GUI_QT_SHARED_DEPS,
+        dynamic_deps = GZ_GUI_QT_SHARED_DEPS + [
+            "//:libgz-gui-shared.so",
+        ],
         linkshared = True,
         linkstatic = False,
         visibility = ["//visibility:public"],

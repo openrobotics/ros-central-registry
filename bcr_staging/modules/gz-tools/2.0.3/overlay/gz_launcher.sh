@@ -32,6 +32,9 @@ cmdsim_rb=$(find_runfile "gz-tools/cmdsim.rb" "gz-tools+/cmdsim.rb" || true)
 gui_yaml=$(find_runfile "gz-gui/conf/gui.yaml" "gz-gui+/conf/gui.yaml")
 cmdgui_rb=$(find_runfile "gz-gui/src/cmd/cmdgui.rb" "gz-gui+/src/cmd/cmdgui.rb")
 libgz_gui=$(find_runfile "gz-gui/libgz-gui-shared.so" "gz-gui+/libgz-gui-shared.so")
+gz_sim_gui_client=$(find_runfile "gz-sim/gz-sim-gui-client" "gz-sim+/gz-sim-gui-client" || true)
+gz_sim_gui_config=$(find_runfile "gz-sim/src/gui/gui.config" "gz-sim+/src/gui/gui.config" || true)
+gz_sim_shapes_world=$(find_runfile "gz-sim/examples/worlds/shapes.sdf" "gz-sim+/examples/worlds/shapes.sdf" || true)
 
 if [[ -z "$gz_rb" || -z "$gui_yaml" || -z "$cmdgui_rb" || -z "$libgz_gui" ]]; then
   echo >&2 "ERROR: missing runfiles. Make sure to build with all dependencies."
@@ -53,11 +56,24 @@ if [[ -n "$cmdsim_rb" ]]; then
 fi
 
 export GZ_GUI_PLUGIN_PATH=$(dirname "$libgz_gui")${GZ_GUI_PLUGIN_PATH:+:$GZ_GUI_PLUGIN_PATH}
+if [[ -n "$gz_sim_gui_client" ]]; then
+  gz_sim_root=$(dirname "$gz_sim_gui_client")
+  export GZ_SIM_GUI_CLIENT_BIN="$gz_sim_gui_client"
+  export GZ_GUI_PLUGIN_PATH="$gz_sim_root:$GZ_GUI_PLUGIN_PATH"
+  export QML2_IMPORT_PATH="$gz_sim_root${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
+fi
+if [[ -n "$gz_sim_gui_config" ]]; then
+  export GZ_SIM_DEFAULT_GUI_CONFIG="$gz_sim_gui_config"
+fi
+if [[ -n "$gz_sim_shapes_world" ]]; then
+  gz_sim_worlds_dir=$(dirname "$gz_sim_shapes_world")
+  export GZ_SIM_RESOURCE_PATH="$gz_sim_worlds_dir${GZ_SIM_RESOURCE_PATH:+:$GZ_SIM_RESOURCE_PATH}"
+fi
 
 # Qt is built from source: the xcb/offscreen QPA plugins and the QML modules
 # gz-gui imports are linked statically into libgz-gui-shared.so, so there is
-# no QT_PLUGIN_PATH / QML2_IMPORT_PATH to set up. Prefer xcb, falling back to
-# offscreen when no display is available.
+# no QT_PLUGIN_PATH to set up. Prefer xcb, falling back to offscreen when no
+# display is available.
 export QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-"xcb;offscreen"}
 
 if [[ -n "${RUNFILES_DIR:-}" && -d "${RUNFILES_DIR}/_main/lib" ]]; then
