@@ -578,12 +578,28 @@ alias(
 
 cc_shared_library(
     name = "assimp_shared",
-    dynamic_deps = [":zlib"],
+    dynamic_deps = [
+        ":pugixml",
+        ":zlib",
+    ],
     exports_filter = [
         "@assimp//:__subpackages__",
-        "@pugixml//:__subpackages__",
     ],
     deps = [":assimp_library"],
+)
+
+# pugixml (linked by both assimp and vtk, so it gets its own shared library
+# rather than being exported from either of them)
+
+alias(
+    name = "pugixml_library",
+    actual = "@pugixml",
+)
+
+cc_shared_library(
+    name = "pugixml",
+    exports_filter = ["@pugixml//:__subpackages__"],
+    deps = [":pugixml_library"],
 )
 
 # orocos-kdl
@@ -844,6 +860,73 @@ cc_shared_library(
     name = "console_bridge",
     exports_filter = [":console_bridge_library_library"],
     deps = [":console_bridge_library"],
+)
+
+# openssl (real OpenSSL, for packages whose upstream needs APIs BoringSSL
+# drops or hides, e.g. BIO_f_base64 which is only in BoringSSL's private
+# :decrepit target -- robotraconteur's websocket transport uses it)
+
+alias(
+    name = "openssl_crypto_library",
+    actual = "@openssl//:crypto",
+)
+
+alias(
+    name = "openssl_ssl_library",
+    actual = "@openssl//:ssl",
+)
+
+cc_shared_library(
+    name = "openssl",
+    exports_filter = [
+        ":openssl_crypto_library",
+        ":openssl_ssl_library",
+        "@openssl//:__subpackages__",
+    ],
+    deps = [
+        ":openssl_crypto_library",
+        ":openssl_ssl_library",
+    ],
+)
+
+# boost.random compiled library (upstream's Boost::random): random_device.
+
+cc_library(
+    name = "boost.random_library",
+    srcs = ["@boost.random_src//:src/random_device.cpp"],
+    deps = [":boost.random"],
+)
+
+cc_shared_library(
+    name = "boost.random_shared",
+    exports_filter = [
+        ":boost.random_library",
+        "@boost.random//:__subpackages__",
+    ],
+    deps = [":boost.random_library"],
+)
+
+# boost.asio SSL half (boost/asio/ssl/impl/src.hpp), against OpenSSL. BCR's
+# @boost.asio only compiles it when its //:ssl flag is set, which a non-root
+# module can't do.
+
+cc_library(
+    name = "boost.asio_ssl_library",
+    srcs = ["boost_asio_ssl_impl.cpp"],
+    deps = [
+        ":boost.asio_library",
+        ":openssl_ssl_library",
+    ],
+)
+
+cc_shared_library(
+    name = "boost.asio_ssl_shared",
+    dynamic_deps = [
+        ":boost.asio_shared",
+        ":openssl",
+    ],
+    exports_filter = [":boost.asio_ssl_library"],
+    deps = [":boost.asio_ssl_library"],
 )
 
 # boringssl (OpenSSL API)
@@ -1205,6 +1288,14 @@ alias(
 alias(
     name = "cli11",
     actual = "@cli11",
+)
+
+# BCR cli11 is a compiled library, not header-only: packages whose shared
+# libraries use it link this dynamically so binaries get a single copy.
+cc_shared_library(
+    name = "cli11_shared",
+    exports_filter = ["@cli11//:__subpackages__"],
+    deps = [":cli11"],
 )
 
 alias(
@@ -2307,16 +2398,6 @@ cc_shared_library(
     deps = [":g2o_library"],
 )
 
-# libx11
-
-# Headers for packages that call Xlib directly. The library itself is linked
-# (and exported) once by @qtbase//:x11_shared, so consumers list that in
-# dynamic_deps alongside this target to avoid a second static copy.
-alias(
-    name = "libx11_library",
-    actual = "@libx11",
-)
-
 # glfw
 
 alias(
@@ -2534,6 +2615,7 @@ cc_library(
     name = "ffmpeg_library",
     deps = [
         "@ffmpeg//:avcodec",
+        "@ffmpeg//:avdevice",
         "@ffmpeg//:avformat",
         "@ffmpeg//:avutil",
         "@ffmpeg//:swresample",
@@ -2573,6 +2655,7 @@ cc_shared_library(
     ]
     for m in [
         "avcodec",
+        "avdevice",
         "avformat",
         "avutil",
         "swresample",
@@ -3092,6 +3175,10 @@ alias(
 
 cc_shared_library(
     name = "epoxy",
+    dynamic_deps = select({
+        "@platforms//os:linux": ["@qtbase//:x11_shared"],
+        "//conditions:default": [],
+    }),
     exports_filter = ["@libepoxy//:__subpackages__"],
     deps = [":epoxy_library"],
 )
@@ -3278,20 +3365,22 @@ cc_shared_library(
         ":libtiff",
         ":lz4",
         ":lz4_hc",
+        ":pugixml",
         ":zlib",
         "@qtbase//:core_shared",
         "@qtbase//:gui_shared",
         "@qtbase//:opengl_shared",
         "@qtbase//:openglwidgets_shared",
         "@qtbase//:widgets_shared",
-    ],
+    ] + select({
+        # libX11/libxcb/libXau are linked (and exported) once by Qt's
+        # x11_shared; take them from there instead of embedding another copy.
+        "@platforms//os:linux": ["@qtbase//:x11_shared"],
+        "//conditions:default": [],
+    }),
     exports_filter = [
         "@freetype//:__subpackages__",
         "@libexpat//:__subpackages__",
-        "@libx11//:__subpackages__",
-        "@libxau//:__subpackages__",
-        "@libxcb//:__subpackages__",
-        "@pugixml//:__subpackages__",
         "@vtk//:__subpackages__",
     ],
     user_link_flags = select({

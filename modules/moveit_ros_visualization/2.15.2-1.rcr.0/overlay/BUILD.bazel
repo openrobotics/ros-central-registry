@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@qt//:qt.bzl", "qt_cc_library", "qt_cc_shared_library")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
-load("@rosdistro//cc:defs.bzl", "ros_exports_header", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_exports_header", "ros_local_defines")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
@@ -43,10 +43,24 @@ DEPENDENCIES = {
     "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
     "@rosdistro//cc:assimp_shared": "@rosdistro//cc:assimp",
     "@rosdistro//cc:OgreOverlay": "@rosdistro//cc:OgreOverlay_library",
-    "@rviz2//:rviz_common": "@rviz2//:rviz_common_library",
-    "@rviz2//:rviz_default_plugins": "@rviz2//:rviz_default_plugins_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_default_plugins//:rviz_default_plugins": "@rviz_default_plugins//:rviz_default_plugins_library",
     "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@moveit_core//:moveit_collision_detection": "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_ros_planning//:moveit_collision_plugin_loader": "@moveit_ros_planning//:moveit_collision_plugin_loader_library",
+    "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
+    "@geometric_shapes//:geometric_shapes": "@geometric_shapes//:geometric_shapes_library",
+    "@moveit_ros_planning_interface//:moveit_common_planning_interface_objects": "@moveit_ros_planning_interface//:moveit_common_planning_interface_objects_library",
+    "@moveit_ros_planning_interface//:moveit_move_group_interface": "@moveit_ros_planning_interface//:moveit_move_group_interface_library",
+    "@moveit_ros_planning_interface//:moveit_planning_scene_interface": "@moveit_ros_planning_interface//:moveit_planning_scene_interface_library",
+    "@moveit_ros_robot_interaction//:moveit_robot_interaction": "@moveit_ros_robot_interaction//:moveit_robot_interaction_library",
+    "@moveit_ros_warehouse//:moveit_warehouse": "@moveit_ros_warehouse//:moveit_warehouse_library",
 }
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
 
 CC_DEPS = [
     "@rosdistro//cc:octomap",
@@ -56,12 +70,6 @@ CC_DEPS = [
     "@std_srvs//:cc",
     "@visualization_msgs//:cc",
     "@class_loader//:class_loader_headers",
-    "@geometric_shapes//:geometric_shapes_library",
-    "@moveit_ros_planning_interface//:moveit_common_planning_interface_objects_library",
-    "@moveit_ros_planning_interface//:moveit_move_group_interface_library",
-    "@moveit_ros_planning_interface//:moveit_planning_scene_interface_library",
-    "@moveit_ros_robot_interaction//:moveit_robot_interaction_library",
-    "@moveit_ros_warehouse//:moveit_warehouse_library",
     "@object_recognition_msgs//:cc",
     "@rclcpp//:node_wrapper",
     "@rclcpp//:type_adapter",
@@ -79,7 +87,7 @@ CC_DEPS = [
     "@qtbase//:widgets",
 ]
 
-cc_library(
+qt_cc_library(
     name = "moveit_rviz_plugin_render_tools_library",
     srcs = [
         "rviz_plugin_render_tools/src/mesh_shape.cpp",
@@ -150,27 +158,30 @@ cc_library(
     ],
     local_defines = ros_local_defines() + [
         "NDEBUG",
+        "QT_NO_KEYWORDS",
         "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = [
+        "rviz_plugin_render_tools/include/moveit/rviz_plugin_render_tools/trajectory_panel.hpp",
+        "rviz_plugin_render_tools/include/moveit/rviz_plugin_render_tools/trajectory_visualization.hpp",
     ],
     deps = DEPENDENCIES.values() + CC_DEPS,
 )
 
-cc_shared_library(
+qt_cc_shared_library(
     name = "moveit_rviz_plugin_render_tools",
-    dynamic_deps = DEPENDENCIES.keys() + [
-        "@qtbase//:core_shared",
-        "@qtbase//:gui_shared",
-        "@qtsvg//:svg_shared",
-        "@qtbase//:widgets_shared",
-    ],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    dynamic_deps = [":transitive_dynamic_deps"],
+    exports_filter = ["//:__subpackages__"],
+    qt_deps = [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@qtsvg//:svg",
     ],
     deps = [":moveit_rviz_plugin_render_tools_library"],
 )
 
-cc_library(
+qt_cc_library(
     name = "moveit_planning_scene_rviz_plugin_core_library",
     srcs = [
         "planning_scene_rviz_plugin/src/background_processing.cpp",
@@ -235,27 +246,33 @@ cc_library(
     ],
     local_defines = ros_local_defines() + [
         "NDEBUG",
+        "QT_NO_KEYWORDS",
         "_FILE_OFFSET_BITS=64",
     ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_rviz_plugin_render_tools_library"],
+    moc_hdrs = [
+        "planning_scene_rviz_plugin/include/moveit/planning_scene_rviz_plugin/planning_scene_display.hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":moveit_rviz_plugin_render_tools_library",
+    ],
 )
 
-cc_shared_library(
+qt_cc_shared_library(
     name = "moveit_planning_scene_rviz_plugin_core",
-    dynamic_deps = DEPENDENCIES.keys() + [
-        "@qtbase//:core_shared",
-        "@qtbase//:gui_shared",
-        "@qtsvg//:svg_shared",
-        "@qtbase//:widgets_shared",
+    dynamic_deps = [":transitive_dynamic_deps"] + [
+        ":moveit_rviz_plugin_render_tools",
     ],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    exports_filter = ["//:__subpackages__"],
+    qt_deps = [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@qtsvg//:svg",
     ],
     deps = [":moveit_planning_scene_rviz_plugin_core_library"],
 )
 
-cc_library(
+qt_cc_library(
     name = "moveit_planning_scene_rviz_plugin_library",
     srcs = ["planning_scene_rviz_plugin/src/plugin_init.cpp"],
     hdrs = [
@@ -317,7 +334,10 @@ cc_library(
     ],
     local_defines = ros_local_defines() + [
         "NDEBUG",
+        "QT_NO_KEYWORDS",
         "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = [
     ],
     deps = DEPENDENCIES.values() + CC_DEPS + [
         ":moveit_planning_scene_rviz_plugin_core_library",
@@ -325,22 +345,23 @@ cc_library(
     ],
 )
 
-cc_shared_library(
+qt_cc_shared_library(
     name = "moveit_planning_scene_rviz_plugin",
-    dynamic_deps = DEPENDENCIES.keys() + [
-        "@qtbase//:core_shared",
-        "@qtbase//:gui_shared",
-        "@qtsvg//:svg_shared",
-        "@qtbase//:widgets_shared",
+    dynamic_deps = [":transitive_dynamic_deps"] + [
+        ":moveit_planning_scene_rviz_plugin_core",
+        ":moveit_rviz_plugin_render_tools",
     ],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    exports_filter = ["//:__subpackages__"],
+    qt_deps = [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@qtsvg//:svg",
     ],
     deps = [":moveit_planning_scene_rviz_plugin_library"],
 )
 
-cc_library(
+qt_cc_library(
     name = "moveit_motion_planning_rviz_plugin_core_library",
     srcs = [
         "motion_planning_rviz_plugin/src/interactive_marker_display.cpp",
@@ -414,7 +435,15 @@ cc_library(
     ],
     local_defines = ros_local_defines() + [
         "NDEBUG",
+        "QT_NO_KEYWORDS",
         "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = [
+        "motion_planning_rviz_plugin/include/moveit/motion_planning_rviz_plugin/interactive_marker_display.hpp",
+        "motion_planning_rviz_plugin/include/moveit/motion_planning_rviz_plugin/motion_planning_display.hpp",
+        "motion_planning_rviz_plugin/include/moveit/motion_planning_rviz_plugin/motion_planning_frame.hpp",
+        "motion_planning_rviz_plugin/include/moveit/motion_planning_rviz_plugin/motion_planning_frame_joints_widget.hpp",
+        "motion_planning_rviz_plugin/include/moveit/motion_planning_rviz_plugin/motion_planning_param_widget.hpp",
     ],
     deps = DEPENDENCIES.values() + CC_DEPS + [
         ":moveit_planning_scene_rviz_plugin_core_library",
@@ -423,22 +452,24 @@ cc_library(
     ],
 )
 
-cc_shared_library(
+qt_cc_shared_library(
     name = "moveit_motion_planning_rviz_plugin_core",
-    dynamic_deps = DEPENDENCIES.keys() + [
-        "@qtbase//:core_shared",
-        "@qtbase//:gui_shared",
-        "@qtsvg//:svg_shared",
-        "@qtbase//:widgets_shared",
+    dynamic_deps = [":transitive_dynamic_deps"] + [
+        ":moveit_planning_scene_rviz_plugin",
+        ":moveit_planning_scene_rviz_plugin_core",
+        ":moveit_rviz_plugin_render_tools",
     ],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    exports_filter = ["//:__subpackages__"],
+    qt_deps = [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@qtsvg//:svg",
     ],
     deps = [":moveit_motion_planning_rviz_plugin_core_library"],
 )
 
-cc_library(
+qt_cc_library(
     name = "moveit_motion_planning_rviz_plugin_library",
     srcs = ["motion_planning_rviz_plugin/src/plugin_init.cpp"],
     hdrs = [
@@ -500,7 +531,10 @@ cc_library(
     ],
     local_defines = ros_local_defines() + [
         "NDEBUG",
+        "QT_NO_KEYWORDS",
         "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = [
     ],
     deps = DEPENDENCIES.values() + CC_DEPS + [
         ":moveit_motion_planning_rviz_plugin_core_library",
@@ -510,22 +544,25 @@ cc_library(
     ],
 )
 
-cc_shared_library(
+qt_cc_shared_library(
     name = "moveit_motion_planning_rviz_plugin",
-    dynamic_deps = DEPENDENCIES.keys() + [
-        "@qtbase//:core_shared",
-        "@qtbase//:gui_shared",
-        "@qtsvg//:svg_shared",
-        "@qtbase//:widgets_shared",
+    dynamic_deps = [":transitive_dynamic_deps"] + [
+        ":moveit_motion_planning_rviz_plugin_core",
+        ":moveit_planning_scene_rviz_plugin",
+        ":moveit_planning_scene_rviz_plugin_core",
+        ":moveit_rviz_plugin_render_tools",
     ],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    exports_filter = ["//:__subpackages__"],
+    qt_deps = [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@qtsvg//:svg",
     ],
     deps = [":moveit_motion_planning_rviz_plugin_library"],
 )
 
-cc_library(
+qt_cc_library(
     name = "moveit_robot_state_rviz_plugin_core_library",
     srcs = ["robot_state_rviz_plugin/src/robot_state_display.cpp"],
     hdrs = [
@@ -587,27 +624,33 @@ cc_library(
     ],
     local_defines = ros_local_defines() + [
         "NDEBUG",
+        "QT_NO_KEYWORDS",
         "_FILE_OFFSET_BITS=64",
     ],
-    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_rviz_plugin_render_tools_library"],
+    moc_hdrs = [
+        "robot_state_rviz_plugin/include/moveit/robot_state_rviz_plugin/robot_state_display.hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":moveit_rviz_plugin_render_tools_library",
+    ],
 )
 
-cc_shared_library(
+qt_cc_shared_library(
     name = "moveit_robot_state_rviz_plugin_core",
-    dynamic_deps = DEPENDENCIES.keys() + [
-        "@qtbase//:core_shared",
-        "@qtbase//:gui_shared",
-        "@qtsvg//:svg_shared",
-        "@qtbase//:widgets_shared",
+    dynamic_deps = [":transitive_dynamic_deps"] + [
+        ":moveit_rviz_plugin_render_tools",
     ],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    exports_filter = ["//:__subpackages__"],
+    qt_deps = [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@qtsvg//:svg",
     ],
     deps = [":moveit_robot_state_rviz_plugin_core_library"],
 )
 
-cc_library(
+qt_cc_library(
     name = "moveit_robot_state_rviz_plugin_library",
     srcs = ["robot_state_rviz_plugin/src/plugin_init.cpp"],
     hdrs = [
@@ -669,7 +712,10 @@ cc_library(
     ],
     local_defines = ros_local_defines() + [
         "NDEBUG",
+        "QT_NO_KEYWORDS",
         "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = [
     ],
     deps = DEPENDENCIES.values() + CC_DEPS + [
         ":moveit_robot_state_rviz_plugin_core_library",
@@ -677,22 +723,23 @@ cc_library(
     ],
 )
 
-cc_shared_library(
+qt_cc_shared_library(
     name = "moveit_robot_state_rviz_plugin",
-    dynamic_deps = DEPENDENCIES.keys() + [
-        "@qtbase//:core_shared",
-        "@qtbase//:gui_shared",
-        "@qtsvg//:svg_shared",
-        "@qtbase//:widgets_shared",
+    dynamic_deps = [":transitive_dynamic_deps"] + [
+        ":moveit_robot_state_rviz_plugin_core",
+        ":moveit_rviz_plugin_render_tools",
     ],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    exports_filter = ["//:__subpackages__"],
+    qt_deps = [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@qtsvg//:svg",
     ],
     deps = [":moveit_robot_state_rviz_plugin_library"],
 )
 
-cc_library(
+qt_cc_library(
     name = "moveit_trajectory_rviz_plugin_core_library",
     srcs = ["trajectory_rviz_plugin/src/trajectory_display.cpp"],
     hdrs = [
@@ -754,7 +801,11 @@ cc_library(
     ],
     local_defines = ros_local_defines() + [
         "NDEBUG",
+        "QT_NO_KEYWORDS",
         "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = [
+        "trajectory_rviz_plugin/include/moveit/trajectory_rviz_plugin/trajectory_display.hpp",
     ],
     deps = DEPENDENCIES.values() + CC_DEPS + [
         ":moveit_planning_scene_rviz_plugin_core_library",
@@ -762,22 +813,23 @@ cc_library(
     ],
 )
 
-cc_shared_library(
+qt_cc_shared_library(
     name = "moveit_trajectory_rviz_plugin_core",
-    dynamic_deps = DEPENDENCIES.keys() + [
-        "@qtbase//:core_shared",
-        "@qtbase//:gui_shared",
-        "@qtsvg//:svg_shared",
-        "@qtbase//:widgets_shared",
+    dynamic_deps = [":transitive_dynamic_deps"] + [
+        ":moveit_planning_scene_rviz_plugin_core",
+        ":moveit_rviz_plugin_render_tools",
     ],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    exports_filter = ["//:__subpackages__"],
+    qt_deps = [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@qtsvg//:svg",
     ],
     deps = [":moveit_trajectory_rviz_plugin_core_library"],
 )
 
-cc_library(
+qt_cc_library(
     name = "moveit_trajectory_rviz_plugin_library",
     srcs = ["trajectory_rviz_plugin/src/plugin_init.cpp"],
     hdrs = [
@@ -839,7 +891,10 @@ cc_library(
     ],
     local_defines = ros_local_defines() + [
         "NDEBUG",
+        "QT_NO_KEYWORDS",
         "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = [
     ],
     deps = DEPENDENCIES.values() + CC_DEPS + [
         ":moveit_planning_scene_rviz_plugin_core_library",
@@ -848,17 +903,19 @@ cc_library(
     ],
 )
 
-cc_shared_library(
+qt_cc_shared_library(
     name = "moveit_trajectory_rviz_plugin",
-    dynamic_deps = DEPENDENCIES.keys() + [
-        "@qtbase//:core_shared",
-        "@qtbase//:gui_shared",
-        "@qtsvg//:svg_shared",
-        "@qtbase//:widgets_shared",
+    dynamic_deps = [":transitive_dynamic_deps"] + [
+        ":moveit_planning_scene_rviz_plugin_core",
+        ":moveit_rviz_plugin_render_tools",
+        ":moveit_trajectory_rviz_plugin_core",
     ],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    exports_filter = ["//:__subpackages__"],
+    qt_deps = [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@qtsvg//:svg",
     ],
     deps = [":moveit_trajectory_rviz_plugin_library"],
 )

@@ -52,16 +52,20 @@ cc_library(
 
 DEPENDENCIES = {
     "@rosdistro//cc:bluez": "@rosdistro//cc:bluez_library",
-    "@rosdistro//cc:boringssl": "@rosdistro//cc:boringssl_crypto_library",
     "@rosdistro//cc:boost.asio_shared": "@rosdistro//cc:boost.asio_library",
+    "@rosdistro//cc:boost.asio_ssl_shared": "@rosdistro//cc:boost.asio_ssl_library",
     "@rosdistro//cc:boost.chrono_shared": "@rosdistro//cc:boost.chrono_library",
     "@rosdistro//cc:boost.container_shared": "@rosdistro//cc:boost.container_library",
     "@rosdistro//cc:boost.filesystem_shared": "@rosdistro//cc:boost.filesystem_library",
     "@rosdistro//cc:boost.locale_shared": "@rosdistro//cc:boost.locale_library",
     "@rosdistro//cc:boost.program_options_shared": "@rosdistro//cc:boost.program_options_library",
+    "@rosdistro//cc:boost.random_shared": "@rosdistro//cc:boost.random_library",
     "@rosdistro//cc:boost.thread_shared": "@rosdistro//cc:boost.thread_library",
     "@rosdistro//cc:dbus": "@rosdistro//cc:dbus_library",
     "@rosdistro//cc:libusb": "@rosdistro//cc:libusb_library",
+    # Upstream links real OpenSSL (find_package(OpenSSL)); BoringSSL lacks
+    # e.g. BIO_f_base64 outside its private decrepit library.
+    "@rosdistro//cc:openssl": "@rosdistro//cc:openssl_crypto_library",
 }
 
 CC_DEPS = [
@@ -99,8 +103,8 @@ CC_DEPS = [
     "@rosdistro//cc:boost.unordered",
     "@rosdistro//cc:boost.utility",
     "@rosdistro//cc:boost.variant",
-    "@rosdistro//cc:boringssl_ssl_library",
     "@rosdistro//cc:nlohmann_json",
+    "@rosdistro//cc:openssl_ssl_library",
 ]
 
 cc_library(
@@ -756,6 +760,43 @@ cc_library(
     deps = DEPENDENCIES.values() + CC_DEPS,
 )
 
+# test/cpp/service/CMakeLists.txt: robotraconteur_generate_thunk(... MASTER_HEADER
+# INCLUDE_DIRS ${ROBOTRACONTEUR_TEST_ROBDEF_DIR}) runs the package's own
+# RobotRaconteurGen over the test robdefs at build time.
+RR_TEST_SERVICES = [
+    "com__robotraconteur__testing__TestService" + str(n)
+    for n in range(1, 6)
+]
+
+RR_TEST_SERVICE_THUNK_HDRS = ["_gen/test_service/robotraconteur_generated.h"] + [
+    "_gen/test_service/" + s + suffix
+    for s in RR_TEST_SERVICES
+    for suffix in [
+        ".h",
+        "_stubskel.h",
+    ]
+]
+
+genrule(
+    name = "robotraconteur_test_service_thunk",
+    srcs = [
+        "test/robdef/com.robotraconteur.testing.TestService" + str(n) + ".robdef"
+        for n in range(1, 6)
+    ],
+    outs = RR_TEST_SERVICE_THUNK_HDRS + [
+        "_gen/test_service/" + s + "_stubskel.cpp"
+        for s in RR_TEST_SERVICES
+    ],
+    cmd = """
+        OUT_DIR="$$(dirname $(location _gen/test_service/robotraconteur_generated.h))"
+        $(execpath :_bin/RobotRaconteurGen) --thunksource --lang=cpp \\
+            --master-header robotraconteur_generated.h \\
+            --include-path=$$(dirname $(location test/robdef/com.robotraconteur.testing.TestService1.robdef)) \\
+            --output-dir "$$OUT_DIR" $(SRCS)
+    """,
+    tools = [":_bin/RobotRaconteurGen"],
+)
+
 cc_library(
     name = "robotraconteur_test_service_lib_library",
     srcs = [
@@ -767,9 +808,9 @@ cc_library(
         "test/cpp/service/ServiceTestClient2.cpp",
         "test/cpp/service/ServiceTestClient3.cpp",
         "test/cpp/service/service_test_utils.cpp",
-        "test/gen/cpp/com__robotraconteur__testing__TestService1_stubskel.cpp",
-        "test/gen/cpp/com__robotraconteur__testing__TestService2_stubskel.cpp",
-        "test/gen/cpp/com__robotraconteur__testing__TestService3_stubskel.cpp",
+    ] + [
+        "_gen/test_service/" + s + "_stubskel.cpp"
+        for s in RR_TEST_SERVICES
     ],
     hdrs = [
         "RobotRaconteurCore/include/RobotRaconteur.h",
@@ -893,8 +934,7 @@ cc_library(
         "test/gen/cpp/com__robotraconteur__testing__TestService3_stubskel.h",
         "test/lfsr/include/robotraconteur_test_lfsr.h",
         "test/lfsr/include/robotraconteur_test_lfsr_cpp.h",
-    ] + [
-    ],
+    ] + RR_TEST_SERVICE_THUNK_HDRS,
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     includes = [
         "RobotRaconteurCore/include",
@@ -902,13 +942,14 @@ cc_library(
         "RobotRaconteurPython3",
         "SWIG",
         "_gen/include",
+        "_gen/test_service",
         "generated_src/Python3/swigwordsize64",
         "test/cpp/common/include",
         "test/cpp/message_serialization/include",
         "test/lfsr/include",
     ],
     local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + ["@rosdistro//cc:googletest"],
 )
 
 cc_library(
@@ -1058,6 +1099,7 @@ cc_library(
         ":RobotRaconteurCore_library",
         ":robotraconteur_test_lfsr_static_library",
         ":robotraconteur_test_service_lib_library",
+        "@rosdistro//cc:googletest",
     ],
 )
 
