@@ -32,7 +32,7 @@ To scan a distro other than the default list (`lyrical`) once, or re-run manuall
 If you need to fix a bug in a single RCR package, use this workflow rather than hand-editing files under `modules/`:
 
 ```shell
-bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-06-08.rcr.2
+bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-10-05.rcr.0
 bazel run //tools/ci:vendor_modules -- rclcpp
 # cd workspace
 # ... edit vendor/rclcpp+/ in place ...
@@ -45,7 +45,7 @@ bazel run //tools/ci:create_patch -- rclcpp
 
 `create_patch` creates a single new module version (e.g. `rclcpp@32.0.0-1.rcr.1` -> `rclcpp@32.0.0-1.rcr.2`) under `modules/rclcpp/`. That new directory plus the updated `metadata.json` is your entire PR — don't touch any other package's files, and don't modify or delete existing version directories (CI enforces this).
 
-Run `bazel run //tools/ci:setup_workspace` again before patching if some time has passed since you first set up the workspace — it always resolves every package to its latest published version (printing an `OVERRIDE:` line whenever it does), so you never compute a patch version that collides with someone else's concurrent PR to the same package.
+Run `bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-10-05.rcr.0` again before patching if some time has passed since you first set up the workspace — it always resolves every package to its latest published version (printing an `OVERRIDE:` line whenever it does), so you never compute a patch version that collides with someone else's concurrent PR to the same package.
 
 ## Distribution patch releases (automated)
 

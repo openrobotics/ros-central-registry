@@ -332,6 +332,19 @@ build:macos --host_copt=-fno-implicit-module-maps
 build:macos --copt=-Wno-elaborated-enum-base
 build:macos --host_copt=-Wno-elaborated-enum-base
 
+# Pin the action environment that --incompatible_strict_action_env produces.
+# Bazel 10 changed its defaults (LC_CTYPE=C.UTF-8 on all OSes, plus
+# PATH=/bin:/usr/bin:/sbin:/usr/sbin vs. /bin:/usr/bin:/usr/local/bin on Unix
+# in Bazel 9). The environment is part of every action's cache key, so without
+# this pin the 9.x and last_rc CI jobs cannot share a disk cache. Exec-config
+# (tool) actions take --host_action_env, so pin both.
+common --action_env=LC_CTYPE=C.UTF-8
+common --host_action_env=LC_CTYPE=C.UTF-8
+common:linux --action_env=PATH=/bin:/usr/bin:/usr/local/bin
+common:linux --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin
+common:macos --action_env=PATH=/bin:/usr/bin:/usr/local/bin
+common:macos --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin
+
 # Fix memory pressure in CI workers, which leads to OOM errors.
 build:ci --jobs=4
 
@@ -618,9 +631,10 @@ def main():
 
 # BCR deps
 
+bazel_dep(name = "llvm", version = "0.8.24.rcr.0")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "protobuf", version = "36.2")
-bazel_dep(name = "rules_cc", version = "0.2.26")
+bazel_dep(name = "rules_cc", version = "0.2.26.rcr.0")
 bazel_dep(name = "rules_go", version = "0.60.0")
 bazel_dep(name = "rules_python", version = "2.4.1")
 bazel_dep(name = "rules_rs", version = "0.1.0")

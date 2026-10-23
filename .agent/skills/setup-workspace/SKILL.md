@@ -22,7 +22,7 @@ resolved version.
 ## Command
 
 ```shell
-bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-06-08.rcr.2
+bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-10-05.rcr.0
 ```
 
 Find the current release name at the top of `README.md`, or by looking for
@@ -48,8 +48,8 @@ concurrently.
 
 ```shell
 cd workspace
-bazel build --config perception   # or --config all, core, base, desktop, ...
-bazel test  --config perception
+bazel build --config desktop_full   # or --config all, core, base, desktop, ...
+bazel test  --config desktop_full
 ```
 
 The first build compiles the whole selected variant from source and is slow;
