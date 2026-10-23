@@ -22,9 +22,11 @@ load(
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
     ":install.bzl",
+    _BUNDLE_LIB_DEPS = "BUNDLE_LIB_DEPS",
     _LIBRARY_KINDS = "LIBRARY_KINDS",
     _PY_TYPESUPPORTS = "PY_TYPESUPPORTS",
     _RosidlBundledLibraryInfo = "RosidlBundledLibraryInfo",
+    _kind_closure = "kind_closure",
     _rosidl_bundled_library = "rosidl_bundled_library",
     _rosidl_bundled_python_module = "rosidl_bundled_python_module",
     _rosidl_cmake_exports = "rosidl_cmake_exports",
@@ -84,19 +86,18 @@ _BUNDLE_DYNAMIC_DEPS = {
     "rosidl_typesupport_introspection_cpp": [Label("@rosidl_typesupport_introspection_cpp//:transitive_dynamic_deps")],
 }
 
-# Bundled libraries of other kinds of the same package each kind links
-# against, in dependency order (a kind only lists kinds declared before it).
-_BUNDLE_LIB_DEPS = [
-    ("rosidl_generator_c", []),
-    ("rosidl_generator_cpp", []),
-    ("rosidl_typesupport_c", ["rosidl_generator_c"]),
-    ("rosidl_typesupport_cpp", ["rosidl_generator_c"]),
-    ("rosidl_typesupport_fastrtps_c", ["rosidl_generator_c"]),
-    ("rosidl_typesupport_fastrtps_cpp", ["rosidl_generator_c", "rosidl_typesupport_fastrtps_c"]),
-    ("rosidl_typesupport_introspection_c", ["rosidl_generator_c"]),
-    ("rosidl_typesupport_introspection_cpp", ["rosidl_generator_c"]),
-    ("rosidl_generator_py", ["rosidl_generator_c", "rosidl_typesupport_c"]),
-]
+def _bundle_dynamic_deps(kind):
+    """Runtime libraries for `kind` and every kind it links against.
+
+    The private copies of dependency packages' sibling kinds a bundle links
+    (see rosidl_bundled_library) need those kinds' runtime libraries too.
+    """
+    labels = []
+    for k in _kind_closure(kind):
+        for label in _BUNDLE_DYNAMIC_DEPS.get(k, []):
+            if label not in labels:
+                labels.append(label)
+    return labels
 
 # Libraries ament_cmake_export_libraries lists for an interface package (the
 # remaining ones are installed, but only exported as CMake targets).
@@ -246,7 +247,7 @@ def core_generators(package_xml, name = None, export_name = None, deps = [], hdr
             package_name = package_name,
             deps = deps,
             lib_deps = [bundles[dep] for dep in lib_deps],
-            dynamic_deps = _BUNDLE_DYNAMIC_DEPS.get(kind, []),
+            dynamic_deps = _bundle_dynamic_deps(kind),
             tags = ["manual"],
         )
     native.filegroup(

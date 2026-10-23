@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
@@ -158,18 +158,27 @@ cc_library(
         "include/mrpt/nav/tpspace/CPTG_Holo_Blend.h",
         "include/mrpt/nav/tpspace/CParameterizedTrajectoryGenerator.h",
     ],
-    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    copts = [
+        "-O2",
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
     includes = [
         "include",
         "src",
     ],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS,
+    alwayslink = True,
+)
+
+collect_transitive_dynamic_deps(
+    name = "link_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
 )
 
 cc_shared_library(
     name = "mrpt_nav",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = [":link_dynamic_deps"],
     deps = [":mrpt_nav_library"],
 )
 
@@ -226,7 +235,10 @@ cc_library(
 
 cc_shared_library(
     name = "_bindings.cpython-314-x86_64-linux-gnu",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = [
+        ":link_dynamic_deps",
+        ":mrpt_nav",
+    ],
     shared_lib_name = "mrpt/nav/_bindings.so",
     deps = [":_bindings.cpython-314-x86_64-linux-gnu_library"],
 )

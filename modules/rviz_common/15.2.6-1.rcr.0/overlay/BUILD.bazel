@@ -457,9 +457,17 @@ qt_cc_library(
     ],
 )
 
+# Upstream links rclcpp, pluginlib and Qt::Widgets PUBLICly, which pulls in
+# rcl, class_loader, ament_index_cpp and Qt Core/Gui transitively; rviz_common
+# uses symbols from all of them directly, so link the full closure.
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + ["@qtbase//:widgets_shared"],
+)
+
 cc_shared_library(
     name = "rviz_common",
-    dynamic_deps = DEPENDENCIES.keys() + ["@qtbase//:widgets_shared"],
+    dynamic_deps = [":transitive_dynamic_deps"],
     exports_filter = ["//:__subpackages__"],
     deps = [":rviz_common_library"],
 )
@@ -476,17 +484,11 @@ TEST_DATA = [
     "@rviz_rendering//:ament_index",
 ]
 
-TEST_LINKOPTS = select({
-    "@platforms//os:linux": ["-Wl,--allow-shlib-undefined"],
-    "//conditions:default": [],
-})
-
 qt_cc_test(
     name = "frame_manager_test",
     srcs = [],
     data = TEST_DATA,
     dynamic_deps = [":transitive_dynamic_deps_test"],
-    linkopts = TEST_LINKOPTS,
     linkstatic = True,
     local_defines = ros_local_defines(),
     deps = [

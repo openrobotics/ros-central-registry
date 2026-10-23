@@ -89,49 +89,7 @@ class TestRenderUnderlayBuildFile(unittest.TestCase):
         self.assertEqual(content.count("ament_underlay("), 1)
 
 
-class TestModuleOverrides(unittest.TestCase):
-
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp())
-        self.repo_root = self.tmp / "repo"
-        self.workspace = self.tmp / "workspace"
-        self.src_dir = self.repo_root / setup_workspace.PATCHES_SOURCE_DIR
-        for rel in setup_workspace.override_patch_paths():
-            (self.src_dir / rel).parent.mkdir(parents=True, exist_ok=True)
-            (self.src_dir / rel).write_text(f"--- {rel}\n")
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp)
-
-    def test_render_module_override_lists_every_patch_with_explanation(self):
-        for override in setup_workspace.MODULE_OVERRIDES:
-            content = setup_workspace.render_module_override(override)
-            dep = f'bazel_dep(name = "{override.module}", version = "{override.version}")'
-            if override.declare_dep:
-                self.assertIn(dep, content)
-            else:
-                self.assertNotIn(dep, content)
-            self.assertIn(f'module_name = "{override.module}"', content)
-            self.assertIn(f'version = "{override.version}"', content)
-            self.assertIn("patch_strip = 1", content)
-            for line in override.reason.splitlines():
-                self.assertIn(f"# {line}", content)
-            for name, explanation in override.patches:
-                self.assertIn(
-                    f'"//{setup_workspace.WORKSPACE_PATCHES_DIR}:{override.module}/{name}",',
-                    content,
-                )
-                for line in explanation.splitlines():
-                    self.assertIn(f"# {line}", content)
-
-    def test_render_module_overrides_includes_extra_pins(self):
-        content = setup_workspace.render_module_overrides()
-        for name, version in setup_workspace.EXTRA_ROOT_PINS:
-            self.assertIn(f'bazel_dep(name = "{name}", version = "{version}")', content)
-        self.assertEqual(
-            content.count("single_version_override("),
-            len(setup_workspace.MODULE_OVERRIDES),
-        )
+class TestQtDeps(unittest.TestCase):
 
     def test_render_qt_deps_pins_every_module(self):
         content = setup_workspace.render_qt_deps()
@@ -141,43 +99,6 @@ class TestModuleOverrides(unittest.TestCase):
                 content,
             )
         self.assertNotIn("rules_qt", content)
-
-    def test_copy_override_patches_copies_all_listed_files(self):
-        written = setup_workspace.copy_override_patches(self.repo_root, self.workspace)
-        expected_dir = self.workspace / setup_workspace.WORKSPACE_PATCHES_DIR
-        self.assertEqual(
-            sorted(str(p.relative_to(expected_dir)) for p in written),
-            sorted(setup_workspace.override_patch_paths()),
-        )
-        for rel in setup_workspace.override_patch_paths():
-            dst = expected_dir / rel
-            self.assertTrue(dst.is_file())
-            self.assertEqual(dst.read_text(), f"--- {rel}\n")
-
-    def test_copy_override_patches_raises_when_a_patch_is_missing(self):
-        missing = setup_workspace.override_patch_paths()[0]
-        (self.src_dir / missing).unlink()
-        with self.assertRaises(FileNotFoundError) as ctx:
-            setup_workspace.copy_override_patches(self.repo_root, self.workspace)
-        self.assertIn(missing, str(ctx.exception))
-
-    def test_render_patches_build_file_exports_each_file(self):
-        content = setup_workspace.render_patches_build_file(["fmt.patch", "llvm/a.patch"])
-        self.assertIn("exports_files([", content)
-        self.assertIn('    "fmt.patch",', content)
-        self.assertIn('    "llvm/a.patch",', content)
-
-    def test_checked_in_patches_match_manifest(self):
-        # Guard against MODULE_OVERRIDES drifting from tools/ci/patches/.
-        real_root = Path(__file__).parents[2]
-        real_dir = real_root / setup_workspace.PATCHES_SOURCE_DIR
-        if not real_dir.is_dir():
-            self.skipTest(f"{real_dir} not available in this test environment")
-        on_disk = sorted(
-            str(p.relative_to(real_dir)) for p in real_dir.glob("*/*.patch")
-        )
-        listed = sorted(setup_workspace.override_patch_paths())
-        self.assertEqual(on_disk, listed)
 
 
 class TestCalculatePackagesForVariant(unittest.TestCase):

@@ -1,0 +1,75 @@
+--- a/src/utils.cpp
++++ b/src/utils.cpp
+@@ -233,6 +233,28 @@
+   return (nullptr);
+ }
+ 
++static AVCodecID fallback_codec_id(const std::string & name)
++{
++  if (
++    name == "libx264" || name == "libx264rgb" || name == "h264" || name == "h264_nvenc" ||
++    name == "h264_vaapi" || name == "h264_nvmpi" || name == "h264_cuvid" || name == "h264_qsv" ||
++    name == "h264_v4l2m2m") {
++    return AV_CODEC_ID_H264;
++  }
++  if (
++    name == "libx265" || name == "hevc" || name == "hevc_nvenc" || name == "hevc_vaapi" ||
++    name == "hevc_cuvid" || name == "hevc_qsv" || name == "hevc_v4l2m2m") {
++    return AV_CODEC_ID_HEVC;
++  }
++  const AVCodecDescriptor * desc = nullptr;
++  while ((desc = avcodec_descriptor_next(desc)) != nullptr) {
++    if (desc->name == name) {
++      return desc->id;
++    }
++  }
++  return AV_CODEC_ID_NONE;
++}
++
+ static void find_decoders(
+   AVCodecID encoding, std::vector<std::string> * decoders, bool with_hw_support)
+ {
+@@ -251,6 +273,12 @@
+       }
+     }
+   }
++  if (decoders->empty() && !with_hw_support) {
++    const AVCodecDescriptor * desc = avcodec_descriptor_get(encoding);
++    if (desc && desc->name) {
++      decoders->push_back(desc->name);
++    }
++  }
+ }
+ 
+ std::vector<std::string> split_by_char(const std::string & str_list, const char sep)
+@@ -283,11 +311,9 @@
+   // first look for encoder with that name
+   const AVCodec * c = find_by_name(encoder);
+   if (!c) {
+-    const AVCodecDescriptor * desc = NULL;
+-    while ((desc = avcodec_descriptor_next(desc)) != nullptr) {
+-      if (desc->name == encoder) {
+-        return (desc->id);
+-      }
++    const AVCodecID id = fallback_codec_id(encoder);
++    if (id != AV_CODEC_ID_NONE) {
++      return id;
+     }
+     throw(std::runtime_error("unknown encoder/encoding: " + encoder));
+   }
+@@ -345,12 +371,13 @@
+ std::string find_codec(const std::string & encoder)
+ {
+   const AVCodec * c = find_by_name(encoder);
+-  if (!c) {
++  AVCodecID id = c ? c->id : fallback_codec_id(encoder);
++  if (id == AV_CODEC_ID_NONE) {
+     throw(std::runtime_error("unknown encoder: " + encoder));
+   }
+   const AVCodecDescriptor * desc = NULL;
+   while ((desc = avcodec_descriptor_next(desc)) != nullptr) {
+-    if (desc->id == c->id) {
++    if (desc->id == id) {
+       return (desc->name);
+     }
+   }

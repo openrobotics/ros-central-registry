@@ -14,8 +14,8 @@
 
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
 load("@rules_python//python:defs.bzl", "py_library")
@@ -242,14 +242,98 @@ cc_library(
         "include",
         "src",
     ],
-    local_defines = ros_local_defines(),
+    local_defines = ros_local_defines() + ["NDEBUG"],
     deps = DEPENDENCIES.values() + CC_DEPS,
+    alwayslink = True,
 )
 
 cc_shared_library(
     name = "mrpt_math",
     dynamic_deps = DEPENDENCIES.keys(),
     deps = [":mrpt_math_library"],
+)
+
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    ":mrpt_math": ":mrpt_math_library",
+    "@mrpt_io//:mrpt_io": "@mrpt_io//:mrpt_io_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_mrpt_math",
+    srcs = [
+        "tests/CAtan2LookUpTable_unittest.cpp",
+        "tests/CHistogram_unittest.cpp",
+        "tests/CMatrixBDF_unittest.cpp",
+        "tests/CMatrixDynamic_unittest.cpp",
+        "tests/CMatrixFixed_unittest.cpp",
+        "tests/CPolygon_unittest.cpp",
+        "tests/CSparseMatrixTemplate_unittest.cpp",
+        "tests/CSplineInterpolator1D_unittest.cpp",
+        "tests/EigenAlignment_unittest.cpp",
+        "tests/KDTreeCapable_unittest.cpp",
+        "tests/ModelSearch_unittest.cpp",
+        "tests/TBoundingBox_unittest.cpp",
+        "tests/TLine2D_TSegment2D_unittest.cpp",
+        "tests/TObject2D_unittest.cpp",
+        "tests/TObject3D_unittest.cpp",
+        "tests/TOrientedBox_unittest.cpp",
+        "tests/TPlane_unittest.cpp",
+        "tests/TPoint2D_unittest.cpp",
+        "tests/TPoint3D_unittest.cpp",
+        "tests/TPolygon2D_unittest.cpp",
+        "tests/TPolygon3D_unittest.cpp",
+        "tests/TPolygonWithPlane_unittest.cpp",
+        "tests/TPose3DQuat_unittest.cpp",
+        "tests/TPoseOrPoint_unittest.cpp",
+        "tests/TSegment3D_unittest.cpp",
+        "tests/TTwist2D_unittest.cpp",
+        "tests/TTwist3D_unittest.cpp",
+        "tests/container_ops_unittest.cpp",
+        "tests/containers_api_unittest.cpp",
+        "tests/distributions_unittest.cpp",
+        "tests/fourier_unittest.cpp",
+        "tests/fresnel_unittest.cpp",
+        "tests/geometry_dispatch_unittest.cpp",
+        "tests/geometry_extra_unittest.cpp",
+        "tests/geometry_numerics_unittest.cpp",
+        "tests/geometry_sets_unittest.cpp",
+        "tests/geometry_unittest.cpp",
+        "tests/interp_fit_unittest.cpp",
+        "tests/math_unittest.cpp",
+        "tests/matrix_api_unittest.cpp",
+        "tests/matrix_ops1_unittest.cpp",
+        "tests/matrix_ops2_unittest.cpp",
+        "tests/matrix_ops3_unittest.cpp",
+        "tests/matrix_ops4_unittest.cpp",
+        "tests/matrix_ops5_unittest.cpp",
+        "tests/matrix_ops_unittest.cpp",
+        "tests/matrix_yaml_unittest.cpp",
+        "tests/ops_vectors_unittest.cpp",
+        "tests/poly_roots_extra_unittest.cpp",
+        "tests/poly_roots_unittest.cpp",
+        "tests/ransac_applications_unittest.cpp",
+        "tests/ransac_unittest.cpp",
+        "tests/robust_kernels_unittest.cpp",
+        "tests/slerp_unittest.cpp",
+        "tests/wrap2pi_unittest.cpp",
+        "@mrpt_common//:common_sources/mrpt_test_main.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = [
+        "CMAKE_UNITTEST_BASEDIR=\\\".\\\"",
+        "NDEBUG",
+    ],
+    deps = TEST_DEPENDENCIES.values() + CC_DEPS + [
+        "@mrpt_common//:mrpt_test_common",
+        "@rosdistro//cc:googletest",
+    ],
 )
 
 cc_library(
