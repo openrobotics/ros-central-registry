@@ -65,14 +65,15 @@ cc_library(
     deps = DEPENDENCIES.values() + CC_DEPS,
 )
 
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
 cc_shared_library(
     name = "velodyne_input",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = [":transitive_dynamic_deps"],
     exports_filter = ["//:__subpackages__"],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
     deps = [":velodyne_input_library"],
 )
 
@@ -99,10 +100,9 @@ cc_library(
 
 cc_shared_library(
     name = "velodyne_driver",
-    dynamic_deps = DEPENDENCIES.keys() + [":velodyne_input"],
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        ":velodyne_input",
     ],
     deps = [":velodyne_driver_library"],
 )
@@ -111,11 +111,6 @@ rclcpp_components_register_nodes(
     name = "velodyne_driver_components",
     component = ":velodyne_driver",
     plugins = ["velodyne_driver::VelodyneDriver"],
-)
-
-collect_transitive_dynamic_deps(
-    name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
 )
 
 cc_binary(
@@ -130,10 +125,6 @@ cc_binary(
         "_gen/include",
         "include",
         "include/velodyne_driver",
-    ],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
     ],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS + [

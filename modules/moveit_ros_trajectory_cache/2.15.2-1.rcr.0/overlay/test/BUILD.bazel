@@ -12,155 +12,254 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_python//python:defs.bzl", "py_binary")
 
 package(
     default_applicable_licenses = ["//:package_license"],
     default_visibility = ["//visibility:public"],
 )
 
-launch_ros_test(
-    name = "test_utils_with_move_group",
-    src = "fixtures/gtest_with_move_group.py",
-    data = [
-        "//:ament_index",
-        "@controller_manager//:ament_index",
-        "@controller_manager//:ros2_control_node",
-        "@moveit_resources_panda_moveit_config//:ament_index",
-        "@moveit_ros_move_group//:ament_index",
-        "@moveit_ros_move_group//:move_group",
-        "@robot_state_publisher",
-        "@robot_state_publisher//:ament_index",
-        "@tf2_ros//:ament_index",
-        "@tf2_ros//:static_transform_publisher",
+write_file(
+    name = "spawner_py_src",
+    out = "spawner_entry.py",
+    content = [
+        "import fcntl, os, sys, types",
+        "os.environ.setdefault('ROS_HOME', '/tmp/ros_home')",
+        "class Timeout(Exception): pass",
+        "class FileLock:",
+        "    def __init__(self, path, timeout=-1):",
+        "        self.path, self.timeout, self._fd = path, timeout, None",
+        "    @property",
+        "    def is_locked(self):",
+        "        return self._fd is not None",
+        "    def acquire(self, timeout=-1):",
+        "        os.makedirs(os.path.dirname(self.path), exist_ok=True)",
+        "        self._fd = open(self.path, 'w')",
+        "        fcntl.flock(self._fd, fcntl.LOCK_EX)",
+        "        return self",
+        "    def release(self):",
+        "        if self._fd is not None:",
+        "            fcntl.flock(self._fd, fcntl.LOCK_UN)",
+        "            self._fd.close()",
+        "            self._fd = None",
+        "    def __enter__(self):",
+        "        return self.acquire()",
+        "    def __exit__(self, *args):",
+        "        self.release()",
+        "m = types.ModuleType('filelock')",
+        "m.Timeout, m.FileLock = Timeout, FileLock",
+        "sys.modules['filelock'] = m",
+        "from controller_manager.spawner import main",
+        "if __name__ == '__main__':",
+        "    sys.exit(main())",
+        "",
     ],
+)
+
+py_binary(
+    name = "spawner",
+    srcs = [":spawner_py_src"],
+    main = "spawner_entry.py",
+    deps = ["@controller_manager//:controller_manager_py"],
+)
+
+ament_index(
+    name = "controller_manager_spawner_index",
+    export_name = "controller_manager",
+    lib_data = [":spawner"],
+)
+
+_TEST_COPTS = [
+    "-Wno-missing-template-arg-list-after-template-kw",
+]
+
+_TEST_LOCAL_DEFINES = ros_local_defines() + [
+    "GTEST_HAS_PTHREAD=1",
+    "NDEBUG",
+    "_FILE_OFFSET_BITS=64",
+]
+
+_TEST_DATA = [
+    ":controller_manager_spawner_index",
+    "//:ament_index",
+    "@controller_manager//:ros2_control_node",
+    "@moveit_ros_move_group//:move_group",
+    "@robot_state_publisher",
+    "@tf2_ros//:static_transform_publisher",
+]
+
+_TEST_DEPS = [
+    "@ament_index_python",
+    "@controller_manager//:controller_manager_py",
+    "@geometry_msgs//:py",
+    "@moveit_configs_utils",
+    "@ros2run",
+    "@trajectory_msgs//:py",
+]
+
+cc_binary(
+    name = "test_utils_with_move_group_bin",
+    testonly = True,
+    srcs = ["utils/test_utils_with_move_group.cpp"],
+    copts = _TEST_COPTS,
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = _TEST_LOCAL_DEFINES,
     deps = [
-        "@ament_index_python",
-        "@geometry_msgs//:py",
-        "@launch_pytest",
-        "@moveit_configs_utils",
-        "@trajectory_msgs//:py",
+        "//:move_group_fixture_library",
+        "//:moveit_ros_trajectory_cache_utils_lib_library",
+        "@rosdistro//cc:googletest",
+        "@rules_python//python/cc:current_py_cc_libs",
     ],
 )
 
 launch_ros_test(
-    name = "test_constant_features_with_move_group",
+    name = "test_utils",
     src = "fixtures/gtest_with_move_group.py",
-    data = [
-        "//:ament_index",
-        "@controller_manager//:ament_index",
-        "@controller_manager//:ros2_control_node",
-        "@moveit_resources_panda_moveit_config//:ament_index",
-        "@moveit_ros_move_group//:ament_index",
-        "@moveit_ros_move_group//:move_group",
-        "@robot_state_publisher",
-        "@robot_state_publisher//:ament_index",
-        "@tf2_ros//:ament_index",
-        "@tf2_ros//:static_transform_publisher",
+    args = [
+        "test_binary_dir:=../moveit_ros_trajectory_cache+/test",
+        "test_executable:=test_utils_with_move_group_bin",
     ],
+    data = _TEST_DATA + [":test_utils_with_move_group_bin"],
+    deps = _TEST_DEPS,
+)
+
+cc_binary(
+    name = "test_constant_features_with_move_group_bin",
+    testonly = True,
+    srcs = ["features/test_constant_features_with_move_group.cpp"],
+    copts = _TEST_COPTS,
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = _TEST_LOCAL_DEFINES,
     deps = [
-        "@ament_index_python",
-        "@geometry_msgs//:py",
-        "@launch_pytest",
-        "@moveit_configs_utils",
-        "@trajectory_msgs//:py",
+        "//:move_group_fixture_library",
+        "//:moveit_ros_trajectory_cache_utils_lib_library",
+        "@rosdistro//cc:googletest",
+        "@rules_python//python/cc:current_py_cc_libs",
     ],
 )
 
 launch_ros_test(
-    name = "test_get_cartesian_path_request_features_with_move_group",
+    name = "test_constant_features",
     src = "fixtures/gtest_with_move_group.py",
-    data = [
-        "//:ament_index",
-        "@controller_manager//:ament_index",
-        "@controller_manager//:ros2_control_node",
-        "@moveit_resources_panda_moveit_config//:ament_index",
-        "@moveit_ros_move_group//:ament_index",
-        "@moveit_ros_move_group//:move_group",
-        "@robot_state_publisher",
-        "@robot_state_publisher//:ament_index",
-        "@tf2_ros//:ament_index",
-        "@tf2_ros//:static_transform_publisher",
+    args = [
+        "test_binary_dir:=../moveit_ros_trajectory_cache+/test",
+        "test_executable:=test_constant_features_with_move_group_bin",
     ],
+    data = _TEST_DATA + [":test_constant_features_with_move_group_bin"],
+    deps = _TEST_DEPS,
+)
+
+cc_binary(
+    name = "test_get_cartesian_path_request_features_with_move_group_bin",
+    testonly = True,
+    srcs = ["features/test_get_cartesian_path_request_features_with_move_group.cpp"],
+    copts = _TEST_COPTS,
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = _TEST_LOCAL_DEFINES,
     deps = [
-        "@ament_index_python",
-        "@geometry_msgs//:py",
-        "@launch_pytest",
-        "@moveit_configs_utils",
-        "@trajectory_msgs//:py",
+        "//:move_group_fixture_library",
+        "//:moveit_ros_trajectory_cache_features_lib_library",
+        "@rosdistro//cc:googletest",
+        "@rules_python//python/cc:current_py_cc_libs",
     ],
 )
 
 launch_ros_test(
-    name = "test_motion_plan_request_features_with_move_group",
+    name = "test_cartesian_features",
     src = "fixtures/gtest_with_move_group.py",
-    data = [
-        "//:ament_index",
-        "@controller_manager//:ament_index",
-        "@controller_manager//:ros2_control_node",
-        "@moveit_resources_panda_moveit_config//:ament_index",
-        "@moveit_ros_move_group//:ament_index",
-        "@moveit_ros_move_group//:move_group",
-        "@robot_state_publisher",
-        "@robot_state_publisher//:ament_index",
-        "@tf2_ros//:ament_index",
-        "@tf2_ros//:static_transform_publisher",
+    args = [
+        "test_binary_dir:=../moveit_ros_trajectory_cache+/test",
+        "test_executable:=test_get_cartesian_path_request_features_with_move_group_bin",
     ],
+    data = _TEST_DATA + [":test_get_cartesian_path_request_features_with_move_group_bin"],
+    deps = _TEST_DEPS,
+)
+
+cc_binary(
+    name = "test_motion_plan_request_features_with_move_group_bin",
+    testonly = True,
+    srcs = ["features/test_motion_plan_request_features_with_move_group.cpp"],
+    copts = _TEST_COPTS,
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = _TEST_LOCAL_DEFINES,
     deps = [
-        "@ament_index_python",
-        "@geometry_msgs//:py",
-        "@launch_pytest",
-        "@moveit_configs_utils",
-        "@trajectory_msgs//:py",
+        "//:move_group_fixture_library",
+        "//:moveit_ros_trajectory_cache_features_lib_library",
+        "@rosdistro//cc:googletest",
+        "@rules_python//python/cc:current_py_cc_libs",
     ],
 )
 
 launch_ros_test(
-    name = "test_always_insert_never_prune_policy_with_move_group",
+    name = "test_motion_plan_features",
     src = "fixtures/gtest_with_move_group.py",
-    data = [
-        "//:ament_index",
-        "@controller_manager//:ament_index",
-        "@controller_manager//:ros2_control_node",
-        "@moveit_resources_panda_moveit_config//:ament_index",
-        "@moveit_ros_move_group//:ament_index",
-        "@moveit_ros_move_group//:move_group",
-        "@robot_state_publisher",
-        "@robot_state_publisher//:ament_index",
-        "@tf2_ros//:ament_index",
-        "@tf2_ros//:static_transform_publisher",
+    args = [
+        "test_binary_dir:=../moveit_ros_trajectory_cache+/test",
+        "test_executable:=test_motion_plan_request_features_with_move_group_bin",
     ],
+    data = _TEST_DATA + [":test_motion_plan_request_features_with_move_group_bin"],
+    deps = _TEST_DEPS,
+)
+
+cc_binary(
+    name = "test_always_insert_never_prune_policy_with_move_group_bin",
+    testonly = True,
+    srcs = ["cache_insert_policies/test_always_insert_never_prune_policy_with_move_group.cpp"],
+    copts = _TEST_COPTS,
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = _TEST_LOCAL_DEFINES,
     deps = [
-        "@ament_index_python",
-        "@geometry_msgs//:py",
-        "@launch_pytest",
-        "@moveit_configs_utils",
-        "@trajectory_msgs//:py",
+        "//:move_group_fixture_library",
+        "//:moveit_ros_trajectory_cache_cache_insert_policies_lib_library",
+        "//:moveit_ros_trajectory_cache_features_lib_library",
+        "//:moveit_ros_trajectory_cache_utils_lib_library",
+        "@rosdistro//cc:googletest",
+        "@rules_python//python/cc:current_py_cc_libs",
     ],
 )
 
 launch_ros_test(
-    name = "test_best_seen_execution_time_policy_with_move_group",
+    name = "test_always_insert_policy",
     src = "fixtures/gtest_with_move_group.py",
-    data = [
-        "//:ament_index",
-        "@controller_manager//:ament_index",
-        "@controller_manager//:ros2_control_node",
-        "@moveit_resources_panda_moveit_config//:ament_index",
-        "@moveit_ros_move_group//:ament_index",
-        "@moveit_ros_move_group//:move_group",
-        "@robot_state_publisher",
-        "@robot_state_publisher//:ament_index",
-        "@tf2_ros//:ament_index",
-        "@tf2_ros//:static_transform_publisher",
+    args = [
+        "test_binary_dir:=../moveit_ros_trajectory_cache+/test",
+        "test_executable:=test_always_insert_never_prune_policy_with_move_group_bin",
     ],
+    data = _TEST_DATA + [":test_always_insert_never_prune_policy_with_move_group_bin"],
+    deps = _TEST_DEPS,
+)
+
+cc_binary(
+    name = "test_best_seen_execution_time_policy_with_move_group_bin",
+    testonly = True,
+    srcs = ["cache_insert_policies/test_best_seen_execution_time_policy_with_move_group.cpp"],
+    copts = _TEST_COPTS,
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = _TEST_LOCAL_DEFINES,
     deps = [
-        "@ament_index_python",
-        "@geometry_msgs//:py",
-        "@launch_pytest",
-        "@moveit_configs_utils",
-        "@trajectory_msgs//:py",
+        "//:move_group_fixture_library",
+        "//:moveit_ros_trajectory_cache_cache_insert_policies_lib_library",
+        "//:moveit_ros_trajectory_cache_features_lib_library",
+        "//:moveit_ros_trajectory_cache_utils_lib_library",
+        "@rosdistro//cc:googletest",
+        "@rules_python//python/cc:current_py_cc_libs",
     ],
+)
+
+launch_ros_test(
+    name = "test_best_seen_policy",
+    src = "fixtures/gtest_with_move_group.py",
+    args = [
+        "test_binary_dir:=../moveit_ros_trajectory_cache+/test",
+        "test_executable:=test_best_seen_execution_time_policy_with_move_group_bin",
+    ],
+    data = _TEST_DATA + [":test_best_seen_execution_time_policy_with_move_group_bin"],
+    deps = _TEST_DEPS,
 )
 
 exports_files([

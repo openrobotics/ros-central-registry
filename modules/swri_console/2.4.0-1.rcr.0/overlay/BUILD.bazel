@@ -1,6 +1,21 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@qt//:qt.bzl", "qt_cc_binary")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
@@ -36,14 +51,9 @@ CC_DEPS = [
     "@qtbase//:widgets",
 ]
 
-collect_transitive_dynamic_deps(
-    name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
-)
-
-cc_binary(
-    name = "swri_console",
-    srcs = [
+cc_library(
+    name = "swri_console_headers",
+    hdrs = [
         "include/swri_console/bag_reader.h",
         "include/swri_console/console_master.h",
         "include/swri_console/console_window.h",
@@ -55,6 +65,25 @@ cc_binary(
         "include/swri_console/rosout_log_loader.h",
         "include/swri_console/settings_keys.h",
         "include/swri_console/unix_signal_handler.h",
+        ":gen_ui_console_window_h",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/swri_console",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+qt_cc_binary(
+    name = "swri_console",
+    srcs = [
         "src/bag_reader.cpp",
         "src/console_master.cpp",
         "src/console_window.cpp",
@@ -67,7 +96,6 @@ cc_binary(
         "src/rosout_log_loader.cpp",
         "src/settings_keys.cpp",
         "src/unix_signal_handler.cpp",
-        ":gen_ui_console_window_h",
     ],
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
@@ -85,15 +113,23 @@ cc_binary(
         "include",
         "include/swri_console",
     ],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
     local_defines = ros_local_defines() + [
         "SWRI_CONSOLE_HAS_LOGGER_SERVICES",
         "_FILE_OFFSET_BITS=64",
     ],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    moc_hdrs = [
+        "include/swri_console/bag_reader.h",
+        "include/swri_console/console_master.h",
+        "include/swri_console/console_window.h",
+        "include/swri_console/log_database.h",
+        "include/swri_console/log_database_proxy_model.h",
+        "include/swri_console/node_click_handler.h",
+        "include/swri_console/node_list_model.h",
+        "include/swri_console/ros_thread.h",
+        "include/swri_console/rosout_log_loader.h",
+        "include/swri_console/unix_signal_handler.h",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":swri_console_headers"],
 )
 
 genrule(

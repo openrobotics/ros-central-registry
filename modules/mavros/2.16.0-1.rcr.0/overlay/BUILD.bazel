@@ -56,7 +56,6 @@ CC_DEPS = [
     "@mavros_msgs//:cc",
     "@mavros_msgs//:mavlink_convert",
     "@nav_msgs//:cc",
-    "@rcl//:wait_for_entity_helpers",
     "@rclcpp//:node_wrapper",
     "@rclcpp//:type_adapter",
     "@rosdistro//cc:eigen",
@@ -128,13 +127,14 @@ cc_library(
     visibility = ["//test:__pkg__"],
 )
 
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
 cc_shared_library(
     name = "mavros",
-    dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
     deps = [":mavros_library"],
 )
 
@@ -202,10 +202,9 @@ cc_library(
 
 cc_shared_library(
     name = "mavros_plugins",
-    dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        ":mavros",
     ],
     deps = [":mavros_plugins_library"],
 )
@@ -217,11 +216,6 @@ rclcpp_components_register_nodes(
         "mavros::router::Router",
         "mavros::uas::UAS",
     ],
-)
-
-collect_transitive_dynamic_deps(
-    name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
 )
 
 cc_binary(
@@ -245,16 +239,15 @@ cc_binary(
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
-    dynamic_deps = [":transitive_dynamic_deps"],
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        ":mavros",
+    ],
     includes = [
         ".",
         "_gen/include",
         "include",
         "include/mavros",
-    ],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
     ],
     local_defines = ros_local_defines() + [
         "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
@@ -311,7 +304,10 @@ py_library(
 ament_index(
     name = "ament_index",
     components = [":mavros_components"],
-    data = ["//launch:launch_files"],
+    data = [
+        "//launch:launch_files",
+        "//test:test_plugin_params.yaml",
+    ],
     lib_data = [
         ":mavros_node",
         "scripts/install_geographiclib_datasets.sh",

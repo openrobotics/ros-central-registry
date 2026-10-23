@@ -1,3 +1,17 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
@@ -17,6 +31,7 @@ license(
 )
 
 DEPENDENCIES = {
+    "@hardware_interface//:hardware_interface": "@hardware_interface//:hardware_interface_library",
     "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
     "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
@@ -25,7 +40,6 @@ DEPENDENCIES = {
 }
 
 CC_DEPS = [
-    "@hardware_interface//:hardware_interface_library",
     "@rclcpp//:node_wrapper",
     "@rclcpp//:type_adapter",
     "@rosdistro//cc:fmt",
@@ -33,6 +47,11 @@ CC_DEPS = [
     "@rosdistro//cc:spdlog",
     "@rosdistro//cc:tl_expected",
 ]
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
 
 cc_library(
     name = "serial_port_library",
@@ -57,11 +76,7 @@ cc_library(
 
 cc_shared_library(
     name = "serial_port",
-    dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
     deps = [":serial_port_library"],
 )
 
@@ -88,10 +103,9 @@ cc_library(
 
 cc_shared_library(
     name = "communication_protocol",
-    dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        ":serial_port",
     ],
     deps = [":communication_protocol_library"],
 )
@@ -122,32 +136,27 @@ cc_library(
 
 cc_shared_library(
     name = "feetech_ros2_driver",
-    dynamic_deps = DEPENDENCIES.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        ":communication_protocol",
+        ":serial_port",
     ],
     deps = [":feetech_ros2_driver_library"],
-)
-
-collect_transitive_dynamic_deps(
-    name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
 )
 
 cc_binary(
     name = "demo",
     srcs = ["feetech_driver/examples/demo.cpp"],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
-    dynamic_deps = [":transitive_dynamic_deps"],
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        ":communication_protocol",
+        ":serial_port",
+    ],
     includes = [
         "feetech_driver/include",
         "include",
         "include/feetech_ros2_driver",
-    ],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
     ],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS + [

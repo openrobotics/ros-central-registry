@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@qt//:qt.bzl", "qt_cc_binary")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
@@ -36,6 +37,7 @@ DEPENDENCIES = {
 CC_DEPS = [
     "@rosdistro//cc:pybind11",
     "@rules_python//python/cc:current_py_cc_headers",
+    "@rules_python//python/cc:current_py_cc_libs",
     "@qtbase//:concurrent",
     "@qtbase//:core",
     "@qtbase//:gui",
@@ -44,14 +46,9 @@ CC_DEPS = [
     "@qtbase//:widgets",
 ]
 
-collect_transitive_dynamic_deps(
-    name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
-)
-
-cc_binary(
-    name = "turtle_nest",
-    srcs = [
+cc_library(
+    name = "turtle_nest_headers",
+    hdrs = [
         "include/turtle_nest/addnodedialog.h",
         "include/turtle_nest/build_type_enum.h",
         "include/turtle_nest/file_utils.h",
@@ -74,6 +71,27 @@ cc_binary(
         "include/turtle_nest/packageswindow.h",
         "include/turtle_nest/rospkgcreator.h",
         "include/turtle_nest/string_tools.h",
+        ":gen_ui_addnodedialog_h",
+        ":gen_ui_mainwindow_h",
+        ":gen_ui_packageinfoform_h",
+        ":gen_ui_packageswindow_h",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/turtle_nest",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+qt_cc_binary(
+    name = "turtle_nest",
+    srcs = [
         "src/addnodedialog.cpp",
         "src/file_utils.cpp",
         "src/generate_cmake.cpp",
@@ -93,10 +111,6 @@ cc_binary(
         "src/packageswindow.cpp",
         "src/rospkgcreator.cpp",
         "src/string_tools.cpp",
-        ":gen_ui_addnodedialog_h",
-        ":gen_ui_mainwindow_h",
-        ":gen_ui_packageinfoform_h",
-        ":gen_ui_packageswindow_h",
     ],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     dynamic_deps = [
@@ -113,12 +127,14 @@ cc_binary(
         "include",
         "include/turtle_nest",
     ],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
     local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    moc_hdrs = [
+        "include/turtle_nest/addnodedialog.h",
+        "include/turtle_nest/mainwindow.h",
+        "include/turtle_nest/packageinfoform.h",
+        "include/turtle_nest/packageswindow.h",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":turtle_nest_headers"],
 )
 
 genrule(

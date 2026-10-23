@@ -71,7 +71,7 @@ BCR_DEPS = {
 # in the BCR), replacing the prebuilt rules_qt binaries. Every module gets
 # them so any package can depend on @qtbase//:widgets, @qtdeclarative//:quick,
 # ... directly. Keep in sync with tools/ci/setup_workspace.py:QT_MODULES.
-QT_VERSION = "6.10.2"
+QT_VERSION = "6.10.2.rcr.0"
 QT_MODULES = (
     "qt",
     "qtbase",
@@ -229,7 +229,7 @@ bazel_dep(name = "libyaml", version = "0.2.5")
 bazel_dep(name = "lz4", version = "1.9.4")
 bazel_dep(name = "mcap", version = "1.4.0")
 bazel_dep(name = "mimick", version = "0.9.0.bcr.0")
-bazel_dep(name = "ogre", version = "1.12.10")
+bazel_dep(name = "ogre", version = "1.12.10.rcr.0")
 bazel_dep(name = "opencv", version = "4.13.0.bcr.5")
 bazel_dep(name = "orocos-kdl", version = "1.5.3")
 bazel_dep(name = "pybind11_bazel", version = "3.0.1")

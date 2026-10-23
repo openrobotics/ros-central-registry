@@ -121,6 +121,11 @@ filegroup(
     srcs = ["lib/64bit/libVimbaC.so"],
 )
 
+collect_transitive_dynamic_deps(
+    name = "vimba_base_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
 cc_library(
     name = "VimbaCPP_library",
     srcs = [
@@ -222,10 +227,11 @@ cc_library(
 
 cc_shared_library(
     name = "VimbaCPP",
-    dynamic_deps = DEPENDENCIES.keys(),
+    additional_linker_inputs = ["lib/64bit/libVimbaC.so"],
+    dynamic_deps = [":vimba_base_dynamic_deps"],
+    exports_filter = ["//:__subpackages__"],
     user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+        "$(location lib/64bit/libVimbaC.so)",
     ],
     deps = [":VimbaCPP_library"],
 )
@@ -303,16 +309,19 @@ cc_library(
         "include/avt_vimba_camera",
     ],
     local_defines = ros_local_defines(),
-    deps = DEPENDENCIES.values() + CC_DEPS,
+    deps = DEPENDENCIES.values() + CC_DEPS + [":VimbaCPP_library"],
 )
 
 cc_shared_library(
     name = "mono_camera_node",
-    dynamic_deps = DEPENDENCIES.keys(),
+    additional_linker_inputs = ["lib/64bit/libVimbaC.so"],
+    dynamic_deps = [
+        ":vimba_base_dynamic_deps",
+        ":VimbaCPP",
+    ],
     exports_filter = ["//:__subpackages__"],
     user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+        "$(location lib/64bit/libVimbaC.so)",
     ],
     deps = [":mono_camera_node_library"],
 )
@@ -386,27 +395,39 @@ cc_library(
         "include/avt_vimba_camera",
     ],
     local_defines = ros_local_defines(),
-    deps = DEPENDENCIES.values() + CC_DEPS + [":mono_camera_node_library"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":VimbaCPP_library",
+        ":mono_camera_node_library",
+    ],
 )
 
 cc_shared_library(
     name = "trigger_node",
-    dynamic_deps = DEPENDENCIES.keys() + [":mono_camera_node"],
+    additional_linker_inputs = ["lib/64bit/libVimbaC.so"],
+    dynamic_deps = [
+        ":vimba_base_dynamic_deps",
+        ":VimbaCPP",
+        ":mono_camera_node",
+    ],
     user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+        "$(location lib/64bit/libVimbaC.so)",
     ],
     deps = [":trigger_node_library"],
 )
 
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
-    dynamic_deps = DEPENDENCIES.keys(),
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":VimbaCPP",
+        ":mono_camera_node",
+        ":trigger_node",
+    ],
 )
 
 cc_binary(
     name = "mono_camera_exec",
     srcs = ["src/exec/mono_camera_exec.cpp"],
+    additional_linker_inputs = ["lib/64bit/libVimbaC.so"],
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
@@ -415,12 +436,10 @@ cc_binary(
         "include",
         "include/avt_vimba_camera",
     ],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    linkopts = ["$(location lib/64bit/libVimbaC.so)"],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":VimbaCPP_library",
         ":mono_camera_node_library",
         ":trigger_node_library",
     ],
@@ -429,6 +448,7 @@ cc_binary(
 cc_binary(
     name = "trigger_exec",
     srcs = ["src/exec/trigger_exec.cpp"],
+    additional_linker_inputs = ["lib/64bit/libVimbaC.so"],
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
@@ -437,12 +457,10 @@ cc_binary(
         "include",
         "include/avt_vimba_camera",
     ],
-    linkopts = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
+    linkopts = ["$(location lib/64bit/libVimbaC.so)"],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":VimbaCPP_library",
         ":mono_camera_node_library",
         ":trigger_node_library",
     ],

@@ -12,22 +12,54 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_python//python:defs.bzl", "py_library")
 
 package(
     default_applicable_licenses = ["//:package_license"],
     default_visibility = ["//visibility:public"],
 )
 
+write_file(
+    name = "test_moveit_init",
+    out = "test_moveit/__init__.py",
+    content = [
+        "import moveit, sys",
+        "from moveit import core, planning",
+        "sys.modules[__name__ + '.core'] = core",
+        "sys.modules[__name__ + '.planning'] = planning",
+        "for k, v in list(sys.modules.items()):",
+        "    if k.startswith('moveit.'):",
+        "        sys.modules['test_' + k] = v",
+        "",
+    ],
+)
+
+py_library(
+    name = "test_moveit_lib",
+    testonly = True,
+    srcs = [":test_moveit_init"],
+    imports = ["."],
+    deps = ["//:moveit"],
+)
+
 py_pytest(
     name = "test_robot_model",
-    srcs = ["unit/test_robot_model.py"],
+    srcs = [
+        "unit/test_robot_model.py",
+    ],
+    args = ["--ignore=share"],
     data = [
+        "unit/fixtures/panda.srdf",
+        "unit/fixtures/panda.urdf",
         "//:ament_index",
         "//:core.cpython-314-x86_64-linux-gnu",
         "//:planning.cpython-314-x86_64-linux-gnu",
     ],
+    imports = ["."],
     deps = [
+        ":test_moveit_lib",
         "//:moveit",
         "@ament_index_python",
         "@geometry_msgs//:py",
@@ -38,13 +70,20 @@ py_pytest(
 
 py_pytest(
     name = "test_robot_state",
-    srcs = ["unit/test_robot_state.py"],
+    srcs = [
+        "unit/test_robot_state.py",
+    ],
+    args = ["--ignore=share"],
     data = [
+        "unit/fixtures/panda.srdf",
+        "unit/fixtures/panda.urdf",
         "//:ament_index",
         "//:core.cpython-314-x86_64-linux-gnu",
         "//:planning.cpython-314-x86_64-linux-gnu",
     ],
+    imports = ["."],
     deps = [
+        ":test_moveit_lib",
         "//:moveit",
         "@ament_index_python",
         "@geometry_msgs//:py",

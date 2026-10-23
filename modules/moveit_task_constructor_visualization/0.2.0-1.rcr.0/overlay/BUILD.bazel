@@ -15,7 +15,7 @@
 load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
@@ -31,30 +31,42 @@ license(
 )
 
 DEPENDENCIES = {
+    "@class_loader//:class_loader": "@class_loader//:class_loader_library",
+    "@moveit_core//:moveit_collision_detection": "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_planning_scene": "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model": "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state": "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory": "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_trajectory_processing": "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_transforms": "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils": "@moveit_core//:moveit_utils_library",
+    "@moveit_ros_visualization//:moveit_rviz_plugin_render_tools": "@moveit_ros_visualization//:moveit_rviz_plugin_render_tools_library",
+    "@moveit_task_constructor_core//:moveit_task_constructor_core": "@moveit_task_constructor_core//:moveit_task_constructor_core_library",
+    "@moveit_task_constructor_core//:moveit_task_constructor_core_stages": "@moveit_task_constructor_core//:moveit_task_constructor_core_stages_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
     "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
+    "@rosdistro//cc:boost.chrono_shared": "@rosdistro//cc:boost.chrono",
+    "@rosdistro//cc:boost.serialization_shared": "@rosdistro//cc:boost.serialization",
+    "@rosdistro//cc:boost.thread_shared": "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
     "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
     "@rviz2//:rviz_common": "@rviz2//:rviz_common_library",
     "@rviz2//:rviz_default_plugins": "@rviz2//:rviz_default_plugins_library",
+    "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
 }
 
 QT_DEPS = {
     "@qtbase//:core_shared": "@qtbase//:core",
     "@qtbase//:gui_shared": "@qtbase//:gui",
     "@qtbase//:widgets_shared": "@qtbase//:widgets",
+    "@qtsvg//:svg_shared": "@qtsvg//:svg",
 }
 
 CC_DEPS = [
-    "@moveit_core//:moveit_planning_scene_library",
-    "@moveit_core//:moveit_robot_model_library",
-    "@moveit_core//:moveit_robot_trajectory_library",
-    "@moveit_core//:moveit_trajectory_processing_library",
-    "@moveit_ros_visualization//:moveit_rviz_plugin_render_tools_library",
-    "@moveit_task_constructor_core//:moveit_task_constructor_core_library",
     "@moveit_task_constructor_msgs//:cc",
     "@rosdistro//cc:boost.algorithm",
     "@rosdistro//cc:boost.lexical_cast",
-    "@rosdistro//cc:boost.thread",
     "@rosdistro//cc:fmt",
 ] + QT_DEPS.values()
 
@@ -151,10 +163,6 @@ cc_library(
 cc_shared_library(
     name = "motion_planning_tasks_utils",
     dynamic_deps = QT_DEPS.keys(),
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
     deps = [":motion_planning_tasks_utils_library"],
 )
 
@@ -179,10 +187,6 @@ cc_library(
 cc_shared_library(
     name = "motion_planning_tasks_properties",
     dynamic_deps = DYNAMIC_DEPS,
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
     deps = [":motion_planning_tasks_properties_library"],
 )
 
@@ -211,10 +215,6 @@ cc_library(
 cc_shared_library(
     name = "moveit_task_visualization_tools",
     dynamic_deps = DYNAMIC_DEPS,
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
-    ],
     deps = [":moveit_task_visualization_tools_library"],
 )
 
@@ -275,10 +275,11 @@ cc_library(
 
 cc_shared_library(
     name = "motion_planning_tasks_rviz_plugin",
-    dynamic_deps = DYNAMIC_DEPS,
-    user_link_flags = [
-        "-Wl,--allow-shlib-undefined",
-        "-Wl,--unresolved-symbols=ignore-all",
+    dynamic_deps = DYNAMIC_DEPS + [
+        ":motion_planning_tasks_properties",
+        ":motion_planning_tasks_utils",
+        ":moveit_task_visualization_tools",
+        ":transitive_dynamic_deps",
     ],
     deps = [":motion_planning_tasks_rviz_plugin_library"],
 )
@@ -396,10 +397,31 @@ cc_test(
     ],
 )
 
+cc_binary(
+    name = "moveit_task_constructor_visualization-test-task_model",
+    testonly = True,
+    srcs = ["motion_planning_tasks/test/test_task_model.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = LOCAL_DEFINES + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":motion_planning_tasks_rviz_plugin_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
 launch_ros_test(
     name = "motion_planning_tasks_test_test.launch.py",
     src = "motion_planning_tasks/test/test.launch.py",
-    data = [":ament_index"],
+    args = [
+        "test_binary:=$(location :moveit_task_constructor_visualization-test-task_model)",
+    ],
+    data = [
+        ":ament_index",
+        ":moveit_task_constructor_visualization-test-task_model",
+    ],
     deps = [
         "@launch//:test_support",
         "@moveit_task_constructor_core//:moveit",
