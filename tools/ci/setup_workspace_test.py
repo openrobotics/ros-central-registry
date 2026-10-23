@@ -48,6 +48,18 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertIn("test:macos --local_test_jobs=1", content)
         self.assertIn("test:macos --strategy=TestRunner=standalone", content)
 
+    def test_action_env_pinned_across_bazel_versions(self):
+        content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
+        self.assertIn("common --action_env=LC_CTYPE=C.UTF-8", content)
+        self.assertIn("common --host_action_env=LC_CTYPE=C.UTF-8", content)
+        for os_name in ("linux", "macos"):
+            self.assertIn(
+                f"common:{os_name} --action_env=PATH=/bin:/usr/bin:/usr/local/bin", content
+            )
+            self.assertIn(
+                f"common:{os_name} --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin", content
+            )
+
 
 class TestPlatforms(unittest.TestCase):
 

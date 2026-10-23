@@ -8,9 +8,9 @@ Editing, fixing, or patching Bazel modules in the ROS Central Registry (RCR) fol
 ## The Workflow
 
 ### 1. Set Up a Throwaway Workspace
-Generate a local, gitignored Bazel workspace for the targeted release (e.g. `lyrical.2026-06-08.rcr.2`).
+Generate a local, gitignored Bazel workspace for the targeted release (e.g. `lyrical.2026-10-05.rcr.0`).
 ```shell
-bazel run //tools/ci:setup_workspace -- --release=<release-name>
+bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-10-05.rcr.0
 ```
 For more details, see the `setup-workspace` skill.
 
