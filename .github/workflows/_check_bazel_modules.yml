@@ -66,11 +66,15 @@ jobs:
         BASE_REF="${{ inputs.base_ref || github.base_ref }}"
 
         # Generate the diff name-status file
-        git diff --name-status "origin/$BASE_REF...HEAD" > /tmp/diff_status.txt
+        # --no-renames: report renames as delete+add so the result does not depend on
+        # git's rename-detection limit (big PRs exceed it and print warnings); the
+        # deletion half is still caught by check_pr_modules.
+        git diff --no-renames --name-status "origin/$BASE_REF...HEAD" > /tmp/diff_status.txt
 
-        # Extract the old versions of any modified metadata.json or MODULE.bazel files under the matrix directory
+        # Extract the old versions of any modified metadata.json or MODULE.bazel files under the matrix directory.
+        # Only modified (M) files have an old version; added files would make `git show` fail.
         mkdir -p /tmp/old_metadata
-        git diff --name-only "origin/$BASE_REF...HEAD" | grep -E "^${{ matrix.directory }}/[^/]*/metadata.json$|^${{ matrix.directory }}/[^/]*/[^/]*/MODULE.bazel$" | while read -r file; do
+        git diff --no-renames --diff-filter=M --name-only "origin/$BASE_REF...HEAD" | grep -E "^${{ matrix.directory }}/[^/]*/metadata.json$|^${{ matrix.directory }}/[^/]*/[^/]*/MODULE.bazel$" | while read -r file; do
             mkdir -p "/tmp/old_metadata/$(dirname "$file")"
             git show "origin/$BASE_REF:$file" > "/tmp/old_metadata/$file" || true
         done
