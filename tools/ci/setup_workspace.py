@@ -179,13 +179,18 @@ common --remote_cache=https://storage.googleapis.com/intrinsic-opensource-buildc
 common --remote_cache_compression=true
 common --remote_upload_local_results=false
 
+# Don't build runfiles symlink trees for every binary; Bazel still creates
+# them when a target is run or tested. Applied everywhere (not just CI):
+# the ament_index-shaped runfiles trees are large, and building one per
+# binary consumes a lot of inodes for no benefit until the target is run.
+common --nobuild_runfile_links
+
 # CI specific performance/reliability tweaks -- safe to use anywhere,
 # require no credentials (this is what forks get; see cache_write_config
 # below for the part that isn't safe on a fork).
 common:ci --http_timeout_scaling=3.0
 common:ci --experimental_repository_downloader_retries=10
 common:ci --remote_cache_compression=false
-common:ci --nobuild_runfile_links
 common:ci --ui_event_filters=-INFO,-DEBUG
 {cache_write_config}
 

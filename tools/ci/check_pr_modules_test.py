@@ -403,6 +403,41 @@ bazel_dep(name = "new_dep", version = "2.0.0")
         violations = check_violations(diffs, self.old_dir, self.work_dir, "modules")
         self.assertEqual(violations, [])
 
+    def test_inter_module_dependency_mismatch_skipped_when_requested(self):
+        # Same mismatch as test_inter_module_dependency_mismatch_fails, but in
+        # bcr_staging/modules with the consistency check disabled.
+        pkg_a_module = (
+            'module(\n'
+            '    name = "pkg_a",\n'
+            '    version = "1.0.0.rcr.2",\n'
+            ')\n'
+            'bazel_dep(name = "pkg_b", version = "2.0.0")\n'
+        )
+        pkg_b_module = (
+            'module(\n'
+            '    name = "pkg_b",\n'
+            '    version = "2.0.0.rcr.1",\n'
+            ')\n'
+        )
+        self.write_text(self.work_dir, "bcr_staging/modules/pkg_a/1.0.0.rcr.2/MODULE.bazel", pkg_a_module)
+        self.write_text(self.work_dir, "bcr_staging/modules/pkg_b/2.0.0.rcr.1/MODULE.bazel", pkg_b_module)
+
+        diffs = [
+            ("A", "bcr_staging/modules/pkg_a/1.0.0.rcr.2/MODULE.bazel"),
+            ("A", "bcr_staging/modules/pkg_b/2.0.0.rcr.1/MODULE.bazel"),
+        ]
+        self.assertTrue(any(
+            "bumped consistently" in v
+            for v in check_violations(diffs, self.old_dir, self.work_dir, "bcr_staging/modules")
+        ))
+        self.assertEqual(
+            check_violations(
+                diffs, self.old_dir, self.work_dir, "bcr_staging/modules",
+                skip_dependency_consistency=True,
+            ),
+            [],
+        )
+
 
 class TestMain(unittest.TestCase):
     """

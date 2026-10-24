@@ -48,6 +48,11 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertIn("test:macos --local_test_jobs=1", content)
         self.assertIn("test:macos --strategy=TestRunner=standalone", content)
 
+    def test_runfile_links_disabled_everywhere(self):
+        content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
+        self.assertIn("common --nobuild_runfile_links\n", content)
+        self.assertNotIn("common:ci --nobuild_runfile_links", content)
+
     def test_action_env_pinned_across_bazel_versions(self):
         content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
         self.assertIn("common --action_env=LC_CTYPE=C.UTF-8", content)

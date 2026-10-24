@@ -108,9 +108,34 @@ cc_test(
     ],
 )
 
+# Equivalent of test/CMakeLists.txt's robotraconteur_generate_thunk() for
+# the test robdef, with AUTO_IMPORT and robdef/group1 as the include path.
+genrule(
+    name = "gen_test_task_generator_thunk",
+    srcs = [
+        "experimental.testing.companion.test_task_generator.robdef",
+        "//:robdef_group1",
+    ],
+    outs = [
+        "experimental__testing__companion__test_task_generator.h",
+        "experimental__testing__companion__test_task_generator_stubskel.h",
+        "experimental__testing__companion__test_task_generator_stubskel.cpp",
+    ],
+    cmd = (
+        "$(location @robotraconteur//:_bin/RobotRaconteurGen) --thunksource --lang=cpp " +
+        "--include-path=$$(dirname $$(echo $(locations //:robdef_group1) | cut -d' ' -f1)) " +
+        "--output-dir $(RULEDIR) --auto-import " +
+        "$(location experimental.testing.companion.test_task_generator.robdef)"
+    ),
+    tools = ["@robotraconteur//:_bin/RobotRaconteurGen"],
+)
+
 cc_test(
     name = "test_task_generator",
-    srcs = ["test_task_generator.cpp"],
+    srcs = [
+        "test_task_generator.cpp",
+        ":gen_test_task_generator_thunk",
+    ],
     copts = ["-Wno-missing-template-arg-list-after-template-kw"],
     data = ["//:ament_index"] + [
         "CMakeLists.txt",
@@ -118,6 +143,7 @@ cc_test(
         "sawyer_robot_default_config.yml",
     ],
     dynamic_deps = ["//:transitive_dynamic_deps"],
+    includes = ["."],
     local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
     deps = DEPENDENCIES.values() + CC_DEPS + [
         "//:RobotRaconteurCompanion_library",
