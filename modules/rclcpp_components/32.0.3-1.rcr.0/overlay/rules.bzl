@@ -54,14 +54,33 @@ _component_node_main_gen = rule(
 )
 
 def _component_record_gen_impl(ctx):
-    lib_path = ctx.attr.component[CcSharedLibraryInfo].linker_input.libraries[0].dynamic_library
+    info = ctx.attr.component[CcSharedLibraryInfo]
+    lib_path = info.linker_input.libraries[0].dynamic_library
     content = "{0};lib/{1}\n".format(ctx.attr.plugin, lib_path.basename)
     output_file = ctx.actions.declare_file(ctx.attr.name + ".component")
     ctx.actions.write(
         output = output_file,
         content = content,
     )
-    return [DefaultInfo(files = depset([output_file, lib_path]))]
+
+    # The component library's transitive dynamic deps (e.g. libimage_geometry.so
+    # for a depth_image_proc component), plus everything in its runfiles (e.g.
+    # message typesupport libraries from :cc message deps). component_container
+    # dlopen()s the component from lib/, where its RUNPATH ($ORIGIN-relative to
+    # Bazel's _solib dirs) doesn't resolve, so ament_index must place these in
+    # lib/ too -- it symlinks every shared library in a component's runfiles there.
+    dep_libs = [
+        lib.dynamic_library
+        for dep in info.dynamic_deps.to_list()
+        for lib in dep.linker_input.libraries
+        if lib.dynamic_library
+    ]
+    return [DefaultInfo(
+        files = depset([output_file, lib_path]),
+        runfiles = ctx.runfiles(files = dep_libs).merge(
+            ctx.attr.component[DefaultInfo].default_runfiles,
+        ),
+    )]
 
 _component_record_gen = rule(
     implementation = _component_record_gen_impl,

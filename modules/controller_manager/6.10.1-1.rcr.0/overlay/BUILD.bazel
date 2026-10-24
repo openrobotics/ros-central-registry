@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines", "ros_version_header")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
@@ -178,6 +180,7 @@ py_library(
         "@ros2pkg",
         "@sensor_msgs//:py",
         "@std_msgs//:py",
+        requirement("filelock"),
     ],
 )
 
@@ -192,11 +195,35 @@ pkg_files(
     prefix = "test",
 )
 
+[
+    write_file(
+        name = "{}_bin".format(script),
+        out = "_gen/lib/controller_manager/{}".format(script),
+        content = [
+            "#!/usr/bin/env python3",
+            "import sys",
+            "from controller_manager.{} import main".format(script),
+            "if __name__ == '__main__':",
+            "    sys.exit(main())",
+            "",
+        ],
+        is_executable = True,
+    )
+    for script in [
+        "hardware_spawner",
+        "spawner",
+        "unspawner",
+    ]
+]
+
 ament_index(
     name = "ament_index",
     data = ["//test:test_launch_utils/test_ros2_control_node_combined.yaml"],
     lib_data = [
+        ":hardware_spawner_bin",
         ":ros2_control_node",
+        ":spawner_bin",
+        ":unspawner_bin",
     ],
     libraries = [
         ":controller_manager",

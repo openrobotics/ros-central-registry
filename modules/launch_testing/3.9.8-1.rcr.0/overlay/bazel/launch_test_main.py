@@ -63,6 +63,21 @@ def _configure_bazel_environment() -> None:
         else:
             os.environ['AMENT_PREFIX_PATH'] = os.getcwd()
 
+    # Mirror launch_main.py: put each underlay prefix's bin/ on PATH so that
+    # `$(find-exec ...)` / FindExecutable() resolve executables installed to
+    # bin/ (e.g. xacro), the same way a sourced ROS install does.
+    ament_bin_dirs = [
+        os.path.abspath(os.path.join(prefix, 'bin'))
+        for prefix in os.environ.get('AMENT_PREFIX_PATH', '').split(os.pathsep)
+        if prefix and os.path.isdir(os.path.join(prefix, 'bin'))
+    ]
+    if ament_bin_dirs:
+        os.environ['PATH'] = (
+            os.pathsep.join(ament_bin_dirs)
+            + os.pathsep
+            + os.environ.get('PATH', '')
+        )
+
     if 'TEST_SRCDIR' in os.environ and shutil.which('ros2') is None:
         bin_dir = os.path.join(
             os.environ.get('TEST_TMPDIR', '/tmp'), 'ros2_bin'

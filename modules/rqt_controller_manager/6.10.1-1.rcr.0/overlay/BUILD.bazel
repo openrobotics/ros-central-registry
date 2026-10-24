@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rules_python//python:defs.bzl", "py_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -27,16 +29,48 @@ py_library(
     ],
     imports = ["."],
     deps = [
+        "@controller_manager//:controller_manager_py",
         "@controller_manager_msgs//:py",
         "@launch_testing",
         "@launch_testing_ros",
         "@rclpy",
+        "@ros2service",
         "@rqt_gui",
         "@rqt_gui_py",
     ],
 )
 
 ### PACKAGING
+
+write_file(
+    name = "rqt_controller_manager_bin",
+    out = "_gen/lib/rqt_controller_manager/rqt_controller_manager",
+    content = [
+        "#!/usr/bin/env python3",
+        "import sys",
+        "from rqt_controller_manager.main import main",
+        "if __name__ == '__main__':",
+        "    sys.exit(main())",
+        "",
+    ],
+    is_executable = True,
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "plugin.xml",
+        "resource/cm_icon.png",
+        "resource/controller_manager.ui",
+        "resource/led_cyan.png",
+        "resource/led_green.png",
+        "resource/led_off.png",
+        "resource/led_yellow.png",
+        "resource/popup_info.ui",
+    ],
+    lib_data = [":rqt_controller_manager_bin"],
+    package_xml = "package.xml",
+)
 
 ament_package(
     name = "ament_package",
@@ -65,4 +99,11 @@ ament_package(
         "@rqt_gui//:ament_package",
         "@rqt_gui_py//:ament_package",
     ],
+)
+
+launch_ros_test(
+    name = "test_test_run_launch_py",
+    src = "test/test_run_launch.py",
+    data = [":ament_index"],
+    deps = [":rqt_controller_manager"],
 )
