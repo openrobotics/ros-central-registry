@@ -254,6 +254,7 @@ def check_violations(
     working_dir: Path,
     target_dir: str,
     permit_module_deletion: bool = False,
+    skip_dependency_consistency: bool = False,
 ) -> list[str]:
     violations = []
     
@@ -323,6 +324,12 @@ def check_violations(
             violations.extend(check_source_json_integrity(version_dir, rel_ver_path))
 
     # Rule 4: Verify inter-module dependencies within the PR are bumped consistently.
+    # Skippable (--skip-dependency-consistency) for bcr_staging/modules: staged
+    # BCR modules keep the upstream BCR pins of their own MODULE.bazel, and
+    # rosdistro's MODULE.bazel is what pins the staged versions that resolve.
+    if skip_dependency_consistency:
+        return violations
+
     pr_updated_modules: dict[str, str] = {}
     for pkg, ver in affected_versions:
         if pkg not in pr_updated_modules or version_sort_key(ver) > version_sort_key(pr_updated_modules[pkg]):
@@ -370,6 +377,12 @@ def main():
         action="store_true",
         help="Permit deleting module files and removing versions from metadata.json."
     )
+    parser.add_argument(
+        "--skip-dependency-consistency",
+        action="store_true",
+        help="Skip the check that bazel_dep pins between modules updated in the "
+             "same PR are bumped consistently (used for bcr_staging/modules)."
+    )
     args = parser.parse_args()
 
     # `bazel run`'s child process cwd is the exec root, not the actual git
@@ -386,6 +399,7 @@ def main():
         workspace_root,
         args.directory,
         permit_module_deletion=args.permit_module_deletion,
+        skip_dependency_consistency=args.skip_dependency_consistency,
     )
 
     if violations:
