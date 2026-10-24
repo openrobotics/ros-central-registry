@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rules_license//rules:license.bzl", "license")
@@ -108,11 +109,28 @@ py_library(
         requirement("rtree"),
         requirement("shapely"),
     ] + select({
-        # fiona has no cp314 wheel; building_map imports it lazily (see
+        # fiona has no cp314 or Linux aarch64 wheels (and its sdist needs a
+        # system GDAL); building_map imports it lazily (see
         # patches/building_map__building__py.patch), so only GeoPackage export is lost.
-        "@rules_python//python/config_settings:is_python_3.14": [],
+        ":no_fiona_wheel": [],
         "//conditions:default": [requirement("fiona")],
     }),
+)
+
+config_setting(
+    name = "linux_aarch64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+selects.config_setting_group(
+    name = "no_fiona_wheel",
+    match_any = [
+        ":linux_aarch64",
+        "@rules_python//python/config_settings:is_python_3.14",
+    ],
 )
 
 TEXTURES = [
