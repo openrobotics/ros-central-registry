@@ -1,0 +1,329 @@
+load("@qt//:qt.bzl", "common_copts", "qt_module_headers", "qt_qml_module")
+load("@qt//:qt_internal_library.bzl", "qt_internal_library", "qt_static_plugin")
+load("@qt//:qt_tools.bzl", "qt_export_header", "qt_sync_headers")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+        "@rules_license//licenses/spdx:GPL-2.0-only",
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+    license_text = "LICENSES/LGPL-3.0-only.txt",
+)
+
+license(
+    name = "open62541_license",
+    license_kinds = ["@rules_license//licenses/spdx:MPL-2.0"],
+    license_text = "src/3rdparty/open62541/mpl-2.0.815ca599c9df.txt",
+)
+
+exports_files(["MODULE.bazel"])
+
+_COMMON_DEFINES = [
+    "QT_ASCII_CAST_WARNINGS",
+    "QT_BUILDING_QT",
+    "QT_DEPRECATED_WARNINGS",
+    "QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH",
+    "QT_MOC_COMPAT",
+    "QT_NO_CAST_TO_ASCII",
+    "QT_NO_CONTEXTLESS_CONNECT=1",
+    "QT_NO_DEBUG",
+    "QT_NO_EXCEPTIONS",
+    "QT_NO_FOREACH=1",
+    "QT_NO_JAVA_STYLE_ITERATORS",
+    "QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+    "QT_NO_QASCONST=1",
+    "QT_NO_QEXCHANGE",
+    "QT_NO_QSNPRINTF",
+    "QT_USE_NODISCARD_FILE_OPEN=1",
+    "QT_USE_QSTRINGBUILDER",
+    "_GLIBCXX_ASSERTIONS",
+    "_LARGEFILE64_SOURCE",
+    "_LARGEFILE_SOURCE",
+]
+
+# ---------------------------------------------------------------------------
+# open62541 (bundled amalgamation, INPUT_open62541=qt)
+# ---------------------------------------------------------------------------
+
+# Built with OpenSSL encryption (QT_FEATURE_open62541_security): upstream
+# enables it whenever OpenSSL is found, and the hermetic @openssl is always
+# available. UA_ENABLE_ENCRYPTION_OPENSSL is public because open62541.h
+# derives UA_ENABLE_ENCRYPTION (and the config struct layout) from it.
+cc_library(
+    name = "open62541",
+    srcs = ["src/3rdparty/open62541/open62541.c"],
+    hdrs = ["src/3rdparty/open62541/open62541.h"],
+    applicable_licenses = [":open62541_license"],
+    conlyopts = ["-std=c99"],
+    # Third-party amalgamation; upstream also silences its warnings
+    # (-Wno-unused-parameter, -Wno-incompatible-pointer-types, ...).
+    copts = ["-w"],
+    defines = ["UA_ENABLE_ENCRYPTION_OPENSSL"],
+    includes = ["src/3rdparty/open62541"],
+    linkopts = select({
+        "@platforms//os:windows": [
+            "-liphlpapi",
+            "-lws2_32",
+        ],
+        "//conditions:default": [],
+    }),
+    local_defines = select({
+        "@platforms//os:macos": ["_DARWIN_C_SOURCE"],
+        "//conditions:default": [],
+    }),
+    deps = ["@openssl//:crypto"],
+)
+
+# ---------------------------------------------------------------------------
+# QtOpcUa
+# ---------------------------------------------------------------------------
+
+# Global Discovery Server support and the x509 helpers (QT_FEATURE_gds) need
+# OpenSSL 3 and are not built on Apple platforms upstream. They are
+# self-contained (nothing else in QtOpcUa references them), so they live in the
+# static-only :opcua_x509 library: like qtbase's OpenSSL TLS plugin, the
+# hermetic OpenSSL is then linked statically into binaries only, never into a
+# Qt shared library.
+_GDS_SRCS = [
+    "src/opcua/client/qopcuagdsclient.cpp",
+] + glob(["src/opcua/x509/*.cpp"])
+
+# Bazel overlay header, not an upstream QtOpcUa header (see :opcua_x509).
+_OPENSSL_RENAME_HDR = "src/opcua/x509/qopcua_openssl_rename_p.h"
+
+_GDS_HDRS = [
+    "src/opcua/client/qopcuagdsclient.h",
+    "src/opcua/client/qopcuagdsclient_p.h",
+] + glob(
+    ["src/opcua/x509/*.h"],
+    exclude = [_OPENSSL_RENAME_HDR],
+)
+
+OPCUA_HDRS = glob(
+    [
+        "src/opcua/*.h",
+        "src/opcua/client/*.h",
+        "src/opcua/core/*.h",
+    ],
+    exclude = _GDS_HDRS,
+)
+
+qt_export_header(
+    name = "opcua_exports_h",
+    out = "generated_exports/qtopcuaexports.h",
+    module_infix = "OPCUA",
+)
+
+qt_sync_headers(
+    name = "opcua_sync_headers",
+    hdrs = glob(
+        [
+            "src/opcua/*.h",
+            "src/opcua/client/*.h",
+            "src/opcua/core/*.h",
+            "src/opcua/x509/*.h",
+        ],
+        exclude = [_OPENSSL_RENAME_HDR],
+    ),
+    dep_modules = [
+        "QtCore",
+        "QtNetwork",
+    ],
+    generated_public_hdrs = [":opcua_exports_h"],
+    module_name = "QtOpcUa",
+    source_dir = "src/opcua",
+)
+
+qt_internal_library(
+    name = "opcua",
+    srcs = glob(
+        [
+            "src/opcua/client/*.cpp",
+            "src/opcua/core/*.cpp",
+        ],
+        exclude = _GDS_SRCS + [
+            # #include'd by qopcuanodeids.cpp with USE_CUSTOM_NODEIDS_METAOBJECT (MSVC only).
+            "src/opcua/client/qopcuanodeidsmetaobject.cpp",
+        ],
+    ) + ["src/opcua/compat/removed_api.cpp"],
+    hdrs = OPCUA_HDRS,
+    # qopcuanodeids.h's Namespace0 enum (~20k values) needs a raised constexpr
+    # evaluation limit for moc's static metaobject (upstream: CLANG branch).
+    copts = common_copts + [
+        "-std=gnu++20",
+        "-fconstexpr-steps=2000000",
+    ],
+    create_shared = True,
+    defines = ["QT_OPCUA_LIB"],
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+        "@qtbase//:network_shared",
+    ],
+    includes = [
+        "src/opcua",
+        "src/opcua/client",
+        "src/opcua/core",
+        "src/opcua/x509",
+    ],
+    local_defines = _COMMON_DEFINES + ["QT_BUILD_OPCUA_LIB"],
+    moc_hdrs = [
+        "src/opcua/client/qopcuaapplicationdescription.h",
+        "src/opcua/client/qopcuaauthenticationinformation.h",
+        "src/opcua/client/qopcuabackend_p.h",
+        "src/opcua/client/qopcuaclient.h",
+        "src/opcua/client/qopcuaclientimpl_p.h",
+        "src/opcua/client/qopcuaendpointdescription.h",
+        "src/opcua/client/qopcuagenericstructhandler.h",
+        "src/opcua/client/qopcuahistoryreadresponse.h",
+        "src/opcua/client/qopcuahistoryreadresponseimpl_p.h",
+        "src/opcua/client/qopcuainternaldatatypenode_p.h",
+        "src/opcua/client/qopcualocalizedtext.h",
+        "src/opcua/client/qopcuamonitoringparameters.h",
+        "src/opcua/client/qopcuanode.h",
+        "src/opcua/client/qopcuanodeids.h",
+        "src/opcua/client/qopcuanodeimpl_p.h",
+        "src/opcua/client/qopcuatype.h",
+        "src/opcua/client/qopcuausertokenpolicy.h",
+        "src/opcua/core/qopcuaplugin.h",
+        "src/opcua/core/qopcuaprovider.h",
+    ],
+    moc_unity = True,
+    textual_hdrs = ["src/opcua/client/qopcuanodeidsmetaobject.cpp"],
+    deps = [
+        ":opcua_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:network",
+    ],
+)
+
+# QOpcUaGdsClient, QOpcUaKeyPair and the QOpcUaX509* classes.
+qt_internal_library(
+    name = "opcua_x509",
+    srcs = _GDS_SRCS,
+    hdrs = _GDS_HDRS,
+    copts = common_copts + [
+        "-std=gnu++20",
+        "-include",
+        "qopcua_openssl_rename_p.h",
+    ],
+    create_shared = False,
+    includes = [
+        "src/opcua/client",
+        "src/opcua/x509",
+    ],
+    # x509 calls the linked OpenSSL directly instead of dlopen()ing libcrypto
+    # at runtime (openssl_symbols.cpp).
+    local_defines = _COMMON_DEFINES + [
+        "QT_BUILD_OPCUA_LIB",
+        "QT_LINKED_OPENSSL",
+    ],
+    moc_hdrs = [
+        "src/opcua/client/qopcuagdsclient.h",
+        "src/opcua/x509/qopcuakeypair.h",
+    ],
+    moc_unity = True,
+    target_compatible_with = select({
+        "@platforms//os:macos": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    # Overlay header renaming the q_* OpenSSL wrappers (see its comment).
+    textual_hdrs = [_OPENSSL_RENAME_HDR],
+    deps = [
+        ":opcua",
+        ":opcua_sync_headers",
+        "@openssl//:crypto",
+        "@qtbase//:core",
+        "@qtbase//:network",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# open62541 backend plugin (QOpen62541Plugin, plugin type "opcua")
+# ---------------------------------------------------------------------------
+
+qt_static_plugin(
+    name = "open62541_backend",
+    srcs = glob(["src/plugins/opcua/open62541/*.cpp"]),
+    hdrs = glob(["src/plugins/opcua/open62541/*.h"]),
+    copts = common_copts + ["-std=gnu++20"],
+    includes = ["src/plugins/opcua/open62541"],
+    local_defines = _COMMON_DEFINES,
+    moc_hdrs = [
+        "src/plugins/opcua/open62541/qopen62541backend.h",
+        "src/plugins/opcua/open62541/qopen62541client.h",
+        "src/plugins/opcua/open62541/qopen62541plugin.h",
+        "src/plugins/opcua/open62541/qopen62541subscription.h",
+    ],
+    moc_unity = True,
+    plugin_class_name = "QOpen62541Plugin",
+    textual_hdrs = ["src/plugins/opcua/open62541/open62541-metadata.json"],
+    deps = [
+        ":opcua",
+        ":open62541",
+        "@qtbase//:core",
+        "@qtbase//:network",
+    ],
+)
+
+# Every backend plugin, for consumers that want QOpcUaProvider to find them.
+cc_library(
+    name = "opcua_plugins",
+    deps = [":open62541_backend"],
+)
+
+# ---------------------------------------------------------------------------
+# QtOpcUa QML module (DeclarativeOpcua, `import QtOpcUa`)
+# ---------------------------------------------------------------------------
+
+DECLARATIVE_OPCUA_HDRS = glob(["src/declarative_opcua/*.h"])
+
+qt_module_headers(
+    name = "declarative_opcua_headers",
+    hdrs = DECLARATIVE_OPCUA_HDRS,
+    module_name = "DeclarativeOpcua",
+)
+
+qt_qml_module(
+    name = "declarative_opcua",
+    srcs = glob(["src/declarative_opcua/*.cpp"]),
+    hdrs = DECLARATIVE_OPCUA_HDRS,
+    copts = ["-std=gnu++20"],
+    create_shared = True,
+    dynamic_deps = [
+        ":opcua_shared",
+        "@qtdeclarative//:quick_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:core_shared",
+    ],
+    foreign_types = [":opcua_moc_hdrs"],
+    import_name = "QtOpcUa",
+    import_version = "6.10",
+    includes = ["src/declarative_opcua"],
+    local_defines = _COMMON_DEFINES,
+    past_major_versions = [
+        "1",
+        "5",
+    ],
+    plugin_class_name = "QtOpcUaPlugin",
+    plugin_target = "declarative_opcuaplugin",
+    qml_depends = ["QtQuick"],
+    deps = [
+        ":declarative_opcua_headers",
+        ":opcua",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)

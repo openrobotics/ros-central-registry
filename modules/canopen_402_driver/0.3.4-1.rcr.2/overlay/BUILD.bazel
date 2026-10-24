@@ -1,0 +1,241 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+HEADERS = [
+    "include/canopen_402_driver/base.hpp",
+    "include/canopen_402_driver/cia402_driver.hpp",
+    "include/canopen_402_driver/command.hpp",
+    "include/canopen_402_driver/default_homing_mode.hpp",
+    "include/canopen_402_driver/homing_mode.hpp",
+    "include/canopen_402_driver/lifecycle_cia402_driver.hpp",
+    "include/canopen_402_driver/mode.hpp",
+    "include/canopen_402_driver/mode_forward_helper.hpp",
+    "include/canopen_402_driver/mode_target_helper.hpp",
+    "include/canopen_402_driver/motor.hpp",
+    "include/canopen_402_driver/node_interfaces/node_canopen_402_driver.hpp",
+    "include/canopen_402_driver/node_interfaces/node_canopen_402_driver_impl.hpp",
+    "include/canopen_402_driver/profiled_position_mode.hpp",
+    "include/canopen_402_driver/state.hpp",
+    "include/canopen_402_driver/visibility_control.h",
+    "include/canopen_402_driver/word_accessor.hpp",
+]
+
+# Map of shared library (key) to its static library (value).
+DEPENDENCIES = {
+    "@canopen_base_driver//:lely_driver_bridge": "@canopen_base_driver//:lely_driver_bridge_library",
+    "@canopen_base_driver//:node_canopen_base_driver": "@canopen_base_driver//:node_canopen_base_driver_library",
+    "@canopen_core//:node_canopen_driver": "@canopen_core//:node_canopen_driver_library",
+    "@canopen_proxy_driver//:node_canopen_proxy_driver": "@canopen_proxy_driver//:node_canopen_proxy_driver_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:boost.container_shared": "@rosdistro//cc:boost.container",
+}
+
+CC_DEPS = [
+    "@canopen_interfaces//:cc",
+    "@sensor_msgs//:cc",
+]
+
+COPTS = [
+    "-Wno-missing-template-arg-list-after-template-kw",
+]
+
+cc_library(
+    name = "lely_motion_controller_bridge_library",
+    srcs = [
+        "src/command.cpp",
+        "src/default_homing_mode.cpp",
+        "src/motor.cpp",
+        "src/state.cpp",
+    ],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "lely_motion_controller_bridge",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":lely_motion_controller_bridge_library"],
+)
+
+cc_library(
+    name = "node_canopen_cia402_driver_library",
+    srcs = ["src/node_interfaces/node_canopen_402_driver.cpp"],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":lely_motion_controller_bridge_library"],
+)
+
+cc_shared_library(
+    name = "node_canopen_cia402_driver",
+    dynamic_deps = DEPENDENCIES.keys() + [":lely_motion_controller_bridge"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":node_canopen_cia402_driver_library"],
+)
+
+cc_library(
+    name = "cia402_driver_library",
+    srcs = ["src/cia402_driver.cpp"],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["CANOPEN_cia402_driver_BUILDING_LIBRARY"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":lely_motion_controller_bridge_library",
+        ":node_canopen_cia402_driver_library",
+    ],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "cia402_driver",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":lely_motion_controller_bridge",
+        ":node_canopen_cia402_driver",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":cia402_driver_library"],
+)
+
+cc_library(
+    name = "lifecycle_cia402_driver_library",
+    srcs = ["src/lifecycle_cia402_driver.cpp"],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["CANOPEN_402_DRIVER_BUILDING_LIBRARY"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":lely_motion_controller_bridge_library",
+        ":node_canopen_cia402_driver_library",
+    ],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "lifecycle_cia402_driver",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":lely_motion_controller_bridge",
+        ":node_canopen_cia402_driver",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":lifecycle_cia402_driver_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "cia402_driver_components",
+    component = ":cia402_driver",
+    plugins = ["ros2_canopen::Cia402Driver"],
+)
+
+rclcpp_components_register_nodes(
+    name = "lifecycle_cia402_driver_components",
+    component = ":lifecycle_cia402_driver",
+    plugins = ["ros2_canopen::LifecycleCia402Driver"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":lely_motion_controller_bridge",
+        ":node_canopen_cia402_driver",
+        "@canopen_core//:device_container",
+        "@canopen_core//:node_canopen_master",
+        "@rclcpp_components//:component_manager",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":cia402_driver_components",
+        ":lifecycle_cia402_driver_components",
+    ],
+    libraries = [
+        ":lely_motion_controller_bridge",
+        ":node_canopen_cia402_driver",
+        ":cia402_driver",
+        ":lifecycle_cia402_driver",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@canopen_base_driver//:ament_package",
+        "@canopen_core//:ament_package",
+        "@canopen_interfaces//:ament_package",
+        "@canopen_proxy_driver//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "canopen_base_driver",
+        "canopen_core",
+        "canopen_interfaces",
+        "canopen_proxy_driver",
+        "rclcpp",
+        "rclcpp_components",
+        "rclcpp_lifecycle",
+        "sensor_msgs",
+    ],
+    cmake_export_name = "export_canopen_402_driver",
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [
+        ":lely_motion_controller_bridge",
+        ":node_canopen_cia402_driver",
+        ":cia402_driver",
+        ":lifecycle_cia402_driver",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@canopen_base_driver//:ament_package",
+        "@canopen_core//:ament_package",
+        "@canopen_interfaces//:ament_package",
+        "@canopen_proxy_driver//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

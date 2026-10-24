@@ -1,0 +1,73 @@
+diff --git a/http_pkg_archive.bzl b/http_pkg_archive.bzl
+index 8724ec5..8f53b72 100644
+--- a/http_pkg_archive.bzl
++++ b/http_pkg_archive.bzl
+@@ -1,6 +1,58 @@
+ load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
+ load("@bazel_tools//tools/build_defs/repo:utils.bzl", "get_auth")
+ 
++# On Windows, libarchive (inside pkgutil) creates every symlink as a *file*
++# symlink when its target does not exist yet at extraction time. The macOS
++# SDK reaches framework contents through directory symlinks
++# (Foo.framework/Headers -> Versions/Current/Headers, Versions/Current -> A),
++# which then cannot be traversed, so e.g. <CoreFoundation/CoreFoundation.h> is
++# not found. Recreate file symlinks whose target is a directory as (relative)
++# directory symlinks, repeating until nothing changes since a link may only
++# resolve once the link it goes through has been fixed. Links are kept
++# relative because the repository may be moved into the repo contents cache.
++_FIX_WINDOWS_DIR_SYMLINKS_PS1 = """
++param([string]$Root)
++$ErrorActionPreference = 'Stop'
++$fixed = 0
++do {
++    $changed = $false
++    $links = Get-ChildItem -LiteralPath $Root -Recurse -Force -Attributes ReparsePoint -ErrorAction SilentlyContinue |
++        Where-Object { -not $_.PSIsContainer }
++    foreach ($link in $links) {
++        $target = (@($link.Target)[0]) -replace '/', '\\'
++        if (-not $target) { continue }
++        if ([System.IO.Path]::IsPathRooted($target)) { $resolved = $target }
++        else { $resolved = Join-Path $link.DirectoryName $target }
++        if (Test-Path -LiteralPath $resolved -PathType Container) {
++            Remove-Item -LiteralPath $link.FullName -Force
++            cmd /c mklink /D "$($link.FullName)" "$target" | Out-Null
++            if ($LASTEXITCODE -ne 0) { throw "mklink /D failed for $($link.FullName) -> $target" }
++            $changed = $true
++            $fixed++
++        }
++    }
++} while ($changed)
++Write-Output "Recreated $fixed directory symlinks"
++"""
++
++def _fix_windows_dir_symlinks(rctx, root):
++    script = rctx.path(".fix_windows_dir_symlinks.ps1")
++    rctx.file(script, _FIX_WINDOWS_DIR_SYMLINKS_PS1)
++    res = rctx.execute([
++        "powershell.exe",
++        "-NoProfile",
++        "-NonInteractive",
++        "-ExecutionPolicy",
++        "Bypass",
++        "-File",
++        str(script),
++        "-Root",
++        str(rctx.path(root)),
++    ])
++    if res.return_code != 0:
++        fail("Failed to fix directory symlinks: {}{}".format(res.stdout, res.stderr))
++    rctx.delete(script)
++
+ def _http_pkg_archive_impl(rctx):
+     rctx.download(
+         url = rctx.attr.urls,
+@@ -34,6 +86,9 @@ def _http_pkg_archive_impl(rctx):
+ 
+     rctx.delete(".downloaded.pkg")
+ 
++    if "windows" in rctx.os.name.lower():
++        _fix_windows_dir_symlinks(rctx, rctx.attr.dst)
++
+     for file, label in rctx.attr.files.items():
+         rctx.file(file, rctx.read(label))
+ 

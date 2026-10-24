@@ -1,0 +1,562 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:tbb": "@rosdistro//cc:tbb_library",
+    "@point_cloud_transport//:point_cloud_transport": "@point_cloud_transport//:point_cloud_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosbag2_storage//:rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:static_transform_broadcaster_node": "@tf2_ros//:static_transform_broadcaster_node_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@builtin_interfaces//:cc",
+    "@tf2_msgs//:cc",
+    "@geometry_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@point_cloud_interfaces//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@rosdistro//cc:pybind11",
+    "@rosdistro//cc:robin_map",
+    "@rosdistro//cc:spdlog",
+    "@rules_python//python/cc:current_py_cc_headers",
+    "@sensor_msgs//:cc",
+    "@sophus//:sophus",
+    "@sophus//:sophus_library",
+    "@std_msgs//:cc",
+]
+
+cc_library(
+    name = "rko_lio.core_library",
+    srcs = [
+        "rko_lio/core/deskew.cpp",
+        "rko_lio/core/lio.cpp",
+        "rko_lio/core/preprocess_scan.cpp",
+        "rko_lio/core/process_timestamps.cpp",
+        "rko_lio/core/voxel_down_sample.cpp",
+        "rko_lio/core/voxel_hash_map.cpp",
+    ],
+    hdrs = [
+        "rko_lio/core/deskew.hpp",
+        "rko_lio/core/error.hpp",
+        "rko_lio/core/lio.hpp",
+        "rko_lio/core/preprocess_scan.hpp",
+        "rko_lio/core/process_timestamps.hpp",
+        "rko_lio/core/profiler.hpp",
+        "rko_lio/core/util.hpp",
+        "rko_lio/core/voxel_down_sample.hpp",
+        "rko_lio/core/voxel_hash_map.hpp",
+        "rko_lio/python/pybind/stl_vector_eigen.hpp",
+        "rko_lio/ros/base_node.hpp",
+        "rko_lio/ros/threaded_node.hpp",
+        "rko_lio/ros/utils/point_cloud_read.hpp",
+        "rko_lio/ros/utils/point_cloud_write.hpp",
+        "rko_lio/ros/utils/ros_vectors.hpp",
+        "rko_lio/ros/utils/rosbag.hpp",
+        "rko_lio/ros/utils/spdlog_sink.hpp",
+        "rko_lio/ros/utils/time.hpp",
+        "rko_lio/ros/utils/transforms.hpp",
+        "rko_lio/ros/utils/utils.hpp",
+        "tests/core/eigen_approx.hpp",
+        "tests/core/synthetic_clouds.hpp",
+    ] + [
+        ":scalar_hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+genrule(
+    name = "static_rko_lio.core_a",
+    srcs = [":rko_lio.core_library"],
+    outs = ["librko_lio.core.a"],
+    cmd = "for f in $(SRCS); do case $$f in *.a) cp $$f $@; exit 0;; esac; done; ar rcs $@",
+)
+
+cc_library(
+    name = "rko_lio.ros_library",
+    srcs = [
+        "rko_lio/ros/base_node.cpp",
+        "rko_lio/ros/threaded_node.cpp",
+    ],
+    hdrs = [
+        "rko_lio/core/deskew.hpp",
+        "rko_lio/core/error.hpp",
+        "rko_lio/core/lio.hpp",
+        "rko_lio/core/preprocess_scan.hpp",
+        "rko_lio/core/process_timestamps.hpp",
+        "rko_lio/core/profiler.hpp",
+        "rko_lio/core/util.hpp",
+        "rko_lio/core/voxel_down_sample.hpp",
+        "rko_lio/core/voxel_hash_map.hpp",
+        "rko_lio/python/pybind/stl_vector_eigen.hpp",
+        "rko_lio/ros/base_node.hpp",
+        "rko_lio/ros/threaded_node.hpp",
+        "rko_lio/ros/utils/point_cloud_read.hpp",
+        "rko_lio/ros/utils/point_cloud_write.hpp",
+        "rko_lio/ros/utils/ros_vectors.hpp",
+        "rko_lio/ros/utils/rosbag.hpp",
+        "rko_lio/ros/utils/spdlog_sink.hpp",
+        "rko_lio/ros/utils/time.hpp",
+        "rko_lio/ros/utils/transforms.hpp",
+        "rko_lio/ros/utils/utils.hpp",
+        "tests/core/eigen_approx.hpp",
+        "tests/core/synthetic_clouds.hpp",
+    ] + [
+        ":scalar_hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+genrule(
+    name = "static_rko_lio.ros_a",
+    srcs = [":rko_lio.ros_library"],
+    outs = ["librko_lio.ros.a"],
+    cmd = "for f in $(SRCS); do case $$f in *.a) cp $$f $@; exit 0;; esac; done; ar rcs $@",
+)
+
+cc_library(
+    name = "rko_lio.ros.utils_library",
+    srcs = [
+        "rko_lio/ros/utils/point_cloud_read.cpp",
+        "rko_lio/ros/utils/point_cloud_write.cpp",
+        "rko_lio/ros/utils/rosbag.cpp",
+    ],
+    hdrs = [
+        "rko_lio/core/deskew.hpp",
+        "rko_lio/core/error.hpp",
+        "rko_lio/core/lio.hpp",
+        "rko_lio/core/preprocess_scan.hpp",
+        "rko_lio/core/process_timestamps.hpp",
+        "rko_lio/core/profiler.hpp",
+        "rko_lio/core/util.hpp",
+        "rko_lio/core/voxel_down_sample.hpp",
+        "rko_lio/core/voxel_hash_map.hpp",
+        "rko_lio/python/pybind/stl_vector_eigen.hpp",
+        "rko_lio/ros/base_node.hpp",
+        "rko_lio/ros/threaded_node.hpp",
+        "rko_lio/ros/utils/point_cloud_read.hpp",
+        "rko_lio/ros/utils/point_cloud_write.hpp",
+        "rko_lio/ros/utils/ros_vectors.hpp",
+        "rko_lio/ros/utils/rosbag.hpp",
+        "rko_lio/ros/utils/spdlog_sink.hpp",
+        "rko_lio/ros/utils/time.hpp",
+        "rko_lio/ros/utils/transforms.hpp",
+        "rko_lio/ros/utils/utils.hpp",
+        "tests/core/eigen_approx.hpp",
+        "tests/core/synthetic_clouds.hpp",
+    ] + [
+        ":scalar_hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+genrule(
+    name = "static_rko_lio.ros.utils_a",
+    srcs = [":rko_lio.ros.utils_library"],
+    outs = ["librko_lio.ros.utils.a"],
+    cmd = "for f in $(SRCS); do case $$f in *.a) cp $$f $@; exit 0;; esac; done; ar rcs $@",
+)
+
+cc_library(
+    name = "online_imu_rate_node_component_library",
+    srcs = ["rko_lio/ros/online_imu_rate_node.cpp"],
+    hdrs = [
+        "rko_lio/core/deskew.hpp",
+        "rko_lio/core/error.hpp",
+        "rko_lio/core/lio.hpp",
+        "rko_lio/core/preprocess_scan.hpp",
+        "rko_lio/core/process_timestamps.hpp",
+        "rko_lio/core/profiler.hpp",
+        "rko_lio/core/util.hpp",
+        "rko_lio/core/voxel_down_sample.hpp",
+        "rko_lio/core/voxel_hash_map.hpp",
+        "rko_lio/python/pybind/stl_vector_eigen.hpp",
+        "rko_lio/ros/base_node.hpp",
+        "rko_lio/ros/threaded_node.hpp",
+        "rko_lio/ros/utils/point_cloud_read.hpp",
+        "rko_lio/ros/utils/point_cloud_write.hpp",
+        "rko_lio/ros/utils/ros_vectors.hpp",
+        "rko_lio/ros/utils/rosbag.hpp",
+        "rko_lio/ros/utils/spdlog_sink.hpp",
+        "rko_lio/ros/utils/time.hpp",
+        "rko_lio/ros/utils/transforms.hpp",
+        "rko_lio/ros/utils/utils.hpp",
+        "tests/core/eigen_approx.hpp",
+        "tests/core/synthetic_clouds.hpp",
+    ] + [
+        ":scalar_hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rko_lio.core_library",
+        ":rko_lio.ros.utils_library",
+        ":rko_lio.ros_library",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_shared_library(
+    name = "online_imu_rate_node_component",
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":online_imu_rate_node_component_library"],
+)
+
+cc_library(
+    name = "online_node_component_library",
+    srcs = ["rko_lio/ros/online_node.cpp"],
+    hdrs = [
+        "rko_lio/core/deskew.hpp",
+        "rko_lio/core/error.hpp",
+        "rko_lio/core/lio.hpp",
+        "rko_lio/core/preprocess_scan.hpp",
+        "rko_lio/core/process_timestamps.hpp",
+        "rko_lio/core/profiler.hpp",
+        "rko_lio/core/util.hpp",
+        "rko_lio/core/voxel_down_sample.hpp",
+        "rko_lio/core/voxel_hash_map.hpp",
+        "rko_lio/python/pybind/stl_vector_eigen.hpp",
+        "rko_lio/ros/base_node.hpp",
+        "rko_lio/ros/threaded_node.hpp",
+        "rko_lio/ros/utils/point_cloud_read.hpp",
+        "rko_lio/ros/utils/point_cloud_write.hpp",
+        "rko_lio/ros/utils/ros_vectors.hpp",
+        "rko_lio/ros/utils/rosbag.hpp",
+        "rko_lio/ros/utils/spdlog_sink.hpp",
+        "rko_lio/ros/utils/time.hpp",
+        "rko_lio/ros/utils/transforms.hpp",
+        "rko_lio/ros/utils/utils.hpp",
+        "tests/core/eigen_approx.hpp",
+        "tests/core/synthetic_clouds.hpp",
+    ] + [
+        ":scalar_hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rko_lio.core_library",
+        ":rko_lio.ros.utils_library",
+        ":rko_lio.ros_library",
+    ],
+)
+
+cc_shared_library(
+    name = "online_node_component",
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":online_node_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "online_imu_rate_node",
+    component = ":online_node_component",
+    node_name = "online_imu_rate_node",
+    plugin = "rko_lio::ros::OnlineNode",
+)
+
+rclcpp_components_register_node(
+    name = "online_node",
+    component = ":online_node_component",
+    node_name = "online_node",
+    plugin = "rko_lio::ros::OnlineNode",
+)
+
+rclcpp_components_register_nodes(
+    name = "online_imu_rate_node_component_components",
+    component = ":online_imu_rate_node_component",
+    plugins = ["rko_lio::ros::OnlineImuRateNode"],
+)
+
+cc_binary(
+    name = "offline_node",
+    srcs = [
+        "rko_lio/core/deskew.hpp",
+        "rko_lio/core/error.hpp",
+        "rko_lio/core/lio.hpp",
+        "rko_lio/core/preprocess_scan.hpp",
+        "rko_lio/core/process_timestamps.hpp",
+        "rko_lio/core/profiler.hpp",
+        "rko_lio/core/util.hpp",
+        "rko_lio/core/voxel_down_sample.hpp",
+        "rko_lio/core/voxel_hash_map.hpp",
+        "rko_lio/python/pybind/stl_vector_eigen.hpp",
+        "rko_lio/ros/base_node.hpp",
+        "rko_lio/ros/offline_node.cpp",
+        "rko_lio/ros/threaded_node.hpp",
+        "rko_lio/ros/utils/point_cloud_read.hpp",
+        "rko_lio/ros/utils/point_cloud_write.hpp",
+        "rko_lio/ros/utils/ros_vectors.hpp",
+        "rko_lio/ros/utils/rosbag.hpp",
+        "rko_lio/ros/utils/spdlog_sink.hpp",
+        "rko_lio/ros/utils/time.hpp",
+        "rko_lio/ros/utils/transforms.hpp",
+        "rko_lio/ros/utils/utils.hpp",
+        "tests/core/eigen_approx.hpp",
+        "tests/core/synthetic_clouds.hpp",
+        ":scalar_hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/rko_lio",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLOG_CUSTOM_PREFIX_SUPPORT",
+        "NDEBUG",
+        "SOPHUS_USE_BASIC_LOGGING=1",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rko_lio.core_library",
+        ":rko_lio.ros.utils_library",
+        ":rko_lio.ros_library",
+    ],
+)
+
+expand_template(
+    name = "scalar_hpp",
+    out = "_gen/include/rko_lio/core/scalar.hpp",
+    substitutions = {
+        "@RKO_LIO_SCALAR@": "float",
+    },
+    template = "rko_lio/core/scalar.hpp.in",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":online_imu_rate_node_record",
+        ":online_node_record",
+        ":online_imu_rate_node_component_components",
+    ],
+    data = [
+        "config/default.rviz",
+        "config/leg_kilo.yaml",
+        "config/oxford_spires.yaml",
+        "config/ros_default.yaml",
+        "//launch:launch_files",
+    ],
+    lib_data = [
+        ":offline_node",
+        ":online_imu_rate_node",
+        ":online_node",
+    ],
+    libraries = [
+        ":online_imu_rate_node_component",
+        ":online_node_component",
+        ":static_rko_lio.ros.utils_a",
+        ":static_rko_lio.core_a",
+        ":static_rko_lio.ros_a",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@point_cloud_interfaces//:ament_package",
+        "@point_cloud_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosidl_runtime_py//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@sophus//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@tf2_ros_py//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "Eigen3",
+        "Sophus",
+        "TBB",
+        "geometry_msgs",
+        "nav_msgs",
+        "point_cloud_interfaces",
+        "point_cloud_transport",
+        "rclcpp",
+        "rosbag2_cpp",
+        "rosbag2_storage",
+        "sensor_msgs",
+        "spdlog",
+        "std_msgs",
+        "tf2",
+        "tf2_ros",
+        "tsl-robin-map",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        "rko_lio/core/deskew.hpp",
+        "rko_lio/core/error.hpp",
+        "rko_lio/core/lio.hpp",
+        "rko_lio/core/preprocess_scan.hpp",
+        "rko_lio/core/process_timestamps.hpp",
+        "rko_lio/core/profiler.hpp",
+        ":scalar_hpp",
+        "rko_lio/core/util.hpp",
+        "rko_lio/core/voxel_down_sample.hpp",
+        "rko_lio/core/voxel_hash_map.hpp",
+        "rko_lio/ros/base_node.hpp",
+        "rko_lio/ros/threaded_node.hpp",
+        "rko_lio/ros/utils/point_cloud_read.hpp",
+        "rko_lio/ros/utils/point_cloud_write.hpp",
+        "rko_lio/ros/utils/ros_vectors.hpp",
+        "rko_lio/ros/utils/rosbag.hpp",
+        "rko_lio/ros/utils/spdlog_sink.hpp",
+        "rko_lio/ros/utils/time.hpp",
+        "rko_lio/ros/utils/transforms.hpp",
+        "rko_lio/ros/utils/utils.hpp",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":online_imu_rate_node_component",
+        ":online_node_component",
+        ":static_rko_lio.ros.utils_a",
+        ":static_rko_lio.core_a",
+        ":static_rko_lio.ros_a",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@point_cloud_interfaces//:ament_package",
+        "@point_cloud_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosidl_runtime_py//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@sophus//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@tf2_ros_py//:ament_package",
+    ],
+)

@@ -1,0 +1,82 @@
+--- a/resource/msg__type_support.cpp.em
++++ b/resource/msg__type_support.cpp.em
+@@ -20,7 +20,7 @@
+ @# Included from rosidl_typesupport_protobuf_c/resource/idl__type_support.c.em
+ @{
+ import rosidl_parser.parser as rosidl
+-from rosidl_cmake import convert_camel_case_to_lower_case_underscore
++from rosidl_pycommon import convert_camel_case_to_lower_case_underscore
+ from rosidl_parser.definition import *
+ from rosidl_typesupport_protobuf import *
+ 
+@@ -94,6 +94,16 @@
+ namespace typesupport_protobuf_c
+ {
+ 
++@{
++message_typed_member_names = {
++    m.name for m in message.structure.members
++    if isinstance(m.type, (NamespacedType, NamedType))
++}
++def proto_member_name(name):
++    if name.startswith("has_") and name[4:] in message_typed_member_names:
++        return name + "_"
++    return name
++}@
+ ROSIDL_TYPESUPPORT_PROTOBUF_C_PUBLIC__@(package_name)
+ bool convert_to_proto(const @(ros_type) &ros_msg, @(proto_type) &pb_msg)
+ {
+@@ -161,11 +171,11 @@
+   }
+ @[    end if]@
+ @[  elif isinstance(member.type, BasicType)]@
+-  pb_msg.set_@(member.name)(ros_msg.@(member.name));
++  pb_msg.set_@(proto_member_name(member.name))(ros_msg.@(member.name));
+ @[  elif isinstance(member.type, AbstractString)]@
+-  pb_msg.set_@(member.name)(ros_msg.@(member.name).data);
++  pb_msg.set_@(proto_member_name(member.name))(ros_msg.@(member.name).data);
+ @[  elif isinstance(member.type, AbstractWString)]@
+-  ::rosidl_typesupport_protobuf_c::write_to_string(ros_msg.@(member.name), *pb_msg.mutable_@(member.name)());
++  ::rosidl_typesupport_protobuf_c::write_to_string(ros_msg.@(member.name), *pb_msg.mutable_@(proto_member_name(member.name))());
+ @[  elif isinstance(member.type, NamespacedType)]@
+   @("::" + "::".join(member.type.namespaces))::typesupport_protobuf_c::convert_to_proto(ros_msg.@(member.name), *pb_msg.mutable_@(member.name)());
+ @[  end if]@
+@@ -250,11 +260,11 @@
+   }
+ @[    end if]@
+ @[  elif isinstance(member.type, BasicType)]@
+-  ros_msg.@(member.name) = pb_msg.@(member.name)();
++  ros_msg.@(member.name) = pb_msg.@(proto_member_name(member.name))();
+ @[  elif isinstance(member.type, AbstractString)]@
+-  ::typesupport_protobuf_c::to_ros_c_string(pb_msg.@(member.name)(), ros_msg.@(member.name));
++  ::typesupport_protobuf_c::to_ros_c_string(pb_msg.@(proto_member_name(member.name))(), ros_msg.@(member.name));
+ @[  elif isinstance(member.type, AbstractWString)]@
+-  ::rosidl_typesupport_protobuf_c::write_to_u16string(pb_msg.@(member.name)(), ros_msg.@(member.name));
++  ::rosidl_typesupport_protobuf_c::write_to_u16string(pb_msg.@(proto_member_name(member.name))(), ros_msg.@(member.name));
+ @[  elif isinstance(member.type, NamespacedType)]@
+   @("::" + "::".join(member.type.namespaces))::typesupport_protobuf_c::convert_to_ros(pb_msg.@(member.name)(), ros_msg.@(member.name));
+ @[  end if]@
+@@ -311,17 +321,20 @@
+ }  // namespace @(ns)
+ @[  end for]@
+ 
+-namespace rosidl_typesupport_protobuf
++/*
++namespace rosidl_typesupport_protobuf_c
+ {
+ 
+ template<>
+ ROSIDL_TYPESUPPORT_PROTOBUF_C_EXPORT__@(package_name)
+-const rosidl_message_type_support_t *get_message_type_support_handle<@(ros_type)>()
++const rosidl_message_type_support_t *
++get_message_type_support_handle<@(ros_type.replace("__", "::"))>()
+ {
+   return &@(namespaced_handle_name);
+ }
+ 
+-}  // namespace rosidl_typesupport_protobuf
++}  // namespace rosidl_typesupport_protobuf_c
++*/
+ 
+ #ifdef __cplusplus
+ extern "C"

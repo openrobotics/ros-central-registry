@@ -1,0 +1,197 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@qt//:qt.bzl", "qt_cc_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:boringssl": "@rosdistro//cc:boringssl_crypto_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+    "@moveit_setup_framework//:moveit_setup_framework": "@moveit_setup_framework//:moveit_setup_framework_library",
+    "@moveit_setup_srdf_plugins//:moveit_setup_srdf_plugins": "@moveit_setup_srdf_plugins//:moveit_setup_srdf_plugins_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.program_options",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:boringssl_ssl_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@qtbase//:core",
+    "@qtbase//:gui",
+    "@qtsvg//:svg",
+    "@qtbase//:widgets",
+]
+
+cc_library(
+    name = "moveit_setup_assistant_library",
+    hdrs = [
+        "include/moveit_setup_assistant/navigation_widget.h",
+        "include/moveit_setup_assistant/navigation_widget.hpp",
+        "include/moveit_setup_assistant/setup_assistant_widget.h",
+        "include/moveit_setup_assistant/setup_assistant_widget.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/moveit_setup_assistant",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+qt_cc_binary(
+    name = "collisions_updater",
+    srcs = ["src/collisions_updater.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/moveit_setup_assistant",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "QT_NO_KEYWORDS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = [],
+    moc_srcs = [],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_setup_assistant_library"],
+)
+
+qt_cc_binary(
+    name = "moveit_setup_assistant",
+    srcs = [
+        "src/main.cpp",
+        "src/navigation_widget.cpp",
+        "src/setup_assistant_widget.cpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/moveit_setup_assistant",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "QT_NO_KEYWORDS",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    # Upstream CMake AUTOMOC HEADERS.
+    moc_hdrs = [
+        "include/moveit_setup_assistant/navigation_widget.hpp",
+        "include/moveit_setup_assistant/setup_assistant_widget.hpp",
+    ],
+    moc_srcs = [],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_setup_assistant_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "resources/MoveIt_Setup_Assistant2.png",
+        "//launch:launch_files",
+    ],
+    lib_data = [
+        ":collisions_updater",
+        ":moveit_setup_assistant",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@moveit_configs_utils//:ament_package",
+        "@moveit_resources_panda_moveit_config//:ament_package",
+        "@moveit_setup_app_plugins//:ament_package",
+        "@moveit_setup_controllers//:ament_package",
+        "@moveit_setup_core_plugins//:ament_package",
+        "@moveit_setup_framework//:ament_package",
+        "@moveit_setup_srdf_plugins//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "Qt6Core",
+        "Qt6Widgets",
+        "ament_index_cpp",
+        "moveit_setup_framework",
+        "moveit_setup_srdf_plugins",
+        "pluginlib",
+        "rclcpp",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        "include/moveit_setup_assistant/navigation_widget.h",
+        "include/moveit_setup_assistant/navigation_widget.hpp",
+        "include/moveit_setup_assistant/setup_assistant_widget.h",
+        "include/moveit_setup_assistant/setup_assistant_widget.hpp",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@moveit_configs_utils//:ament_package",
+        "@moveit_resources_panda_moveit_config//:ament_package",
+        "@moveit_setup_app_plugins//:ament_package",
+        "@moveit_setup_controllers//:ament_package",
+        "@moveit_setup_core_plugins//:ament_package",
+        "@moveit_setup_framework//:ament_package",
+        "@moveit_setup_srdf_plugins//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)

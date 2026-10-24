@@ -1,0 +1,289 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:boost.uuid",
+    "@robotraconteur//:RobotRaconteurCore_library",
+    "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.predef",
+    "@rosdistro//cc:boost.program_options",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:eigen",
+]
+
+_RR_SERVICE_NAMES_GROUP1 = [
+    "com.robotraconteur.action",
+    "com.robotraconteur.actuator",
+    "com.robotraconteur.bignum",
+    "com.robotraconteur.color",
+    "com.robotraconteur.datatype",
+    "com.robotraconteur.datetime.clock",
+    "com.robotraconteur.datetime",
+    "com.robotraconteur.device.clock",
+    "com.robotraconteur.device.isoch",
+    "com.robotraconteur.device",
+    "com.robotraconteur.eventlog",
+    "com.robotraconteur.fiducial",
+    "com.robotraconteur.geometry",
+    "com.robotraconteur.geometry.shapes",
+    "com.robotraconteur.geometryf",
+    "com.robotraconteur.geometryi",
+    "com.robotraconteur.gps",
+    "com.robotraconteur.hid.joystick",
+    "com.robotraconteur.identifier",
+    "com.robotraconteur.image",
+    "com.robotraconteur.imaging.camerainfo",
+    "com.robotraconteur.imaging",
+    "com.robotraconteur.imu",
+    "com.robotraconteur.laserscan",
+    "com.robotraconteur.laserscanner",
+    "com.robotraconteur.lighting",
+    "com.robotraconteur.objectrecognition",
+    "com.robotraconteur.octree",
+    "com.robotraconteur.param",
+    "com.robotraconteur.pid",
+    "com.robotraconteur.pointcloud",
+    "com.robotraconteur.pointcloud.sensor",
+    "com.robotraconteur.resource",
+    "com.robotraconteur.resource.device",
+    "com.robotraconteur.robotics.joints",
+    "com.robotraconteur.robotics.payload",
+    "com.robotraconteur.robotics.robot",
+    "com.robotraconteur.robotics.tool",
+    "com.robotraconteur.robotics.trajectory",
+    "com.robotraconteur.sensor",
+    "com.robotraconteur.sensordata",
+    "com.robotraconteur.servo",
+    "com.robotraconteur.signal",
+    "com.robotraconteur.units",
+    "com.robotraconteur.uuid",
+]
+
+_RR_ROBDEF_FILES = [
+    "robdef/group1/" + s + ".robdef"
+    for s in _RR_SERVICE_NAMES_GROUP1
+]
+
+_RR_THUNK_SRCS = [
+    "_gen/include/RobotRaconteurCompanion/StdRobDef/group1/" + s.replace(".", "__") + "_stubskel.cpp"
+    for s in _RR_SERVICE_NAMES_GROUP1
+]
+
+_RR_THUNK_HDRS = [
+    "_gen/include/RobotRaconteurCompanion/StdRobDef/group1/" + s.replace(".", "__") + ".h"
+    for s in _RR_SERVICE_NAMES_GROUP1
+] + [
+    "_gen/include/RobotRaconteurCompanion/StdRobDef/group1/" + s.replace(".", "__") + "_stubskel.h"
+    for s in _RR_SERVICE_NAMES_GROUP1
+]
+
+# The group1 robdefs, for test/'s thunk generation (upstream passes
+# robdef/group1 as an INCLUDE_DIRS entry for its AUTO_IMPORT).
+filegroup(
+    name = "robdef_group1",
+    srcs = _RR_ROBDEF_FILES,
+)
+
+genrule(
+    name = "gen_robdef_thunk",
+    srcs = _RR_ROBDEF_FILES,
+    outs = _RR_THUNK_SRCS + _RR_THUNK_HDRS,
+    cmd = (
+        "mkdir -p $(RULEDIR)/_gen/include/RobotRaconteurCompanion/StdRobDef/group1 && " +
+        "$(location @robotraconteur//:_bin/RobotRaconteurGen) --thunksource --lang=cpp " +
+        "--output-dir $(RULEDIR)/_gen/include/RobotRaconteurCompanion/StdRobDef/group1 " +
+        "--cpp-extra-include=RobotRaconteurCompanion/StdRobDef/StdRobDef_Macros.h " +
+        "$(SRCS)"
+    ),
+    tools = ["@robotraconteur//:_bin/RobotRaconteurGen"],
+)
+
+_PUBLIC_HDRS = [
+    "include/RobotRaconteurCompanion/Converters/EigenConverters.h",
+    "include/RobotRaconteurCompanion/InfoParser/InfoParserMacros.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/action_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/actuator_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/bignum_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/color_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/datatype_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/datetime__clock_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/datetime_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/device__clock_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/device__isoch_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/device_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/eventlog_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/fiducial_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/geometry__shapes_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/geometry_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/geometryf_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/geometryi_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/gps_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/hid__joystick_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/identifier_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/image_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/imaging__camerainfo_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/imaging_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/imu_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/laserscan_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/laserscanner_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/lighting_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/objectrecognition_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/octree_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/param_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/pid_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/pointcloud__sensor_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/pointcloud_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/resource__device_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/resource_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/robotics__joints_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/robotics__payload_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/robotics__robot_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/robotics__tool_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/robotics__trajectory_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/sensor_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/sensordata_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/servo_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/signal_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/units_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/uuid_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/yaml_loader_enums.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/yaml_loader_enums_impl.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/yaml_namedarray_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/yaml_number_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/yaml_parser_all.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/yaml_parser_common_include.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/yaml_parser_overrides.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/yaml_structure_parser.h",
+    "include/RobotRaconteurCompanion/InfoParser/yaml/yaml_varvalue_parser.h",
+    "include/RobotRaconteurCompanion/RobotRaconteurCompanionVersion.h",
+    "include/RobotRaconteurCompanion/StdRobDef/StdRobDefAll.h",
+    "include/RobotRaconteurCompanion/StdRobDef/StdRobDef_Macros.h",
+    "include/RobotRaconteurCompanion/Util/AttributesUtil.h",
+    "include/RobotRaconteurCompanion/Util/DateTimeUtil.h",
+    "include/RobotRaconteurCompanion/Util/DeviceConnector.h",
+    "include/RobotRaconteurCompanion/Util/IdentifierUtil.h",
+    "include/RobotRaconteurCompanion/Util/ImageUtil.h",
+    "include/RobotRaconteurCompanion/Util/InfoFileLoader.h",
+    "include/RobotRaconteurCompanion/Util/LocalIdentifiersManager.h",
+    "include/RobotRaconteurCompanion/Util/SensorDataUtil.h",
+    "include/RobotRaconteurCompanion/Util/TaskGenerator.h",
+    "include/RobotRaconteurCompanion/Util/TestFixtures.h",
+    "include/RobotRaconteurCompanion/Util/UtilMacros.h",
+    "include/RobotRaconteurCompanion/Util/UuidUtil.h",
+]
+
+cc_library(
+    name = "RobotRaconteurCompanion_library",
+    srcs = [
+        "src/AttributesUtil.cpp",
+        "src/DateTimeUtil.cpp",
+        "src/DeviceConnector.cpp",
+        "src/EigenConverters.cpp",
+        "src/IdentifierUtil.cpp",
+        "src/InfoFileLoader.cpp",
+        "src/LocalIdentifiersManager.cpp",
+        "src/StdRobDefAll.cpp",
+        "src/UuidUtil.cpp",
+        "src/yaml_loader_enums.cpp",
+        "src/yaml_loader_impl.cpp",
+    ] + _RR_THUNK_SRCS,
+    hdrs = _PUBLIC_HDRS + _RR_THUNK_HDRS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "_gen/include/RobotRaconteurCompanion/StdRobDef/group1",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "RobotRaconteurCompanion",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":RobotRaconteurCompanion_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+register_ament_files(
+    name = "ament_files_group1",
+    files = _RR_ROBDEF_FILES,
+    prefix = "share/robotraconteur/robdef/standard_robdef/group1",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_group2",
+    files = [
+        "robdef/group2/com.robotraconteur.a1.robotics.planning.robdef",
+        "robdef/group2/com.robotraconteur.a1.robotics.scene.robdef",
+    ],
+    prefix = "share/robotraconteur/robdef/standard_robdef/group2",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_group1",
+        ":ament_files_group2",
+    ],
+    libraries = [":RobotRaconteurCompanion"],
+    package_xml = "package.xml",
+    sonames = {"RobotRaconteurCompanion": [
+        "libRobotRaconteurCompanion.so.0.4",
+        "libRobotRaconteurCompanion.so.0.4.3",
+    ]},
+    deps = ["@robotraconteur//:ament_package"],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = _PUBLIC_HDRS + _RR_THUNK_HDRS,
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [":RobotRaconteurCompanion"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + ["@robotraconteur//:ament_package"],
+)

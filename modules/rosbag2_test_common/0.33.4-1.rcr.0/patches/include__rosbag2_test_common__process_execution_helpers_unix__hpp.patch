@@ -1,0 +1,132 @@
+--- a/include/rosbag2_test_common/process_execution_helpers_unix.hpp
++++ b/include/rosbag2_test_common/process_execution_helpers_unix.hpp
+@@ -25,8 +25,39 @@
+ #include <cstdlib>
+ #include <vector>
+ #include <string>
++#include <filesystem>
++
++namespace fs = std::filesystem;
+ 
+ using namespace ::testing;  // NOLINT
++
++#ifdef __APPLE__
++/// \brief Absolute library search path for child processes on macOS.
++/// The Bazel test environment sets a relative DYLD_LIBRARY_PATH ("lib"), which
++/// stops resolving as soon as the helpers below chdir() elsewhere.
++inline std::string macos_absolute_library_path(const fs::path & runfiles_main_dir)
++{
++  std::string lib_path = (runfiles_main_dir / "lib").generic_string();
++  const char * existing = getenv("DYLD_LIBRARY_PATH");
++  if (existing != nullptr && existing[0] != '\0') {
++    lib_path += std::string(":") + existing;
++  }
++  return lib_path;
++}
++
++/// \brief Hermetic interpreter of the mock `ros2` py_binary, if present.
++/// macOS System Integrity Protection strips DYLD_* variables from the
++/// environment of protected binaries such as /bin/sh and /usr/bin/env. The
++/// mock `ros2` script's `#!/usr/bin/env python3` shebang therefore loses
++/// DYLD_LIBRARY_PATH and can't dlopen() the RMW implementation, so we run the
++/// script through its (unprotected) interpreter directly instead.
++inline std::string macos_ros2_interpreter(const fs::path & ros2bag_dir)
++{
++  const fs::path interpreter = ros2bag_dir / "_ros2.venv" / "bin" / "python3";
++  std::error_code ec;
++  return fs::exists(interpreter, ec) ? interpreter.generic_string() : std::string();
++}
++#endif  // __APPLE__
+ 
+ using ProcessHandle = int;
+ 
+@@ -56,11 +87,51 @@
+     return EXIT_FAILURE;
+   }
+ 
++  auto abs_mock_ros2_dir = (fs::path(previous_dir) / "../ros2bag+");
++  std::string new_path = abs_mock_ros2_dir.generic_string() + ":" + getenv("PATH");
++  setenv("PATH", new_path.c_str(), 1);
++
++  const char* ld_lib_path = getenv("LD_LIBRARY_PATH");
++  if (ld_lib_path != nullptr) {
++    std::string new_ld_path = (fs::path(previous_dir) / "lib").generic_string() + ":" + ld_lib_path;
++    setenv("LD_LIBRARY_PATH", new_ld_path.c_str(), 1);
++  }
++  const char* ament_prefix_path = getenv("AMENT_PREFIX_PATH");
++  if (ament_prefix_path != nullptr && std::string(ament_prefix_path) == ".") {
++    setenv("AMENT_PREFIX_PATH", previous_dir, 1);
++  }
++
++  std::string full_command = command;
++  if (command.substr(0, 5) == "ros2 ") {
++    auto abs_mock_ros2 = (fs::path(previous_dir) / "../ros2bag+/ros2").generic_string();
++    full_command = abs_mock_ros2 + command.substr(4);
++#ifdef __APPLE__
++    const std::string interpreter =
++      macos_ros2_interpreter(fs::path(previous_dir) / "../ros2bag+");
++    if (!interpreter.empty()) {
++      // Inline assignment: popen() runs /bin/sh, which SIP scrubs DYLD_* from.
++      full_command = "DYLD_LIBRARY_PATH='" +
++        macos_absolute_library_path(fs::path(previous_dir)) + "' '" +
++        interpreter + "' " + full_command;
++    }
++#endif  // __APPLE__
++  }
++
+   auto ret_ch_dir = chdir(path.c_str());
+   if (ret_ch_dir != 0) {
+     return EXIT_FAILURE;
+   }
+-  auto status = std::system(command.c_str());
++  FILE* pipe = popen((full_command + " 2>&1").c_str(), "r");
++  if (!pipe) {
++    return EXIT_FAILURE;
++  }
++  char buffer[128];
++  while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
++    std::cout << buffer;
++    std::cerr << buffer;
++  }
++  int status = pclose(pipe);
++
+   ret_ch_dir = chdir(previous_dir);
+   if (ret_ch_dir != 0) {
+     return EXIT_FAILURE;
+@@ -75,6 +146,12 @@
+ 
+ ProcessHandle start_execution(const std::string & command)
+ {
++  const char* test_srcdir = getenv("TEST_SRCDIR");
++  if (test_srcdir != nullptr) {
++    std::string new_path = std::string(test_srcdir) + "/ros2bag+:" + getenv("PATH");
++    setenv("PATH", new_path.c_str(), 1);
++  }
++
+   auto process_id = fork();
+   if (process_id == -1) {
+     throw std::runtime_error("Failed to start process via fork()");
+@@ -85,6 +162,23 @@
+     // will spawn one more child process with default SIG_INT handler and will incorrectly return
+     // exit codes in case of signal handling.
+     std::vector<char *> arguments{command_string_to_arguments(command)};
++#ifdef __APPLE__
++    if (test_srcdir != nullptr && arguments[0] != nullptr &&
++      std::string(arguments[0]) == "ros2")
++    {
++      const fs::path ros2bag_dir = fs::path(test_srcdir) / "ros2bag+";
++      const std::string interpreter = macos_ros2_interpreter(ros2bag_dir);
++      if (!interpreter.empty()) {
++        // Not inherited through the script's /usr/bin/env shebang under SIP.
++        setenv(
++          "DYLD_LIBRARY_PATH",
++          macos_absolute_library_path(fs::current_path()).c_str(), 1);
++        free(arguments[0]);
++        arguments[0] = strdup((ros2bag_dir / "ros2").generic_string().c_str());
++        arguments.insert(arguments.begin(), strdup(interpreter.c_str()));
++      }
++    }
++#endif  // __APPLE__
+     const char * cmd = arguments[0];
+     int ret = execvp(cmd, arguments.data());
+     for (auto str : arguments) {

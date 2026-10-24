@@ -1,0 +1,181 @@
+load("@qt//:qt_internal_library.bzl", "qt_internal_library")
+load(
+    "@qt//:qt_tools.bzl",
+    "qt_depends_header",
+    "qt_export_header",
+    "qt_sync_headers",
+)
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+    ],
+    license_text = "LICENSES/LGPL-3.0-only.txt",
+)
+
+exports_files(["LICENSES/LGPL-3.0-only.txt"])
+
+QT_VERSION = "6.10.2"
+
+common_copts = [
+    "-w",
+    "-fPIC",
+    "-O2",
+    "-DNDEBUG",
+    "-DQT_NO_CAST_TO_ASCII",
+    "-DQT_BUILDING_QT",
+]
+
+# From .cmake.conf QT_EXTRA_INTERNAL_TARGET_DEFINES plus the usual Qt module set.
+common_local_defines = [
+    "QT_ASCII_CAST_WARNINGS",
+    "QT_BUILDING_QT",
+    "QT_CORE_LIB",
+    "QT_DEPRECATED_WARNINGS",
+    "QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH",
+    "QT_MOC_COMPAT",
+    "QT_NO_AS_CONST=1",
+    "QT_NO_CAST_TO_ASCII",
+    "QT_NO_CONTEXTLESS_CONNECT",
+    "QT_NO_DEBUG",
+    "QT_NO_FOREACH=1",
+    "QT_NO_JAVA_STYLE_ITERATORS",
+    "QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+    "QT_NO_QEXCHANGE",
+    "QT_NO_QSNPRINTF",
+    "QT_NO_USING_NAMESPACE",
+    "QT_USE_NODISCARD_FILE_OPEN",
+    "QT_USE_QSTRINGBUILDER",
+    "_GLIBCXX_ASSERTIONS",
+    "_LARGEFILE64_SOURCE",
+    "_LARGEFILE_SOURCE",
+]
+
+# Both libraries in this repo are INTERNAL_MODULE + STATIC upstream (Qt::JsonRpcPrivate,
+# Qt::LanguageServerPrivate), so no cc_shared_library is produced.
+
+# =============================================================================
+# QtJsonRpc (internal, static)
+# =============================================================================
+
+qt_export_header(
+    name = "qtjsonrpcexports_h",
+    out = "generated_exports/qtjsonrpcexports.h",
+    module_infix = "JSONRPC",
+)
+
+qt_depends_header(
+    name = "qtjsonrpc_depends_h",
+    out = "generated_exports/QtJsonRpcDepends",
+    dep_modules = ["QtCore"],
+)
+
+qt_sync_headers(
+    name = "jsonrpc_sync_headers",
+    hdrs = glob(["src/jsonrpc/*.h"]),
+    generated_public_hdrs = [
+        ":qtjsonrpcexports_h",
+        ":qtjsonrpc_depends_h",
+    ],
+    internal_module = True,
+    module_name = "QtJsonRpc",
+    source_dir = "src/jsonrpc",
+    version = QT_VERSION,
+    deps = ["@qtbase//:core_sync_headers"],
+)
+
+qt_internal_library(
+    name = "jsonrpc",
+    srcs = [
+        "src/jsonrpc/qhttpmessagestreamparser.cpp",
+        "src/jsonrpc/qjsonrpcprotocol.cpp",
+        "src/jsonrpc/qjsontypedrpc.cpp",
+        "src/jsonrpc/qtypedjson.cpp",
+    ],
+    hdrs = glob(["src/jsonrpc/*.h"]),
+    copts = common_copts,
+    create_shared = False,
+    cxxopts = ["-std=gnu++20"],
+    defines = ["QT_JSONRPC_LIB"],
+    includes = ["src/jsonrpc"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_JSONRPC_LIB",
+    ],
+    moc_hdrs = ["src/jsonrpc/qtypedjson_p.h"],
+    deps = [
+        ":jsonrpc_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:core_internal_cfg",
+    ],
+)
+
+# =============================================================================
+# QtLanguageServer (internal, static)
+# =============================================================================
+
+qt_export_header(
+    name = "qtlanguageserverexports_h",
+    out = "generated_exports/qtlanguageserverexports.h",
+    module_infix = "LANGUAGESERVER",
+)
+
+qt_depends_header(
+    name = "qtlanguageserver_depends_h",
+    out = "generated_exports/QtLanguageServerDepends",
+    dep_modules = [
+        "QtCore",
+        "QtJsonRpc",
+    ],
+)
+
+qt_sync_headers(
+    name = "languageserver_sync_headers",
+    hdrs = glob(["src/languageserver/*.h"]),
+    generated_public_hdrs = [
+        ":qtlanguageserverexports_h",
+        ":qtlanguageserver_depends_h",
+    ],
+    internal_module = True,
+    module_name = "QtLanguageServer",
+    source_dir = "src/languageserver",
+    version = QT_VERSION,
+    deps = [":jsonrpc_sync_headers"],
+)
+
+qt_internal_library(
+    name = "languageserver",
+    srcs = [
+        "src/languageserver/qlanguageserverbase.cpp",
+        "src/languageserver/qlanguageservergen.cpp",
+        "src/languageserver/qlanguageserverjsonrpctransport.cpp",
+        "src/languageserver/qlanguageserverprotocol.cpp",
+        "src/languageserver/qlspnotifysignals.cpp",
+    ],
+    hdrs = glob(["src/languageserver/*.h"]),
+    copts = common_copts,
+    create_shared = False,
+    cxxopts = ["-std=gnu++20"],
+    defines = ["QT_LANGUAGESERVER_LIB"],
+    includes = ["src/languageserver"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_LANGUAGESERVER_LIB",
+        "QT_JSONRPC_LIB",
+    ],
+    moc_hdrs = [
+        "src/languageserver/qlanguageserverspectypes_p.h",
+        "src/languageserver/qlspnotifysignals_p.h",
+    ],
+    deps = [
+        ":jsonrpc",
+        ":languageserver_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:core_internal_cfg",
+    ],
+)

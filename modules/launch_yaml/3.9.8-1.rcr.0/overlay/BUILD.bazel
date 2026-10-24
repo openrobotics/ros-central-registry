@@ -1,0 +1,116 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+py_binary(
+    name = "setup",
+    srcs = ["setup.py"],
+    deps = [requirement("setuptools")],
+)
+
+genrule(
+    name = "entry_points",
+    srcs = [
+        "CHANGELOG.rst",
+        "README.md",
+        "launch_yaml/__init__.py",
+        "launch_yaml/entity.py",
+        "launch_yaml/launch_description_sources/__init__.py",
+        "launch_yaml/launch_description_sources/yaml_launch_description_source.py",
+        "launch_yaml/parser.py",
+        "launch_yaml/py.typed",
+        "package.xml",
+        "pytest.ini",
+        "resource/launch_yaml",
+        "setup.py",
+    ],
+    outs = [
+        "launch_yaml.egg-info/PKG-INFO",
+        "launch_yaml.egg-info/entry_points.txt",
+        "launch_yaml.egg-info/top_level.txt",
+    ],
+    cmd = "$(location :setup) egg_info --egg-base=. && mkdir -p $(@D)/launch_yaml.egg-info && cp -r launch_yaml.egg-info/* $(@D)/launch_yaml.egg-info/",
+    tools = [":setup"],
+)
+
+py_library(
+    name = "launch_yaml",
+    srcs = [
+        "launch_yaml/__init__.py",
+        "launch_yaml/entity.py",
+        "launch_yaml/launch_description_sources/__init__.py",
+        "launch_yaml/launch_description_sources/yaml_launch_description_source.py",
+        "launch_yaml/parser.py",
+    ],
+    data = [":entry_points"],
+    imports = ["."],
+    deps = [
+        "@launch",
+        requirement("pyyaml"),
+    ],
+)
+
+[py_pytest(
+    name = "test_{0}".format(linter),
+    srcs = ["//test:test_{0}.py".format(linter)],
+    data = [
+        "CHANGELOG.rst",
+        "README.md",
+        "launch_yaml/__init__.py",
+        "launch_yaml/entity.py",
+        "launch_yaml/launch_description_sources/__init__.py",
+        "launch_yaml/launch_description_sources/yaml_launch_description_source.py",
+        "launch_yaml/parser.py",
+        "launch_yaml/py.typed",
+        "package.xml",
+        "pytest.ini",
+        "resource/launch_yaml",
+        "setup.py",
+    ],
+    deps = ["@ament_{0}".format(linter)],
+) for linter in [
+    "copyright",
+    "flake8",
+    "pep257",
+    "xmllint",
+]]
+
+ament_package(
+    name = "ament_package",
+    package_xml = "package.xml",
+    python = [":launch_yaml"] + ["launch_yaml/py.typed"],
+    deps = [
+        "@ament_copyright//:ament_package",
+        "@ament_flake8//:ament_package",
+        "@ament_pep257//:ament_package",
+        "@ament_xmllint//:ament_package",
+        "@launch//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

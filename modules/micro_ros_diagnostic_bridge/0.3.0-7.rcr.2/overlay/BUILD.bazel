@@ -1,0 +1,103 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+HEADERS = ["include/micro_ros_diagnostic_bridge/micro_ros_diagnostic_bridge.hpp"]
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+}
+
+cc_library(
+    name = "micro_ros_diagnostic_bridge_library",
+    srcs = ["src/micro_ros_diagnostic_bridge/micro_ros_diagnostic_bridge.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@diagnostic_msgs//:cc",
+        "@micro_ros_diagnostic_msgs//:cc",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "diagnostic_bridge",
+    srcs = ["src/diagnostic_bridge_node.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [":micro_ros_diagnostic_bridge_library"],
+)
+
+DATA = ["//launch:launch_files"]
+
+ament_index(
+    name = "ament_index",
+    data = DATA,
+    executables = [":diagnostic_bridge"],
+    package_xml = "package.xml",
+    deps = [
+        "@diagnostic_msgs//:ament_index",
+        "@micro_ros_diagnostic_msgs//:ament_index",
+    ],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies_list = [
+        "ament_cmake",
+        "micro_ros_diagnostic_msgs",
+        "rcl",
+        "rcutils",
+        "rosidl_generator_c",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_targets = False,
+    cmake_extras = ["ament_cmake_export_libraries-extras.cmake"],
+    headers = HEADERS,
+    include_prefix = "",
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@micro_ros_diagnostic_msgs//:ament_package",
+        "@osrf_testing_tools_cpp//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

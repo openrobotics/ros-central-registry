@@ -1,0 +1,444 @@
+load(
+    "@qt//:qt.bzl",
+    "qt_cc_library",
+    "qt_config_header",
+    "qt_export_header",
+    "qt_generate_qrc",
+    "qt_module_headers",
+    "qt_plugin",
+    "qt_qml_module",
+)
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+        "@rules_license//licenses/spdx:GPL-2.0-only",
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+    license_text = "LICENSES/LGPL-3.0-only.txt",
+)
+
+# ============================================================================
+# ScxmlGlobalPrivate config header
+# ============================================================================
+
+qt_config_header(
+    name = "scxmlglobal_private_config",
+    out = "qtscxmlglobal-config_p.h",
+    content = """#pragma once
+#define QT_FEATURE_scxml 1
+#define QT_FEATURE_scxml_qml 1
+#define QT_FEATURE_scxml_ecmascriptdatamodel 1
+#define QT_FEATURE_statemachine 1
+#define QT_FEATURE_statemachine_qml 1
+#define QT_FEATURE_qeventtransition 1
+""",
+)
+
+qt_module_headers(
+    name = "scxmlglobal_headers",
+    hdrs = [],
+    extra_deps = [":scxmlglobal_private_config"],
+    extra_private_hdrs = [":scxmlglobal_private_config"],
+    module_name = "ScxmlGlobal",
+)
+
+# ============================================================================
+# Qt6Scxml + qscxmlc tool
+# ============================================================================
+
+qt_export_header(
+    name = "scxml_export",
+    module_Header = "Scxml",
+    module_name = "scxml",
+)
+
+SCXML_HEADERS = [
+    "src/scxml/qscxmlcompiler.h",
+    "src/scxml/qscxmlcompiler_p.h",
+    "src/scxml/qscxmlcppdatamodel.h",
+    "src/scxml/qscxmlcppdatamodel_p.h",
+    "src/scxml/qscxmldatamodel.h",
+    "src/scxml/qscxmldatamodel_p.h",
+    "src/scxml/qscxmldatamodelplugin_p.h",
+    "src/scxml/qscxmlerror.h",
+    "src/scxml/qscxmlevent.h",
+    "src/scxml/qscxmlevent_p.h",
+    "src/scxml/qscxmlexecutablecontent.h",
+    "src/scxml/qscxmlexecutablecontent_p.h",
+    "src/scxml/qscxmlglobals.h",
+    "src/scxml/qscxmlglobals_p.h",
+    "src/scxml/qscxmlinvokableservice.h",
+    "src/scxml/qscxmlinvokableservice_p.h",
+    "src/scxml/qscxmlnulldatamodel.h",
+    "src/scxml/qscxmlstatemachine.h",
+    "src/scxml/qscxmlstatemachine_p.h",
+    "src/scxml/qscxmlstatemachineinfo_p.h",
+    "src/scxml/qscxmltabledata.h",
+    "src/scxml/qscxmltabledata_p.h",
+]
+
+qt_module_headers(
+    name = "scxml_headers",
+    hdrs = SCXML_HEADERS,
+    extra_deps = [
+        ":scxml_export",
+        ":scxmlglobal_headers",
+        ":scxmlglobal_private_config",
+    ],
+    extra_private_hdrs = [":scxmlglobal_private_config"],
+    module_name = "Scxml",
+)
+
+qt_cc_library(
+    name = "scxml",
+    srcs = [
+        "src/scxml/qscxmlcompiler.cpp",
+        "src/scxml/qscxmlcppdatamodel.cpp",
+        "src/scxml/qscxmldatamodel.cpp",
+        "src/scxml/qscxmldatamodelplugin.cpp",
+        "src/scxml/qscxmlerror.cpp",
+        "src/scxml/qscxmlevent.cpp",
+        "src/scxml/qscxmlexecutablecontent.cpp",
+        "src/scxml/qscxmlinvokableservice.cpp",
+        "src/scxml/qscxmlnulldatamodel.cpp",
+        "src/scxml/qscxmlstatemachine.cpp",
+        "src/scxml/qscxmlstatemachineinfo.cpp",
+        "src/scxml/qscxmltabledata.cpp",
+    ],
+    hdrs = SCXML_HEADERS,
+    copts = ["-w"],
+    create_shared = True,
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+    ],
+    includes = ["src/scxml"],
+    local_defines = [
+        "QT_BUILDING_QT",
+        "QT_BUILD_SCXML_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ],
+    deps = [
+        ":scxml_export",
+        ":scxml_headers",
+        ":scxmlglobal_headers",
+        "@qtbase//:core",
+    ],
+)
+
+qt_generate_qrc(
+    name = "qscxmlc_templates_qrc",
+    srcs = [
+        "tools/qscxmlc/cppdatamodel.t",
+        "tools/qscxmlc/data.t",
+        "tools/qscxmlc/decl.t",
+    ],
+    prefix = "/",
+    rcc_options = ["--no-compress"],
+    strip_prefix = "tools/qscxmlc",
+)
+
+cc_binary(
+    name = "qscxmlc",
+    srcs = [
+        "src/scxml/qscxmlcompiler.cpp",
+        "src/scxml/qscxmlcompiler.h",
+        "src/scxml/qscxmlcompiler_p.h",
+        "src/scxml/qscxmlerror.cpp",
+        "src/scxml/qscxmlerror.h",
+        "src/scxml/qscxmlexecutablecontent.cpp",
+        "src/scxml/qscxmlexecutablecontent.h",
+        "src/scxml/qscxmlexecutablecontent_p.h",
+        "src/scxml/qscxmlglobals.h",
+        "src/scxml/qscxmltabledata.cpp",
+        "src/scxml/qscxmltabledata.h",
+        "tools/qscxmlc/generator.cpp",
+        "tools/qscxmlc/generator.h",
+        "tools/qscxmlc/main.cpp",
+        "tools/qscxmlc/moc.cpp",
+        "tools/qscxmlc/moc.h",
+        "tools/qscxmlc/outputrevision.h",
+        "tools/qscxmlc/qscxmlc.cpp",
+        "tools/qscxmlc/qscxmlc.h",
+        "tools/qscxmlc/scxmlcppdumper.cpp",
+        "tools/qscxmlc/scxmlcppdumper.h",
+        "tools/qscxmlc/utils.h",
+        ":qscxmlc_templates_qrc",
+    ],
+    includes = [
+        "src/scxml",
+        "tools/qscxmlc",
+    ],
+    local_defines = [
+        "BUILD_QSCXMLC",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ],
+    deps = [
+        ":scxml_export",
+        ":scxml_headers",
+        ":scxmlglobal_headers",
+        "@qtbase//:core",
+    ],
+)
+
+# ============================================================================
+# Qt6ScxmlQml + declarative_scxml + qscxmlecmascriptdatamodel
+# ============================================================================
+
+qt_export_header(
+    name = "scxmlqml_export",
+    module_Header = "ScxmlQml",
+    module_name = "scxmlqml",
+)
+
+SCXMLQML_HEADERS = [
+    "src/scxmlqml/eventconnection_p.h",
+    "src/scxmlqml/invokedservices_p.h",
+    "src/scxmlqml/qscxmlqmlglobals_p.h",
+    "src/scxmlqml/statemachineextended_p.h",
+    "src/scxmlqml/statemachineloader_p.h",
+]
+
+qt_module_headers(
+    name = "scxmlqml_headers",
+    hdrs = SCXMLQML_HEADERS,
+    extra_deps = [":scxmlqml_export"],
+    module_name = "ScxmlQml",
+)
+
+qt_qml_module(
+    name = "scxmlqml",
+    srcs = [
+        "src/scxmlqml/eventconnection.cpp",
+        "src/scxmlqml/invokedservices.cpp",
+        "src/scxmlqml/statemachineextended.cpp",
+        "src/scxmlqml/statemachineloader.cpp",
+    ],
+    hdrs = SCXMLQML_HEADERS,
+    create_shared = True,
+    dynamic_deps = [
+        ":scxml_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:core_shared",
+    ],
+    import_name = "QtScxml",
+    import_version = "6.10",
+    includes = ["src/scxmlqml"],
+    local_defines = [
+        "QT_BUILD_SCXMLQML_LIB",
+    ],
+    plugin_class_name = "QScxmlStateMachinePlugin",
+    plugin_target = "declarative_scxml",
+    deps = [
+        ":scxml",
+        ":scxmlqml_export",
+        ":scxmlqml_headers",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+qt_plugin(
+    name = "qscxmlecmascriptdatamodel",
+    srcs = [
+        "src/plugins/ecmascriptdatamodel/qscxmlecmascriptdatamodel.cpp",
+        "src/plugins/ecmascriptdatamodel/qscxmlecmascriptdatamodelplugin.cpp",
+        "src/plugins/ecmascriptdatamodel/qscxmlecmascriptplatformproperties.cpp",
+    ],
+    hdrs = [
+        "src/plugins/ecmascriptdatamodel/qscxmlecmascriptdatamodel_p.h",
+        "src/plugins/ecmascriptdatamodel/qscxmlecmascriptdatamodelplugin_p.h",
+        "src/plugins/ecmascriptdatamodel/qscxmlecmascriptplatformproperties_p.h",
+    ],
+    includes = ["src/plugins/ecmascriptdatamodel"],
+    plugin_class_name = "QScxmlEcmaScriptDataModelPlugin",
+    deps = [
+        ":scxml",
+        "@qtbase//:core",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+# ============================================================================
+# Qt6StateMachine + Qt6StateMachineQml + qtqmlstatemachine
+# ============================================================================
+
+qt_export_header(
+    name = "statemachine_export",
+    module_Header = "StateMachine",
+    module_name = "statemachine",
+)
+
+STATEMACHINE_HEADERS = [
+    "src/statemachine/gui/qbasickeyeventtransition_p.h",
+    "src/statemachine/gui/qbasicmouseeventtransition_p.h",
+    "src/statemachine/gui/qkeyeventtransition.h",
+    "src/statemachine/gui/qmouseeventtransition.h",
+    "src/statemachine/qabstractstate.h",
+    "src/statemachine/qabstractstate_p.h",
+    "src/statemachine/qabstracttransition.h",
+    "src/statemachine/qabstracttransition_p.h",
+    "src/statemachine/qeventtransition.h",
+    "src/statemachine/qeventtransition_p.h",
+    "src/statemachine/qfinalstate.h",
+    "src/statemachine/qfinalstate_p.h",
+    "src/statemachine/qhistorystate.h",
+    "src/statemachine/qhistorystate_p.h",
+    "src/statemachine/qsignaleventgenerator_p.h",
+    "src/statemachine/qsignaltransition.h",
+    "src/statemachine/qsignaltransition_p.h",
+    "src/statemachine/qstate.h",
+    "src/statemachine/qstate_p.h",
+    "src/statemachine/qstatemachine.h",
+    "src/statemachine/qstatemachine_p.h",
+    "src/statemachine/qstatemachineglobal.h",
+    "src/statemachine/qstatemachineglobal_p.h",
+]
+
+qt_module_headers(
+    name = "statemachine_headers",
+    hdrs = STATEMACHINE_HEADERS,
+    extra_deps = [
+        ":scxmlglobal_headers",
+        ":scxmlglobal_private_config",
+        ":statemachine_export",
+    ],
+    extra_private_hdrs = [":scxmlglobal_private_config"],
+    module_name = "StateMachine",
+)
+
+qt_cc_library(
+    name = "statemachine",
+    srcs = [
+        "src/statemachine/gui/qbasickeyeventtransition.cpp",
+        "src/statemachine/gui/qbasicmouseeventtransition.cpp",
+        "src/statemachine/gui/qkeyeventtransition.cpp",
+        "src/statemachine/gui/qmouseeventtransition.cpp",
+        "src/statemachine/qabstractstate.cpp",
+        "src/statemachine/qabstracttransition.cpp",
+        "src/statemachine/qeventtransition.cpp",
+        "src/statemachine/qfinalstate.cpp",
+        "src/statemachine/qhistorystate.cpp",
+        "src/statemachine/qsignaltransition.cpp",
+        "src/statemachine/qstate.cpp",
+        "src/statemachine/qstatemachine.cpp",
+    ],
+    hdrs = STATEMACHINE_HEADERS,
+    copts = ["-w"],
+    create_shared = True,
+    dynamic_deps = [
+        "@qtbase//:gui_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:core_shared",
+    ],
+    included_moc_hdrs = [
+        "src/statemachine/gui/qbasickeyeventtransition_p.h",
+        "src/statemachine/gui/qbasicmouseeventtransition_p.h",
+        "src/statemachine/gui/qkeyeventtransition.h",
+        "src/statemachine/gui/qmouseeventtransition.h",
+        "src/statemachine/qabstractstate.h",
+        "src/statemachine/qabstracttransition.h",
+        "src/statemachine/qeventtransition.h",
+        "src/statemachine/qfinalstate.h",
+        "src/statemachine/qhistorystate.h",
+        "src/statemachine/qsignaltransition.h",
+        "src/statemachine/qstate.h",
+        "src/statemachine/qstatemachine.h",
+    ],
+    includes = [
+        "src/statemachine",
+        "src/statemachine/gui",
+    ],
+    local_defines = [
+        "QT_BUILDING_QT",
+        "QT_BUILD_STATEMACHINE_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_TO_ASCII",
+    ],
+    deps = [
+        ":scxmlglobal_headers",
+        ":statemachine_export",
+        ":statemachine_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+    ],
+)
+
+qt_export_header(
+    name = "statemachineqml_export",
+    module_Header = "StateMachineQml",
+    module_name = "statemachineqml",
+)
+
+STATEMACHINEQML_HEADERS = [
+    "src/statemachineqml/childrenprivate_p.h",
+    "src/statemachineqml/finalstate_p.h",
+    "src/statemachineqml/qstatemachineqmlglobals_p.h",
+    "src/statemachineqml/signaltransition_p.h",
+    "src/statemachineqml/state_p.h",
+    "src/statemachineqml/statemachine_p.h",
+    "src/statemachineqml/statemachineforeign_p.h",
+    "src/statemachineqml/timeouttransition_p.h",
+]
+
+qt_module_headers(
+    name = "statemachineqml_headers",
+    hdrs = STATEMACHINEQML_HEADERS,
+    extra_deps = [":statemachineqml_export"],
+    module_name = "StateMachineQml",
+)
+
+qt_qml_module(
+    name = "statemachineqml",
+    srcs = [
+        "src/statemachineqml/finalstate.cpp",
+        "src/statemachineqml/signaltransition.cpp",
+        "src/statemachineqml/state.cpp",
+        "src/statemachineqml/statemachine.cpp",
+        "src/statemachineqml/timeouttransition.cpp",
+    ],
+    hdrs = STATEMACHINEQML_HEADERS,
+    create_shared = True,
+    dynamic_deps = [
+        ":statemachine_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:core_shared",
+    ],
+    foreign_types = [":statemachine_moc_hdrs"],
+    import_name = "QtQml.StateMachine",
+    import_version = "6.10",
+    included_moc_hdrs = [
+        "src/statemachineqml/signaltransition_p.h",
+        "src/statemachineqml/state_p.h",
+        "src/statemachineqml/statemachine_p.h",
+        "src/statemachineqml/timeouttransition_p.h",
+    ],
+    includes = ["src/statemachineqml"],
+    local_defines = [
+        "QT_BUILD_STATEMACHINEQML_LIB",
+    ],
+    plugin_class_name = "QtQmlStateMachinePlugin",
+    plugin_target = "qtqmlstatemachine",
+    deps = [
+        ":statemachine",
+        ":statemachineqml_export",
+        ":statemachineqml_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+    ],
+)

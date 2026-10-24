@@ -1,0 +1,345 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+expand_template(
+    name = "extra_configs_cmake",
+    out = "extra_configs.cmake",
+    substitutions = {
+        "@RTABMAP_SYNC_MULTI_RGBD_CONF@": "0",
+        "@RTABMAP_SYNC_USER_DATA_CONF@": "0",
+    },
+    template = "cmake/extra_configs.cmake.in",
+)
+
+DEPENDENCIES = {
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:boost.filesystem_shared": "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.iostreams_shared": "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:pcl": "@rosdistro//cc:pcl_library",
+    "@rosdistro//cc:protobuf": "@rosdistro//cc:protobuf_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+    "@rtabmap//:rtabmap_core": "@rtabmap//:rtabmap_core_library",
+    "@rtabmap//:rtabmap_utilite": "@rtabmap//:rtabmap_utilite_library",
+    "@rtabmap_conversions//:rtabmap_conversions": "@rtabmap_conversions//:rtabmap_conversions_library",
+}
+
+CC_DEPS = [
+    "@diagnostic_msgs//:cc",
+    "@nav_msgs//:cc",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rtabmap//:_gen_textual_hdrs",
+    "@rtabmap_msgs//:cc",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "rtabmap_sync_library",
+    srcs = [
+        "src/CommonDataSubscriber.cpp",
+        "src/impl/CommonDataSubscriberDepth.cpp",
+        "src/impl/CommonDataSubscriberOdom.cpp",
+        "src/impl/CommonDataSubscriberRGB.cpp",
+        "src/impl/CommonDataSubscriberRGBD.cpp",
+        "src/impl/CommonDataSubscriberRGBDX.cpp",
+        "src/impl/CommonDataSubscriberScan.cpp",
+        "src/impl/CommonDataSubscriberSensorData.cpp",
+        "src/impl/CommonDataSubscriberStereo.cpp",
+    ],
+    hdrs = [
+        "include/rtabmap_sync/CommonDataSubscriber.h",
+        "include/rtabmap_sync/CommonDataSubscriberDefines.h",
+        "include/rtabmap_sync/SyncDiagnostic.h",
+        "include/rtabmap_sync/rgb_sync.hpp",
+        "include/rtabmap_sync/rgbd_sync.hpp",
+        "include/rtabmap_sync/rgbdx_sync.hpp",
+        "include/rtabmap_sync/stereo_sync.hpp",
+        "include/rtabmap_sync/visibility.h",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/rtabmap_sync",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "rtabmap_sync",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":rtabmap_sync_library"],
+)
+
+cc_library(
+    name = "rtabmap_sync_plugins_library",
+    srcs = [
+        "src/nodelets/rgb_sync.cpp",
+        "src/nodelets/rgbd_sync.cpp",
+        "src/nodelets/rgbdx_sync.cpp",
+        "src/nodelets/stereo_sync.cpp",
+    ],
+    hdrs = [
+        "include/rtabmap_sync/CommonDataSubscriber.h",
+        "include/rtabmap_sync/CommonDataSubscriberDefines.h",
+        "include/rtabmap_sync/SyncDiagnostic.h",
+        "include/rtabmap_sync/rgb_sync.hpp",
+        "include/rtabmap_sync/rgbd_sync.hpp",
+        "include/rtabmap_sync/rgbdx_sync.hpp",
+        "include/rtabmap_sync/stereo_sync.hpp",
+        "include/rtabmap_sync/visibility.h",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/rtabmap_sync",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":rtabmap_sync_library"],
+)
+
+cc_shared_library(
+    name = "rtabmap_sync_plugins",
+    dynamic_deps = DEPENDENCIES.keys() + [":rtabmap_sync"],
+    deps = [":rtabmap_sync_plugins_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "rtabmap_sync_plugins_components",
+    component = ":rtabmap_sync_plugins",
+    plugins = [
+        "rtabmap_sync::RGBDSync",
+        "rtabmap_sync::StereoSync",
+        "rtabmap_sync::RGBSync",
+        "rtabmap_sync::RGBDXSync",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":rtabmap_sync",
+        ":rtabmap_sync_plugins",
+    ],
+)
+
+cc_binary(
+    name = "rgb_sync",
+    srcs = ["src/RGBSyncNode.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rtabmap_sync",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_sync_library",
+        ":rtabmap_sync_plugins_library",
+    ],
+)
+
+cc_binary(
+    name = "rgbd_sync",
+    srcs = ["src/RGBDSyncNode.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rtabmap_sync",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_sync_library",
+        ":rtabmap_sync_plugins_library",
+    ],
+)
+
+cc_binary(
+    name = "rgbdx_sync",
+    srcs = ["src/RGBDXSyncNode.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rtabmap_sync",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_sync_library",
+        ":rtabmap_sync_plugins_library",
+    ],
+)
+
+cc_binary(
+    name = "stereo_sync",
+    srcs = ["src/StereoSyncNode.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/rtabmap_sync",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "GLAD_API_CALL_EXPORT",
+        "kiss_fft_scalar=double",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_sync_library",
+        ":rtabmap_sync_plugins_library",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":rtabmap_sync_plugins_components"],
+    lib_data = [
+        ":rgb_sync",
+        ":rgbd_sync",
+        ":rgbdx_sync",
+        ":stereo_sync",
+    ],
+    libraries = [
+        ":rtabmap_sync",
+        ":rtabmap_sync_plugins",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@image_transport//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rtabmap_conversions//:ament_package",
+        "@rtabmap_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "cv_bridge",
+        "diagnostic_updater",
+        "image_transport",
+        "message_filters",
+        "nav_msgs",
+        "rclcpp",
+        "rclcpp_components",
+        "rtabmap_conversions",
+        "rtabmap_msgs",
+        "sensor_msgs",
+    ],
+    cmake_export_include_directories = False,
+    cmake_extras = ["extra_configs.cmake"],
+    headers = [
+        "include/rtabmap_sync/CommonDataSubscriber.h",
+        "include/rtabmap_sync/CommonDataSubscriberDefines.h",
+        "include/rtabmap_sync/SyncDiagnostic.h",
+        "include/rtabmap_sync/visibility.h",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":rtabmap_sync",
+        ":rtabmap_sync_plugins",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@image_transport//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rtabmap_conversions//:ament_package",
+        "@rtabmap_msgs//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

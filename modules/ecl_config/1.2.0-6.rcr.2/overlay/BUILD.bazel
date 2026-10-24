@@ -1,0 +1,134 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+cmake_configure_file(
+    name = "ecl_hpp",
+    src = "include/ecl/config/ecl.hpp.in",
+    out = "include/ecl/config/ecl.hpp",
+    defines = [
+        "ecl_config_VERSION=",
+        "ECL_IS_POSIX=1",
+        "ECL_HAS_POSIX_THREADS=1",
+        "ECL_SIZE_OF_CHAR=1",
+        "ECL_SIZE_OF_SHORT=2",
+        "ECL_SIZE_OF_INT=4",
+        "ECL_SIZE_OF_LONG=8",
+        "ECL_SIZE_OF_LONG_LONG=8",
+        "ECL_SIZE_OF_FLOAT=4",
+        "ECL_SIZE_OF_DOUBLE=8",
+        "ECL_SIZE_OF_LONG_DOUBLE=16",
+        "ECL_HAS_SHARED_LIBS=1",
+    ],
+    undefines = [
+        "ECL_IS_APPLE",
+        "ECL_IS_WIN32",
+        "ECL_HAS_WIN32_THREADS",
+        "ECL_DISABLE_EXCEPTIONS",
+        "ECL_HAS_STATIC_LIBS",
+    ],
+)
+
+cc_library(
+    name = "ecl_config",
+    hdrs = [
+        "include/ecl/config.hpp",
+        "include/ecl/config/char_sign.hpp",
+        "include/ecl/config/ecl_unknown.hpp",
+        "include/ecl/config/endianness.hpp",
+        "include/ecl/config/macros.hpp",
+        "include/ecl/config/portable_types.hpp",
+        "include/ecl/config/windows.hpp",
+    ] + [":ecl_hpp"],
+    includes = ["include"],
+)
+
+alias(
+    name = "ecl_config_library",
+    actual = ":ecl_config",
+)
+
+cc_binary(
+    name = "ecl_detect_endian",
+    srcs = ["src/utilities/detect_endian.cpp"],
+    deps = [":ecl_config"],
+)
+
+cc_binary(
+    name = "ecl_detect_posix",
+    srcs = ["src/utilities/detect_posix.cpp"],
+    deps = [":ecl_config"],
+)
+
+[
+    cc_test(
+        name = "ecl_test_{}".format(test_name),
+        size = "small",
+        srcs = ["src/test/{}.cpp".format(test_name)],
+        deps = [
+            ":ecl_config",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test_name in [
+        "char_sign",
+        "endianness",
+        "macros",
+        "portable_types",
+    ]
+]
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    headers = [
+        "include/ecl/config.hpp",
+        "include/ecl/config/char_sign.hpp",
+        "include/ecl/config/ecl_unknown.hpp",
+        "include/ecl/config/endianness.hpp",
+        "include/ecl/config/macros.hpp",
+        "include/ecl/config/portable_types.hpp",
+        "include/ecl/config/windows.hpp",
+    ] + [":ecl_hpp"],
+    include_prefix = "",
+    package_xml = "package.xml",
+    programs = [
+        ":ecl_detect_endian",
+        ":ecl_detect_posix",
+    ],
+    deps = [
+        ":ament_index",
+        "@ecl_build//:ament_package",
+        "@ecl_license//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

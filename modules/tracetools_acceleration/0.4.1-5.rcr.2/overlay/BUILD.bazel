@@ -1,0 +1,135 @@
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:lttng_ust_shared": "@rosdistro//cc:lttng_ust",
+}
+
+CC_DEPS = [
+]
+
+cc_library(
+    name = "tracetools_acceleration_library",
+    srcs = [
+        "src/tp_call.c",
+        "src/tracetools.c",
+        "src/utils.cpp",
+    ],
+    hdrs = [
+        "include/tracetools_acceleration/tp_call.h",
+        "include/tracetools_acceleration/tracetools.h",
+        "include/tracetools_acceleration/utils.hpp",
+        "include/tracetools_acceleration/visibility_control.hpp",
+    ] + [":config_h"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tracetools_acceleration",
+        "include",
+        "include/tracetools_acceleration",
+    ],
+    local_defines = ros_local_defines() + ["tracetools_acceleration_VERSION=\\\"0.4.1\\\""],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "tracetools_acceleration",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":tracetools_acceleration_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":tracetools_acceleration"],
+)
+
+cc_binary(
+    name = "status",
+    srcs = [
+        "include/tracetools_acceleration/tp_call.h",
+        "include/tracetools_acceleration/tracetools.h",
+        "include/tracetools_acceleration/utils.hpp",
+        "include/tracetools_acceleration/visibility_control.hpp",
+        "src/status.c",
+        ":config_h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/tracetools_acceleration",
+        "include",
+        "include/tracetools_acceleration",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":tracetools_acceleration_library"],
+)
+
+cmake_configure_file(
+    name = "config_h",
+    src = "include/tracetools_acceleration/config.h.in",
+    out = "_gen/include/tracetools_acceleration/config.h",
+    defines = [
+        "TRACETOOLS_LTTNG_ENABLED=1",
+    ],
+    undefines = [
+        "TRACETOOLS_DISABLED",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":status",
+    ],
+    libraries = [
+        ":tracetools_acceleration",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_name = "tracetools_acceleration_export",
+    cmake_extras = ["ament_cmake_export_link_flags-extras.cmake"],
+    headers = [
+        ":config_h",
+    ] + [
+        "include/tracetools_acceleration/config.h.in",
+        "include/tracetools_acceleration/tp_call.h",
+        "include/tracetools_acceleration/tracetools.h",
+        "include/tracetools_acceleration/utils.hpp",
+        "include/tracetools_acceleration/visibility_control.hpp",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":tracetools_acceleration",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+    ],
+)

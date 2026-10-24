@@ -1,0 +1,17 @@
+--- a/src/pcl_ros/filters/filter.cpp
++++ b/src/pcl_ros/filters/filter.cpp
+@@ -193,8 +193,12 @@
+ pcl_ros::Filter::createPublishers()
+ {
+   auto pub_options = rclcpp::PublisherOptions();
+-  pub_options.event_callbacks.matched_callback = [this](rclcpp::MatchedInfo & /*info*/) {
+-      if (pub_output_->get_subscription_count() == 0) {
++  pub_options.event_callbacks.matched_callback = [this](rclcpp::MatchedInfo & info) {
++      // Use the event's own match count: get_subscription_count() reads the
++      // graph cache, which can lag behind this event and report 0 even though
++      // a subscription just matched -- that would unsubscribe us and, with no
++      // further matched events, never subscribe again.
++      if (info.current_count == 0) {
+         unsubscribe();
+       } else {
+         if (use_indices_) {

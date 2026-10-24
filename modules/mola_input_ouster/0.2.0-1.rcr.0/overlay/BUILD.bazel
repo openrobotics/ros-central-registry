@@ -1,0 +1,384 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+cmake_configure_file(
+    name = "build_h",
+    src = "ouster-sdk/cmake/build.h.in",
+    out = "ouster-sdk/ouster_client/include/ouster/impl/build.h",
+    defines = [
+        "BUILD_TYPE=release",
+        "BUILD_SYSTEM=Linux",
+        "GIT_HASH=unknown",
+        "OusterSDK_VERSION_STRING=0.14.0",
+    ],
+)
+
+_FBS_FILES = [
+    "chunk.fbs",
+    "header.fbs",
+    "metadata.fbs",
+    "os_sensor/collation_stream.fbs",
+    "os_sensor/common.fbs",
+    "os_sensor/extrinsics.fbs",
+    "os_sensor/lidar_scan_stream.fbs",
+    "os_sensor/lidar_sensor.fbs",
+    "os_sensor/sensor_info_stream.fbs",
+    "streaming/streaming_info.fbs",
+]
+
+genrule(
+    name = "fb_gen_headers",
+    srcs = ["ouster-sdk/ouster_osf/fb/" + f for f in _FBS_FILES],
+    outs = ["_gen/fb/" + f.removesuffix(".fbs") + "_generated.h" for f in _FBS_FILES],
+    cmd = """
+        OUT_ROOT="$$(dirname $(location _gen/fb/chunk_generated.h))"
+        for f in $(SRCS); do
+            rel="$${f#*ouster-sdk/ouster_osf/fb/}"
+            sub="$$(dirname "$$rel")"
+            mkdir -p "$$OUT_ROOT/$$sub"
+            $(execpath @rosdistro//cc:flatc) --cpp --no-includes --scoped-enums -o "$$OUT_ROOT/$$sub" "$$f"
+        done
+    """,
+    tools = ["@rosdistro//cc:flatc"],
+)
+
+DEPENDENCIES = {
+    "@mola_kernel//:mola_kernel": "@mola_kernel//:mola_kernel_library",
+    "@mola_yaml//:mola_yaml": "@mola_yaml//:mola_yaml_library",
+    "@mrpt_maps//:mrpt_maps": "@mrpt_maps//:mrpt_maps_library",
+    "@mrpt_obs//:mrpt_obs": "@mrpt_obs//:mrpt_obs_library",
+    "@rosdistro//cc:boringssl": "@rosdistro//cc:boringssl_crypto_library",
+    "@rosdistro//cc:ceres": "@rosdistro//cc:ceres_library",
+    "@rosdistro//cc:curl": "@rosdistro//cc:curl_library",
+    "@rosdistro//cc:flatbuffers": "@rosdistro//cc:flatbuffers_library",
+    "@rosdistro//cc:glfw": "@rosdistro//cc:glfw_library",
+    "@rosdistro//cc:glog": "@rosdistro//cc:glog_library",
+    "@rosdistro//cc:libpcap": "@rosdistro//cc:libpcap_library",
+    "@rosdistro//cc:libpng": "@rosdistro//cc:libpng_library",
+    "@rosdistro//cc:libtins": "@rosdistro//cc:libtins_library",
+    "@rosdistro//cc:libzip": "@rosdistro//cc:libzip_library",
+    "@rosdistro//cc:tbb": "@rosdistro//cc:tbb_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+    "@rosdistro//cc:zstd": "@rosdistro//cc:zstd_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:boost.optional",
+    "@rosdistro//cc:boringssl_ssl_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:nlohmann_json",
+    "@rosdistro//cc:fmt",
+    "@rosdistro//cc:pybind11",
+    "@rosdistro//cc:spdlog",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+HEADERS = glob(
+    [
+        "include/**/*.h",
+        "ouster-sdk/ouster_client/include/**/*.h",
+        "ouster-sdk/ouster_client/include/**/*.hpp",
+        "ouster-sdk/ouster_client/src/**/*.h",
+        "ouster-sdk/ouster_osf/include/**/*.h",
+        "ouster-sdk/ouster_osf/src/**/*.h",
+        "ouster-sdk/ouster_pcap/include/**/*.h",
+        "ouster-sdk/ouster_pcap/src/**/*.h",
+        "ouster-sdk/ouster_sensor/include/**/*.h",
+        "ouster-sdk/ouster_sensor/src/**/*.h",
+        "ouster-sdk/thirdparty/**/*.h",
+        "ouster-sdk/thirdparty/**/*.hpp",
+    ],
+    # Upstream always builds against its bundled spdlog (and the fmt bundled
+    # inside it); use the distro-wide @rosdistro//cc:spdlog / fmt instead.
+    exclude = ["ouster-sdk/thirdparty/spdlog/**"],
+) + [
+    ":build_h",
+    ":fb_gen_headers",
+]
+
+INCLUDES = [
+    "_gen/fb",
+    "_gen/include",
+    "include",
+    "include/mola_input_ouster",
+    "ouster-sdk/ouster_client/include",
+    "ouster-sdk/ouster_client/include/optional-lite",
+    "ouster-sdk/ouster_osf/include",
+    "ouster-sdk/ouster_pcap/include",
+    "ouster-sdk/ouster_sensor/include",
+    "ouster-sdk/thirdparty",
+    "ouster-sdk/thirdparty/nmea/include",
+    "ouster-sdk/thirdparty/zpng/include",
+]
+
+cc_library(
+    name = "nmea_library",
+    srcs = [
+        "ouster-sdk/thirdparty/nmea/src/gga.cpp",
+        "ouster-sdk/thirdparty/nmea/src/gll.cpp",
+        "ouster-sdk/thirdparty/nmea/src/gsa.cpp",
+        "ouster-sdk/thirdparty/nmea/src/gsv.cpp",
+        "ouster-sdk/thirdparty/nmea/src/parse.cpp",
+        "ouster-sdk/thirdparty/nmea/src/rmc.cpp",
+        "ouster-sdk/thirdparty/nmea/src/sentence.cpp",
+        "ouster-sdk/thirdparty/nmea/src/vtg.cpp",
+        "ouster-sdk/thirdparty/nmea/src/zda.cpp",
+    ],
+    hdrs = HEADERS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = INCLUDES,
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_library(
+    name = "ouster_client_library",
+    srcs = [
+        "ouster-sdk/ouster_client/src/beam_config.cpp",
+        "ouster-sdk/ouster_client/src/chanfield.cpp",
+        "ouster-sdk/ouster_client/src/cloud_io.cpp",
+        "ouster-sdk/ouster_client/src/compat_ops.cpp",
+        "ouster-sdk/ouster_client/src/error_handler.cpp",
+        "ouster-sdk/ouster_client/src/field.cpp",
+        "ouster-sdk/ouster_client/src/image_processing.cpp",
+        "ouster-sdk/ouster_client/src/io_type.cpp",
+        "ouster-sdk/ouster_client/src/json_tools.cpp",
+        "ouster-sdk/ouster_client/src/lidar_scan.cpp",
+        "ouster-sdk/ouster_client/src/lidar_scan_set.cpp",
+        "ouster-sdk/ouster_client/src/logging.cpp",
+        "ouster-sdk/ouster_client/src/mesh.cpp",
+        "ouster-sdk/ouster_client/src/metadata.cpp",
+        "ouster-sdk/ouster_client/src/multi_scan_source.cpp",
+        "ouster-sdk/ouster_client/src/normals.cpp",
+        "ouster-sdk/ouster_client/src/open_source.cpp",
+        "ouster-sdk/ouster_client/src/packet.cpp",
+        "ouster-sdk/ouster_client/src/packet_source.cpp",
+        "ouster-sdk/ouster_client/src/parsing.cpp",
+        "ouster-sdk/ouster_client/src/pose_conversion.cpp",
+        "ouster-sdk/ouster_client/src/pose_util.cpp",
+        "ouster-sdk/ouster_client/src/profile_extension.cpp",
+        "ouster-sdk/ouster_client/src/scan_source.cpp",
+        "ouster-sdk/ouster_client/src/scan_source_utils.cpp",
+        "ouster-sdk/ouster_client/src/sensor_info.cpp",
+        "ouster-sdk/ouster_client/src/sha256.cpp",
+        "ouster-sdk/ouster_client/src/stl.cpp",
+        "ouster-sdk/ouster_client/src/transform_homogeneous.cpp",
+        "ouster-sdk/ouster_client/src/transform_quaternion.cpp",
+        "ouster-sdk/ouster_client/src/transform_vector.cpp",
+        "ouster-sdk/ouster_client/src/triangle.cpp",
+        "ouster-sdk/ouster_client/src/typedefs.cpp",
+        "ouster-sdk/ouster_client/src/types.cpp",
+        "ouster-sdk/ouster_client/src/vector_streambuf.cpp",
+        "ouster-sdk/ouster_client/src/xyzlut.cpp",
+        "ouster-sdk/ouster_client/src/zip.cpp",
+        "ouster-sdk/ouster_client/src/zone.cpp",
+        "ouster-sdk/ouster_client/src/zone_header.cpp",
+        "ouster-sdk/ouster_client/src/zone_monitor.cpp",
+        "ouster-sdk/ouster_client/src/zrb.cpp",
+    ],
+    hdrs = HEADERS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = INCLUDES,
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":nmea_library"],
+)
+
+cc_library(
+    name = "zpng_library",
+    srcs = ["ouster-sdk/thirdparty/zpng/zpng.cpp"],
+    hdrs = HEADERS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = INCLUDES,
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_library(
+    name = "ouster_osf_library",
+    srcs = [
+        "ouster-sdk/ouster_osf/src/async_writer.cpp",
+        "ouster-sdk/ouster_osf/src/basics.cpp",
+        "ouster-sdk/ouster_osf/src/buffer.cpp",
+        "ouster-sdk/ouster_osf/src/chunk.cpp",
+        "ouster-sdk/ouster_osf/src/collation_stream.cpp",
+        "ouster-sdk/ouster_osf/src/compat_ops.cpp",
+        "ouster-sdk/ouster_osf/src/crc32.cpp",
+        "ouster-sdk/ouster_osf/src/fb_common.cpp",
+        "ouster-sdk/ouster_osf/src/fb_utils.cpp",
+        "ouster-sdk/ouster_osf/src/file.cpp",
+        "ouster-sdk/ouster_osf/src/layout_streaming.cpp",
+        "ouster-sdk/ouster_osf/src/memory_mapped_osf_file.cpp",
+        "ouster-sdk/ouster_osf/src/meta_extrinsics.cpp",
+        "ouster-sdk/ouster_osf/src/meta_lidar_sensor.cpp",
+        "ouster-sdk/ouster_osf/src/meta_streaming_info.cpp",
+        "ouster-sdk/ouster_osf/src/metadata.cpp",
+        "ouster-sdk/ouster_osf/src/metadata_impl.cpp",
+        "ouster-sdk/ouster_osf/src/offset.cpp",
+        "ouster-sdk/ouster_osf/src/operations.cpp",
+        "ouster-sdk/ouster_osf/src/osf_scan_source.cpp",
+        "ouster-sdk/ouster_osf/src/png_lidarscan_encoder.cpp",
+        "ouster-sdk/ouster_osf/src/png_tools.cpp",
+        "ouster-sdk/ouster_osf/src/reader.cpp",
+        "ouster-sdk/ouster_osf/src/reader_base.cpp",
+        "ouster-sdk/ouster_osf/src/sensor_info_stream.cpp",
+        "ouster-sdk/ouster_osf/src/stream_lidar_scan.cpp",
+        "ouster-sdk/ouster_osf/src/stream_osf_file.cpp",
+        "ouster-sdk/ouster_osf/src/writer.cpp",
+        "ouster-sdk/ouster_osf/src/zpng_lidarscan_encoder.cpp",
+    ],
+    hdrs = HEADERS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = INCLUDES,
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":ouster_client_library",
+        ":zpng_library",
+    ],
+)
+
+cc_library(
+    name = "ouster_pcap_library",
+    srcs = [
+        "ouster-sdk/ouster_pcap/src/indexed_pcap_reader.cpp",
+        "ouster-sdk/ouster_pcap/src/ip_reassembler.cpp",
+        "ouster-sdk/ouster_pcap/src/os_pcap.cpp",
+        "ouster-sdk/ouster_pcap/src/pcap.cpp",
+        "ouster-sdk/ouster_pcap/src/pcap_packet_source.cpp",
+        "ouster-sdk/ouster_pcap/src/pcap_scan_source.cpp",
+    ],
+    hdrs = HEADERS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "cstdint",
+    ],
+    includes = INCLUDES,
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ouster_client_library"],
+)
+
+cc_library(
+    name = "ouster_sensor_library",
+    srcs = [
+        "ouster-sdk/ouster_sensor/src/client.cpp",
+        "ouster-sdk/ouster_sensor/src/netcompat.cpp",
+        "ouster-sdk/ouster_sensor/src/sensor_http.cpp",
+        "ouster-sdk/ouster_sensor/src/sensor_http_imp.cpp",
+        "ouster-sdk/ouster_sensor/src/sensor_packet_source.cpp",
+        "ouster-sdk/ouster_sensor/src/sensor_scan_source.cpp",
+    ],
+    hdrs = HEADERS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = INCLUDES,
+    local_defines = ros_local_defines() + ["NDEBUG"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":ouster_client_library"],
+)
+
+cc_library(
+    name = "mola_input_ouster_library",
+    srcs = ["src/OusterDirectInput.cpp"],
+    hdrs = HEADERS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "cstdint",
+    ],
+    includes = INCLUDES,
+    local_defines = ros_local_defines() + [
+        "MOLA_MAJOR_VERSION=3",
+        "MOLA_MINOR_VERSION=3",
+        "MOLA_PATCH_VERSION=0",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":nmea_library",
+        ":ouster_client_library",
+        ":ouster_osf_library",
+        ":ouster_pcap_library",
+        ":ouster_sensor_library",
+        ":zpng_library",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_shared_library(
+    name = "mola_input_ouster",
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":mola_input_ouster_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "mola-cli-launchs/lidar_odometry_ouster_live.yaml",
+        "mola-cli-launchs/lidar_odometry_ouster_pcap.yaml",
+        "mola-cli-launchs/live_ouster_just_view.yaml",
+        "mola-cli-launchs/osf_ouster_just_view.yaml",
+        "mola-cli-launchs/pcap_ouster_just_view.yaml",
+    ],
+    libraries = [
+        ":mola_input_ouster",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@mola_kernel//:ament_package",
+        "@mola_yaml//:ament_package",
+        "@mrpt_maps//:ament_package",
+        "@mrpt_obs//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    cmake_prefix_path_hook = False,
+    headers = ["include/mola_input_ouster/OusterDirectInput.h"],
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mola_input_ouster",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@mola_kernel//:ament_package",
+        "@mola_yaml//:ament_package",
+        "@mrpt_maps//:ament_package",
+        "@mrpt_obs//:ament_package",
+    ],
+)

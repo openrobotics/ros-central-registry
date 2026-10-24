@@ -1,0 +1,161 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+HEADERS = [
+    "include/rosgraph_monitor/event.hpp",
+    "include/rosgraph_monitor/monitor.hpp",
+    "include/rosgraph_monitor/node.hpp",
+]
+
+ROS_DISTRO_DEFINES = ["ROS2_ROLLING"]
+
+DEPENDENCIES = {
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@generate_parameter_library//:rsl": "@generate_parameter_library//:rsl_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+}
+
+cc_library(
+    name = "rosgraph_monitor_library",
+    srcs = [
+        "src/event.cpp",
+        "src/monitor.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ROS_DISTRO_DEFINES,
+    deps = DEPENDENCIES.values() + [
+        "@diagnostic_msgs//:cc",
+        "@rosgraph_monitor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "rosgraph_monitor",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rosgraph_monitor_library"],
+)
+
+generate_parameter_library(
+    name = "rosgraph_monitor_generated_parameters",
+    yaml_file = "src/params_decl.yaml",
+)
+
+NODELIB_DEPENDENCIES = DEPENDENCIES | {
+    ":rosgraph_monitor": ":rosgraph_monitor_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+}
+
+cc_library(
+    name = "rosgraph_monitor_nodelib_library",
+    srcs = ["src/node.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ROS_DISTRO_DEFINES,
+    deps = NODELIB_DEPENDENCIES.values() + [
+        ":rosgraph_monitor_generated_parameters",
+        "@diagnostic_msgs//:cc",
+        "@rosgraph_monitor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "rosgraph_monitor_nodelib",
+    dynamic_deps = NODELIB_DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rosgraph_monitor_nodelib_library"],
+)
+
+rclcpp_components_register_node(
+    name = "rosgraph_monitor_node",
+    component = ":rosgraph_monitor_nodelib",
+    node_name = "rosgraph_monitor_node",
+    plugin = "rosgraph_monitor::Node",
+)
+
+DATA = ["config/diagnostic_aggregator_params.yaml"] + ["//launch:launch_files"]
+
+ament_index(
+    name = "ament_index",
+    components = [":rosgraph_monitor_node_record"],
+    data = DATA,
+    executables = [":rosgraph_monitor_node"],
+    libraries = [
+        ":rosgraph_monitor",
+        ":rosgraph_monitor_nodelib",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@diagnostic_msgs//:ament_index",
+        "@rosgraph_monitor_msgs//:ament_index",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rosgraph_monitor_nodelib"] + [":rosgraph_monitor"],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "rosgraph_monitorTargets",
+    headers = HEADERS + [":rosgraph_monitor_generated_parameters_gen"],
+    include_prefix = "",
+    libraries = [
+        ":rosgraph_monitor",
+        ":rosgraph_monitor_nodelib",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@diagnostic_aggregator//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rmw_implementation//:ament_package",
+        "@rmw_stats_shim//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosgraph_monitor_msgs//:ament_package",
+    ],
+)

@@ -1,0 +1,120 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+pkg_files(
+    name = "vendor_src",
+    srcs = [
+        "include/gtest/gtest.h",
+        "include/gtest/gtest-assertion-result.h",
+        "include/gtest/gtest-death-test.h",
+        "include/gtest/gtest-matchers.h",
+        "include/gtest/gtest-message.h",
+        "include/gtest/gtest-param-test.h",
+        "include/gtest/gtest-printers.h",
+        "include/gtest/gtest-spi.h",
+        "include/gtest/gtest-test-part.h",
+        "include/gtest/gtest-typed-test.h",
+        "include/gtest/gtest_pred_impl.h",
+        "include/gtest/gtest_prod.h",
+        "include/gtest/internal/custom/README.md",
+        "include/gtest/internal/custom/gtest.h",
+        "include/gtest/internal/custom/gtest-port.h",
+        "include/gtest/internal/custom/gtest-printers.h",
+        "include/gtest/internal/gtest-death-test-internal.h",
+        "include/gtest/internal/gtest-filepath.h",
+        "include/gtest/internal/gtest-internal.h",
+        "include/gtest/internal/gtest-param-util.h",
+        "include/gtest/internal/gtest-port.h",
+        "include/gtest/internal/gtest-port-arch.h",
+        "include/gtest/internal/gtest-string.h",
+        "include/gtest/internal/gtest-type-util.h",
+        "src/gtest.cc",
+        "src/gtest-all.cc",
+        "src/gtest-assertion-result.cc",
+        "src/gtest-death-test.cc",
+        "src/gtest-filepath.cc",
+        "src/gtest-internal-inl.h",
+        "src/gtest-matchers.cc",
+        "src/gtest-port.cc",
+        "src/gtest-printers.cc",
+        "src/gtest-test-part.cc",
+        "src/gtest-typed-test.cc",
+        "src/gtest_main.cc",
+    ],
+    prefix = "src/gtest_vendor",
+    strip_prefix = strip_prefix.from_pkg(),
+)
+
+write_file(
+    name = "meta_src_gtest_vendor_CMakeLists_txt",
+    out = "_meta/src/gtest_vendor/CMakeLists.txt",
+    content = [
+        "project(gtest CXX C)",
+        "cmake_minimum_required(VERSION 3.8)",
+        "",
+        "include_directories(",
+        "  include",
+        "  .  # to find the source files included with \"src/gtest*.cc\"",
+        ")",
+        "",
+        "add_library(gtest STATIC src/gtest-all.cc)",
+        "target_compile_features(gtest PUBLIC cxx_std_11)  # Require C++11",
+        "",
+        "# When building with asan (i.e. using colcon build --mixin asan-gcc),",
+        "# asan itself provides a \"fake\" pthread that tricks the pthread",
+        "# detection logic into thinking no link libraries are necessary",
+        "# (see https://wiki.gentoo.org/wiki/AddressSanitizer/Problems#pthread_linking_issues",
+        "# for some additional information).  To work around that, we unconditionally",
+        "# add the -pthread flag for Linux machines so it will always work",
+        "if(UNIX AND NOT APPLE)",
+        "  target_link_libraries(gtest \"-pthread\")",
+        "endif()",
+        "",
+        "if(NOT WIN32)",
+        "  set_target_properties(gtest PROPERTIES COMPILE_FLAGS \"-Wno-missing-field-initializers\")",
+        "  set_target_properties(gtest PROPERTIES POSITION_INDEPENDENT_CODE True)",
+        "endif()",
+        "",
+        "add_library(gtest_main STATIC src/gtest_main.cc)",
+        "target_compile_features(gtest_main PUBLIC cxx_std_11)  # Require C++11",
+    ],
+)
+
+pkg_files(
+    name = "meta_files",
+    srcs = [":meta_src_gtest_vendor_CMakeLists_txt"],
+    strip_prefix = strip_prefix.from_pkg("_meta"),
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    cmake = [
+        "gtest_vendorConfig.cmake",
+    ],
+    cmake_strip_prefix = "",
+    install = [
+        ":meta_files",
+        ":vendor_src",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@rosdistro//:ament_package",
+    ],
+)

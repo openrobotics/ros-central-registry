@@ -1,0 +1,301 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+# The vendored libraries below are all built as static libraries upstream
+# (add_subdirectory(... EXCLUDE_FROM_ALL), _BUILD_STATIC_LIB) and linked into
+# motion_capture_tracking_node only, so they're plain cc_library targets here.
+
+LMC = "deps/libmotioncapture/"
+
+VICON = LMC + "deps/vicon-datastream-sdk/Vicon/CrossMarket/"
+
+VRPN = LMC + "deps/vrpn/"
+
+# deps/libmotioncapture/deps/vicon-datastream-sdk/CMakeLists.txt
+cc_library(
+    name = "ViconDataStreamSDK_CPP",
+    srcs = [VICON + "DataStream/" + f for f in [
+        "ViconCGStreamClient/CGStreamReaderWriter.cpp",
+        "ViconCGStreamClient/ViconCGStreamBayer.cpp",
+        "ViconCGStreamClient/ViconCGStreamClient.cpp",
+        "ViconCGStreamClientSDK/CGClient.cpp",
+        "ViconDataStreamSDKCore/CoreClient.cpp",
+        "ViconDataStreamSDKCore/CoreClientTimingLog.cpp",
+        "ViconDataStreamSDKCore/WirelessConfiguration.cpp",
+        "ViconDataStreamSDKCoreUtils/AxisMapping.cpp",
+        "ViconDataStreamSDKCoreUtils/ClientUtils.cpp",
+        "ViconDataStreamSDK_CPP/DataStreamClient.cpp",
+    ]],
+    hdrs = glob([VICON + "DataStream/ViconDataStreamSDK_CPP/*.h"]),
+    copts = ["-std=c++14"],
+    includes = [VICON + "DataStream/ViconDataStreamSDK_CPP"],
+    local_defines = [
+        "BOOST_DATE_TIME_NO_LIB",
+        "BOOST_REGEX_NO_LIB",
+        "_BUILD_STATIC_LIB",
+    ],
+    deps = [
+        ":vicon_private_includes",
+        "@rosdistro//cc:boost.algorithm",
+        "@rosdistro//cc:boost.asio",
+        "@rosdistro//cc:boost.chrono",
+        "@rosdistro//cc:boost.date_time",
+        "@rosdistro//cc:boost.filesystem",
+        "@rosdistro//cc:boost.format",
+        "@rosdistro//cc:boost.lexical_cast",
+        "@rosdistro//cc:boost.math",
+        "@rosdistro//cc:boost.optional",
+        "@rosdistro//cc:boost.range",
+        "@rosdistro//cc:boost.thread",
+    ],
+)
+
+# include_directories(Vicon/CrossMarket/DataStream Vicon/CrossMarket) in the
+# SDK's CMakeLists.txt.
+cc_library(
+    name = "vicon_private_includes",
+    hdrs = glob([VICON + "**/*.h"]),
+    includes = [
+        VICON[:-1],
+        VICON + "DataStream",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+# deps/libmotioncapture/deps/qualisys_cpp_sdk/CMakeLists.txt
+cc_library(
+    name = "qualisys_cpp_sdk",
+    srcs = [LMC + "deps/qualisys_cpp_sdk/" + f for f in [
+        "Markup.cpp",
+        "Network.cpp",
+        "RTPacket.cpp",
+        "RTProtocol.cpp",
+    ]],
+    hdrs = glob([LMC + "deps/qualisys_cpp_sdk/*.h"]),
+    copts = ["-std=c++14"],
+    includes = [LMC + "deps/qualisys_cpp_sdk"],
+)
+
+# vrpn/quat/CMakeLists.txt
+cc_library(
+    name = "quat",
+    srcs = [VRPN + "quat/" + f for f in [
+        "matrix.c",
+        "quat.c",
+        "vector.c",
+        "xyzquat.c",
+    ]],
+    hdrs = [VRPN + "quat/quat.h"],
+    includes = [VRPN + "quat"],
+)
+
+# vrpn/CMakeLists.txt: VRPN_BUILD_CLIENT_LIBRARY=ON -> `vrpn` client library
+# (VRPN_CLIENT_SOURCES, always compiled with VRPN_CLIENT_ONLY).
+cc_library(
+    name = "vrpn",
+    srcs = [VRPN + f + ".C" for f in [
+        "vrpn_Analog",
+        "vrpn_Analog_Output",
+        "vrpn_Assert",
+        "vrpn_Auxiliary_Logger",
+        "vrpn_BaseClass",
+        "vrpn_Button",
+        "vrpn_Connection",
+        "vrpn_Dial",
+        "vrpn_EndpointContainer",
+        "vrpn_FileConnection",
+        "vrpn_FileController",
+        "vrpn_ForceDevice",
+        "vrpn_Forwarder",
+        "vrpn_ForwarderController",
+        "vrpn_FunctionGenerator",
+        "vrpn_Imager",
+        "vrpn_LamportClock",
+        "vrpn_Mutex",
+        "vrpn_Poser",
+        "vrpn_RedundantTransmission",
+        "vrpn_Serial",
+        "vrpn_SerialPort",
+        "vrpn_Shared",
+        "vrpn_SharedObject",
+        "vrpn_Sound",
+        "vrpn_Text",
+        "vrpn_Thread",
+        "vrpn_Tracker",
+    ]],
+    hdrs = glob([VRPN + "*.h"]),
+    defines = ["VRPN_CLIENT_ONLY"],
+    includes = [VRPN[:-1]],
+    deps = [":quat"],
+)
+
+# deps/libmotioncapture/CMakeLists.txt, configured by the top-level
+# CMakeLists.txt: QUALISYS, OPTITRACK, VICON, VRPN and FZMOTION on;
+# OPTITRACK_CLOSED_SOURCE, NOKOV and MOTIONANALYSIS (closed SDKs) off;
+# no python bindings / example.
+cc_library(
+    name = "libmotioncapture",
+    srcs = [LMC + "src/" + f for f in [
+        "fzmotion.cpp",
+        "mock.cpp",
+        "motioncapture.cpp",
+        "optitrack.cpp",
+        "qualisys.cpp",
+        "vicon.cpp",
+        "vrpn.cpp",
+    ]],
+    hdrs = glob([LMC + "include/libmotioncapture/*.h"]),
+    copts = ["-std=c++14"],
+    includes = [LMC + "include"],
+    local_defines = [
+        "BOOST_DATE_TIME_NO_LIB",
+        "BOOST_REGEX_NO_LIB",
+        "ENABLE_FZMOTION",
+        "ENABLE_OPTITRACK",
+        "ENABLE_QUALISYS",
+        "ENABLE_VICON",
+        "ENABLE_VRPN",
+        "_BUILD_STATIC_LIB",
+    ],
+    # motioncapture.cpp: `#include "../version"`.
+    textual_hdrs = [LMC + "version"],
+    deps = [
+        ":ViconDataStreamSDK_CPP",
+        ":qualisys_cpp_sdk",
+        ":vrpn",
+        "@rosdistro//cc:boost.asio",
+        "@rosdistro//cc:boost.date_time",
+        "@rosdistro//cc:boost.regex",
+        "@rosdistro//cc:boost.uuid",
+        "@rosdistro//cc:eigen",
+    ],
+)
+
+# deps/librigidbodytracker/CMakeLists.txt (library target only).
+cc_library(
+    name = "librigidbodytracker",
+    srcs = ["deps/librigidbodytracker/src/rigid_body_tracker.cpp"] + glob(
+        [
+            "deps/librigidbodytracker/src/*.hpp",
+            "deps/librigidbodytracker/src/*.h",
+        ],
+        allow_empty = True,
+    ),
+    hdrs = glob(
+        [
+            "deps/librigidbodytracker/include/**/*.h",
+            "deps/librigidbodytracker/include/**/*.hpp",
+        ],
+        allow_empty = True,
+    ),
+    copts = ["-std=c++14"],
+    includes = ["deps/librigidbodytracker/include"],
+    deps = [
+        "@rosdistro//cc:boost.bimap",
+        "@rosdistro//cc:boost.graph",
+        "@rosdistro//cc:boost.heap",
+        "@rosdistro//cc:boost.program_options",
+        "@rosdistro//cc:eigen",
+        "@rosdistro//cc:pcl_common",
+        "@rosdistro//cc:pcl_registration",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "motion_capture_tracking_node",
+    srcs = ["src/motion_capture_tracking_node.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":libmotioncapture",
+        ":librigidbodytracker",
+        "@motion_capture_tracking_interfaces//:cc",
+        "@rclcpp//:node_wrapper",
+        "@rclcpp//:type_adapter",
+        "@rosdistro//cc:eigen",
+        "@rosdistro//cc:fmt",
+        "@rosdistro//cc:pcl_common",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/cfg.yaml",
+        "config/rviz.rviz",
+        "//launch:launch_files",
+    ],
+    lib_data = [
+        ":motion_capture_tracking_node",
+        "deps/libmotioncapture/deps/NatNetSDKCrossplatform/lib/ubuntu/libNatNet.so",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@motion_capture_tracking_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@motion_capture_tracking_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)

@@ -1,0 +1,185 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+# Upstream vendors OGRE 1.12.10 via ament_vendor and installs it under
+# opt/rviz_ogre_vendor/. Here OGRE comes from the `ogre` module (exposed via
+# @rosdistro//cc). This package re-exports its shared libraries so that
+#
+#   * rviz_rendering can locate the RenderSystem_GL / Codec_STBI plugins
+#     relative to this package's ament prefix at runtime (lib/ in the Bazel
+#     runfiles tree, see RenderSystem::setPluginDirectory()), and
+#   * the installed underlay carries the same opt/rviz_ogre_vendor/lib layout
+#     as the colcon build (OGRE plugins without the `lib` prefix in lib/OGRE/).
+OGRE_LIBRARIES = [
+    "@rosdistro//cc:OgreMain",
+    "@rosdistro//cc:OgreMeshLodGenerator",
+    "@rosdistro//cc:OgreOverlay",
+    "@rosdistro//cc:OgrePaging",
+    "@rosdistro//cc:OgreProperty",
+    "@rosdistro//cc:OgreRTShaderSystem",
+    "@rosdistro//cc:OgreTerrain",
+    "@rosdistro//cc:OgreVolume",
+]
+
+OGRE_PLUGINS = {
+    "@rosdistro//cc:Codec_STBI": "Codec_STBI.so",
+    "@rosdistro//cc:RenderSystem_GL": "RenderSystem_GL.so",
+    "@rosdistro//cc:RenderSystem_GL3Plus": "RenderSystem_GL3Plus.so",
+}
+
+### PACKAGING
+
+pkg_files(
+    name = "opt_libraries",
+    srcs = OGRE_LIBRARIES,
+    prefix = "opt/rviz_ogre_vendor/lib",
+)
+
+pkg_files(
+    name = "opt_plugins",
+    srcs = OGRE_PLUGINS.keys(),
+    prefix = "opt/rviz_ogre_vendor/lib/OGRE",
+    renames = OGRE_PLUGINS,
+)
+
+# include/OGRE/...: OgreMain at the top level (plus Threading/ subdir),
+# components/render systems/plugins in subdirectories.
+OGRE_HEADERS = {
+    "OgreMain": ("OgreMain/include", ""),
+    "OgreMeshLodGenerator": ("Components/MeshLodGenerator/include", "MeshLodGenerator"),
+    "OgreOverlay": ("Components/Overlay/include", "Overlay"),
+    "OgrePaging": ("Components/Paging/include", "Paging"),
+    "OgreProperty": ("Components/Property/include", "Property"),
+    "OgreRTShaderSystem": ("Components/RTShaderSystem/include", "RTShaderSystem"),
+    "OgreTerrain": ("Components/Terrain/include", "Terrain"),
+    "OgreVolume": ("Components/Volume/include", "Volume"),
+    "RenderSystem_GLSupport": ("RenderSystems/GLSupport/include", "RenderSystems/GL"),
+    "Codec_STBI": ("PlugIns/STBICodec/include", "Plugins/STBICodec"),
+}
+
+[
+    pkg_files(
+        name = "opt_headers_" + name,
+        srcs = ["@rosdistro//cc:" + name + "_headers"],
+        prefix = "opt/rviz_ogre_vendor/include/OGRE/" + subdir,
+        strip_prefix = strip_prefix.files_only(),
+    )
+    for name, (_, subdir) in OGRE_HEADERS.items()
+]
+
+pkg_files(
+    name = "opt_headers_OgreMain_tree",
+    srcs = ["@rosdistro//cc:OgreMain_headers"],
+    prefix = "opt/rviz_ogre_vendor/include/OGRE",
+    strip_prefix = strip_prefix.from_pkg("OgreMain/include"),
+)
+
+pkg_files(
+    name = "opt_headers_RenderSystem_GL_tree",
+    srcs = ["@rosdistro//cc:RenderSystem_GL_headers"],
+    prefix = "opt/rviz_ogre_vendor/include/OGRE/RenderSystems/GL",
+    strip_prefix = strip_prefix.from_pkg("RenderSystems/GL/include"),
+)
+
+pkg_files(
+    name = "opt_headers_RenderSystem_GL3Plus_tree",
+    srcs = ["@rosdistro//cc:RenderSystem_GL3Plus_headers"],
+    prefix = "opt/rviz_ogre_vendor/include/OGRE/RenderSystems/GL3Plus",
+    strip_prefix = strip_prefix.from_pkg("RenderSystems/GL3Plus/include"),
+)
+
+pkg_files(
+    name = "opt_headers_RenderSystem_GLSupport_gl3plus",
+    srcs = ["@rosdistro//cc:RenderSystem_GLSupport_headers"],
+    prefix = "opt/rviz_ogre_vendor/include/OGRE/RenderSystems/GL3Plus",
+    strip_prefix = strip_prefix.files_only(),
+)
+
+genrule(
+    name = "vendor_package_files",
+    srcs = ["rviz_ogre_vendor-extras.cmake.in"],
+    outs = [
+        "cmake/rviz_ogre_vendor-extras.cmake",
+        "cmake/vendor_package_cmake_prefix.cmake",
+        "environment/vendor_package.bat",
+        "environment/vendor_package.dsv",
+        "environment/vendor_package.sh",
+        "vendor_packages/rviz_ogre_vendor",
+    ],
+    cmd = "mkdir -p $(@D)/cmake $(@D)/environment $(@D)/vendor_packages && cp $(location rviz_ogre_vendor-extras.cmake.in) $(@D)/cmake/rviz_ogre_vendor-extras.cmake && touch $(@D)/cmake/vendor_package_cmake_prefix.cmake $(@D)/environment/vendor_package.bat $(@D)/environment/vendor_package.dsv $(@D)/environment/vendor_package.sh $(@D)/vendor_packages/rviz_ogre_vendor",
+)
+
+pkg_files(
+    name = "install_vendor_env",
+    srcs = [":vendor_package_files"],
+    prefix = "share",
+    renames = {
+        "cmake/rviz_ogre_vendor-extras.cmake": "rviz_ogre_vendor/cmake/rviz_ogre_vendor-extras.cmake",
+        "cmake/vendor_package_cmake_prefix.cmake": "rviz_ogre_vendor/cmake/vendor_package_cmake_prefix.cmake",
+        "environment/vendor_package.bat": "rviz_ogre_vendor/environment/vendor_package.bat",
+        "environment/vendor_package.dsv": "rviz_ogre_vendor/environment/vendor_package.dsv",
+        "environment/vendor_package.sh": "rviz_ogre_vendor/environment/vendor_package.sh",
+        "vendor_packages/rviz_ogre_vendor": "ament_index/resource_index/vendor_packages/rviz_ogre_vendor",
+    },
+    strip_prefix = strip_prefix.from_pkg(""),
+)
+
+OPT_INSTALL = [
+    ":install_vendor_env",
+    ":opt_headers_OgreMain_tree",
+    ":opt_headers_RenderSystem_GL_tree",
+    ":opt_headers_RenderSystem_GL3Plus_tree",
+    ":opt_headers_RenderSystem_GLSupport_gl3plus",
+    ":opt_libraries",
+    ":opt_plugins",
+] + [":opt_headers_" + name for name in OGRE_HEADERS.keys()]
+
+ament_index(
+    name = "ament_index",
+    libraries = OGRE_LIBRARIES + OGRE_PLUGINS.keys(),
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_extras = [
+        "rviz_ogre_vendor-extras.cmake",
+        "vendor_package_cmake_prefix.cmake",
+    ],
+    install = OPT_INSTALL,
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_vendor_package//:ament_package",
+        "@ament_cmake_xmllint//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

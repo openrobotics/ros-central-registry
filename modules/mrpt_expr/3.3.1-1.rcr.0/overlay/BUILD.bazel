@@ -1,0 +1,169 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@mrpt_system//:mrpt_containers": "@mrpt_system//:mrpt_containers_library",
+    "@mrpt_system//:mrpt_core": "@mrpt_system//:mrpt_core_library",
+    "@mrpt_system//:mrpt_system": "@mrpt_system//:mrpt_system_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+# Upstream uses the bundled src/3rdparty/exprtk.hpp unless a system copy is
+# found in /usr/include, which never happens in a hermetic build.
+cc_library(
+    name = "mrpt_expr_library",
+    srcs = [
+        "src/3rdparty/exprtk.hpp",
+        "src/CRuntimeCompiledExpression.cpp",
+    ],
+    hdrs = [
+        "include/mrpt/expr/CRuntimeCompiledExpression.h",
+        "include/mrpt/expr/mrpt-expr_export.h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_expr",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mrpt_expr_library"],
+)
+
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    ":mrpt_expr": ":mrpt_expr_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_mrpt_expr",
+    srcs = [
+        "tests/CRuntimeCompiledExpression_unittest.cpp",
+        "@mrpt_common//:common_sources/mrpt_test_main.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ["CMAKE_UNITTEST_BASEDIR=\\\".\\\""],
+    deps = TEST_DEPENDENCIES.values() + [
+        "@mrpt_common//:mrpt_test_common",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu_library",
+    srcs = ["python_bindings/mrpt_expr_py.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_expr_library"],
+)
+
+cc_shared_library(
+    name = "_bindings.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys() + [":mrpt_expr"],
+    shared_lib_name = "mrpt/expr/_bindings.so",
+    deps = [":_bindings.cpython-314-x86_64-linux-gnu_library"],
+)
+
+py_library(
+    name = "mrpt",
+    srcs = ["python/mrpt/expr/__init__.py"],
+    imports = ["python"],
+    deps = ["@mrpt_system//:mrpt"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mrpt_expr",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_expr": [
+            "libmrpt_expr.so.3.3",
+            "libmrpt_expr.so.3.3.1",
+        ],
+    },
+    deps = [
+        "@mrpt_common//:ament_package",
+        "@mrpt_system//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        "include/mrpt/expr/CRuntimeCompiledExpression.h",
+        "include/mrpt/expr/mrpt-expr_export.h",
+    ],
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_expr",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":mrpt",
+        ":_bindings.cpython-314-x86_64-linux-gnu",
+    ],
+    python_strip_prefix = "python",
+    sonames = {
+        "mrpt_expr": [
+            "libmrpt_expr.so.3.3",
+            "libmrpt_expr.so.3.3.1",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_common//:ament_package",
+        "@mrpt_system//:ament_package",
+    ],
+)

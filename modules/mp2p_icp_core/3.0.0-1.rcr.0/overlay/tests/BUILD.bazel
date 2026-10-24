@@ -1,0 +1,148 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {}
+
+CC_DEPS = [
+    "@mola_imu_preintegration//:mola_imu_preintegration_library",
+    "@mrpt_containers//:mrpt_containers_library",
+    "@mrpt_maps//:mrpt_maps_library",
+    "@mrpt_obs//:mrpt_obs_library",
+    "@mrpt_poses//:mrpt_poses_library",
+    "@mrpt_rtti//:mrpt_rtti_library",
+    "@mrpt_serialization//:mrpt_serialization_library",
+    "@mrpt_system//:mrpt_system_library",
+    "@mrpt_tfest//:mrpt_tfest_library",
+    "@mrpt_topography//:mrpt_topography_library",
+    "@rosdistro//cc:boost.mpl",
+    "@rosdistro//cc:eigen",
+]
+
+# Mirrors tests/CMakeLists.txt: one executable per mp2p_add_test(NAME), built
+# from the single source file test-NAME.cpp. Tests that upstream only builds
+# conditionally on packages that aren't dependencies here are omitted:
+# mp2p_quality_voxels (mola_test_datasets) and mp2p_gicp_pipeline_benchmark
+# (mola_metric_maps, which depends back on this package). mp2p_matcher_pt2pl
+# is commented out upstream.
+TESTS = [
+    "georef-yaml",
+    "mp2p_cov2cov",
+    "mp2p_point_weight_by_range",
+    "mp2p_point_weight_by_incidence",
+    "mp2p_gravity_prior",
+    "mp2p_error_terms_jacobians",
+    "mp2p_estimate_points_eigen",
+    "mp2p_georef_yaml",
+    "mp2p_icp_algos",
+    "mp2p_LogRecord",
+    "mp2p_map_serialization",
+    "mp2p_matcher_adaptive",
+    "mp2p_matcher_ndt_blend",
+    "mp2p_matcher_knn_plane",
+    "mp2p_matcher_points_blend",
+    "mp2p_matcher_pt2ln",
+    "mp2p_matcher_pt2pt_parameterizable",
+    "mp2p_matcher_pt2pt",
+    "mp2p_optimal_tf_algos",
+    "mp2p_pt2ln_pl_to_pt2pt",
+    "mp2p_optimize_cov2cov",
+    "mp2p_optimize_cov2cov_with_prior",
+    "mp2p_censi3d_covariance",
+    "mp2p_pipeline_from_yaml",
+    "mp2p_optimize_pt2ln",
+    "mp2p_optimize_pt2pl",
+    "mp2p_optimize_with_prior",
+    "mp2p_optimize_prior_referenced_kernel",
+    "mp2p_robust_kernel_scale",
+    "mp2p_solver_determinism",
+    "mp2p_Pairings",
+    "mp2p_PairWeights",
+    "mp2p_quality_reproject_ranges",
+    "mp2p_viz_non_finite_points",
+    "mp2p_WeightParameters",
+]
+
+# Tests declared upstream with EXTRA_LIBS mp2p_icp_filters.
+FILTER_TESTS = [
+    "mp2p_deskew",
+    "mp2p_deskew_empty_buffer",
+    "mp2p_class_factory",
+    "mp2p_FilterAbsoluteTimestamp",
+    "mp2p_FilterByExpression",
+    "mp2p_FilterByIntensity",
+    "mp2p_FilterByRange",
+    "mp2p_FilterByRing",
+    "mp2p_FilterClear",
+    "mp2p_FilterCurvature",
+    "mp2p_FilterPlanePatches",
+    "mp2p_FilterDecimate",
+    "mp2p_FilterDecimateAdaptive",
+    "mp2p_FilterDecimateRangeAdaptive",
+    "mp2p_FilterDecimateVoxels",
+    "mp2p_RotatingIndexDecimation",
+    "mp2p_FilterEdgesPlanes",
+    "mp2p_FilterFartherPointSampling",
+    "mp2p_FilterMerge_view",
+    "mp2p_FilterNormalizeIntensity",
+    "mp2p_FilterPoleDetector",
+    "mp2p_FilterPolygon2D",
+    "mp2p_FilterRangeBiasCorrection",
+    "mp2p_FilterRemovePointCloudField",
+    "mp2p_FilterRenameLayer",
+    "mp2p_Filters",
+    "mp2p_FilterMLS",
+    "mp2p_FilterSOR",
+    "mp2p_FilterTransformPointCloud",
+    "mp2p_FilterVoxelSOR",
+    "mp2p_generator",
+    "mp2p_PointCloudRobustRange",
+    "mp2p_generator_view_vector",
+    "sm2mm_georef",
+    "sm2mm_imu_obs",
+]
+
+[
+    cc_test(
+        name = "run_test-" + name,
+        srcs = ["test-" + name + ".cpp"],
+        copts = [
+            "-Wno-missing-template-arg-list-after-template-kw",
+        ],
+        data = ["//:ament_index"] + ["CMakeLists.txt"],
+        dynamic_deps = ["//:transitive_dynamic_deps"],
+        includes = ["."],
+        local_defines = ros_local_defines() + [
+            'MOLA_MODULE_SOURCE_DIR=\\"tests\\"',
+            'MP2P_DATASET_DIR=\\"demos/\\"',
+            "MP2P_ICP_HAS_MOLA_IMU_PREINTEGRATION",
+            "NDEBUG",
+        ],
+        deps = DEPENDENCIES.values() + CC_DEPS + [
+            "//:mp2p_icp_common_library",
+            "//:mp2p_icp_library",
+            "//:mp2p_icp_map_library",
+            "@rosdistro//cc:bazel_test_helper",
+            "@rosdistro//cc:googletest",
+        ] + (["//:mp2p_icp_filters_library"] if name in FILTER_TESTS else []),
+    )
+    for name in TESTS + FILTER_TESTS
+]

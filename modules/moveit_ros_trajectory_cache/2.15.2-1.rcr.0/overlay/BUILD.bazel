@@ -1,0 +1,351 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_exports_header", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+DEPENDENCIES = {
+    "@moveit_core//:moveit_robot_model": "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state": "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory": "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_utils": "@moveit_core//:moveit_utils_library",
+    "@moveit_ros_planning_interface//:moveit_move_group_interface": "@moveit_ros_planning_interface//:moveit_move_group_interface_library",
+    "@moveit_ros_planning_interface//:moveit_planning_scene_interface": "@moveit_ros_planning_interface//:moveit_planning_scene_interface_library",
+    "@moveit_ros_warehouse//:moveit_warehouse": "@moveit_ros_warehouse//:moveit_warehouse_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:boringssl": "@rosdistro//cc:boringssl_crypto_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@warehouse_ros//:warehouse_ros": "@warehouse_ros//:warehouse_ros_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+CC_DEPS = [
+    "@geometry_msgs//:cc",
+    "@trajectory_msgs//:cc",
+]
+
+_HDRS = [
+    "include/moveit/trajectory_cache/cache_insert_policies/always_insert_never_prune_policy.hpp",
+    "include/moveit/trajectory_cache/cache_insert_policies/best_seen_execution_time_policy.hpp",
+    "include/moveit/trajectory_cache/cache_insert_policies/cache_insert_policy_interface.hpp",
+    "include/moveit/trajectory_cache/features/constant_features.hpp",
+    "include/moveit/trajectory_cache/features/features_interface.hpp",
+    "include/moveit/trajectory_cache/features/get_cartesian_path_request_features.hpp",
+    "include/moveit/trajectory_cache/features/motion_plan_request_features.hpp",
+    "include/moveit/trajectory_cache/trajectory_cache.h",
+    "include/moveit/trajectory_cache/trajectory_cache.hpp",
+    "include/moveit/trajectory_cache/utils/utils.hpp",
+    ":moveit_ros_trajectory_cache_cache_insert_policies_lib_export_h",
+    ":moveit_ros_trajectory_cache_features_lib_export_h",
+    ":moveit_ros_trajectory_cache_lib_export_h",
+    ":moveit_ros_trajectory_cache_utils_lib_export_h",
+]
+
+cc_library(
+    name = "move_group_fixture_library",
+    srcs = ["//test:fixtures/move_group_fixture.cpp"],
+    hdrs = _HDRS + ["//test:fixtures/move_group_fixture.hpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_ros_trajectory_cache",
+        "include",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + ["@rosdistro//cc:googletest"],
+)
+
+cc_library(
+    name = "moveit_ros_trajectory_cache_utils_lib_library",
+    srcs = ["src/utils/utils.cpp"],
+    hdrs = _HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_ros_trajectory_cache",
+        "include",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_ros_trajectory_cache_utils_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":moveit_ros_trajectory_cache_utils_lib_library"],
+)
+
+cc_library(
+    name = "moveit_ros_trajectory_cache_features_lib_library",
+    srcs = [
+        "src/features/get_cartesian_path_request_features.cpp",
+        "src/features/motion_plan_request_features.cpp",
+    ],
+    hdrs = _HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_ros_trajectory_cache",
+        "include",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_ros_trajectory_cache_utils_lib_library"],
+)
+
+cc_shared_library(
+    name = "moveit_ros_trajectory_cache_features_lib",
+    dynamic_deps = DEPENDENCIES.keys() + [":moveit_ros_trajectory_cache_utils_lib"],
+    deps = [":moveit_ros_trajectory_cache_features_lib_library"],
+)
+
+cc_library(
+    name = "moveit_ros_trajectory_cache_cache_insert_policies_lib_library",
+    srcs = [
+        "src/cache_insert_policies/always_insert_never_prune_policy.cpp",
+        "src/cache_insert_policies/best_seen_execution_time_policy.cpp",
+    ],
+    hdrs = _HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_ros_trajectory_cache",
+        "include",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_ros_trajectory_cache_features_lib_library"],
+)
+
+cc_shared_library(
+    name = "moveit_ros_trajectory_cache_cache_insert_policies_lib",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":moveit_ros_trajectory_cache_features_lib",
+        ":moveit_ros_trajectory_cache_utils_lib",
+    ],
+    deps = [":moveit_ros_trajectory_cache_cache_insert_policies_lib_library"],
+)
+
+cc_library(
+    name = "moveit_ros_trajectory_cache_lib_library",
+    srcs = ["src/trajectory_cache.cpp"],
+    hdrs = _HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_ros_trajectory_cache",
+        "include",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_ros_trajectory_cache_cache_insert_policies_lib_library"],
+)
+
+cc_shared_library(
+    name = "moveit_ros_trajectory_cache_lib",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":moveit_ros_trajectory_cache_cache_insert_policies_lib",
+        ":moveit_ros_trajectory_cache_features_lib",
+        ":moveit_ros_trajectory_cache_utils_lib",
+    ],
+    deps = [":moveit_ros_trajectory_cache_lib_library"],
+)
+
+cc_library(
+    name = "warehouse_fixture_library",
+    srcs = ["//test:fixtures/warehouse_fixture.cpp"],
+    hdrs = _HDRS + ["//test:fixtures/warehouse_fixture.hpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_ros_trajectory_cache",
+        "include",
+        "test",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + ["@rosdistro//cc:googletest"],
+)
+
+ros_exports_header(
+    name = "moveit_ros_trajectory_cache_cache_insert_policies_lib_export_h",
+    out = "_gen/include/moveit_ros_trajectory_cache/moveit_ros_trajectory_cache_cache_insert_policies_lib_export.h",
+    library = "moveit_ros_trajectory_cache_cache_insert_policies_lib",
+)
+
+ros_exports_header(
+    name = "moveit_ros_trajectory_cache_features_lib_export_h",
+    out = "_gen/include/moveit_ros_trajectory_cache/moveit_ros_trajectory_cache_features_lib_export.h",
+    library = "moveit_ros_trajectory_cache_features_lib",
+)
+
+ros_exports_header(
+    name = "moveit_ros_trajectory_cache_lib_export_h",
+    out = "_gen/include/moveit_ros_trajectory_cache/moveit_ros_trajectory_cache_lib_export.h",
+    library = "moveit_ros_trajectory_cache_lib",
+)
+
+ros_exports_header(
+    name = "moveit_ros_trajectory_cache_utils_lib_export_h",
+    out = "_gen/include/moveit_ros_trajectory_cache/moveit_ros_trajectory_cache_utils_lib_export.h",
+    library = "moveit_ros_trajectory_cache_utils_lib",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":moveit_ros_trajectory_cache_utils_lib",
+        ":moveit_ros_trajectory_cache_features_lib",
+        ":moveit_ros_trajectory_cache_cache_insert_policies_lib",
+        ":moveit_ros_trajectory_cache_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@controller_manager//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@launch_pytest//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_configs_utils//:ament_package",
+        "@moveit_planners_ompl//:ament_package",
+        "@moveit_resources_panda_moveit_config//:ament_package",
+        "@moveit_ros_move_group//:ament_package",
+        "@moveit_ros_planning_interface//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rmf_utils//:ament_package",
+        "@robot_state_publisher//:ament_package",
+        "@ros2_controllers//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@trajectory_msgs//:ament_package",
+        "@warehouse_ros_sqlite//:ament_package",
+        "@xacro//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "geometry_msgs",
+        "moveit_ros_planning_interface",
+        "moveit_ros_warehouse",
+        "rclcpp",
+        "tf2",
+        "tf2_ros",
+        "trajectory_msgs",
+        "warehouse_ros",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        ":moveit_ros_trajectory_cache_cache_insert_policies_lib_export_h",
+        ":moveit_ros_trajectory_cache_features_lib_export_h",
+        ":moveit_ros_trajectory_cache_lib_export_h",
+        ":moveit_ros_trajectory_cache_utils_lib_export_h",
+    ] + [
+        "include/moveit/trajectory_cache/cache_insert_policies/always_insert_never_prune_policy.hpp",
+        "include/moveit/trajectory_cache/cache_insert_policies/best_seen_execution_time_policy.hpp",
+        "include/moveit/trajectory_cache/cache_insert_policies/cache_insert_policy_interface.hpp",
+        "include/moveit/trajectory_cache/features/constant_features.hpp",
+        "include/moveit/trajectory_cache/features/features_interface.hpp",
+        "include/moveit/trajectory_cache/features/get_cartesian_path_request_features.hpp",
+        "include/moveit/trajectory_cache/features/motion_plan_request_features.hpp",
+        "include/moveit/trajectory_cache/trajectory_cache.h",
+        "include/moveit/trajectory_cache/trajectory_cache.hpp",
+        "include/moveit/trajectory_cache/utils/utils.hpp",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":moveit_ros_trajectory_cache_utils_lib",
+        ":moveit_ros_trajectory_cache_features_lib",
+        ":moveit_ros_trajectory_cache_cache_insert_policies_lib",
+        ":moveit_ros_trajectory_cache_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_uncrustify//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@launch_pytest//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_configs_utils//:ament_package",
+        "@moveit_planners_ompl//:ament_package",
+        "@moveit_resources//:ament_package",
+        "@moveit_ros//:ament_package",
+        "@moveit_ros_planning_interface//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rmf_utils//:ament_package",
+        "@robot_state_publisher//:ament_package",
+        "@ros2_control//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@trajectory_msgs//:ament_package",
+        "@warehouse_ros_sqlite//:ament_package",
+        "@xacro//:ament_package",
+    ],
+)

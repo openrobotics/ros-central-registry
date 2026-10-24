@@ -1,0 +1,184 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_testing//:defs.bzl", "launch_test")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@gz_math_vendor//:gz_math": "@gz_math_vendor//:gz_math_library",
+    "@gz_msgs_vendor//:gz_msgs": "@gz_msgs_vendor//:gz_msgs_library",
+    "@gz_transport_vendor//:gz_transport": "@gz_transport_vendor//:gz_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+MESSAGE_DEPS = [
+    "@builtin_interfaces//:cc",
+    "@geometry_msgs//:cc",
+    "@ros_gz_interfaces//:cc",
+    "@std_msgs//:cc",
+]
+
+[
+    (
+        cc_test(
+            name = name,
+            timeout = "moderate",
+            srcs = ["{0}.cpp".format(name)],
+            dynamic_deps = ["//:transitive_dynamic_deps"],
+            local_defines = ros_local_defines(),
+            deps = DEPENDENCIES.values() + MESSAGE_DEPS + extra_deps + [
+                "@rosdistro//cc:googletest",
+            ],
+        ),
+        cc_binary(
+            name = "bin/" + name,
+            srcs = ["{0}.cpp".format(name)],
+            dynamic_deps = ["//:transitive_dynamic_deps"],
+            local_defines = ros_local_defines(),
+            deps = DEPENDENCIES.values() + MESSAGE_DEPS + extra_deps + [
+                "@rosdistro//cc:googletest",
+            ],
+        ),
+    )
+    for name, extra_deps in [
+        (
+            "test_stopwatch",
+            ["//:ros_gz_sim_library"],
+        ),
+        (
+            "test_spawn_entity",
+            ["//:ros_gz_sim_spawn_entity_library"],
+        ),
+        (
+            "test_set_entity_pose",
+            ["//:ros_gz_sim_set_entity_pose_library"],
+        ),
+        (
+            "test_delete_entity",
+            ["//:ros_gz_sim_delete_entity_library"],
+        ),
+    ]
+]
+
+# Helpers for the launch tests (ament_add_gtest_executable, run via launch).
+[
+    cc_binary(
+        name = name,
+        srcs = ["{0}.cpp".format(name)],
+        dynamic_deps = ["//:transitive_dynamic_deps"],
+        local_defines = ros_local_defines(),
+        deps = DEPENDENCIES.values() + [
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for name in [
+        "test_create",
+        "test_remove",
+    ]
+]
+
+# Integration tests: launch several processes (create/remove + Gazebo
+# transport, or a full gzserver with the ros_gz_bridge) via launch_testing;
+# they need gz-transport discovery (UDP multicast) and a Gazebo server, so
+# they are manual.
+launch_test(
+    name = "test_test_create_node_launch",
+    src = "test_create_node.launch.py",
+    data = ["sdf/gz_simulation_interfaces.sdf"] + [
+        ":test_create",
+        ":test_remove",
+        "//:ament_index",
+        "//:create",
+        "//:gzserver",
+        "//:remove",
+        "@rclcpp_components//:ament_index",
+        "@ros_gz_bridge//:ament_index",
+        "@ros_gz_bridge//:parameter_bridge",
+    ],
+    tags = ["manual"],
+    deps = [
+        "//:ros_gz_sim_py",
+        "@launch_ros",
+        "@ros_gz_bridge//:ros_gz_bridge_py",
+        "@rules_python//python/runfiles",
+        "@simulation_interfaces//:py",
+    ],
+)
+
+launch_test(
+    name = "test_test_remove_node_launch",
+    src = "test_remove_node.launch.py",
+    data = ["sdf/gz_simulation_interfaces.sdf"] + [
+        ":test_create",
+        ":test_remove",
+        "//:ament_index",
+        "//:create",
+        "//:gzserver",
+        "//:remove",
+        "@rclcpp_components//:ament_index",
+        "@ros_gz_bridge//:ament_index",
+        "@ros_gz_bridge//:parameter_bridge",
+    ],
+    tags = ["manual"],
+    deps = [
+        "//:ros_gz_sim_py",
+        "@launch_ros",
+        "@ros_gz_bridge//:ros_gz_bridge_py",
+        "@rules_python//python/runfiles",
+        "@simulation_interfaces//:py",
+    ],
+)
+
+launch_test(
+    name = "test_test_gz_simulation_interfaces_launch",
+    src = "test_gz_simulation_interfaces.launch.py",
+    data = ["sdf/gz_simulation_interfaces.sdf"] + [
+        ":test_create",
+        ":test_remove",
+        "//:ament_index",
+        "//:create",
+        "//:gzserver",
+        "//:remove",
+        "@rclcpp_components//:ament_index",
+        "@ros_gz_bridge//:ament_index",
+        "@ros_gz_bridge//:parameter_bridge",
+    ],
+    tags = ["manual"],
+    deps = [
+        "//:ros_gz_sim_py",
+        "@geometry_msgs//:py",
+        "@launch_ros",
+        "@rclpy",
+        "@ros_gz_bridge//:ros_gz_bridge_py",
+        "@rules_python//python/runfiles",
+        "@simulation_interfaces//:py",
+    ],
+)

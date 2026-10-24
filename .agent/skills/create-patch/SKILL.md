@@ -102,8 +102,9 @@ automatically) — in particular:
 
 Before running `create_patch` and committing:
 1. **Remove reject/conflict artifacts**: Ensure no `.rej`, `.orig`, or temporary conflict files exist under `workspace/vendor/<module>+/`. If left behind, `create_patch` will treat them as new overlay files and write them to `source.json`, causing `check_pr_modules.py` and CI builds to fail.
-2. **Format build files**: Run `buildifier -mode fix -r .` from the repo root so all new and modified `BUILD.bazel`/`.bzl` files adhere to formatting standards.
-3. **Validate modules**: Run `bazel run //tools/ci:check_pr_modules` locally. This verifies that all overlay and patch hashes in `source.json` match disk files exactly, immutability rules are respected, and no undeclared or missing files exist.
+2. **Verify copyright header order**: Ensure the `# Copyright ...` header comment block is at the very top (line 1) of every `BUILD.bazel` and `.bzl` file, **before** any `load(...)` statements. Never prepend a `load(...)` statement above the copyright header.
+3. **Format build files**: Run `buildifier -mode fix -r .` from the repo root so all new and modified `BUILD.bazel`/`.bzl` files adhere to formatting standards (and if you run `buildifier` on files under `modules/<pkg>/<ver>/overlay/` after `create_patch`, make sure to re-run `create_patch` or regenerate `source.json` integrity hashes afterwards).
+4. **Validate modules**: Run `bazel test //tools/ci/...` (and `check_pr_modules`) locally. This verifies that all overlay and patch hashes in `source.json` match disk files exactly, immutability rules are respected, and no undeclared or missing files exist.
 
 ## Gotchas
 

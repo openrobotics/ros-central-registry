@@ -1,0 +1,106 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# BUILD file for @basalt (https://github.com/luxonis/basalt), built the way
+# depthai's vcpkg port builds it: -DBASALT_SDK_ONLY=ON, i.e. just upstream's
+# `basalt_sdk` library (see the BASALT_SDK_ONLY branch of its CMakeLists.txt).
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+    license_text = "LICENSE",
+)
+
+# configure_file(include/basalt/utils/build_config.h.in) with BASALT_SDK_ONLY
+# set and BASALT_BUILD_SHARED_LIBRARY_ONLY unset.
+genrule(
+    name = "build_config_h",
+    outs = ["include/basalt/utils/build_config.h"],
+    cmd = "printf '#pragma once\\n\\n#define BASALT_SDK_ONLY\\n' > $@",
+)
+
+# generate_export_header(basalt_sdk): the macros CMake generates for a
+# GCC/Clang build.
+genrule(
+    name = "basalt_sdk_export_h",
+    outs = ["include/basalt/exports/basalt_sdkExport.h"],
+    cmd = "\n".join([
+        "cat > $@ <<'EOH'",
+        "#pragma once",
+        "#define BASALT_SDK_EXPORT __attribute__((visibility(\"default\")))",
+        "#define BASALT_SDK_NO_EXPORT __attribute__((visibility(\"hidden\")))",
+        "#define BASALT_SDK_DEPRECATED __attribute__((__deprecated__))",
+        "#define BASALT_SDK_DEPRECATED_EXPORT BASALT_SDK_EXPORT BASALT_SDK_DEPRECATED",
+        "#define BASALT_SDK_DEPRECATED_NO_EXPORT BASALT_SDK_NO_EXPORT BASALT_SDK_DEPRECATED",
+        "EOH",
+    ]),
+)
+
+cc_library(
+    name = "basalt_sdk",
+    srcs = [
+        "src/io/marg_data_io.cpp",
+        "src/linearization/landmark_block.cpp",
+        "src/linearization/linearization_abs_qr.cpp",
+        "src/linearization/linearization_abs_sc.cpp",
+        "src/linearization/linearization_base.cpp",
+        "src/linearization/linearization_rel_sc.cpp",
+        "src/optical_flow/optical_flow.cpp",
+        "src/utils/keypoints.cpp",
+        "src/utils/system_utils.cpp",
+        "src/utils/time_utils.cpp",
+        "src/utils/vio_config.cpp",
+        "src/vi_estimator/ba_base.cpp",
+        "src/vi_estimator/landmark_database.cpp",
+        "src/vi_estimator/marg_helper.cpp",
+        "src/vi_estimator/sc_ba_base.cpp",
+        "src/vi_estimator/sqrt_ba_base.cpp",
+        "src/vi_estimator/sqrt_keypoint_vio.cpp",
+        "src/vi_estimator/sqrt_keypoint_vo.cpp",
+        "src/vi_estimator/vio_estimator.cpp",
+    ],
+    hdrs = glob([
+        "include/basalt/**/*.h",
+        "include/basalt/**/*.hpp",
+    ]) + [
+        ":basalt_sdk_export_h",
+        ":build_config_h",
+    ],
+    # Upstream's BASALT_COMPILE_DEFINITIONS (both instantiation options
+    # default to ON).
+    defines = [
+        "BASALT_INSTANTIATIONS_DOUBLE",
+        "BASALT_INSTANTIATIONS_FLOAT",
+    ],
+    includes = ["include"],
+    deps = [
+        "@basalt_headers",
+        "@cereal",
+        "@eigen",
+        "@fmt",
+        "@magic_enum//:magic_enum_library",
+        "@nlohmann_json//:json",
+        "@onetbb//:tbb",
+        "@opencv",
+        "@sophus",
+    ],
+)

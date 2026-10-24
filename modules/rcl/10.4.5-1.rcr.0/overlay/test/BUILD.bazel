@@ -1,0 +1,191 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@launch_testing//:defs.bzl", "launch_test")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {
+    "@rcl_logging_interface//:rcl_logging_interface": "@rcl_logging_interface//:rcl_logging_interface_library",
+    "@rcl_logging_spdlog//:rcl_logging_spdlog": "@rcl_logging_spdlog//:rcl_logging_spdlog_library",
+    "@rcl_yaml_param_parser//:rcl_yaml_param_parser": "@rcl_yaml_param_parser//:rcl_yaml_param_parser_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rmw_implementation//:rmw_implementation": "@rmw_implementation//:rmw_implementation_library",
+    "@rosidl_runtime_c//:rosidl_runtime_c": "@rosidl_runtime_c//:rosidl_runtime_c_library",
+    "@tracetools//:tracetools": "@tracetools//:tracetools_library",
+}
+
+cc_library(
+    name = "wait_for_entity_helpers",
+    srcs = ["rcl/wait_for_entity_helpers.cpp"],
+    hdrs = ["rcl/wait_for_entity_helpers.hpp"],
+    includes = ["."],
+    local_defines = ros_local_defines(),
+    deps = [
+        "//:rcl_library",
+        "@osrf_testing_tools_cpp//:memory_tools",
+    ],
+)
+
+# Local helper headers #included by the tests via "./x.h" / "../mocking_utils/x.hpp".
+cc_library(
+    name = "test_utils_headers",
+    testonly = True,
+    hdrs = [
+        "mocking_utils/patch.hpp",
+        "rcl/allocator_testing_utils.h",
+        "rcl/arg_macros.hpp",
+        "rcl/failing_allocator_functions.hpp",
+        "rcl/locate_test_assets.h",
+    ],
+    includes = ["rcl"],
+)
+
+[cc_test(
+    name = test.removesuffix(".py"),
+    timeout = "moderate",
+    srcs = ["rcl/{}.cpp".format(test)],
+    data = [
+        "resources/test_arguments/test_parameters.1.yaml",
+        "resources/test_arguments/test_parameters.2.yaml",
+        "resources/test_profile/disable_intraprocess.xml",
+        "resources/test_security_directory/enclaves/dummy_enclave/.gitkeep",
+        "resources/test_security_directory/enclaves/group1/dummy_enclave/.gitkeep",
+    ],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + ["RMW_TIMESTAMPS_SUPPORTED=1"],
+    deps = ["//:_test_root_headers"] + DEPENDENCIES.values() + [
+        ":test_utils_headers",
+        ":wait_for_entity_helpers",
+        "//:rcl_library",
+        "@osrf_testing_tools_cpp//:memory_tools",
+        "@rosdistro//cc:googletest",
+        "@rosdistro//cc:mimick",
+        "@rules_cc//cc/runfiles",
+        "@test_msgs//:c",
+        "@test_msgs//:cc",
+    ],
+) for test in [
+    "test_arguments",
+    "test_client",
+    "test_common",
+    "test_context",
+    "test_count_matched",
+    "test_discovery_options",
+    "test_domain_id",
+    "test_events",
+    "test_expand_topic_name",
+    "test_get_actual_qos",
+    "test_get_node_names",
+    "test_get_type_description_service",
+    "test_graph",
+    "test_guard_condition",
+    "test_info_by_service",
+    "test_info_by_topic",
+    "test_init",
+    "test_lexer",
+    "test_lexer_lookahead",
+    "test_log_level",
+    "test_logging",
+    "test_logging_rosout",
+    "test_namespace",
+    "test_network_flow_endpoints",
+    "test_node",
+    "test_node_type_cache",
+    "test_publisher",
+    "test_publisher_wait_all_ack",
+    "test_remap",
+    "test_remap_integration",
+    "test_rmw_impl_id_check_func",
+    "test_security",
+    "test_service",
+    "test_service_event_publisher",
+    "test_subscription",
+    "test_subscription_buffer_backend_options",
+    "test_subscription_content_filter_options",
+    "test_time",
+    "test_timer",
+    "test_type_description_conversions",
+    "test_type_hash",
+    "test_validate_enclave_name",
+    "test_validate_topic_name",
+    "test_wait",
+]]
+
+[cc_binary(
+    name = exe,
+    testonly = True,
+    srcs = ["rcl/{}.cpp".format(exe)],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":wait_for_entity_helpers",
+        "//:rcl_library",
+        "@osrf_testing_tools_cpp//:memory_tools",
+        "@rosdistro//cc:googletest",
+        "@test_msgs//:c",
+        "@test_msgs//:cc",
+    ] + ["//:_test_root_headers"],
+) for exe in [
+    "client_fixture",
+    "service_fixture",
+    "test_rmw_impl_id_check_exe",
+]]
+
+expand_template(
+    name = "test_services_py",
+    testonly = True,
+    out = "test_services.py",
+    substitutions = {
+        "'@TEST_EXECUTABLE1@'": "os.path.join(os.path.dirname(__file__), 'service_fixture')",
+        "@TEST_EXECUTABLE1_NAME@": "service_fixture",
+        "'@TEST_EXECUTABLE2@'": "os.path.join(os.path.dirname(__file__), 'client_fixture')",
+        "@TEST_EXECUTABLE2_NAME@": "client_fixture",
+        "@TEST_NAME@": "test_services",
+    },
+    template = "rcl/test_two_executables.py.in",
+)
+
+launch_test(
+    name = "test_services",
+    src = "test_services.py",
+    data = [
+        ":client_fixture",
+        ":service_fixture",
+    ],
+)
+
+expand_template(
+    name = "test_rmw_impl_id_check_py",
+    testonly = True,
+    out = "test_rmw_impl_id_check.py",
+    substitutions = {
+        "cmd=['@TEST_RMW_IMPL_ID_CHECK_EXECUTABLE_NAME@']": "cmd=[os.path.join(os.path.dirname(__file__), 'test_rmw_impl_id_check_exe')]",
+        "@TEST_RMW_IMPL_ID_CHECK_EXECUTABLE_NAME@": "test_rmw_impl_id_check_exe",
+        "'@rmw_implementation@'": "os.environ.get('RMW_IMPLEMENTATION', 'rmw_fastrtps_cpp')",
+    },
+    template = "rcl/test_rmw_impl_id_check.py.in",
+)
+
+launch_test(
+    name = "test_rmw_impl_id_check",
+    src = "test_rmw_impl_id_check.py",
+    data = [":test_rmw_impl_id_check_exe"],
+)

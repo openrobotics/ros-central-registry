@@ -1,0 +1,392 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_jrl_headers", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+_HDRS = [
+    "include/ndcurves/MathDefs.h",
+    "include/ndcurves/bernstein.h",
+    "include/ndcurves/bezier_curve.h",
+    "include/ndcurves/constant_curve.h",
+    "include/ndcurves/cross_implementation.h",
+    "include/ndcurves/cubic_hermite_spline.h",
+    "include/ndcurves/curve_abc.h",
+    "include/ndcurves/curve_constraint.h",
+    "include/ndcurves/curve_conversion.h",
+    "include/ndcurves/exact_cubic.h",
+    "include/ndcurves/fwd.h",
+    "include/ndcurves/helpers/effector_spline.h",
+    "include/ndcurves/helpers/effector_spline_rotation.h",
+    "include/ndcurves/linear_variable.h",
+    "include/ndcurves/optimization/definitions.h",
+    "include/ndcurves/optimization/details.h",
+    "include/ndcurves/optimization/integral_cost.h",
+    "include/ndcurves/optimization/quadratic_problem.h",
+    "include/ndcurves/piecewise_curve.h",
+    "include/ndcurves/polynomial.h",
+    "include/ndcurves/python/python_definitions.h",
+    "include/ndcurves/quadratic_variable.h",
+    "include/ndcurves/se3_curve.h",
+    "include/ndcurves/serialization/archive.hpp",
+    "include/ndcurves/serialization/curves.hpp",
+    "include/ndcurves/serialization/eigen-matrix.hpp",
+    "include/ndcurves/serialization/registeration.hpp",
+    "include/ndcurves/sinusoidal.h",
+    "include/ndcurves/so3_linear.h",
+    "include/ndcurves/so3_smooth.h",
+]
+
+_PY_HDRS = [
+    "python/ndcurves/archive_python_binding.h",
+    "python/ndcurves/namespace.h",
+    "python/ndcurves/optimization_python.h",
+    "python/ndcurves/python_variables.h",
+]
+
+cc_library(
+    name = "_test_root_headers",
+    hdrs = _HDRS + _PY_HDRS,
+    includes = [],
+    deps = [
+        "@rosdistro//cc:boost.serialization",
+        "@rosdistro//cc:boost.test",
+    ],
+)
+
+DEPENDENCIES = {
+    "@eigenpy//:eigenpy": "@eigenpy//:eigenpy_library",
+    "@pinocchio//:pinocchio_collision": "@pinocchio//:pinocchio_collision_library",
+    "@pinocchio//:pinocchio_default": "@pinocchio//:pinocchio_default_library",
+    "@pinocchio//:pinocchio_parsers": "@pinocchio//:pinocchio_parsers_library",
+    "@rosdistro//cc:boost.chrono_shared": "@rosdistro//cc:boost.chrono",
+    "@rosdistro//cc:boost.container_shared": "@rosdistro//cc:boost.container",
+    "@rosdistro//cc:boost.python_shared": "@rosdistro//cc:boost.python",
+    "@rosdistro//cc:boost.serialization_shared": "@rosdistro//cc:boost.serialization",
+    "@rosdistro//cc:boost.thread_shared": "@rosdistro//cc:boost.thread",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:boost.math",
+    "@rosdistro//cc:boost.utility",
+    "@rosdistro//cc:eigen",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+ros_jrl_headers(
+    name = "jrl_headers",
+    outs = [
+        "_gen/include/ndcurves/config.hh",
+        "_gen/include/ndcurves/deprecated.hh",
+        "_gen/include/ndcurves/warning.hh",
+    ],
+)
+
+cc_library(
+    name = "ndcurves.cpython-314-x86_64-linux-gnu_library",
+    srcs = [
+        "python/ndcurves/curves_python.cpp",
+        "python/ndcurves/namespace.cpp",
+        "python/ndcurves/optimization_python.cpp",
+        "python/ndcurves/python_variables.cpp",
+    ],
+    hdrs = _HDRS + _PY_HDRS + [":jrl_headers"],
+    includes = [
+        "_gen/include",
+        "_gen/include/ndcurves",
+        "include",
+        "include/ndcurves",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "CURVES_WITH_PINOCCHIO_SUPPORT",
+        "NDEBUG",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ndcurves.cpython-314-x86_64-linux-gnu",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    shared_lib_name = "ndcurves/ndcurves.so",
+    deps = [":ndcurves.cpython-314-x86_64-linux-gnu_library"],
+)
+
+_DEFINES = [
+    "COAL_HAS_OCTOMAP",
+    "COAL_HAVE_OCTOMAP",
+    "CURVES_WITH_PINOCCHIO_SUPPORT",
+    "NDEBUG",
+    "OCTOMAP_MAJOR_VERSION=1",
+    "OCTOMAP_MINOR_VERSION=10",
+    "OCTOMAP_PATCH_VERSION=0",
+    "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+    "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+    "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+    "PINOCCHIO_WITH_COLLISION",
+    "PINOCCHIO_WITH_HPP_FCL",
+    "PINOCCHIO_WITH_URDFDOM",
+]
+
+_CORE_DEPENDENCIES = {
+    k: v
+    for k, v in DEPENDENCIES.items()
+    if k not in [
+        "@eigenpy//:eigenpy",
+        "@rosdistro//cc:boost.python_shared",
+    ]
+}
+
+cc_library(
+    name = "ndcurves_headers",
+    hdrs = _HDRS + [":jrl_headers"],
+    defines = _DEFINES,
+    includes = [
+        "_gen/include",
+        "_gen/include/ndcurves",
+        "include",
+        "include/ndcurves",
+    ],
+    deps = _CORE_DEPENDENCIES.values() + [
+        "@rosdistro//cc:boost.math",
+        "@rosdistro//cc:boost.utility",
+        "@rosdistro//cc:eigen",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "core_dynamic_deps",
+    dynamic_deps = _CORE_DEPENDENCIES.keys(),
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ndcurves.cpython-314-x86_64-linux-gnu"],
+)
+
+py_library(
+    name = "ndcurves_py",
+    srcs = [
+        "python/ndcurves/__init__.py",
+        "python/ndcurves/optimization.py",
+        "python/ndcurves/plot.py",
+    ],
+    imports = ["python"],
+    deps = [
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@eigenpy//:ament_package",
+        "@jrl_cmakemodules//:ament_package",
+        "@pinocchio//:ament_package",
+    ],
+)
+
+py_pytest(
+    name = "python-curves",
+    srcs = ["python/test/test.py"],
+    data = [
+        ":ament_index",
+        ":ndcurves.cpython-314-x86_64-linux-gnu",
+    ],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":ndcurves_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "python-constant",
+    srcs = ["python/test/test-constant.py"],
+    data = [
+        ":ament_index",
+        ":ndcurves.cpython-314-x86_64-linux-gnu",
+    ],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":ndcurves_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "python-sinusoidal",
+    srcs = ["python/test/test-sinusoidal.py"],
+    data = [
+        ":ament_index",
+        ":ndcurves.cpython-314-x86_64-linux-gnu",
+    ],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":ndcurves_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "python-minjerk",
+    srcs = ["python/test/test-minjerk.py"],
+    data = [
+        ":ament_index",
+        ":ndcurves.cpython-314-x86_64-linux-gnu",
+    ],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":ndcurves_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "python-optimization",
+    srcs = ["python/test/optimization.py"],
+    data = [
+        ":ament_index",
+        ":ndcurves.cpython-314-x86_64-linux-gnu",
+    ],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":ndcurves_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "python-notebook",
+    srcs = ["python/test/notebook.py"],
+    data = [
+        ":ament_index",
+        ":ndcurves.cpython-314-x86_64-linux-gnu",
+    ],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":ndcurves_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "python-registration",
+    srcs = ["python/test/registration.py"],
+    data = [
+        ":ament_index",
+        ":ndcurves.cpython-314-x86_64-linux-gnu",
+    ],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":ndcurves_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+py_pytest(
+    name = "python-curve-constraints",
+    srcs = ["python/test/test-curve-constraints.py"],
+    data = [
+        ":ament_index",
+        ":ndcurves.cpython-314-x86_64-linux-gnu",
+    ],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":ndcurves_py",
+        "@eigenpy//:eigenpy_py",
+        "@pinocchio//:pinocchio_py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [":jrl_headers"] + _HDRS,
+    include_prefix = "",
+    package_xml = "package.xml",
+    python = [
+        ":ndcurves_py",
+        ":ndcurves.cpython-314-x86_64-linux-gnu",
+    ],
+    python_strip_prefix = "python",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@eigenpy//:ament_package",
+        "@jrl_cmakemodules//:ament_package",
+        "@pinocchio//:ament_package",
+    ],
+)
