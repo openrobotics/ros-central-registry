@@ -84,6 +84,25 @@ class TestPlatforms(unittest.TestCase):
         self.assertIn("common --enable_platform_specific_config", content)
 
 
+class TestRenderBazelignore(unittest.TestCase):
+
+    def test_ignores_internal_tooling_and_runtime_dirs(self):
+        content = setup_workspace.render_bazelignore()
+        lines = content.splitlines()
+        self.assertEqual(
+            lines,
+            [
+                ".package_manifest",
+                ".pristine_upstream",
+                ".rebase_conflicts",
+                ".ros",
+                ".vendor_manifest",
+                ".vendor_snapshot",
+            ],
+        )
+        self.assertTrue(content.endswith("\n"))
+
+
 class TestRenderUnderlayBuildFile(unittest.TestCase):
 
     def test_one_underlay_per_variant(self):
@@ -99,11 +118,13 @@ class TestRenderUnderlayBuildFile(unittest.TestCase):
         content = setup_workspace.render_underlay_build_file([])
         self.assertNotIn("ament_underlay(", content)
 
-    def test_skips_all_variant(self):
+    def test_all_variant_renders_as_ros_underlay(self):
         content = setup_workspace.render_underlay_build_file(["all", "core"])
         self.assertNotIn('name = "all",', content)
+        self.assertIn('name = "ros",', content)
+        self.assertIn('deps = ["@ros//:ament_package"],', content)
         self.assertIn('name = "core",', content)
-        self.assertEqual(content.count("ament_underlay("), 1)
+        self.assertEqual(content.count("ament_underlay("), 2)
 
 
 class TestQtDeps(unittest.TestCase):

@@ -443,6 +443,26 @@ def render_platforms_build_file() -> str:
     return get_copyright_header() + "\n" + PLATFORMS_BUILD
 
 
+# Internal tooling and runtime directories under <workspace>/ that are not
+# Bazel packages (snapshots/manifests from vendor_modules, create_patch, and
+# rebase_module, plus ROS_HOME). Listing them in .bazelignore keeps `bazel
+# query //...` and IDE Bazel extensions from trying to parse BUILD.bazel files
+# inside vendored/upstream snapshots as main-workspace packages.
+BAZELIGNORE_DIRS = (
+    ".package_manifest",
+    ".pristine_upstream",
+    ".rebase_conflicts",
+    ".ros",
+    ".vendor_manifest",
+    ".vendor_snapshot",
+)
+
+
+def render_bazelignore() -> str:
+    """Content for <workspace>/.bazelignore."""
+    return "\n".join(BAZELIGNORE_DIRS) + "\n"
+
+
 def render_underlay_build_file(variant_names: List[str]) -> str:
     """BUILD.bazel content declaring one `ament_underlay` tarball per variant.
 
@@ -456,13 +476,14 @@ def render_underlay_build_file(variant_names: List[str]) -> str:
         'package(default_visibility = ["//visibility:public"])',
         "",
     ]
-    for name in variant_names:
-        if name == "all":
-            continue
-        package = VARIANTS[name]
+    underlays = sorted(
+        ("ros" if name == "all" else name, VARIANTS.get(name, name))
+        for name in variant_names
+    )
+    for target_name, package in underlays:
         lines += [
             "ament_underlay(",
-            f'    name = "{name}",',
+            f'    name = "{target_name}",',
             f'    deps = ["@{package}//:ament_package"],',
             ")",
             "",
@@ -810,6 +831,10 @@ register_toolchains(
     )
     with open(target_workspace / ".bazelrc", "w") as f:
         f.write(render_bazelrc(distro, variants, tmpdir, args.remote_cache_write))
+
+    # Write .bazelignore
+    with open(target_workspace / ".bazelignore", "w") as f:
+        f.write(render_bazelignore())
 
     print("Workspace setup complete.")
 
