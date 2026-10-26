@@ -15,9 +15,20 @@
 load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
 [
     py_pytest(
@@ -48,15 +59,33 @@ package(default_visibility = ["//visibility:public"])
     ]
 ]
 
+alias(
+    name = "clang-tidy",
+    actual = "@rosdistro//cc:clang-tidy",
+)
+
+# Records the runfiles location of the hermetic clang-tidy binary, so main.py
+# can find it without relying on a system-installed copy on PATH.
+genrule(
+    name = "clang_tidy_rlocation",
+    srcs = [":clang-tidy"],
+    outs = ["ament_clang_tidy/clang_tidy_rlocation.py"],
+    cmd = "echo 'CLANG_TIDY_RLOCATIONPATH = \"$(rlocationpath :clang-tidy)\"' > $@",
+    visibility = ["//visibility:private"],
+)
+
 py_library(
     name = "ament_clang_tidy",
     srcs = [
         "ament_clang_tidy/__init__.py",
         "ament_clang_tidy/main.py",
+        ":clang_tidy_rlocation",
     ],
+    data = [":clang-tidy"],
     imports = ["."],
     deps = [
         requirement("pyyaml"),
+        "@rules_python//python/runfiles",
     ],
 )
 

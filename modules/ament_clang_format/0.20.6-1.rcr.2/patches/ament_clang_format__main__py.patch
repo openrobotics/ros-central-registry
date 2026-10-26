@@ -1,0 +1,36 @@
+--- a/ament_clang_format/main.py
++++ b/ament_clang_format/main.py
+@@ -88,7 +88,11 @@
+     if args.clang_format_version:
+         bin_names = ['clang-format-' + args.clang_format_version]
+ 
+-    clang_format_bin = find_executable(bin_names)
++    clang_format_bin = None
++    if not args.clang_format_version:
++        clang_format_bin = find_runfiles_executable()
++    if not clang_format_bin:
++        clang_format_bin = find_executable(bin_names)
+     if not clang_format_bin:
+         print('Could not find %s executable' %
+               ' / '.join(["'%s'" % n for n in bin_names]), file=sys.stderr)
+@@ -246,6 +250,20 @@
+     return rc
+ 
+ 
++def find_runfiles_executable():
++    # Prefer the hermetic clang-format shipped in our runfiles over one on PATH.
++    try:
++        from ament_clang_format.clang_format_rlocation import CLANG_FORMAT_RLOCATIONPATH
++        from python.runfiles import runfiles
++    except ImportError:
++        return None
++    r = runfiles.Create()
++    path = r.Rlocation(CLANG_FORMAT_RLOCATIONPATH) if r else None
++    if path and os.path.isfile(path) and os.access(path, os.X_OK):
++        return os.path.abspath(path)
++    return None
++
++
+ def find_executable(file_names):
+     paths = os.getenv('PATH').split(os.path.pathsep)
+     for file_name in file_names:

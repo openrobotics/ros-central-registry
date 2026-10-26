@@ -124,3 +124,44 @@ def py_pytest(name, srcs, deps = [], args = [], **kwargs):
         ],
         **kwargs
     )
+
+def _wheel_binary_impl(ctx):
+    suffix = "/site-packages/" + ctx.attr.path
+    files = ctx.attr.pkg[DefaultInfo].default_runfiles.files.to_list()
+    matches = [f for f in files if f.short_path.endswith(suffix)]
+    if len(matches) != 1:
+        fail("Expected exactly one file ending in '%s' in %s, found %d" % (
+            suffix,
+            ctx.attr.pkg.label,
+            len(matches),
+        ))
+    out = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.symlink(output = out, target_file = matches[0], is_executable = True)
+    return [DefaultInfo(
+        executable = out,
+        files = depset([out]),
+        runfiles = ctx.runfiles(files = [out, matches[0]]),
+    )]
+
+wheel_binary = rule(
+    implementation = _wheel_binary_impl,
+    doc = """Exposes a native executable shipped inside a wheel's package data.
+
+    Some wheels (e.g. clang-format, clang-tidy) bundle a prebuilt native binary
+    under `<pkg>/data/bin/`, wrapped by a Python console script. This picks the
+    binary out directly, so it can be run (or located via runfiles) without a
+    Python launcher in between.
+    """,
+    attrs = {
+        "path": attr.string(
+            doc = "Path of the executable relative to site-packages, e.g. " +
+                  "\"clang_tidy/data/bin/clang-tidy\".",
+            mandatory = True,
+        ),
+        "pkg": attr.label(
+            doc = "The wheel's py_library, e.g. \"@pip_ros//clang_tidy\".",
+            mandatory = True,
+        ),
+    },
+    executable = True,
+)
