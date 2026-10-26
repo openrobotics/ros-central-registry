@@ -28,6 +28,7 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertNotIn("--google_default_credentials", content)
         # The safe, credential-free performance flags are always present.
         self.assertIn("common:ci --http_timeout_scaling=3.0", content)
+        self.assertIn("common:ci --repo_contents_cache=", content)
 
     def test_cache_write_enabled_opt_in(self):
         content = setup_workspace.render_bazelrc("lyrical", "", "/tmp", remote_cache_write=True)

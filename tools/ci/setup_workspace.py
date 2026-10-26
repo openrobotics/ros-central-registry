@@ -197,6 +197,7 @@ common --nobuild_runfile_links
 # below for the part that isn't safe on a fork).
 common:ci --http_timeout_scaling=3.0
 common:ci --experimental_repository_downloader_retries=10
+common:ci --repo_contents_cache=
 common:ci --remote_cache_compression=false
 common:ci --ui_event_filters=-INFO,-DEBUG
 {cache_write_config}
