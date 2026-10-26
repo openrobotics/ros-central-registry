@@ -286,36 +286,38 @@ One of our objectives is to provide the ability to compile small, portable C and
 
 ## Static compilation
 
-If you run `bazel run //:example_ros_publisher_cc --dynamic_mode=off --@rosdistro//:rmw=rmw_cyclonedds_cpp` in the examples folder you will get a single portable executable with all required symbols statically linked into the executable. These flags must always be used together, as both the typesupports and the middleware / dependencies must both be either statically or dynamically linked, but never mixed.
-
-For a simple rmw_zenoh_cpp publisher this will result in a 170M binary. With the following compiler optimizations, you can drop this to around 47M:
+In the `examples` folder, [`examples/.bazelrc`](examples/.bazelrc) defines a `portable` configuration (`--config portable`) that links all ROS dependencies, middleware (`rmw_cyclonedds_cpp` by default), and message typesupports statically into a single executable with size optimizations, dead-code elimination, ThinLTO, and symbol stripping enabled:
 
 ```
-$ bazel build //:example_ros_publisher_cc --dynamic_mode=off --@rosdistro//:rmw=rmw_zenoh_cpp -c opt \
-    --copt=-Os --copt=-fdata-sections  --copt=-ffunction-sections --copt=-fno-asynchronous-unwind-tables \
-        --linkopt=-Wl,--gc-sections --linkopt=-s  --strip=always
-$ du -hs bazel-bin/example_ros_publisher_cc
-47M     bazel-bin/example_ros_publisher_cc
+$ bazel build --config portable //:example_ros_publisher_cc
 ```
 
-For a simple rmw_fastrtps_cpp publisher this drops even further to 30M:
+You can also override the middleware while keeping the rest of the `portable` configuration:
 
 ```
-$ bazel build //:example_ros_publisher_cc --dynamic_mode=off --@rosdistro//:rmw=rmw_fastrtps_cpp -c opt \
-    --copt=-Os --copt=-fdata-sections  --copt=-ffunction-sections --copt=-fno-asynchronous-unwind-tables \
-        --linkopt=-Wl,--gc-sections --linkopt=-s  --strip=always
-$ du -hs bazel-bin/example_ros_publisher_cc
-30M     bazel-bin/example_ros_publisher_cc
+$ bazel build --config portable --@rosdistro//:rmw=rmw_fastrtps_cpp //:example_ros_publisher_cc
+$ bazel build --config portable --@rosdistro//:rmw=rmw_zenoh_cpp //:example_ros_publisher_cc
 ```
 
-For a simple rmw_cyclonedds_cpp publisher this drops even further to 8.8M:
+To verify what shared libraries the resulting binary still links against (typically only core OS system libraries), run `ldd` on Linux or `otool -L` on macOS:
 
 ```
-$ bazel build //:example_ros_publisher_cc --dynamic_mode=off --@rosdistro//:rmw=rmw_cyclonedds_cpp -c opt \
-    --copt=-Os --copt=-fdata-sections  --copt=-ffunction-sections --copt=-fno-asynchronous-unwind-tables \
-        --linkopt=-Wl,--gc-sections --linkopt=-s  --strip=always
-$ du -hs bazel-bin/example_ros_publisher_cc
-8.8M     bazel-bin/example_ros_publisher_cc
+# Linux
+$ ldd bazel-bin/example_ros_publisher_cc
+
+# macOS
+$ otool -L bazel-bin/example_ros_publisher_cc
+```
+
+> [!CAUTION]
+> Be careful before distributing statically linked binaries if your dependency graph includes LGPL or GPL licensed code (for example, Qt or certain third-party libraries). Static linking may trigger copyleft obligations that require providing object files, full source code, or relinking mechanisms to end users. Always audit the licenses of your transitive dependencies before distributing static executables.
+
+You can use `rules_license` to perform this audit for you, and write it to a `.json` file. For example:
+
+```
+bazel build --config portable //:example_ros_publisher_cc --config ci  \
+  --aspects=@rules_license//rules_gathering:gather_metadata.bzl%gather_metadata_info_and_write \
+  --output_groups=licenses
 ```
 
 # Remote caching

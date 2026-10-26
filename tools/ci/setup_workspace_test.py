@@ -71,6 +71,16 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertIn("build:ci --jobs=4", content)
         self.assertIn("build:ci --discard_analysis_cache", content)
 
+    def test_portable_and_sanitizer_configs(self):
+        content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
+        self.assertIn("build:portable --@rosdistro//:rmw=rmw_cyclonedds_cpp", content)
+        self.assertIn("build:portable --dynamic_mode=off", content)
+        self.assertIn("build:portable --per_file_copt=\\.pb\\.cc$@-O3", content)
+        for san in ("asan", "msan", "tsan", "ubsan", "rtsan"):
+            self.assertIn(f"common:{san} --@llvm//config:{san}", content)
+            self.assertIn(f"test:{san} --test_tag_filters=-no{san}", content)
+        self.assertIn("common:fuzztest --config=asan", content)
+
 
 class TestPlatforms(unittest.TestCase):
 

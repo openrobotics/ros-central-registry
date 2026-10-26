@@ -385,6 +385,70 @@ test:ci --flaky_test_attempts=3
 test:ci --local_test_jobs=1
 test:ci --test_strategy=exclusive
 test:ci --strategy=TestRunner=standalone
+
+## STATIC compilation
+
+build:portable --@rosdistro//:rmw=rmw_cyclonedds_cpp
+build:portable -c opt
+build:portable --dynamic_mode=off
+build:portable --strip=always
+build:portable --copt=-Oz
+build:portable --copt=-ffunction-sections
+build:portable --copt=-fdata-sections
+build:portable --copt=-fno-asynchronous-unwind-tables
+build:portable --features=no_gdb_index
+build:portable --features=thin_lto
+build:portable --per_file_copt=\\.pb\\.cc$@-O3
+
+## SANITIZER OPTIONS
+
+# Address sanitizer
+common:asan --strip=never
+common:asan --@llvm//config:asan
+common:asan --copt -O0
+common:asan --copt -g
+common:asan --copt -fno-omit-frame-pointer
+test:asan --test_tag_filters=-noasan
+
+# Memory sanitizer
+common:msan --strip=never
+common:msan --@llvm//config:msan
+common:msan --copt -O0
+common:msan --copt -g
+common:msan --copt -fno-omit-frame-pointer
+test:msan --test_tag_filters=-nomsan
+
+# Thread sanitizer
+common:tsan --strip=never
+common:tsan --@llvm//config:tsan
+common:tsan --copt -O0
+common:tsan --copt -g
+common:tsan --copt -fno-omit-frame-pointer
+test:tsan --test_tag_filters=-notsan
+
+# Undefined Behavior sanitizer
+common:ubsan --strip=never
+common:ubsan --@llvm//config:ubsan
+common:ubsan --copt -O0
+common:ubsan --copt -g
+common:ubsan --copt -fno-omit-frame-pointer
+test:ubsan --test_tag_filters=-noubsan
+
+# Real-time sanitizer
+common:rtsan --strip=never
+common:rtsan --@llvm//config:rtsan
+common:rtsan --copt -O0
+common:rtsan --copt -g
+common:rtsan --copt -fno-omit-frame-pointer
+test:rtsan --test_tag_filters=-nortsan
+
+# Fuzzing
+common:fuzztest --config=asan
+common:fuzztest --config=ubsan
+common:fuzztest --dynamic_mode=off
+common:fuzztest --copt=-fsanitize-coverage=inline-8bit-counters,trace-cmp,pc-table
+common:fuzztest --@llvm//config:sanitizer_strip_foreign_source_paths
+test:fuzztest --test_tag_filters=-nofuzztest
 """
 
 
