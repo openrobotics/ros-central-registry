@@ -12,6 +12,7 @@
 #else
 #undef _FORTIFY_SOURCE
 #define _FORTIFY_SOURCE 0
+#define HAVE_STRLCPY 1
 #endif
 #define HAVE_UNISTD_H 1
 #define HAVE_STDINT_H 1

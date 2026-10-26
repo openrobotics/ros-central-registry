@@ -255,7 +255,8 @@ def regenerate_integrity_hashes(module_dir: Path) -> None:
                         has_patches = True
 
     if has_patches:
-        source["patch_strip"] = 1
+        if "patch_strip" not in source:
+            source["patch_strip"] = 1
     else:
         source.pop("patch_strip", None)
 
