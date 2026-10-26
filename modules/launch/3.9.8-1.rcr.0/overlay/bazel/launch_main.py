@@ -27,6 +27,7 @@ from launch import LaunchDescription
 from launch import LaunchService
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import AnyLaunchDescriptionSource
+import launch.logging
 
 
 def _cleanup_log_symlinks(log_dir: str) -> None:
@@ -131,9 +132,10 @@ def main(argv: List[Text] = sys.argv[1:]) -> int:
             + os.environ.get('PATH', '')
         )
 
+    launch.logging._renew_latest_log_dir = lambda *, log_dir: True
     base_tmp = (
-        os.environ.get('TEST_UNDECLARED_OUTPUTS_DIR') or
-        os.environ.get('TEST_TMPDIR')
+        os.environ.get('TEST_TMPDIR') or
+        os.environ.get('TEST_UNDECLARED_OUTPUTS_DIR')
     )
     if base_tmp and not os.environ.get('ROS_LOG_DIR'):
         log_dir = os.path.join(base_tmp, 'ros_log')

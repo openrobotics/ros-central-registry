@@ -19,6 +19,7 @@ import os
 import shutil
 import sys
 
+import launch.logging
 from launch_testing.launch_test import main
 
 
@@ -95,9 +96,10 @@ def _configure_bazel_environment() -> None:
             bin_dir + os.pathsep + os.environ.get('PATH', '')
         )
 
+    launch.logging._renew_latest_log_dir = lambda *, log_dir: True
     base_tmp = (
-        os.environ.get('TEST_UNDECLARED_OUTPUTS_DIR') or
-        os.environ.get('TEST_TMPDIR')
+        os.environ.get('TEST_TMPDIR') or
+        os.environ.get('TEST_UNDECLARED_OUTPUTS_DIR')
     )
     if base_tmp and not os.environ.get('ROS_LOG_DIR'):
         log_dir = os.path.join(base_tmp, 'ros_log')
