@@ -26,7 +26,7 @@
          help='The files or directories to check. For directories, only files ending '
               'in %s will be considered (unless overruled by the --extensions '
               'option)' %
-@@ -66,6 +76,18 @@
+@@ -66,13 +76,25 @@
      if args.xunit_file:
          start_time = time.time()
  
@@ -45,6 +45,14 @@
      files = get_files(args.paths, args.extensions, args.exclude)
      if not files:
          print('No files found', file=sys.stderr)
+         return 1
+     files = [os.path.abspath(f) for f in files]
+ 
+-    xmllint_bin = shutil.which('xmllint')
++    xmllint_bin = find_xmllint()
+     if not xmllint_bin:
+         return "Could not find 'xmllint' executable"
+ 
 @@ -111,6 +133,34 @@
                      handler.root_attributes['xsi:noNamespaceSchemaLocation'], temp_dir)
                  cmd += ['--schema', schema_path]
@@ -80,7 +88,25 @@
              try:
                  subprocess.check_output(
                      cmd, cwd=os.path.dirname(filename), stderr=subprocess.STDOUT)
-@@ -166,6 +216,17 @@
+@@ -163,9 +213,35 @@
+     return rc
+ 
+ 
++def find_xmllint():
++    # Prefer the hermetic xmllint shipped in our runfiles, falling back to PATH.
++    try:
++        from ament_xmllint.xmllint_rlocation import XMLLINT_RLOCATIONPATH
++        from python.runfiles import runfiles
++    except ImportError:
++        return shutil.which('xmllint')
++    r = runfiles.Create()
++    if r:
++        path = r.Rlocation(XMLLINT_RLOCATIONPATH)
++        if path and os.path.isfile(path) and os.access(path, os.X_OK):
++            return os.path.abspath(path)
++    return shutil.which('xmllint')
++
++
  def get_local_schema_path(path, temp_dir):
      if not path.startswith(('http://', 'https://')):
          return path
