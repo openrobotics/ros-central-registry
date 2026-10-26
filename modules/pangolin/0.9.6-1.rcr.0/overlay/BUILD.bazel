@@ -102,12 +102,18 @@ PANGO_FACTORIES = {
             "namespace pangolin {",
             "",
             "  // Forward declarations",
-        ] + ["  bool Register%sFactory();" % f for f in factories] + [
+        ] + [
+            "#ifdef __linux__\n  bool Register%sFactory();\n#endif" % f if f == "V4lVideo" else "  bool Register%sFactory();" % f
+            for f in factories
+        ] + [
             "",
             "",
             "  inline bool RegisterFactories%s() {" % interface,
             "    bool success = true;",
-        ] + ["    success &= Register%sFactory();" % f for f in factories] + [
+        ] + [
+            "#ifdef __linux__\n    success &= Register%sFactory();\n#endif" % f if f == "V4lVideo" else "    success &= Register%sFactory();" % f
+            for f in factories
+        ] + [
             "    return success;",
             "  }",
             "",
@@ -183,12 +189,15 @@ cc_library(
         allow_empty = True,
     ),
     copts = COPTS,
-    defines = ["_LINUX_"],
+    defines = select({
+        "@platforms//os:macos": ["_OSX_"],
+        "//conditions:default": ["_LINUX_"],
+    }),
     includes = ["components/pango_core/include"],
-    linkopts = [
-        "-lpthread",
-        "-lrt",
-    ],
+    linkopts = ["-lpthread"] + select({
+        "@platforms//os:linux": ["-lrt"],
+        "//conditions:default": [],
+    }),
     local_defines = ros_local_defines(),
 )
 
@@ -610,13 +619,17 @@ cc_library(
         "components/pango_video/src/drivers/truncate.cpp",
         "components/pango_video/src/drivers/unpack.cpp",
         "components/pango_video/src/drivers/uvc.cpp",
-        "components/pango_video/src/drivers/v4l.cpp",
         "components/pango_video/src/stream_encoder_factory.cpp",
         "components/pango_video/src/video.cpp",
         "components/pango_video/src/video_help.cpp",
         "components/pango_video/src/video_input.cpp",
         "components/pango_video/src/video_output.cpp",
-    ],
+    ] + select({
+        "@platforms//os:linux": [
+            "components/pango_video/src/drivers/v4l.cpp",
+        ],
+        "//conditions:default": [],
+    }),
     hdrs = glob(
         [("components/pango_video/include/" + p) for p in HDR_PATTERNS],
         allow_empty = True,

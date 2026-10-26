@@ -6,8 +6,13 @@
 #define HAVE_DBUS 1
 #define HAVE_DLOPEN 1
 #define HAVE_PTHREAD 1
+#ifndef __APPLE__
 #define HAVE_STRCHRNUL 1
 #define HAVE_SYS_PRCTL_H 1
+#else
+#undef _FORTIFY_SOURCE
+#define _FORTIFY_SOURCE 0
+#endif
 #define HAVE_UNISTD_H 1
 #define HAVE_STDINT_H 1
 #define HAVE_STDLIB_H 1

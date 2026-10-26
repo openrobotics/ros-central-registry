@@ -16,21 +16,26 @@
 #if !defined(_GNU_SOURCE)
 #define _GNU_SOURCE 1
 #endif
+#if !defined(__APPLE__)
 #define HAVE_LIBRT 1
 #define HAVE_LINUX_CAN_H 1
+#define HAVE_LINUX_SERIAL_H 1
+#define HAVE_SYS_SYSMACROS_H 1
+#define STRERROR_R_STR
+#else
+#define HAVE_STRLCAT 1
+#define HAVE_STRLCPY 1
+#endif
 #define HAVE_STDATOMIC_H 1
 #define HAVE_BUILTIN_ENDIANNESS 1
 #define HAVE_ARPA_INET_H 1
-#define HAVE_LINUX_SERIAL_H 1
 #define HAVE_NETDB_H 1
 #define HAVE_NETINET_IN_H 1
 #define HAVE_NETINET_IP_H 1
-#define HAVE_SYS_SYSMACROS_H 1
 #define HAVE_SYS_SOCKET_H 1
 #define HAVE_SYS_UN_H 1
 #define HAVE_SYSLOG_H 1
 #define HAVE_TERMIOS_H 1
-#define STRERROR_R_STR
 #define SIZEOF_TIME_T 8
 #define HAVE_CFMAKERAW 1
 #define HAVE_CLOCK_GETTIME 1

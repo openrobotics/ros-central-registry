@@ -23,7 +23,9 @@
 #define HAVE_DLFCN_H 1
 #define HAVE_ERRNO_H 1
 #define HAVE_FCNTL_H 1
+#ifndef __APPLE__
 #define HAVE_FEATURES_H 1
+#endif
 #define HAVE_FLOAT_H 1
 #define HAVE_GETCWD 1
 #define HAVE_GETPAGESIZE 1
@@ -35,7 +37,9 @@
 #define HAVE_LIBJPEG 1
 #define HAVE_LIBPTHREAD 1
 #define HAVE_LIMITS_H 1
+#ifndef __APPLE__
 #define HAVE_LINUX_VIDEODEV2_H 1
+#endif
 #define HAVE_LOCALECONV 1
 #define HAVE_LOCALE_H 1
 #define HAVE_MALLOC 1

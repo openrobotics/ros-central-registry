@@ -37,14 +37,22 @@ exports_files(["LICENSE"])
 genrule(
     name = "spnav_config_h",
     outs = ["src/spnav_config.h"],
-    cmd = "printf '%s\\n' " + " ".join([
-        "'#ifndef SPNAV_CONFIG_H_'",
-        "'#define SPNAV_CONFIG_H_'",
-        "''",
-        "'#define SPNAV_USE_X11'",
-        "''",
-        "'#endif\t/* SPNAV_CONFIG_H_ */'",
-    ]) + " > $@",
+    cmd = select({
+        "@platforms//os:linux": "printf '%s\\n' " + " ".join([
+            "'#ifndef SPNAV_CONFIG_H_'",
+            "'#define SPNAV_CONFIG_H_'",
+            "''",
+            "'#define SPNAV_USE_X11'",
+            "''",
+            "'#endif\t/* SPNAV_CONFIG_H_ */'",
+        ]) + " > $@",
+        "//conditions:default": "printf '%s\\n' " + " ".join([
+            "'#ifndef SPNAV_CONFIG_H_'",
+            "'#define SPNAV_CONFIG_H_'",
+            "''",
+            "'#endif\t/* SPNAV_CONFIG_H_ */'",
+        ]) + " > $@",
+    }),
 )
 
 cc_library(
@@ -53,9 +61,11 @@ cc_library(
         "src/proto.c",
         "src/proto.h",
         "src/spnav.c",
-        "src/spnav_magellan.c",
         "src/util.c",
-    ],
+    ] + select({
+        "@platforms//os:linux": ["src/spnav_magellan.c"],
+        "//conditions:default": [],
+    }),
     hdrs = [
         "src/spnav.h",
         "src/spnav_magellan.h",
@@ -64,7 +74,10 @@ cc_library(
     copts = ["-fno-strict-aliasing"],
     linkopts = ["-lm"],
     strip_include_prefix = "src",
-    deps = ["@libx11"],
+    deps = select({
+        "@platforms//os:linux": ["@libx11"],
+        "//conditions:default": [],
+    }),
 )
 
 alias(

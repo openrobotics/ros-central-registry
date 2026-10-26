@@ -114,7 +114,6 @@ ALL_HDRS = [
     "3rdparty/Qt-Advanced-Docking/include/Qads/PushButton.h",
     "3rdparty/Qt-Advanced-Docking/include/Qads/ResizeHandle.h",
     "3rdparty/Qt-Advanced-Docking/include/Qads/ads_globals.h",
-    "3rdparty/Qt-Advanced-Docking/src/linux/FloatingWidgetTitleBar.h",
     "3rdparty/backward-cpp/backward.hpp",
     "3rdparty/color_widgets/include/color_names.hpp",
     "3rdparty/color_widgets/include/color_palette.hpp",
@@ -570,7 +569,6 @@ CC_DEPS = [
     ":_gen_headers",
     "@rosdistro//cc:boost.optional",
     "@rosdistro//cc:fmt",
-    "@rosdistro//cc:libxcb_library",
     "@rosdistro//cc:nlohmann_json",
     "@rules_python//python/cc:current_py_cc_headers",
     "@rules_python//python/cc:current_py_cc_libs",
@@ -1787,9 +1785,18 @@ qt_cc_library(
         "3rdparty/Qt-Advanced-Docking/src/PushButton.cpp",
         "3rdparty/Qt-Advanced-Docking/src/ResizeHandle.cpp",
         "3rdparty/Qt-Advanced-Docking/src/ads_globals.cpp",
-        "3rdparty/Qt-Advanced-Docking/src/linux/FloatingWidgetTitleBar.cpp",
-    ],
-    hdrs = ALL_HDRS,
+    ] + select({
+        "@platforms//os:linux": [
+            "3rdparty/Qt-Advanced-Docking/src/linux/FloatingWidgetTitleBar.cpp",
+        ],
+        "//conditions:default": [],
+    }),
+    hdrs = ALL_HDRS + select({
+        "@platforms//os:linux": [
+            "3rdparty/Qt-Advanced-Docking/src/linux/FloatingWidgetTitleBar.h",
+        ],
+        "//conditions:default": [],
+    }),
     copts = [
         "-Wno-missing-template-arg-list-after-template-kw",
     ],
@@ -1818,11 +1825,18 @@ qt_cc_library(
         "3rdparty/Qt-Advanced-Docking/include/Qads/FloatingDragPreview.h",
         "3rdparty/Qt-Advanced-Docking/include/Qads/PushButton.h",
         "3rdparty/Qt-Advanced-Docking/include/Qads/ResizeHandle.h",
-        "3rdparty/Qt-Advanced-Docking/src/linux/FloatingWidgetTitleBar.h",
-    ],
+    ] + select({
+        "@platforms//os:linux": [
+            "3rdparty/Qt-Advanced-Docking/src/linux/FloatingWidgetTitleBar.h",
+        ],
+        "//conditions:default": [],
+    }),
     deps = DEPENDENCIES.values() + CC_DEPS + [
         ":ads",
-    ],
+    ] + select({
+        "@platforms//os:linux": ["@rosdistro//cc:libxcb_library"],
+        "//conditions:default": [],
+    }),
 )
 
 qt_cc_binary(
@@ -1946,7 +1960,7 @@ genrule(
     name = "static_plotjuggler_qwt_a",
     srcs = [":plotjuggler_qwt_library"],
     outs = ["libplotjuggler_qwt.a"],
-    cmd = "for f in $(SRCS); do case $$f in *.a) cp $$f $@; exit 0;; esac; done; ar rcs $@",
+    cmd = "for f in $(SRCS); do case $$f in *.a|*.lo) cp $$f $@; exit 0;; esac; done; ar rcs $@",
 )
 
 genrule(
