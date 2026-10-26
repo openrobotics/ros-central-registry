@@ -14,11 +14,10 @@
 
 load("@rosidl_generator_c//:defs.bzl", "RosCBindingsInfo")
 load("@rosidl_generator_type_description//:defs.bzl", "RosTypeDescriptionInfo")
-load("@rosidl_parser//:defs.bzl", "RosIdlInfo", "generate_compilation_information", "generate_sources")
+load("@rosidl_parser//:defs.bzl", "ROSIDL_COMMON_ATTRS", "RosIdlInfo", "generate_compilation_information", "generate_sources", "rosidl_static_typesupport")
 load("@rosidl_pycommon//:defs.bzl", "RosInterfaceInfo")
 load("@rules_cc//cc:defs.bzl", "CcInfo")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
-load("@rules_cc//cc/common:cc_shared_library_info.bzl", "CcSharedLibraryInfo")
 load(":types.bzl", "RosCcBindingsInfo")
 
 def _rosidl_generator_cpp_aspect_impl(target, ctx):
@@ -46,10 +45,9 @@ def _rosidl_generator_cpp_aspect_impl(target, ctx):
     # even though it has no sources of its own, it statically depends on
     # rosidl_runtime_c_library (and transitively rcutils_library), so
     # linking it in here would duplicate that global state into every
-    # message's C++ bindings fragment. Route it through header_only_deps/
-    # dynamic_dep_linker_inputs so every fragment links against the single
-    # canonical @rosidl_runtime_cpp//:rosidl_runtime_cpp shared library
-    # instead. See generate_compilation_information's docstring.
+    # message's C++ bindings fragment. Route it through header_only_deps
+    # so the package shared library links against the single canonical
+    # @rosidl_runtime_cpp//:rosidl_runtime_cpp shared library instead. See generate_compilation_information's docstring.
     header_only_deps = [dep[CcInfo] for dep in ctx.attr._cc_deps if CcInfo in dep]
 
     deps = [target[RosCBindingsInfo].cc_info]
@@ -58,7 +56,8 @@ def _rosidl_generator_cpp_aspect_impl(target, ctx):
             deps.append(dep[RosCcBindingsInfo].cc_info)
 
     # Assemble the CcInfo provider.
-    cc_info, dynamic_libraries = generate_compilation_information(
+    package_name = target[RosIdlInfo].package_name
+    info = generate_compilation_information(
         ctx = ctx,
         name = "{}__{}__{}__rosidl_generator_cpp".format(
             target[RosIdlInfo].package_name,
@@ -69,22 +68,16 @@ def _rosidl_generator_cpp_aspect_impl(target, ctx):
         srcs = srcs,
         deps = deps,
         header_only_deps = header_only_deps,
-        dynamic_dep_linker_inputs = [ctx.attr._cc_shared_dep[CcSharedLibraryInfo].linker_input],
         include_dirs = include_dirs,
+        local_defines = [],
+        alwayslink = rosidl_static_typesupport(ctx),
     )
 
     # Return the CcInfo wrapped in a RosCBindingsInfo provider.
     return [
         RosCcBindingsInfo(
-            cc_info = cc_info,
-            dynamic_libraries = depset(
-                direct = dynamic_libraries,
-                transitive = [
-                    dep[RosCBindingsInfo].dynamic_libraries
-                    for dep in ctx.rule.attr.deps
-                    if RosCBindingsInfo in dep
-                ],
-            ),
+            cc_info = info.cc_info,
+            static_library = info.static_library,
         ),
     ]
 
@@ -112,10 +105,7 @@ rosidl_generator_cpp_aspect = aspect(
             ],
             providers = [CcInfo],
         ),
-        "_cc_shared_dep": attr.label(
-            default = Label("@rosidl_runtime_cpp//:transitive_dynamic_deps"),
-        ),
-    },
+    } | ROSIDL_COMMON_ATTRS,
     required_providers = [RosInterfaceInfo],
     required_aspect_providers = [
         [RosIdlInfo],

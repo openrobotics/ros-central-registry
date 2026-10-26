@@ -13,14 +13,13 @@
 # limitations under the License.
 
 load("@rosidl_generator_cpp//:defs.bzl", "RosCcBindingsInfo")
-load("@rosidl_pycommon//:defs.bzl", "RosIdlInfo", "RosInterfaceInfo", "generate_compilation_information", "generate_sources")
+load("@rosidl_pycommon//:defs.bzl", "ROSIDL_COMMON_ATTRS", "RosIdlInfo", "RosInterfaceInfo", "generate_compilation_information", "generate_sources", "rosidl_static_typesupport")
 
 # Load from types.bzl (not defs.bzl) to avoid a .bzl load cycle: fastrtps_c's
 # own aspects.bzl loads this package's defs.bzl for RosCcTypesupportFastRTPSInfo.
 load("@rosidl_typesupport_fastrtps_c//:types.bzl", "RosCTypesupportFastRTPSInfo")
 load("@rules_cc//cc:defs.bzl", "CcInfo")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
-load("@rules_cc//cc/common:cc_shared_library_info.bzl", "CcSharedLibraryInfo")
 load(":types.bzl", "RosCcTypesupportFastRTPSInfo")
 
 def _rosidl_typesupport_fastrtps_cpp_aspect_impl(target, ctx):
@@ -40,7 +39,7 @@ def _rosidl_typesupport_fastrtps_cpp_aspect_impl(target, ctx):
     # rosidl_typesupport_fastrtps_cpp_library is only needed for its
     # headers here -- linking it in statically would duplicate its global
     # state into every message's typesupport fragment. Route it through
-    # header_only_deps/dynamic_dep_linker_inputs so every fragment links
+    # header_only_deps so the package shared library links
     # against the single canonical shared library instead. See
     # generate_compilation_information's docstring.
     header_only_deps = [dep[CcInfo] for dep in ctx.attr._cc_deps if CcInfo in dep]
@@ -50,15 +49,13 @@ def _rosidl_typesupport_fastrtps_cpp_aspect_impl(target, ctx):
     # the same interface, mirroring upstream CMake's PRIVATE link against
     # ${target}__rosidl_typesupport_fastrtps_c. Compile against its headers
     # and link its per-interface library in.
-    deps = [
-        target[RosCcBindingsInfo].cc_info,
-        target[RosCTypesupportFastRTPSInfo].cc_info,
-    ]
+    deps = [target[RosCcBindingsInfo].cc_info, target[RosCTypesupportFastRTPSInfo].cc_info]
     for dep in ctx.rule.attr.deps:
         if RosCcTypesupportFastRTPSInfo in dep:
             deps.append(dep[RosCcTypesupportFastRTPSInfo].cc_info)
 
-    cc_info, dynamic_libraries = generate_compilation_information(
+    package_name = target[RosIdlInfo].package_name
+    info = generate_compilation_information(
         ctx = ctx,
         name = "{}__{}__{}__rosidl_typesupport_fastrtps_cpp".format(
             target[RosIdlInfo].package_name,
@@ -69,23 +66,15 @@ def _rosidl_typesupport_fastrtps_cpp_aspect_impl(target, ctx):
         srcs = srcs,
         deps = deps,
         header_only_deps = header_only_deps,
-        dynamic_dep_linker_inputs = [ctx.attr._cc_shared_dep[CcSharedLibraryInfo].linker_input],
         include_dirs = include_dirs,
+        local_defines = ["ROSIDL_TYPESUPPORT_FASTRTPS_CPP_BUILDING_DLL_" + package_name],
+        alwayslink = rosidl_static_typesupport(ctx),
     )
 
     return [
         RosCcTypesupportFastRTPSInfo(
-            cc_info = cc_info,
-            dynamic_libraries = depset(
-                direct = dynamic_libraries,
-                transitive = [
-                    target[RosCTypesupportFastRTPSInfo].dynamic_libraries,
-                ] + [
-                    dep[RosCcTypesupportFastRTPSInfo].dynamic_libraries
-                    for dep in ctx.rule.attr.deps
-                    if RosCcTypesupportFastRTPSInfo in dep
-                ],
-            ),
+            cc_info = info.cc_info,
+            static_library = info.static_library,
         ),
     ]
 
@@ -113,10 +102,7 @@ rosidl_typesupport_fastrtps_cpp_aspect = aspect(
             ],
             providers = [CcInfo],
         ),
-        "_cc_shared_dep": attr.label(
-            default = Label("@rosidl_typesupport_fastrtps_cpp//:transitive_dynamic_deps"),
-        ),
-    },
+    } | ROSIDL_COMMON_ATTRS,
     required_providers = [RosInterfaceInfo],
     required_aspect_providers = [
         [RosIdlInfo],

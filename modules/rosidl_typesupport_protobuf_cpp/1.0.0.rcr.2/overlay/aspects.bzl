@@ -14,10 +14,9 @@
 
 load("@rosidl_adapter_proto//:types.bzl", "RosProtoInfo")
 load("@rosidl_generator_cpp//:types.bzl", "RosCcBindingsInfo")
-load("@rosidl_pycommon//:defs.bzl", "RosIdlInfo", "RosInterfaceInfo", "generate_compilation_information", "generate_sources")
+load("@rosidl_pycommon//:defs.bzl", "ROSIDL_COMMON_ATTRS", "RosIdlInfo", "RosInterfaceInfo", "generate_compilation_information", "generate_sources", "rosidl_static_typesupport")
 load("@rules_cc//cc:defs.bzl", "CcInfo", "cc_common")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
-load("@rules_cc//cc/common:cc_shared_library_info.bzl", "CcSharedLibraryInfo")
 load(":types.bzl", "RosCcTypesupportProtobufInfo")
 
 def _rosidl_typesupport_protobuf_cpp_aspect_impl(target, ctx):
@@ -40,17 +39,19 @@ def _rosidl_typesupport_protobuf_cpp_aspect_impl(target, ctx):
     # rosidl_typesupport_protobuf_cpp_library is only needed for its
     # headers here -- linking it in statically would duplicate its global
     # state into every message's typesupport fragment. Route it through
-    # header_only_deps/dynamic_dep_linker_inputs so every fragment links
+    # header_only_deps so the package shared library links
     # against the single canonical shared library instead. See
     # generate_compilation_information's docstring.
     header_only_deps = [dep[CcInfo] for dep in ctx.attr._cc_deps if CcInfo in dep]
 
-    deps = [target[RosCcBindingsInfo].cc_info, target[RosProtoInfo].cc_info]
+    deps = [target[RosCcBindingsInfo].cc_info]
+    embed_deps = [target[RosProtoInfo].cc_info]
     for dep in ctx.rule.attr.deps:
         if RosCcTypesupportProtobufInfo in dep:
             deps.append(dep[RosCcTypesupportProtobufInfo].cc_info)
 
-    cc_info, dynamic_libraries = generate_compilation_information(
+    package_name = target[RosIdlInfo].package_name
+    info = generate_compilation_information(
         ctx = ctx,
         name = "{}__{}__{}__rosidl_typesupport_protobuf_cpp".format(
             target[RosIdlInfo].package_name,
@@ -61,22 +62,17 @@ def _rosidl_typesupport_protobuf_cpp_aspect_impl(target, ctx):
         srcs = srcs,
         deps = deps,
         header_only_deps = header_only_deps,
-        dynamic_dep_linker_inputs = [ctx.attr._cc_shared_dep[CcSharedLibraryInfo].linker_input],
+        embed_deps = embed_deps,
         include_dirs = include_dirs,
+        local_defines = ["ROSIDL_TYPESUPPORT_PROTOBUF_BUILDING_DLL", "ROSIDL_TYPESUPPORT_PROTOBUF_CPP_BUILDING_DLL__" + package_name],
+        alwayslink = rosidl_static_typesupport(ctx),
     )
 
     return [
         RosCcTypesupportProtobufInfo(
-            cc_info = cc_info,
-            dynamic_libraries = depset(
-                direct = dynamic_libraries,
-                transitive = [
-                    dep[RosCcTypesupportProtobufInfo].dynamic_libraries
-                    for dep in ctx.rule.attr.deps
-                    if RosCcTypesupportProtobufInfo in dep
-                ],
-            ),
-            linker_inputs = cc_info.linking_context.linker_inputs,
+            cc_info = info.cc_info,
+            static_library = info.static_library,
+            linker_inputs = info.cc_info.linking_context.linker_inputs,
         ),
     ]
 
@@ -104,10 +100,7 @@ rosidl_typesupport_protobuf_cpp_aspect = aspect(
             ],
             providers = [CcInfo],
         ),
-        "_cc_shared_dep": attr.label(
-            default = Label("@rosidl_typesupport_protobuf_cpp//:rosidl_typesupport_protobuf_cpp"),
-        ),
-    },
+    } | ROSIDL_COMMON_ATTRS,
     required_providers = [RosInterfaceInfo],
     required_aspect_providers = [
         [RosIdlInfo],

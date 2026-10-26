@@ -36,8 +36,10 @@ load(
 load(
     ":rules.bzl",
     _c_ros_library = "c_ros_library",
+    _c_ros_shared_library = "c_ros_shared_library",
     _cc_proto_ros_library = "cc_proto_ros_library",
     _cc_ros_library = "cc_ros_library",
+    _cc_ros_shared_library = "cc_ros_shared_library",
     _proto_ros_library = "proto_ros_library",
     _py_ros_library = "py_ros_library",
     _ros_library = "ros_library",
@@ -57,13 +59,72 @@ ros_library = _ros_library
 proto_ros_library = _proto_ros_library
 
 # Generates .proto files and C++ bindings for ros interfaces.
-cc_proto_ros_library = _cc_proto_ros_library
+def cc_proto_ros_library(name, deps = [], shared = None, dynamic_deps = [], **kwargs):
+    if not shared:
+        shared = ":" + name + "_cc_shared"
+        _cc_ros_shared_library(
+            name = name + "_cc_shared",
+            deps = deps,
+        )
+    _cc_proto_ros_library(
+        name = name,
+        deps = deps,
+        shared = shared,
+        dynamic_deps = dynamic_deps,
+        **kwargs
+    )
 
 # Language bindings.
-c_ros_library = _c_ros_library
-cc_ros_library = _cc_ros_library
-py_ros_library = _py_ros_library
-rs_ros_library = _rs_ros_library
+def cc_ros_library(name, deps = [], shared = None, **kwargs):
+    if not shared:
+        shared = ":" + name + "_cc_shared"
+        _cc_ros_shared_library(
+            name = name + "_cc_shared",
+            deps = deps,
+        )
+    _cc_ros_library(
+        name = name,
+        deps = deps,
+        shared = select({
+            Label("@rosdistro//:dynamic_mode_off"): None,
+            Label("@rosdistro//:rmw_dynamic"): shared,
+            "//conditions:default": None,
+        }),
+        **kwargs
+    )
+
+c_ros_library = cc_ros_library
+c_ros_shared_library = _c_ros_shared_library
+cc_ros_shared_library = _cc_ros_shared_library
+
+def py_ros_library(name, deps = [], shared = None, dynamic_deps = [], **kwargs):
+    if not shared:
+        shared = ":" + name + "_cc_shared"
+        _cc_ros_shared_library(
+            name = name + "_cc_shared",
+            deps = deps,
+        )
+    _py_ros_library(
+        name = name,
+        deps = deps,
+        shared = shared,
+        dynamic_deps = dynamic_deps,
+        **kwargs
+    )
+
+def rs_ros_library(name, deps = [], shared = None, **kwargs):
+    if not shared:
+        shared = ":" + name + "_cc_shared"
+        _cc_ros_shared_library(
+            name = name + "_cc_shared",
+            deps = deps,
+        )
+    _rs_ros_library(
+        name = name,
+        deps = deps,
+        shared = shared,
+        **kwargs
+    )
 
 # Install layout (what colcon installs): one library per typesupport kind.
 RosidlBundledLibraryInfo = _RosidlBundledLibraryInfo
@@ -110,7 +171,28 @@ _PY_MODULE_LIB_DEPS = {
     "rosidl_typesupport_introspection_c": ["rosidl_typesupport_introspection_c", "rosidl_generator_c"],
 }
 
-def core_generators(package_xml, name = None, export_name = None, deps = [], hdrs = [], includes = [], data = [], alwayslink = None):
+def _dependency_label(dependency, target):
+    """`@std_msgs` -> `@std_msgs//:<target>`.
+
+    Strings are resolved in the calling package's repository; Label objects
+    (e.g. the implicit dependencies rosidl_default_generators adds) keep
+    their repository and get the target swapped.
+    """
+    if type(dependency) == "Label":
+        return Label("@@{}//:{}".format(dependency.repo_name, target))
+    if "//" in dependency:
+        return dependency
+    return dependency + "//:" + target
+
+def _dependency_package(dependency):
+    """The package (module) name of a `dependencies` entry."""
+    if type(dependency) == "Label":
+        name = dependency.repo_name
+    else:
+        name = dependency.removeprefix("@").split("//")[0]
+    return name.removesuffix("+")
+
+def core_generators(package_xml = None, name = None, export_name = None, deps = [], dependencies = [], hdrs = [], includes = [], data = []):
     """Generate core interface targets
 
     Besides the language binding targets (`:c`, `:cc`, `:py`, `:rs`) consumed
@@ -131,56 +213,54 @@ def core_generators(package_xml, name = None, export_name = None, deps = [], hdr
     per typesupport kind) and passes them as `cmake_exports`.
 
     Args:
-        package_xml: required package.xml file
+        package_xml: optional package.xml file (required when building an ament package)
         name: optional macro name
         export_name: optional export name
         deps: list of dependencies for this target collection.
+        dependencies: the interface packages these interfaces depend on, as
+            repository labels (e.g. `["@std_msgs", "@builtin_interfaces"]`,
+            like `rosidl_generate_interfaces(DEPENDENCIES ...)` in CMake).
+            The package's shared libraries, Python modules and protobuf
+            library link against theirs.
         hdrs: extra headers
         includes: extra includes
         data: extra data
-        alwayslink: optional boolean to force alwayslink behavior
     """
-
-    if alwayslink == None:
-        alwayslink = select({
-            "@rosdistro//:rmw_dynamic": False,
-            "//conditions:default": True,
-        })
 
     package_name = export_name if export_name else native.module_name()
 
-    # C bindings:
-    # ----------
-    # This is a rule that returns a CcInfo with compile context that sets up the consumer
-    # to link against shared libraries available at runtime. It includes a DefaultInfo
-    # containing all shared libraries for the whole dep chain of messages.
-    c_ros_library(
-        name = "c_internal",
-        alwayslink = alwayslink,
-        deps = deps,
-    )
-    cc_library(
-        name = "c",
-        hdrs = hdrs,
-        includes = includes,
-        deps = [":c_internal"],
-    )
-
-    # C++ bindings:
-    # ------------
-    # This is a rule that returns a CcInfo with compile context that sets up the consumer
-    # to link against shared libraries available at runtime. It includes a DefaultInfo
-    # containing all shared libraries for the whole dep chain of messages.
+    # C and C++ bindings:
+    # -------------------
+    # `:cc` (and its alias `:c`) is the cc_library half: a CcInfo with the
+    # generated headers and static archives, to list in `deps`. `:cc_shared`
+    # (alias `:c_shared`) is the cc_shared_library half: a CcSharedLibraryInfo
+    # with the generated shared libraries, to list in `dynamic_deps` (or feed
+    # to collect_transitive_dynamic_deps). Listing only `:cc` links the
+    # generated code statically into the consumer, exactly like any other
+    # `*_library`/`cc_shared_library` pair in the registry.
     cc_ros_library(
         name = "cc_internal",
-        alwayslink = alwayslink,
         deps = deps,
+        shared = ":cc_shared",
     )
     cc_library(
         name = "cc",
         hdrs = hdrs,
         includes = includes,
         deps = [":cc_internal"],
+    )
+    native.alias(
+        name = "c",
+        actual = ":cc",
+    )
+    cc_ros_shared_library(
+        name = "cc_shared",
+        deps = deps,
+        dynamic_deps = [_dependency_label(dependency, "cc_shared") for dependency in dependencies],
+    )
+    native.alias(
+        name = "c_shared",
+        actual = ":cc_shared",
     )
 
     # Python bindings:
@@ -191,16 +271,19 @@ def core_generators(package_xml, name = None, export_name = None, deps = [], hdr
     py_ros_library(
         name = "py",
         deps = deps,
+        shared = ":cc_shared",
+        dynamic_deps = [_dependency_label(dependency, "py") for dependency in dependencies],
     )
 
     # Rust bindings:
     # ---------------
-    # This is a rule that returns a PyInfo with python context that sets up the consumer
-    # to link against shared libraries available at runtime. It includes a DefaultInfo
-    # containing all shared libraries for the whole dep chain of messages.
+    # This is a rule that returns a CrateInfo for the generated Rust bindings. It
+    # includes a DefaultInfo containing the C typesupport shared libraries they
+    # load at runtime.
     rs_ros_library(
         name = "rs",
         deps = deps,
+        shared = ":cc_shared",
     )
 
     # Message data
@@ -218,71 +301,82 @@ def core_generators(package_xml, name = None, export_name = None, deps = [], hdr
     cc_proto_ros_library(
         name = "proto",
         deps = deps,
+        shared = ":cc_shared",
+        dynamic_deps = [_dependency_label(dependency, "proto") for dependency in dependencies],
+    )
+    native.alias(
+        name = "proto_shared",
+        actual = ":proto",
     )
 
-    ament_index(
-        name = "ament_index",
-        package_xml = package_xml,
-        export_name = package_name,
-        data = data + [":idl"],
-        libraries = [
-            ":cc",
-            ":c",
-            ":py",
-            ":rs",
-        ],
-    )
+    if package_xml:
+        ament_index(
+            name = "ament_index",
+            package_xml = package_xml,
+            export_name = package_name,
+            data = data + [":idl"],
+            libraries = [
+                ":cc_shared",
+                ":py",
+                ":rs",
+            ],
+        )
 
-    # Install layout:
-    # ---------------
-    # One shared library per typesupport kind (lib<pkg>__<kind>.so), like
-    # colcon installs, plus the install map for everything else.
-    bundles = {}
-    for kind, lib_deps in _BUNDLE_LIB_DEPS:
-        bundle = "{}__{}".format(package_name, kind)
-        bundles[kind] = ":" + bundle
-        rosidl_bundled_library(
-            name = bundle,
-            kind = kind,
-            package_name = package_name,
-            deps = deps,
-            lib_deps = [bundles[dep] for dep in lib_deps],
-            dynamic_deps = _bundle_dynamic_deps(kind),
+        # Install layout:
+        # ---------------
+        # One shared library per typesupport kind (lib<pkg>__<kind>.so), like
+        # colcon installs, plus the install map for everything else.
+        bundles = {}
+        for kind, lib_deps in _BUNDLE_LIB_DEPS:
+            bundle = "{}__{}".format(package_name, kind)
+            bundles[kind] = ":" + bundle
+            rosidl_bundled_library(
+                name = bundle,
+                kind = kind,
+                package_name = package_name,
+                deps = deps,
+                shared = ":cc_shared",
+                lib_deps = [bundles[dep] for dep in lib_deps],
+                py_deps = [
+                    _dependency_label(dependency, "{}__{}".format(_dependency_package(dependency), kind))
+                    for dependency in dependencies
+                ] if kind == "rosidl_generator_py" else [],
+                dynamic_deps = _bundle_dynamic_deps(kind),
+                tags = ["manual"],
+            )
+        native.filegroup(
+            name = "rosidl_libraries",
+            srcs = [bundles[kind] for kind in _EXPORTED_LIBRARY_KINDS],
             tags = ["manual"],
         )
-    native.filegroup(
-        name = "rosidl_libraries",
-        srcs = [bundles[kind] for kind in _EXPORTED_LIBRARY_KINDS],
-        tags = ["manual"],
-    )
-    for typesupport in _PY_TYPESUPPORTS:
-        rosidl_bundled_python_module(
-            name = "rosidl_python_{}".format(typesupport),
+        for typesupport in _PY_TYPESUPPORTS:
+            rosidl_bundled_python_module(
+                name = "rosidl_python_{}".format(typesupport),
+                package_name = package_name,
+                typesupport = typesupport,
+                deps = deps,
+                lib_deps = [bundles[kind] for kind in _PY_MODULE_LIB_DEPS[typesupport]],
+                tags = ["manual"],
+            )
+        rosidl_install(
+            name = "rosidl_install",
             package_name = package_name,
-            typesupport = typesupport,
             deps = deps,
-            lib_deps = [bundles[kind] for kind in _PY_MODULE_LIB_DEPS[typesupport]],
+            libraries = [bundles[kind] for kind in _LIBRARY_KINDS if kind not in _EXPORTED_LIBRARY_KINDS],
+            python_modules = ["rosidl_python_{}".format(typesupport) for typesupport in _PY_TYPESUPPORTS],
             tags = ["manual"],
         )
-    rosidl_install(
-        name = "rosidl_install",
-        package_name = package_name,
-        deps = deps,
-        libraries = [bundles[kind] for kind in _LIBRARY_KINDS if kind not in _EXPORTED_LIBRARY_KINDS],
-        python_modules = ["rosidl_python_{}".format(typesupport) for typesupport in _PY_TYPESUPPORTS],
-        tags = ["manual"],
-    )
-    rosidl_skip_install(
-        name = "rosidl_skip_install",
-        package_name = package_name,
-        tags = ["manual"],
-    )
-    native.filegroup(
-        name = "rosidl_cmake",
-        srcs = [":rosidl_install"],
-        output_group = "cmake",
-        tags = ["manual"],
-    )
+        rosidl_skip_install(
+            name = "rosidl_skip_install",
+            package_name = package_name,
+            tags = ["manual"],
+        )
+        native.filegroup(
+            name = "rosidl_cmake",
+            srcs = [":rosidl_install"],
+            output_group = "cmake",
+            tags = ["manual"],
+        )
 
 _ROSIDL_CMAKE_EXTRAS = [
     "rosidl_cmake-extras.cmake",

@@ -65,6 +65,12 @@ class TestRenderBazelrc(unittest.TestCase):
                 f"common:{os_name} --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin", content
             )
 
+    def test_ci_memory_options(self):
+        content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
+        self.assertIn("startup --host_jvm_args=-XX:MaxRAMPercentage=50.0", content)
+        self.assertIn("build:ci --jobs=4", content)
+        self.assertIn("build:ci --discard_analysis_cache", content)
+
 
 class TestPlatforms(unittest.TestCase):
 

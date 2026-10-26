@@ -15,10 +15,13 @@
 RosPyBindingsInfo = provider(
     "Encapsulates Python modules generated for an underlying ROS message.",
     fields = [
-        "cc_info",  # CcInfo providers for the python bindings
+        "cc_info",  # CcInfo: static archive of the extension module (+ what it links against)
+        "static_library",  # LibraryToLink: static archive of the extension module, or None
+        "module_name",  # str: file name of the extension module (<pkg>__<type>__<name>_s__rosidl_typesupport_c.so)
+        "module_package",  # str: package path of the interface target (where the module file lives)
+        "dep_labels",  # list of Labels: interfaces whose extension modules this one calls into
         "transitive_sources",  # generated .py interface code
         "imports",  # import path for generated code
-        "dynamic_libraries",  # shared libraries for c typesupport
         "sources",  # generated C sources of this interface's bindings (_foo_s.c, entry point)
     ],
 )

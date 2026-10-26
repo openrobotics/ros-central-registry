@@ -13,10 +13,10 @@
 # limitations under the License.
 
 load("@protobuf//bazel/common:proto_common.bzl", "proto_common")
-load("@protobuf//bazel/private:cc_proto_support.bzl", "cc_proto_compile_and_link")
+load("@protobuf//bazel/private:cc_proto_support.bzl", "get_feature_configuration")
 load("@rosidl_parser//:defs.bzl", "RosIdlInfo", "RosInterfaceInfo", "generate_sources")
-load("@rules_cc//cc:defs.bzl", "CcInfo")
-load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
+load("@rules_cc//cc:defs.bzl", "CcInfo", "cc_common")
+load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
 load(":tools.bzl", "merge_proto_infos")
 load(":types.bzl", "RosProtoInfo")
 
@@ -75,18 +75,43 @@ def _rosidl_adapter_proto_aspect_impl(target, ctx):
         experimental_output_files = "multiple",
     )
 
-    deps = [proto_toolchain.runtime] if proto_toolchain.runtime else []
-    for dep in ctx.rule.attr.deps:
-        if CcInfo in dep:
-            deps.append(dep)
-
-    cc_info, _, _ = cc_proto_compile_and_link(
-        ctx = ctx,
-        deps = deps,
-        sources = [output_proto_cc],
-        headers = [output_proto_h],
+    # The protobuf C++ for this interface, compiled like cc_proto_library
+    # does (cc_proto_support.bzl's cc_proto_compile_and_link), against the
+    # protobuf runtime and the protobuf C++ of the interfaces it depends on.
+    # Deliberately kept in RosProtoInfo rather than returned as a CcInfo:
+    # ros_interface advertises CcInfo itself (see rosidl_adapter's rules.bzl),
+    # and a provider may only come from one place.
+    dep_cc_infos = [proto_toolchain.runtime[CcInfo]] if proto_toolchain.runtime else []
+    dep_cc_infos += [
+        dep[RosProtoInfo].cc_info
+        for dep in ctx.rule.attr.deps
+        if RosProtoInfo in dep
+    ]
+    cc_toolchain = find_cc_toolchain(ctx)
+    feature_configuration = get_feature_configuration(ctx, True)
+    (compilation_context, compilation_outputs) = cc_common.compile(
+        actions = ctx.actions,
+        feature_configuration = feature_configuration,
+        cc_toolchain = cc_toolchain,
+        srcs = [output_proto_cc],
+        public_hdrs = [output_proto_h],
         textual_hdrs = hdrs,
         strip_include_prefix = proto_path,
+        compilation_contexts = [dep.compilation_context for dep in dep_cc_infos],
+        name = ctx.label.name,
+    )
+    linking_context, linking_outputs = cc_common.create_linking_context_from_compilation_outputs(
+        actions = ctx.actions,
+        feature_configuration = feature_configuration,
+        cc_toolchain = cc_toolchain,
+        compilation_outputs = compilation_outputs,
+        linking_contexts = [dep.linking_context for dep in dep_cc_infos],
+        name = ctx.label.name,
+        disallow_dynamic_library = True,
+    )
+    cc_info = CcInfo(
+        compilation_context = compilation_context,
+        linking_context = linking_context,
     )
 
     # Collect all of the sources from the dependencies.
@@ -102,13 +127,13 @@ def _rosidl_adapter_proto_aspect_impl(target, ctx):
             ),
             proto_info = proto_info,
             cc_info = cc_info,
+            static_library = linking_outputs.library_to_link,
             proto_deps = [
                 dep[RosProtoInfo].proto_info
                 for dep in ctx.rule.attr.deps
                 if RosProtoInfo in dep
             ],
         ),
-        cc_info,  # Required because of the way deps work with
     ]
 
 rosidl_adapter_proto_aspect = aspect(
@@ -137,5 +162,5 @@ rosidl_adapter_proto_aspect = aspect(
     required_aspect_providers = [
         [RosIdlInfo],
     ],
-    provides = [RosProtoInfo, CcInfo],
+    provides = [RosProtoInfo],
 )

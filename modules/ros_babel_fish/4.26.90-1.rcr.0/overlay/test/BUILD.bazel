@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_test")
 
 package(
@@ -22,13 +22,25 @@ package(
 
 DEPENDENCIES = {
     "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@example_interfaces//:cc_shared": "@example_interfaces//:cc",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
     "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
     "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@ros_babel_fish_test_msgs//:cc_shared": "@ros_babel_fish_test_msgs//:cc",
     "@rosidl_runtime_cpp//:rosidl_runtime_cpp": "@rosidl_runtime_cpp//:rosidl_runtime_cpp_library",
     "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp": "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_library",
     "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp": "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
 }
+
+# The tests load typesupports by name at runtime (BabelFish); the interface
+# packages they compare against must therefore be linked dynamically, so
+# both paths resolve to the same shared library.
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + ["//:ros_babel_fish"],
+)
 
 TEST_HEADERS = [
     "common.hpp",
@@ -39,14 +51,11 @@ TEST_HEADERS = [
     name = "test_{}".format(name),
     srcs = ["{}.cpp".format(name)] + TEST_HEADERS,
     data = ["//:ament_index"],
-    dynamic_deps = ["//:transitive_dynamic_deps"],
+    dynamic_deps = [":transitive_dynamic_deps"],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + [
         "//:ros_babel_fish_library",
-        "@geometry_msgs//:cc",
-        "@ros_babel_fish_test_msgs//:cc",
         "@rosdistro//cc:googletest",
-        "@std_msgs//:cc",
     ],
 ) for name in [
     "message",
@@ -58,15 +67,11 @@ TEST_HEADERS = [
     name = "test_{}".format(name),
     srcs = ["{}.cpp".format(name)] + TEST_HEADERS,
     data = ["//:ament_index"],
-    dynamic_deps = ["//:transitive_dynamic_deps"],
+    dynamic_deps = [":transitive_dynamic_deps"],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values() + [
         "//:ros_babel_fish_library",
-        "@example_interfaces//:cc",
-        "@geometry_msgs//:cc",
-        "@ros_babel_fish_test_msgs//:cc",
         "@rosdistro//cc:googletest",
-        "@std_msgs//:cc",
     ],
 ) for name in [
     "action_client",

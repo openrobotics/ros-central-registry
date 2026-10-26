@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+## STARTUP OPTIONS
+
+# Raise the JVM heap limit from the default 25% of physical RAM (4 GB on
+# 16 GB GitHub Actions runners), which is too small to hold the Skyframe
+# graph when analyzing large target sets across the distribution.
+startup --host_jvm_args=-XX:MaxRAMPercentage=50.0
+
 ## COMMON OPTIONS
 
 # This suppresses warnings that bazel emits when two dependencies rely
@@ -218,6 +225,22 @@ test --sandbox_default_allow_network=false
 test:macos --local_test_jobs=1
 test:macos --strategy=TestRunner=standalone
 
+## STATIC compilation
+
+build:portable --@rosdistro//:rmw=rmw_cyclonedds_cpp
+build:portable -c opt
+build:portable --dynamic_mode=off
+build:portable --strip=always
+build:portable --copt=-Oz
+build:portable --copt=-ffunction-sections
+build:portable --copt=-fdata-sections
+build:portable --copt=-fno-asynchronous-unwind-tables
+build:portable --linkopt=-Wl,--gc-sections
+build:portable --linkopt=-Wl,--strip-all
+build:portable --features=no_gdb_index
+build:portable --features=thin_lto
+build:portable --per_file_copt=\.pb\.cc$@-O3
+
 ## SANITIZER OPTIONS
 
 # Address sanitizer
@@ -301,6 +324,7 @@ common:ci --ui_event_filters=-INFO,-DEBUG
 
 # Fix memory pressure in CI workers, which leads to OOM errors.
 build:ci --jobs=4
+build:ci --discard_analysis_cache
 
 # Run at most one test at a time on this machine.
 test:ci --local_test_jobs=1

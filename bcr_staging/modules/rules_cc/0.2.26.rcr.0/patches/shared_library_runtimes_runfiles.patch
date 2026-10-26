@@ -1,0 +1,32 @@
+cc_shared_library: ship the C++ runtimes toolchain's shared libraries in runfiles.
+
+With a cc_runtimes_toolchain that provides the C++ runtime as shared
+libraries (libc++.so.1, ...), every cc_shared_library links against them
+and its RUNPATH points at their _solib symlinks, but only cc_binary adds
+those symlinks to runfiles. A cc_shared_library loaded by something that
+is not a Bazel-built cc_binary (a Python extension module loaded by the
+hermetic interpreter) therefore fails with "libc++.so.1: cannot open
+shared object file". Merge the runtimes' dynamic libraries into the
+cc_shared_library's runfiles, like its precompiled dynamic libraries.
+
+--- a/cc/private/rules_impl/cc_shared_library_impl.bzl
++++ b/cc/private/rules_impl/cc_shared_library_impl.bzl
+@@ -736,6 +736,18 @@
+     for dep in ctx.attr.dynamic_deps:
+         runfiles = runfiles.merge(dep[DefaultInfo].data_runfiles)
+ 
++    # The C++ runtimes toolchain may deliver the runtime as shared libraries
++    # (linked above through runtimes_linking_contexts). A consumer that is
++    # not itself a cc_binary -- e.g. an interpreter loading this library as
++    # an extension module -- only has this target's runfiles to find them.
++    for runtimes_linking_context in runtimes_linking_contexts:
++        runfiles = runfiles.merge(ctx.runfiles(
++            files = cc_helper.get_dynamic_libraries_for_runtime(
++                runtimes_linking_context,
++                linking_statically = True,
++            ),
++        ))
++
+     if feature_configuration.is_enabled(feature_names.COPY_DYNAMIC_LIBRARIES_TO_BINARY):
+         libraries_to_copy = []
+         copy_linking_contexts = [linking_context] + runtimes_linking_contexts

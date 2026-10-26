@@ -1,0 +1,18 @@
+--- a/src/plugins/plugin_loader.cpp
++++ b/src/plugins/plugin_loader.cpp
+@@ -138,7 +138,14 @@
+   }
+ 
+   // --- dlopen ---
+-  void * handle = dlopen(canonical_path.c_str(), RTLD_NOW | RTLD_LOCAL);
++  // RTLD_NODELETE keeps the plugin's code/rodata pages mapped across dlclose()
++  // during GatewayNode teardown. GatewayNode inherits from rclcpp::Node, so its
++  // base-class destructor (~Node -> ~CallbackGroup) runs AFTER ~PluginManager()
++  // destroys plugins; any rclcpp subscriptions/timers/clients created by a
++  // plugin leave expired std::weak_ptr control blocks in CallbackGroup whose
++  // vtables reside in the plugin .so and are invoked when ~Node() releases the
++  // last weak_ptr.
++  void * handle = dlopen(canonical_path.c_str(), RTLD_NOW | RTLD_LOCAL | RTLD_NODELETE);
+   if (!handle) {
+     return tl::make_unexpected("Failed to load plugin: " + std::string(dlerror()));
+   }

@@ -110,6 +110,13 @@ BAZELRC_TEMPLATE = """# Copyright 2026 Open Source Robotics Foundation, Inc.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+## STARTUP OPTIONS
+
+# Raise the JVM heap limit from the default 25% of physical RAM (4 GB on
+# 16 GB GitHub Actions runners), which is too small to hold the Skyframe
+# graph when analyzing large target sets across the distribution.
+startup --host_jvm_args=-XX:MaxRAMPercentage=50.0
+
 ## COMMON OPTIONS
 
 # This suppresses warnings that bazel emits when two dependencies rely
@@ -352,6 +359,7 @@ common:macos --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin
 
 # Fix memory pressure in CI workers, which leads to OOM errors.
 build:ci --jobs=4
+build:ci --discard_analysis_cache
 
 ## TEST OPTIONS
 

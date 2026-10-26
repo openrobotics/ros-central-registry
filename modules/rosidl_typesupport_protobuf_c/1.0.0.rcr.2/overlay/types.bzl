@@ -16,7 +16,6 @@ RosCTypesupportProtobufInfo = provider(
     "Encapsulates C type support information for Protocol Buffers.",
     fields = [
         "cc_info",
-        "dynamic_libraries",
         "linker_inputs",
     ],
 )

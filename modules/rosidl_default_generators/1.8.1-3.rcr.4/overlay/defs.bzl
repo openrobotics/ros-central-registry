@@ -20,8 +20,10 @@ load(
     "@rosidl_core_generators//:defs.bzl",
     _RosInterfaceInfo = "RosInterfaceInfo",
     _c_ros_library = "c_ros_library",
+    _c_ros_shared_library = "c_ros_shared_library",
     _cc_proto_ros_library = "cc_proto_ros_library",
     _cc_ros_library = "cc_ros_library",
+    _cc_ros_shared_library = "cc_ros_shared_library",
     _core_generators = "core_generators",
     _proto_ros_library = "proto_ros_library",
     _py_ros_library = "py_ros_library",
@@ -49,11 +51,39 @@ cc_proto_ros_library = _cc_proto_ros_library
 # Language generators
 c_ros_library = _c_ros_library
 cc_ros_library = _cc_ros_library
+c_ros_shared_library = _c_ros_shared_library
+cc_ros_shared_library = _cc_ros_shared_library
 py_ros_library = _py_ros_library
 rs_ros_library = _rs_ros_library
 
-# Default generators are just core generators (for now)
-default_generators = _core_generators
+# Interface packages every service (service_msgs) and action (action_msgs,
+# and through it unique_identifier_msgs and builtin_interfaces) implicitly
+# depends on -- see ros_service/ros_action below. They are offered to every
+# package as `dependencies`; the rules only link the ones the interfaces
+# actually use. The packages that *are* these dependencies (or that they
+# depend on) must not get them, that would be a cycle.
+_IMPLICIT_DEPENDENCIES = [
+    Label("@service_msgs"),
+    Label("@action_msgs"),
+]
+
+_IMPLICIT_DEPENDENCY_PACKAGES = [
+    "builtin_interfaces",
+    "unique_identifier_msgs",
+    "service_msgs",
+    "action_msgs",
+]
+
+def default_generators(dependencies = [], **kwargs):
+    """core_generators plus the implicit service/action interface dependencies.
+
+    Args:
+        dependencies: see core_generators.
+        **kwargs: see core_generators.
+    """
+    if native.module_name() not in _IMPLICIT_DEPENDENCY_PACKAGES:
+        dependencies = list(dependencies) + _IMPLICIT_DEPENDENCIES
+    _core_generators(dependencies = dependencies, **kwargs)
 
 # ament_package wired up with the install layout default_generators declares.
 rosidl_ament_package = _rosidl_ament_package

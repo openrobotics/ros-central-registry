@@ -1,11 +1,17 @@
 --- a/src/rclcpp/typesupport_helpers.cpp
 +++ b/src/rclcpp/typesupport_helpers.cpp
-@@ -23,6 +23,23 @@
- #include <string>
+@@ -16,6 +16,7 @@
+ #include "rclcpp/typesupport_helpers.hpp"
+ 
+ #include <algorithm>
++#include <filesystem>
+ #include <functional>
+ #include <memory>
+ #include <sstream>
+@@ -24,6 +25,22 @@
  #include <tuple>
  #include <utility>
-+#include <vector>
-+
+ 
 +#include <unistd.h>  // For readlink
 +#include <limits.h>  // For PATH_MAX
 +
@@ -21,9 +27,10 @@
 +#include "rules_cc/cc/runfiles/runfiles.h"
 +
 +using rules_cc::cc::runfiles::Runfiles;
- 
++
  #include "ament_index_cpp/get_package_prefix.hpp"
  #include "ament_index_cpp/get_resources.hpp"
+ #include "rcpputils/shared_library.hpp"
 @@ -35,6 +52,55 @@
  
  namespace
@@ -80,57 +87,32 @@
  
  const void * get_typesupport_handle_impl(
    const std::string & type,
-@@ -49,7 +115,8 @@
-   std::string type_name;
-   std::tie(package_name, middle_module, type_name) = extract_type_identifier(type);
- 
--  if (middle_module.empty()) {
-+  const bool was_legacy = middle_module.empty();
-+  if (was_legacy) {
-     middle_module = middle_module_additional;
-   }
- 
-@@ -62,14 +129,26 @@
-       return rcutils_dynamic_loading_error.str();
-     };
- 
-+  std::string symbol_name = typesupport_identifier + symbol_part_name +
-+    package_name + "__" + middle_module + "__" + type_name;
-   try {
--    std::string symbol_name = typesupport_identifier + symbol_part_name +
--      package_name + "__" + middle_module + "__" + type_name;
-     const void * (* get_ts)() = nullptr;
-     // This will throw runtime_error if the symbol was not found.
-     get_ts = reinterpret_cast<decltype(get_ts)>(library.get_symbol(symbol_name));
-     return get_ts();
-   } catch (std::runtime_error &) {
-+    if (was_legacy) {
-+      try {
-+        static std::vector<std::shared_ptr<rcpputils::SharedLibrary>> fallback_libs;
-+        auto fallback_lib = get_typesupport_library(
-+          package_name + "/" + middle_module + "/" + type_name, typesupport_identifier);
-+        fallback_libs.push_back(fallback_lib);
-+        const void * (* get_ts)() = nullptr;
-+        get_ts = reinterpret_cast<decltype(get_ts)>(fallback_lib->get_symbol(symbol_name));
-+        return get_ts();
-+      } catch (std::runtime_error &) {
-+      }
-+    }
-     throw std::runtime_error{mk_error("Library could not be found.")};
-   }
- }
-@@ -119,40 +198,127 @@
- }
- 
+@@ -121,39 +187,75 @@
  std::string get_typesupport_library_path(
--  const std::string & package_name, const std::string & typesupport_identifier)
--{
+   const std::string & package_name, const std::string & typesupport_identifier)
+ {
 -  const char * dynamic_library_folder;
 -#ifdef _WIN32
 -  dynamic_library_folder = "bin";
 -#elif __APPLE__
 -  dynamic_library_folder = "lib";
--#else
++  const std::optional<std::string> test_workspace = get_env_variable("TEST_WORKSPACE");
++  std::string error;
++  auto runfiles = test_workspace
++    ? Runfiles::CreateForTest(BAZEL_CURRENT_REPOSITORY, &error)
++    : Runfiles::Create(get_executable_path(), BAZEL_CURRENT_REPOSITORY, &error);
++
++  if (!runfiles) {
++    throw std::runtime_error("Failed to create Runfiles: " + error);
++  }
++
++  std::string target_library = package_name + "__" + typesupport_identifier;
++
++#if defined(__APPLE__)
++  const std::string ext = ".dylib";
++#elif defined(_WIN32)
++  const std::string ext = ".dll";
+ #else
 -  dynamic_library_folder = "lib";
 -#endif
 -
@@ -144,68 +126,26 @@
 -  const std::string library_path = rcpputils::path_for_library(
 -    (package_prefix / dynamic_library_folder).string(),
 -    package_name + "__" + typesupport_identifier);
-+  const std::string & package_name,
-+  const std::string & interface_type,
-+  const std::string & interface_name,
-+  const std::string & typesupport_identifier)
-+{
-+  const std::optional<std::string> test_workspace = get_env_variable("TEST_WORKSPACE");
-+  std::string error;
-+  auto runfiles = test_workspace
-+    ? Runfiles::CreateForTest(BAZEL_CURRENT_REPOSITORY, &error)
-+    : Runfiles::Create(get_executable_path(), BAZEL_CURRENT_REPOSITORY, &error);
-+
-+  if (!runfiles) {
-+    throw std::runtime_error("Failed to create Runfiles: " + error);
-+  }
-+
-+  std::string runfiles_prefix = "_main/";
-+  if (!package_name.empty()) {
-+    runfiles_prefix = package_name + "+/" + interface_type + "/";
-+  }
-+
-+  std::string target_library = package_name + "__" + interface_type + "__" + 
-+                               interface_name + "__" + typesupport_identifier;
-+
-+  #if defined(__APPLE__)
-+  const std::string ext = ".dylib";
-+  #else
-+  const std::string ext = ".so";
-+  #endif
-+  std::string library_path = runfiles->Rlocation(
-+    runfiles_prefix + "lib" + target_library + ext);
-+
-+  if (library_path.empty()) {
-+    library_path = runfiles->Rlocation("_main/lib/lib" + target_library + ext);
-+  }
-+
-   if (library_path.empty()) {
-     throw std::runtime_error(
+-  if (library_path.empty()) {
+-    throw std::runtime_error(
 -      "Typesupport library for " + package_name + " does not exist in '" +
 -        package_prefix.string() + "'.");
-+      "Typesupport library for " + target_library + " does not exist in runfiles.");
-   }
-   return library_path;
-+}
-+
-+static std::string pascal_to_snake_case(std::string_view str)
-+{
-+  std::string result;
-+  result.reserve(2 * str.size());
-+  for (size_t i = 0; i < str.size(); ++i) {
-+    char ch = str[i];
-+    if (std::isupper(ch)) {
-+      if (i > 0 && str[i - 1] != '_') {
-+        if (std::islower(str[i - 1]) || (i + 1 < str.size() && std::islower(str[i + 1]))) {
-+          result.push_back('_');
-+        }
-+      }
-+      result.push_back(std::tolower(ch));
-+    } else {
-+      result.push_back(ch);
+-  }
+-  return library_path;
++  const std::string ext = ".so";
++#endif
++  for (const std::string & rlocation_path : {
++    package_name + "+/lib" + target_library + ext,
++    "_main/lib/lib" + target_library + ext,
++  }) {
++    std::string candidate = runfiles->Rlocation(rlocation_path);
++    if (!candidate.empty() && std::filesystem::exists(candidate)) {
++      return candidate;
 +    }
 +  }
-+  return result;
++
++  throw std::runtime_error(
++    "Typesupport library for " + target_library + " does not exist in runfiles.");
  }
  
  std::shared_ptr<rcpputils::SharedLibrary>
@@ -213,62 +153,40 @@
  {
 -  auto package_name = std::get<0>(extract_type_identifier(type));
 -  auto library_path = get_typesupport_library_path(package_name, typesupport_identifier);
+-  return std::make_shared<rcpputils::SharedLibrary>(library_path);
 +  std::string package_name;
-+  std::string interface_type;
-+  std::string interface_name;
-+  std::tie(package_name, interface_type, interface_name) = extract_type_identifier(type);
-+  const bool was_legacy = interface_type.empty();
-+  if (was_legacy) {
-+    interface_type = "msg";
-+  }
-+  // Strip service/action suffixes so event/request/response messages resolve to their parent library
-+  std::string base_interface_name = interface_name;
-+  if (interface_type == "srv") {
-+    for (const char * suffix : {
-+      "_Event",
-+      "_Request",
-+      "_Response"
-+    }) {
-+      if (base_interface_name.size() > strlen(suffix) &&
-+          base_interface_name.compare(base_interface_name.size() - strlen(suffix), strlen(suffix), suffix) == 0) {
-+        base_interface_name = base_interface_name.substr(0, base_interface_name.size() - strlen(suffix));
-+        break;
-+      }
-+    }
-+  } else if (interface_type == "action") {
-+    for (const char * suffix : {
-+      "_SendGoal_Event",
-+      "_SendGoal_Request",
-+      "_SendGoal_Response",
-+      "_SendGoal",
-+      "_GetResult_Event",
-+      "_GetResult_Request",
-+      "_GetResult_Response",
-+      "_GetResult",
-+      "_FeedbackMessage",
-+      "_Feedback",
-+      "_Goal",
-+      "_Result"
-+    }) {
-+      if (base_interface_name.size() > strlen(suffix) &&
-+          base_interface_name.compare(base_interface_name.size() - strlen(suffix), strlen(suffix), suffix) == 0) {
-+        base_interface_name = base_interface_name.substr(0, base_interface_name.size() - strlen(suffix));
-+        break;
-+      }
-+    }
-+  }
-+  std::string snake_interface_name = pascal_to_snake_case(base_interface_name);
-+  if (was_legacy) {
-+    for (const char * candidate_type : {"msg", "srv", "action"}) {
++  std::string middle_module;
++  std::string type_name;
++  std::tie(package_name, middle_module, type_name) = extract_type_identifier(type);
++
++  try {
++    auto library_path = get_typesupport_library_path(package_name, typesupport_identifier);
++    return std::make_shared<rcpputils::SharedLibrary>(library_path);
++  } catch (const std::runtime_error &) {
++    // Fallback for statically linked binaries (--dynamic_mode=off) where
++    // individual interfaces are linked directly into the executable with
++    // --export-dynamic and no typesupport .so exists in runfiles.
++    auto exe_path = get_executable_path();
++    if (exe_path != "ignore-argv[0]" && std::filesystem::exists(exe_path)) {
 +      try {
-+        auto candidate_path = get_typesupport_library_path(
-+          package_name, candidate_type, snake_interface_name, typesupport_identifier);
-+        return std::make_shared<rcpputils::SharedLibrary>(candidate_path);
-+      } catch (const std::runtime_error &) {
++        auto exe_lib = std::make_shared<rcpputils::SharedLibrary>(exe_path);
++        const std::pair<std::string, std::string> candidates[] = {
++          {"__get_message_type_support_handle__", middle_module.empty() ? "msg" : middle_module},
++          {"__get_service_type_support_handle__", middle_module.empty() ? "srv" : middle_module},
++          {"__get_action_type_support_handle__", middle_module.empty() ? "action" : middle_module},
++        };
++        for (const auto & [symbol_part, mod] : candidates) {
++          std::string symbol_name =
++            typesupport_identifier + symbol_part + package_name + "__" + mod + "__" + type_name;
++          if (exe_lib->has_symbol(symbol_name)) {
++            return exe_lib;
++          }
++        }
++      } catch (const std::exception &) {
 +      }
 +    }
++    throw;
 +  }
-+  auto library_path = get_typesupport_library_path(package_name, interface_type, snake_interface_name, typesupport_identifier);
-   return std::make_shared<rcpputils::SharedLibrary>(library_path);
  }
  
+ const rosidl_message_type_support_t * get_message_typesupport_handle(

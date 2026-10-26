@@ -14,7 +14,7 @@
 
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@rosidl_generator_c//:defs.bzl", "RosCBindingsInfo")
-load("@rosidl_parser//:defs.bzl", "RosIdlInfo", "RosInterfaceInfo", "generate_compilation_information", "generate_sources")
+load("@rosidl_parser//:defs.bzl", "ROSIDL_COMMON_ATTRS", "RosIdlInfo", "RosInterfaceInfo", "generate_compilation_information", "generate_sources")
 load("@rosidl_typesupport_c//:defs.bzl", "RosCTypesupportInfo")
 load("@rules_cc//cc:defs.bzl", "CcInfo")
 load(":types.bzl", "RosPyBindingsInfo")
@@ -38,16 +38,24 @@ def _rosidl_generator_py_aspect_impl(target, ctx):
     # python interface, the other is the module initialization file (__init__.py).
     py_interface_file, _ = py_files[0], py_files[1]
 
-    # Collect the set of deps needed to build the C type support module.
-    deps = [dep[CcInfo] for dep in ctx.attr._cc_deps if CcInfo in dep]
+    # The extension module calls into this interface's C bindings and C
+    # typesupport, and into the extension modules of nested interfaces
+    # (their <type>__convert_from_py/_to_py are called by symbol). Only the
+    # static archive is built here; py_ros_library links the module itself,
+    # against the package's lib<pkg>__rosidl_generator_c/typesupport_c.so
+    # and the nested interfaces' modules.
+    deps = [target[RosCBindingsInfo].cc_info, target[RosCTypesupportInfo].cc_info]
+    dep_labels = []
     for dep in ctx.rule.attr.deps:
         if RosPyBindingsInfo in dep:
             deps.append(dep[RosPyBindingsInfo].cc_info)
-    deps.append(target[RosCBindingsInfo].cc_info)
-    deps.append(target[RosCTypesupportInfo].cc_info)
+            dep_labels.append(dep.label)
 
-    # Assemble the CcInfo provider.
-    cc_info, dynamic_libraries = generate_compilation_information(
+    # numpy is header-only here; the extension module resolves the Python C
+    # API from the interpreter that loads it.
+    header_only_deps = [dep[CcInfo] for dep in ctx.attr._cc_deps if CcInfo in dep]
+
+    info = generate_compilation_information(
         ctx = ctx,
         name = "{p}/{t}/{p}__{t}__{n}_s__rosidl_typesupport_c".format(
             p = target[RosIdlInfo].package_name,
@@ -57,12 +65,13 @@ def _rosidl_generator_py_aspect_impl(target, ctx):
         hdrs = [],
         srcs = srcs,
         deps = deps,
+        header_only_deps = header_only_deps,
         include_dirs = [],
-        custom_name = "{p}__{t}__{n}_s__rosidl_typesupport_c.so".format(
-            p = target[RosIdlInfo].package_name,
-            t = target[RosIdlInfo].interface_type,
-            n = target[RosIdlInfo].interface_code,
-        ),
+    )
+    module_name = "{p}__{t}__{n}_s__rosidl_typesupport_c".format(
+        p = target[RosIdlInfo].package_name,
+        t = target[RosIdlInfo].interface_type,
+        n = target[RosIdlInfo].interface_code,
     )
 
     # We need the import path relative to the runfiles root, and this is different
@@ -79,9 +88,13 @@ def _rosidl_generator_py_aspect_impl(target, ctx):
     # aggregated by the rule and placed in the runfile path as needed.
     return [
         RosPyBindingsInfo(
-            cc_info = cc_info,
+            cc_info = info.cc_info,
+            static_library = info.static_library,
+            module_name = module_name,
+            module_package = target.label.package,
+            dep_labels = dep_labels,
             transitive_sources = depset(
-                direct = [py_interface_file] + dynamic_libraries,
+                direct = [py_interface_file],
                 transitive = [
                     dep[RosPyBindingsInfo].transitive_sources
                     for dep in ctx.rule.attr.deps
@@ -92,14 +105,6 @@ def _rosidl_generator_py_aspect_impl(target, ctx):
                 direct = [import_path],
                 transitive = [
                     dep[RosPyBindingsInfo].imports
-                    for dep in ctx.rule.attr.deps
-                    if RosPyBindingsInfo in dep
-                ],
-            ),
-            dynamic_libraries = depset(
-                direct = dynamic_libraries,
-                transitive = [
-                    dep[RosPyBindingsInfo].dynamic_libraries
                     for dep in ctx.rule.attr.deps
                     if RosPyBindingsInfo in dep
                 ],
@@ -134,7 +139,7 @@ rosidl_generator_py_aspect = aspect(
             ],
             providers = [CcInfo],
         ),
-    },
+    } | ROSIDL_COMMON_ATTRS,
     required_providers = [RosInterfaceInfo],
     required_aspect_providers = [
         [RosIdlInfo],

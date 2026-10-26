@@ -16,6 +16,6 @@ RosCTypesupportInfo = provider(
     "Encapsulates C type support information generated for an underlying ROS message.",
     fields = [
         "cc_info",
-        "dynamic_libraries",
+        "static_library",
     ],
 )

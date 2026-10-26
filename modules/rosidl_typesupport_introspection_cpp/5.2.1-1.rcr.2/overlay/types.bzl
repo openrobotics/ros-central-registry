@@ -16,6 +16,6 @@ RosCcTypesupportIntrospectionInfo = provider(
     "Encapsulates type support information for C++ introspection.",
     fields = [
         "cc_info",
-        "dynamic_libraries",
+        "static_library",
     ],
 )

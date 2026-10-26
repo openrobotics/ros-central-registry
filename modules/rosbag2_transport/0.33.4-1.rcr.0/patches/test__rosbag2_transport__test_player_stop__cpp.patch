@@ -1,0 +1,94 @@
+--- a/test/rosbag2_transport/test_player_stop.cpp
++++ b/test/rosbag2_transport/test_player_stop.cpp
+@@ -84,18 +84,17 @@
+ }
+ 
+ TEST_F(Rosbag2PlayerStopTestFixture, stop_playback_in_pause_mode_implicit) {
+-  std::future<void> play_future_result;
+-  {
+-    rosbag2_transport::Player player(std::move(reader_), storage_options_, play_options_);
+-    player.pause();
+-    ASSERT_TRUE(player.is_paused());
++  auto player = std::make_unique<rosbag2_transport::Player>(
++    std::move(reader_), storage_options_, play_options_);
++  player->pause();
++  ASSERT_TRUE(player->is_paused());
+ 
+-    player.play();
+-    play_future_result =
+-      std::async(std::launch::async, [&] {player.wait_for_playback_to_finish();});
+-    EXPECT_TRUE(player.play_next());
+-  }
++  player->play();
++  EXPECT_TRUE(player->play_next());
++  auto play_future_result =
++    std::async(std::launch::async, [&player] {player.reset();});
+   ASSERT_EQ(play_future_result.wait_for(1s), std::future_status::ready);
++  play_future_result.get();
+ }
+ 
+ TEST_F(Rosbag2PlayerStopTestFixture, stop_playback_explicit) {
+@@ -136,37 +135,38 @@
+   auto calls = 0;
+   std::mutex m;
+   std::condition_variable cv;
+-  std::future<void> play_future_result;
++  auto player = std::make_unique<MockPlayer>(
++    std::move(reader_), storage_options_, play_options_);
++  const auto callback = [&](std::shared_ptr<rosbag2_storage::SerializedBagMessage>) {
++      std::unique_lock<std::mutex> lk{m};
++      ++calls;
++      lk.unlock();
++      cv.notify_one();
++      std::this_thread::sleep_for(50ms);
++    };
++  const auto pre_callback_handle =
++    player->add_on_play_message_pre_callback(callback);
++  ASSERT_NE(pre_callback_handle, Player::invalid_callback_handle);
++
++  player->pause();
++  ASSERT_TRUE(player->is_paused());
++
++  player->play();
++  player->wait_for_playback_to_start();
++  ASSERT_TRUE(player->is_paused());
++
+   {
+-    MockPlayer player(std::move(reader_), storage_options_, play_options_);
+-    const auto callback = [&](std::shared_ptr<rosbag2_storage::SerializedBagMessage>) {
+-        std::unique_lock<std::mutex> lk{m};
+-        ++calls;
+-        lk.unlock();
+-        cv.notify_one();
+-        std::this_thread::sleep_for(50ms);
+-      };
+-    const auto pre_callback_handle =
+-      player.add_on_play_message_pre_callback(callback);
+-    ASSERT_NE(pre_callback_handle, Player::invalid_callback_handle);
+-
+-    player.pause();
+-    ASSERT_TRUE(player.is_paused());
+-
+-    player.play();
+-    player.wait_for_playback_to_start();
+-    play_future_result =
+-      std::async(std::launch::async, [&] {player.wait_for_playback_to_finish();});
+-    ASSERT_TRUE(player.is_paused());
+-
+     std::unique_lock<std::mutex> lk{m};
+-    player.resume();
+-    ASSERT_FALSE(player.is_paused());
++    player->resume();
++    ASSERT_FALSE(player->is_paused());
+     ASSERT_TRUE(cv.wait_for(lk, 2s, [&] {return calls == 1;}));
+-    // Player's destructor call should interrupt the playback
+   }
++  // Player's destructor call should interrupt the playback
++  auto play_future_result =
++    std::async(std::launch::async, [&player] {player.reset();});
+ 
+   ASSERT_EQ(play_future_result.wait_for(1s), std::future_status::ready);
++  play_future_result.get();
+   ASSERT_EQ(calls, 1);
+ }
+ 

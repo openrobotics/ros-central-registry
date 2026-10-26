@@ -44,7 +44,7 @@ changing what in-tree consumers use:
 """
 
 load("@rosdistro//ament:defs.bzl", "AmentCMakeExportsInfo")
-load("@rosidl_adapter//:defs.bzl", "RosIdlInfo", "RosInterfaceInfo", "rosidl_adapter_aspect")
+load("@rosidl_adapter//:defs.bzl", "ROSIDL_COMMON_ATTRS", "RosIdlInfo", "RosInterfaceInfo", "rosidl_adapter_aspect", "rosidl_link_shared_library")
 load("@rosidl_generator_c//:defs.bzl", "RosCBindingsInfo", "RosTypeDescriptionInfo", "rosidl_generator_c_aspect", "rosidl_generator_type_description_aspect")
 load("@rosidl_generator_cpp//:defs.bzl", "RosCcBindingsInfo", "rosidl_generator_cpp_aspect")
 load("@rosidl_generator_py//:defs.bzl", "RosPyBindingsInfo", "rosidl_generator_py_aspect")
@@ -58,6 +58,7 @@ load("@rules_cc//cc:defs.bzl", "CcInfo", "cc_common")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_shared_library_info.bzl", "CcSharedLibraryInfo")
 load("@rules_pkg//pkg:providers.bzl", "PackageFilesInfo")
+load(":rules.bzl", "RosidlSharedLibraryInfo")
 
 # Typesupport kinds, in the order ament_cmake_export_targets lists them.
 # `provider` is the per-message aspect provider carrying the kind's CcInfo.
@@ -201,8 +202,6 @@ BUNDLE_LIB_DEPS = [
     ("rosidl_generator_py", ["rosidl_generator_c", "rosidl_typesupport_c"]),
 ]
 
-_KIND_LIB_DEPS = dict(BUNDLE_LIB_DEPS)
-
 def kind_closure(kind):
     """Kinds a bundle of `kind` (transitively) links against, plus `kind`.
 
@@ -291,49 +290,6 @@ def shared_library_name(package_name, kind, cc_toolchain):
     ext = ".dylib" if _is_darwin(cc_toolchain) else ".so"
     return "lib{}__{}{}".format(package_name, kind, ext)
 
-def _classify_archive(archive):
-    """Identify the (package, kind) a per-interface static archive belongs to.
-
-    rosidl_adapter's generate_compilation_information() names every
-    per-interface archive lib<pkg>__<type>__<code>__<kind>_link.{a,pic.a}
-    (the python bindings use <code>_s__rosidl_typesupport_c, under a
-    <pkg>/<type>/ sub directory). Returns None for anything else, e.g. the
-    runtime libraries' archives that are linked in statically on Linux.
-    """
-    stem = archive.basename
-    if stem.startswith("lib"):
-        stem = stem[3:]
-    for ext in (".pic.a", ".a", ".pic.lo", ".lo", ".lib"):
-        if stem.endswith(ext):
-            stem = stem[:-len(ext)]
-            break
-    if not stem.endswith("_link"):
-        return None
-    stem = stem[:-len("_link")]
-    parts = stem.split("__")
-    if len(parts) < 4:
-        return None
-    package_name = parts[0]
-    interface_type = parts[1]
-    kind = parts[-1]
-    code = "__".join(parts[2:-1])
-    if kind not in _KIND_PROVIDERS:
-        return None
-    if kind == "rosidl_typesupport_c" and code.endswith("_s") and \
-       archive.dirname.endswith("/" + package_name + "/" + interface_type):
-        kind = "rosidl_generator_py"
-    return struct(package_name = package_name, kind = kind)
-
-def _whole_archive(ctx, feature_configuration, cc_toolchain, lib):
-    return cc_common.create_library_to_link(
-        actions = ctx.actions,
-        feature_configuration = feature_configuration,
-        cc_toolchain = cc_toolchain,
-        static_library = lib.static_library,
-        pic_static_library = lib.pic_static_library,
-        alwayslink = True,
-    )
-
 def _dynamic_linker_inputs(targets):
     inputs = []
     for target in targets:
@@ -346,122 +302,32 @@ def _dynamic_linker_inputs(targets):
             fail("{} is neither a rosidl_bundled_library nor a cc_shared_library".format(target.label))
     return inputs
 
-def _link_shared_library(ctx, feature_configuration, cc_toolchain, name, soname, static_libs, dynamic_linker_inputs):
-    """Link `static_libs` (whole-archive) into one shared library."""
-    is_darwin = _is_darwin(cc_toolchain)
-    user_link_flags = []
-    if is_darwin:
-        user_link_flags += ["-Wl,-undefined,dynamic_lookup", "-Wl,-install_name,@rpath/" + soname]
-    elif not _is_windows(cc_toolchain):
-        user_link_flags.append("-Wl,-soname," + soname)
-    own_input = cc_common.create_linker_input(
-        owner = ctx.label,
-        libraries = depset([_whole_archive(ctx, feature_configuration, cc_toolchain, lib) for lib in static_libs]),
-        user_link_flags = depset(user_link_flags),
-    )
-    linking_outputs = cc_common.link(
-        name = name,
-        actions = ctx.actions,
-        feature_configuration = feature_configuration,
-        cc_toolchain = cc_toolchain,
-        output_type = "dynamic_library",
-        linking_contexts = [
-            cc_common.create_linking_context(
-                linker_inputs = depset([own_input] + dynamic_linker_inputs, order = "topological"),
-            ),
-        ],
-    )
-    lib_to_link = linking_outputs.library_to_link
-    library = lib_to_link.resolved_symlink_dynamic_library or lib_to_link.dynamic_library
-    linker_input = cc_common.create_linker_input(
-        owner = ctx.label,
-        libraries = depset([
-            cc_common.create_library_to_link(
-                actions = ctx.actions,
-                feature_configuration = feature_configuration,
-                cc_toolchain = cc_toolchain,
-                dynamic_library = library,
-                interface_library = lib_to_link.interface_library,
-            ),
-        ]),
-    )
-    return library, linker_input
-
-def _archives_by_package(deps, kind):
-    """Per-interface static archives of `kind`, grouped by owning package.
-
-    The merged linking context is transitive, so it also carries the archives
-    of interface packages we depend on (and the runtime libraries, which
-    _classify_archive ignores).
-    """
-    provider = _KIND_PROVIDERS[kind]
-    merged = cc_common.merge_cc_infos(
-        direct_cc_infos = [dep[provider].cc_info for dep in deps if provider in dep],
-    )
-    by_package = {}
-    seen = {}
-    for linker_input in merged.linking_context.linker_inputs.to_list():
-        for lib in linker_input.libraries:
-            archive = lib.pic_static_library or lib.static_library
-            if not archive or archive.path in seen:
-                continue
-            seen[archive.path] = True
-            info = _classify_archive(archive)
-            if not info or info.kind != kind:
-                continue
-            by_package.setdefault(info.package_name, []).append(lib)
-    return by_package
-
-def _package_edges(deps):
-    """Interface package -> list of interface packages it (transitively) depends on."""
+def _dep_packages(deps, package_name):
+    """Interface packages the package's interfaces (transitively) depend on."""
     merged = depset(
         transitive = [dep[_RosidlPackageGraphInfo].edges for dep in deps if _RosidlPackageGraphInfo in dep],
     )
     edges = {}
     for pkg, dep_pkg in merged.to_list():
         edges.setdefault(pkg, {})[dep_pkg] = True
-    for _ in range(len(edges)):
-        for pkg in list(edges.keys()):
-            for dep_pkg in list(edges[pkg].keys()):
-                for trans_pkg in edges.get(dep_pkg, {}):
-                    if trans_pkg != pkg:
-                        edges[pkg][trans_pkg] = True
-    return {k: sorted(v.keys()) for k, v in edges.items()}
-
-def _dependencies_first(packages, edges):
-    """Topologically sort `packages` so every package follows its dependencies."""
-    ordered = []
-    done = {}
-    for _ in range(len(packages)):
-        progressed = False
-        for package_name in packages:
-            if package_name in done:
-                continue
-            if all([dep in done or dep not in packages for dep in edges.get(package_name, [])]):
-                ordered.append(package_name)
-                done[package_name] = True
-                progressed = True
-        if not progressed:
+    packages = {}
+    todo = edges.get(package_name, {}).keys()
+    for _ in range(len(edges) + 1):
+        if not todo:
             break
-    if len(ordered) != len(packages):
-        fail("cyclic interface package dependencies among {}".format(packages))
-    return ordered
+        next_todo = []
+        for pkg in todo:
+            if pkg in packages or pkg == package_name:
+                continue
+            packages[pkg] = True
+            next_todo.extend(edges.get(pkg, {}).keys())
+        todo = next_todo
+    return sorted(packages.keys())
 
 def _rosidl_bundled_library_impl(ctx):
     kind = ctx.attr.kind
     package_name = ctx.attr.package_name
-
-    cc_toolchain = find_cc_toolchain(ctx)
-    feature_configuration = cc_common.configure_features(
-        ctx = ctx,
-        cc_toolchain = cc_toolchain,
-        requested_features = ctx.features,
-        unsupported_features = ctx.disabled_features,
-    )
-
-    archives = _archives_by_package(ctx.attr.deps, kind)
-    own = archives.get(package_name, [])
-    dep_packages = sorted([p for p in archives.keys() if p != package_name])
+    dep_packages = _dep_packages(ctx.attr.deps, package_name)
 
     if kind not in LIBRARY_KINDS:
         # Header-only kind: nothing to link, but the CMake export still
@@ -477,81 +343,59 @@ def _rosidl_bundled_library_impl(ctx):
             ),
         ]
 
-    if not own:
-        fail("{}: found no {} archives for package '{}' in deps".format(ctx.label, kind, package_name))
-
-    runtime_inputs = _dynamic_linker_inputs(ctx.attr.dynamic_deps)
-    sibling_inputs = _dynamic_linker_inputs(ctx.attr.lib_deps)
-
-    # Dependency interface packages: the installed lib<pkg>__<kind>.so must
-    # carry a DT_NEEDED / LC_LOAD_DYLIB on lib<dep>__<kind>.so, which the
-    # dependency package installs itself. There is no label for that
-    # library reachable from here (interface deps are expressed between
-    # individual messages), so link a private copy with the same soname
-    # from the dependency's archives; it is never installed, only used so
-    # the link resolves to the right soname.
-    #
-    # Each private copy is itself linked fully resolved, exactly like the
-    # dependency package links its own copy: against the private copies of
-    # the dependency's sibling kinds (e.g. lib<dep>__rosidl_generator_c for
-    # lib<dep>__rosidl_typesupport_fastrtps_c) and of the packages *it*
-    # depends on. Copies are therefore linked kind by kind in BUNDLE_LIB_DEPS
-    # order, and within a kind dependencies first.
-    edges = _package_edges(ctx.attr.deps)
-    ordered_dep_packages = _dependencies_first(dep_packages, edges)
-    copies = {}  # (package, kind) -> LinkerInput
-    for copy_kind in kind_closure(kind):
-        if copy_kind not in LIBRARY_KINDS:
-            continue
-        copy_archives = archives if copy_kind == kind else _archives_by_package(ctx.attr.deps, copy_kind)
-        for dep_package in ordered_dep_packages:
-            if dep_package not in copy_archives:
-                continue
-            inputs = [
-                copies[(dep_package, sibling_kind)]
-                for sibling_kind in _KIND_LIB_DEPS[copy_kind]
-                if (dep_package, sibling_kind) in copies
-            ]
-            for transitive_package in edges.get(dep_package, []):
-                for dep_kind in [copy_kind] + _KIND_LIB_DEPS[copy_kind]:
-                    if (transitive_package, dep_kind) in copies:
-                        inputs.append(copies[(transitive_package, dep_kind)])
-            _, linker_input = _link_shared_library(
-                ctx,
-                feature_configuration,
-                cc_toolchain,
-                name = "_rosidl_bundled_deps/{}/{}__{}".format(ctx.label.name, dep_package, copy_kind),
-                soname = shared_library_name(dep_package, copy_kind, cc_toolchain),
-                static_libs = copy_archives[dep_package],
-                dynamic_linker_inputs = inputs + runtime_inputs,
-            )
-            copies[(dep_package, copy_kind)] = linker_input
-    foreign_inputs = []
-    for p in ordered_dep_packages:
-        for fk in [kind] + _KIND_LIB_DEPS[kind]:
-            if (p, fk) in copies:
-                foreign_inputs.append(copies[(p, fk)])
-
+    cc_toolchain = find_cc_toolchain(ctx)
     soname = shared_library_name(package_name, kind, cc_toolchain)
-    library, linker_input = _link_shared_library(
-        ctx,
-        feature_configuration,
-        cc_toolchain,
-        name = "{}__{}".format(package_name, kind),
-        soname = soname,
-        static_libs = own,
-        dynamic_linker_inputs = sibling_inputs + foreign_inputs + runtime_inputs,
-    )
-    if library.basename != soname:
-        fail("{}: linked {} but expected {}".format(ctx.label, library.basename, soname))
 
+    if kind != "rosidl_generator_py":
+        # The C/C++ kinds are exactly the libraries cc_ros_shared_library
+        # (`:cc_shared`) links -- same names, same contents, already linked
+        # against the dependency packages' libraries.
+        shared = ctx.attr.shared[RosidlSharedLibraryInfo]
+        if kind not in shared.libraries:
+            fail("{}: {} has no {} library".format(ctx.label, ctx.attr.shared.label, kind))
+        library = shared.libraries[kind]
+        if library.basename != soname:
+            fail("{}: {} is {} but expected {}".format(ctx.label, ctx.attr.shared.label, library.basename, soname))
+        return [
+            DefaultInfo(files = depset([library])),
+            RosidlBundledLibraryInfo(
+                kind = kind,
+                package_name = package_name,
+                library = library,
+                linker_input = shared.linker_inputs[kind],
+                dep_packages = dep_packages,
+            ),
+        ]
+
+    # lib<pkg>__rosidl_generator_py.so: all of the package's Python
+    # typesupport code in one library (the per-interface extension modules
+    # py_ros_library links are the Bazel-side equivalent). It calls into the
+    # dependency packages' libraries of the same kind, which they install
+    # themselves (`py_deps`).
+    archives = [
+        dep[RosPyBindingsInfo].static_library
+        for dep in ctx.attr.deps
+        if RosPyBindingsInfo in dep and dep[RosPyBindingsInfo].static_library
+    ]
+    if not archives:
+        fail("{}: found no {} archives for package '{}' in deps".format(ctx.label, kind, package_name))
+    linked = rosidl_link_shared_library(
+        ctx,
+        name = "{}__{}".format(package_name, kind),
+        static_libraries = archives,
+        linker_inputs = _dynamic_linker_inputs(ctx.attr.lib_deps + ctx.attr.py_deps + ctx.attr.dynamic_deps),
+        allow_undefined_symbols = True,
+        symlink_dir = "rosidl_" + package_name,
+    )
+    if linked.file.basename != soname:
+        fail("{}: linked {} but expected {}".format(ctx.label, linked.file.basename, soname))
     return [
-        DefaultInfo(files = depset([library])),
+        DefaultInfo(files = depset([linked.file])),
         RosidlBundledLibraryInfo(
             kind = kind,
             package_name = package_name,
-            library = library,
-            linker_input = linker_input,
+            library = linked.file,
+            linker_input = linked.linker_input,
             dep_packages = dep_packages,
         ),
     ]
@@ -569,14 +413,23 @@ rosidl_bundled_library = rule(
         ),
         "kind": attr.string(mandatory = True, values = KINDS),
         "package_name": attr.string(mandatory = True),
+        "shared": attr.label(
+            mandatory = True,
+            providers = [RosidlSharedLibraryInfo],
+            doc = "The package's cc_ros_shared_library, which links the C/C++ kinds.",
+        ),
         "lib_deps": attr.label_list(
             providers = [RosidlBundledLibraryInfo],
             doc = "Bundled libraries of other kinds of the same package this one links against.",
         ),
+        "py_deps": attr.label_list(
+            providers = [RosidlBundledLibraryInfo],
+            doc = "The dependency packages' bundled libraries of the same kind (rosidl_generator_py only).",
+        ),
         "dynamic_deps": attr.label_list(
             doc = "Runtime shared libraries (cc_shared_library / collect_transitive_dynamic_deps) to link against.",
         ),
-    },
+    } | ROSIDL_COMMON_ATTRS,
     provides = [RosidlBundledLibraryInfo],
 )
 
@@ -867,6 +720,7 @@ def _rosidl_bundled_python_module_impl(ctx):
             cc_common.create_linking_context(
                 linker_inputs = depset(_dynamic_linker_inputs(ctx.attr.lib_deps), order = "topological"),
             ),
+            ctx.attr._link_extra_lib[CcInfo].linking_context,
         ],
         user_link_flags = ["-Wl,-undefined,dynamic_lookup"] if is_darwin else [],
     )
@@ -887,6 +741,10 @@ rosidl_bundled_python_module = rule(
     toolchains = use_cc_toolchain(),
     fragments = ["cpp"],
     attrs = {
+        "_link_extra_lib": attr.label(
+            default = Label("@bazel_tools//tools/cpp:link_extra_lib"),
+            providers = [CcInfo],
+        ),
         "deps": attr.label_list(
             aspects = [rosidl_adapter_aspect],
             providers = [RosInterfaceInfo],

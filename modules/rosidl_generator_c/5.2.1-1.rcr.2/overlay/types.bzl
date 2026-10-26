@@ -16,6 +16,6 @@ RosCBindingsInfo = provider(
     "Encapsulates C compilation information for an underlying ROS message.",
     fields = [
         "cc_info",
-        "dynamic_libraries",
+        "static_library",
     ],
 )

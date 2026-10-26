@@ -13,10 +13,9 @@
 # limitations under the License.
 
 load("@rosidl_generator_type_description//:defs.bzl", "RosTypeDescriptionInfo")
-load("@rosidl_parser//:defs.bzl", "RosIdlInfo", "RosInterfaceInfo", "generate_compilation_information", "generate_sources")
+load("@rosidl_parser//:defs.bzl", "ROSIDL_COMMON_ATTRS", "RosIdlInfo", "RosInterfaceInfo", "generate_compilation_information", "generate_sources", "rosidl_static_typesupport")
 load("@rules_cc//cc:defs.bzl", "CcInfo")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
-load("@rules_cc//cc/common:cc_shared_library_info.bzl", "CcSharedLibraryInfo")
 load(":types.bzl", "RosCBindingsInfo")
 
 def _rosidl_generator_c_aspect_impl(target, ctx):
@@ -47,10 +46,9 @@ def _rosidl_generator_c_aspect_impl(target, ctx):
     # linking it in statically would duplicate its global state (and
     # transitively rcutils' error state, since rosidl_runtime_c_library
     # itself statically depends on rcutils_library) into every message's
-    # C bindings fragment. Route it through header_only_deps/
-    # dynamic_dep_linker_inputs so every fragment links against the single
-    # canonical @rosidl_runtime_c//:rosidl_runtime_c shared library
-    # instead. See generate_compilation_information's docstring.
+    # C bindings fragment. Route it through header_only_deps so
+    # the package shared library links against the single canonical
+    # @rosidl_runtime_c//:rosidl_runtime_c shared library instead. See generate_compilation_information's docstring.
     header_only_deps = [dep[CcInfo] for dep in ctx.attr._c_deps if CcInfo in dep]
 
     deps = []
@@ -59,7 +57,8 @@ def _rosidl_generator_c_aspect_impl(target, ctx):
             deps.append(dep[RosCBindingsInfo].cc_info)
 
     # Assemble the CcInfo provider.
-    cc_info, dynamic_libraries = generate_compilation_information(
+    package_name = target[RosIdlInfo].package_name
+    info = generate_compilation_information(
         ctx = ctx,
         name = "{}__{}__{}__rosidl_generator_c".format(
             target[RosIdlInfo].package_name,
@@ -70,22 +69,16 @@ def _rosidl_generator_c_aspect_impl(target, ctx):
         srcs = srcs,
         deps = deps,
         header_only_deps = header_only_deps,
-        dynamic_dep_linker_inputs = [ctx.attr._cc_shared_dep[CcSharedLibraryInfo].linker_input],
         include_dirs = include_dirs,
+        local_defines = ["ROSIDL_GENERATOR_C_BUILDING_DLL_" + package_name],
+        alwayslink = rosidl_static_typesupport(ctx),
     )
 
     # Return the CcInfo wrapped in a RosCBindingsInfo provider.
     return [
         RosCBindingsInfo(
-            cc_info = cc_info,
-            dynamic_libraries = depset(
-                direct = dynamic_libraries,
-                transitive = [
-                    dep[RosCBindingsInfo].dynamic_libraries
-                    for dep in ctx.rule.attr.deps
-                    if RosCBindingsInfo in dep
-                ],
-            ),
+            cc_info = info.cc_info,
+            static_library = info.static_library,
         ),
     ]
 
@@ -113,19 +106,7 @@ rosidl_generator_c_aspect = aspect(
             ],
             providers = [CcInfo],
         ),
-        "_cc_shared_dep": attr.label(
-            # On Windows a DLL may not carry undefined symbols, so each fragment
-            # must link the *full* transitive shared-library closure it uses --
-            # not just rosidl_runtime_c but also its dependencies (rcutils,
-            # rosidl_typesupport_interface, ...), which the generated C bindings
-            # call into directly. transitive_dynamic_deps collects that closure;
-            # linking against just @rosidl_runtime_c//:rosidl_runtime_c leaves
-            # e.g. rcutils_get_default_allocator undefined at link time. On Linux
-            # this attribute is unused (fragments statically bundle their deps)
-            # and on Darwin the extra DLLs are harmless.
-            default = Label("@rosidl_runtime_c//:transitive_dynamic_deps"),
-        ),
-    },
+    } | ROSIDL_COMMON_ATTRS,
     required_providers = [RosInterfaceInfo],
     required_aspect_providers = [
         [RosIdlInfo],

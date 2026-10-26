@@ -17,7 +17,8 @@ RosProtoInfo = provider(
     fields = [
         "protos",
         "proto_info",
-        "cc_info",
+        "cc_info",  # CcInfo: the protobuf C++ for this interface and its dependencies (+ the protobuf runtime)
+        "static_library",  # LibraryToLink: this interface's own protobuf C++ archive, or None
         "proto_deps",
     ],
 )

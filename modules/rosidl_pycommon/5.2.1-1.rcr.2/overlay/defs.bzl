@@ -14,12 +14,21 @@
 
 load(
     "@rosidl_parser//:defs.bzl",
+    _ROSIDL_COMMON_ATTRS = "ROSIDL_COMMON_ATTRS",
     _RosIdlInfo = "RosIdlInfo",
     _RosInterfaceInfo = "RosInterfaceInfo",
     _generate_compilation_information = "generate_compilation_information",
     _generate_sources = "generate_sources",
     _ros_interface = "ros_interface",
     _rosidl_adapter_aspect = "rosidl_adapter_aspect",
+    _rosidl_export_dynamic_link_flags = "rosidl_export_dynamic_link_flags",
+    _rosidl_is_darwin = "rosidl_is_darwin",
+    _rosidl_is_windows = "rosidl_is_windows",
+    _rosidl_link_shared_library = "rosidl_link_shared_library",
+    _rosidl_runtime_dynamic_libraries = "rosidl_runtime_dynamic_libraries",
+    _rosidl_shared_library_name = "rosidl_shared_library_name",
+    _rosidl_static_typesupport = "rosidl_static_typesupport",
+    _rosidl_whole_archive = "rosidl_whole_archive",
 )
 
 RosInterfaceInfo = _RosInterfaceInfo
@@ -27,6 +36,15 @@ RosIdlInfo = _RosIdlInfo
 
 rosidl_adapter_aspect = _rosidl_adapter_aspect
 
+ROSIDL_COMMON_ATTRS = _ROSIDL_COMMON_ATTRS
 generate_compilation_information = _generate_compilation_information
+rosidl_runtime_dynamic_libraries = _rosidl_runtime_dynamic_libraries
+rosidl_link_shared_library = _rosidl_link_shared_library
+rosidl_shared_library_name = _rosidl_shared_library_name
+rosidl_whole_archive = _rosidl_whole_archive
+rosidl_is_darwin = _rosidl_is_darwin
+rosidl_is_windows = _rosidl_is_windows
+rosidl_export_dynamic_link_flags = _rosidl_export_dynamic_link_flags
+rosidl_static_typesupport = _rosidl_static_typesupport
 generate_sources = _generate_sources
 ros_interface = _ros_interface

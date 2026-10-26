@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosidl_generator_c//:defs.bzl", "rosidl_generator_c_aspect", "rosidl_generator_type_description_aspect")
+load("@rosidl_generator_c//:defs.bzl", "RosCBindingsInfo", "rosidl_generator_c_aspect", "rosidl_generator_type_description_aspect")
 load("@rosidl_generator_cpp//:defs.bzl", "rosidl_generator_cpp_aspect")
-load("@rosidl_parser//:defs.bzl", "RosInterfaceInfo", "rosidl_adapter_aspect")
+load("@rosidl_parser//:defs.bzl", "ROSIDL_COMMON_ATTRS", "RosInterfaceInfo", "rosidl_adapter_aspect", "rosidl_link_shared_library", "rosidl_runtime_dynamic_libraries")
 load("@rosidl_typesupport_c//:defs.bzl", "RosCTypesupportInfo", "rosidl_typesupport_c_aspect")
-load("@rosidl_typesupport_fastrtps_c//:defs.bzl", "RosCTypesupportFastRTPSInfo", "rosidl_typesupport_fastrtps_c_aspect")
-load("@rosidl_typesupport_introspection_c//:defs.bzl", "RosCTypesupportIntrospectionInfo", "rosidl_typesupport_introspection_c_aspect")
-load("@rules_cc//cc:defs.bzl", "CcInfo", "cc_common")
-load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
+load("@rosidl_typesupport_fastrtps_c//:defs.bzl", "rosidl_typesupport_fastrtps_c_aspect")
+load("@rosidl_typesupport_introspection_c//:defs.bzl", "rosidl_typesupport_introspection_c_aspect")
+load("@rules_cc//cc:find_cc_toolchain.bzl", "use_cc_toolchain")
+load("@rules_cc//cc/common:cc_shared_library_info.bzl", "CcSharedLibraryInfo")
 load("@rules_python//python:defs.bzl", "PyInfo")
 load("@rules_python//python/api:api.bzl", "py_common")
 load(":aspects.bzl", _rosidl_generator_py_aspect = "rosidl_generator_py_aspect")
@@ -31,104 +31,100 @@ RosPyBindingsInfo = _RosPyBindingsInfo
 # Aspects
 rosidl_generator_py_aspect = _rosidl_generator_py_aspect
 
-def _extract_information(deps, providers):
-    direct_cc_infos = []
-    direct_libraries = []
-    for dep in deps:
-        for provider in providers:
-            if provider in dep:
-                direct_cc_infos.append(dep[provider].cc_info)
-                direct_libraries.append(dep[provider].dynamic_libraries)
-    return direct_cc_infos, direct_libraries
+# ---------------------------------------------------------------------------
+# Test-only py_ros_library
+# ---------------------------------------------------------------------------
+#
+# rosidl_core_generators (which owns the real `py_ros_library`) depends on
+# this package, so this package's own test interfaces cannot use it. This
+# minimal stand-in links the test package's C bindings and C typesupport
+# into one shared library each (like cc_ros_shared_library does per kind)
+# and each interface's extension module against them; the dependency
+# packages' modules are never needed because the test interfaces only nest
+# each other.
 
-def _create_dynamic_linking_context(ctx, transitive_libraries):
-    cc_toolchain = find_cc_toolchain(ctx)
-    feature_configuration = cc_common.configure_features(
-        ctx = ctx,
-        cc_toolchain = cc_toolchain,
-        requested_features = ctx.features,
-        unsupported_features = ctx.disabled_features,
-    )
-    libraries_to_link = []
-    for file in depset(transitive = transitive_libraries).to_list():
-        libraries_to_link.append(
-            cc_common.create_library_to_link(
-                actions = ctx.actions,
-                feature_configuration = feature_configuration,
-                cc_toolchain = cc_toolchain,
-                dynamic_library = file,
-            ),
+def _dependencies_first(items, dep_labels):
+    ordered = []
+    done = {}
+    for _ in range(len(items)):
+        for label, item in items:
+            if label in done:
+                continue
+            if all([dep in done or dep not in dict(items) for dep in dep_labels[label]]):
+                ordered.append((label, item))
+                done[label] = True
+    if len(ordered) != len(items):
+        fail("cyclic interface dependencies among {}".format([label for label, _ in items]))
+    return ordered
+
+def _test_py_ros_library_impl(ctx):
+    package_name = ctx.label.repo_name.removesuffix("+")
+    runtime_inputs = [dep[CcSharedLibraryInfo].linker_input for dep in ctx.attr._runtime_shared_deps]
+    package_inputs = []
+    package_files = []
+    for name, provider in (("rosidl_generator_c", RosCBindingsInfo), ("rosidl_typesupport_c", RosCTypesupportInfo)):
+        archives = [dep[provider].static_library for dep in ctx.attr.deps if provider in dep and dep[provider].static_library]
+        linked = rosidl_link_shared_library(
+            ctx,
+            name = "{}__{}".format(package_name, name),
+            static_libraries = archives,
+            linker_inputs = package_inputs + runtime_inputs,
+            symlink_dir = "rosidl_" + package_name,
         )
-    return cc_common.create_linking_context(
-        linker_inputs = depset([
-            cc_common.create_linker_input(
-                owner = ctx.label,
-                libraries = depset(direct = libraries_to_link),
-            ),
-        ]),
-    )
+        package_inputs.append(linked.linker_input)
+        package_files.append(linked.file)
 
-def _py_ros_library_rule_impl(ctx):
-    direct_cc_infos, direct_libraries = _extract_information(ctx.attr.deps, [
-        RosCTypesupportIntrospectionInfo,
-        RosCTypesupportFastRTPSInfo,
-        RosCTypesupportInfo,
-    ])
-    dynamic_linking_context = _create_dynamic_linking_context(ctx, direct_libraries)
-    cc_info = cc_common.merge_cc_infos(
-        direct_cc_infos = [
-            cc_common.merge_cc_infos(direct_cc_infos = direct_cc_infos),
-            CcInfo(linking_context = dynamic_linking_context),
-        ],
-    )
-    symlinks = {}
-    for file in depset(transitive = direct_libraries).to_list():
-        symlinks["lib/" + file.basename] = file
+    items = [(str(dep.label), dep[RosPyBindingsInfo]) for dep in ctx.attr.deps if RosPyBindingsInfo in dep]
+    dep_labels = {label: [str(dep_label) for dep_label in info.dep_labels] for label, info in items}
+    modules = {}
+    module_files = []
+    for label, info in _dependencies_first(items, dep_labels):
+        if not info.static_library:
+            continue
+        nested = [modules[dep_label] for dep_label in dep_labels[label] if dep_label in modules]
+        linked = rosidl_link_shared_library(
+            ctx,
+            name = info.module_name,
+            static_libraries = [info.static_library],
+            linker_inputs = package_inputs + nested + runtime_inputs,
+            output_name = info.module_package + "/" + info.module_name + ".so",
+            allow_undefined_symbols = True,
+            symlink_dir = "rosidl_" + package_name,
+        )
+        modules[label] = linked.linker_input
+        module_files.append(linked.file)
+
+    solib_files = []
+    for linker_input in package_inputs + modules.values():
+        for library in linker_input.libraries:
+            if library.dynamic_library:
+                solib_files.append(library.dynamic_library)
+    symlinks = {"lib/" + f.basename: f for f in package_files}
     runfiles = ctx.runfiles(
         symlinks = symlinks,
-        transitive_files = depset(transitive = direct_libraries),
+        transitive_files = depset(
+            package_files + module_files + solib_files + rosidl_runtime_dynamic_libraries(ctx),
+            transitive = [dep[DefaultInfo].files for dep in ctx.attr._runtime_shared_deps],
+        ),
     )
     for dep in ctx.attr._py_deps:
-        if DefaultInfo in dep:
-            runfiles = runfiles.merge(dep[DefaultInfo].default_runfiles)
-    for dep in ctx.attr.deps:
-        if DefaultInfo in dep:
-            runfiles = runfiles.merge(dep[DefaultInfo].default_runfiles)
+        runfiles = runfiles.merge(dep[DefaultInfo].default_runfiles)
 
-    default_info = DefaultInfo(
-        files = depset(transitive = direct_libraries),
-        runfiles = runfiles,
-    )
     rosidl_py_info = PyInfo(
-        imports = depset(
-            transitive = [
-                dep[_RosPyBindingsInfo].imports
-                for dep in ctx.attr.deps
-                if _RosPyBindingsInfo in dep
-            ],
-        ),
-        transitive_sources = depset(
-            transitive = [
-                dep[_RosPyBindingsInfo].transitive_sources
-                for dep in ctx.attr.deps
-                if _RosPyBindingsInfo in dep
-            ],
-        ),
+        imports = depset(transitive = [info.imports for _, info in items]),
+        transitive_sources = depset(module_files, transitive = [info.transitive_sources for _, info in items]),
     )
-
     py_info = py_common.get(ctx).merge_py_infos(
         direct = [rosidl_py_info],
-        transitive = [
-            dep[PyInfo]
-            for dep in ctx.attr._py_deps
-            if PyInfo in dep
-        ],
+        transitive = [dep[PyInfo] for dep in ctx.attr._py_deps if PyInfo in dep],
     )
-
-    return [py_info, cc_info, default_info]
+    return [
+        py_info,
+        DefaultInfo(files = depset(module_files), runfiles = runfiles),
+    ]
 
 py_ros_library = rule(
-    implementation = _py_ros_library_rule_impl,
+    implementation = _test_py_ros_library_impl,
     toolchains = use_cc_toolchain(),
     fragments = ["cpp"],
     attrs = {
@@ -152,6 +148,10 @@ py_ros_library = rule(
             ],
             providers = [PyInfo],
         ),
-    } | py_common.API_ATTRS,
-    provides = [PyInfo, CcInfo, DefaultInfo],
+        "_runtime_shared_deps": attr.label_list(
+            default = [Label("@rosidl_typesupport_c//:transitive_dynamic_deps")],
+            providers = [CcSharedLibraryInfo],
+        ),
+    } | ROSIDL_COMMON_ATTRS | py_common.API_ATTRS,
+    provides = [PyInfo, DefaultInfo],
 )

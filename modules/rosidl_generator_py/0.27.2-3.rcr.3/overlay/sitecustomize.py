@@ -133,23 +133,22 @@ sys.meta_path.insert(0, InterceptingFinder())
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "asyncio: mark test as asyncio")
-
-
-try:
     import asyncio
     import inspect
     import pytest
 
-    @pytest.hookimpl(tryfirst=True)
-    def pytest_pyfunc_call(pyfuncitem):
-        if inspect.iscoroutinefunction(pyfuncitem.obj):
-            testargs = {
-                arg: pyfuncitem.funcargs[arg]
-                for arg in pyfuncitem._fixtureinfo.argnames
-            }
-            asyncio.run(pyfuncitem.obj(**testargs))
-            return True
-        return None
-except ImportError:
-    pass
+    class _AsyncioFallbackPlugin:
+        @pytest.hookimpl(tryfirst=True)
+        def pytest_pyfunc_call(self, pyfuncitem):
+            if inspect.iscoroutinefunction(pyfuncitem.obj):
+                testargs = {
+                    arg: pyfuncitem.funcargs[arg]
+                    for arg in pyfuncitem._fixtureinfo.argnames
+                }
+                asyncio.run(pyfuncitem.obj(**testargs))
+                return True
+            return None
+
+    config.pluginmanager.register(_AsyncioFallbackPlugin(), name="_rcr_asyncio_fallback")
+
 

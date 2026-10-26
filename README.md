@@ -225,16 +225,17 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 
 HEADERS = glob(["include/**/*.hpp"])
 
-DEPENDENCIES = {"@foo//:foo": "@foo//:foo_library"}
+DEPENDENCIES = {
+    "@foo//:foo": "@foo//:foo_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",  # See notes below
+}
 
 cc_library(
     name = "bar_library",
     srcs = glob(["src/**/*.cpp"]),
     hdrs = glob(["src/**/*.hpp"]),
     includes = ["include"],
-    deps = DEPENDENCIES.values() + [
-      "@std_msgs//:cc"                  # See notes below
-    ],
+    deps = DEPENDENCIES.values(),
 )
 
 cc_shared_library(
@@ -257,7 +258,7 @@ cc_test(
         ":foo",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
-        "@test_msgs//:cc",              # See notes below
+        "@test_msgs//:cc",              # Linked statically, see notes below
     ],
 )
 
@@ -272,7 +273,7 @@ ament_package(
 
 Some important notes about the code above:
 
-1. The message packages have `:cc` targets that supply both compilation information (via a `CcInfo`) and shared library files (via `DefaultInfo`) so they can be just listed in the `deps` directly; you do not have to import special targets for the message language bindings.
+1. Message packages follow the same two-target convention as every other library: `:cc` (alias `:c`) is the `cc_library` half -- a `CcInfo` with the generated headers and static archives -- and `:cc_shared` (alias `:c_shared`) is the `cc_shared_library` half -- a `CcSharedLibraryInfo` with the generated shared libraries. List them as a pair in `DEPENDENCIES` to link the generated code dynamically. Listing only `:cc` (as the test above does with `test_msgs`) links the generated code statically into the consumer, which is fine for binaries and tests but should be avoided in a `cc_shared_library`, where it would duplicate the code into your library (`cc_shared_library` reports this as "linked statically by different cc_shared_libraries but not exported").
 2. The `collect_transitive_dynamic_deps` rule is needed because `dynamic_deps` does not work transitively. So, in order for `baz` to link correctly to `foo` through `bar`, we need to collect all of the shared libraries from `bar` and all of its `dynamic_deps`, and then pass them to `baz`. You only need to do this for `cc_test` or `cc_binary` rules.
 
 ## Message generation

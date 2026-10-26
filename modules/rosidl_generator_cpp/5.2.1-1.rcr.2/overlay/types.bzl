@@ -16,6 +16,6 @@ RosCcBindingsInfo = provider(
     "Encapsulates C++ information generated for an underlying ROS message.",
     fields = [
         "cc_info",
-        "dynamic_libraries",
+        "static_library",
     ],
 )

@@ -129,6 +129,12 @@ jobs:
         bazel run //tools/ci:setup_workspace -- --release=${{ matrix.ros }} --tmpdir "$RUNNER_TEMP" \
             ${{ (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry' && '--remote-cache-write' || '' }}
 
+    # Build the ros 2 distribution
+    - name: Build
+      id: build
+      run: |
+        bazel build --config ci --config=${{ matrix.variant }} 2>&1 | tee build.log
+
     # Build whatever package(s) this PR actually touches, in case they
     # aren't part of the variant above -- see changed_packages' input docs.
     - name: Build changed packages
@@ -137,6 +143,9 @@ jobs:
       run: |
         TARGETS=""
         for pkg in ${{ inputs.changed_packages }}; do
+          if grep -qxF "@${pkg}//..." "ros-${{ matrix.variant }}.txt"; then
+            continue
+          fi
           if bazel query "@${pkg}//..." >/dev/null 2>&1; then
             TARGETS="$TARGETS @${pkg}//..."
           else
@@ -148,12 +157,6 @@ jobs:
             echo "::warning title=Build changed packages failed::Building changed packages ($TARGETS) failed, but will not block CI as some modules may be outside the supported collection."
           fi
         fi
-
-    # Build the ros 2 distribution
-    - name: Build
-      id: build
-      run: |
-        bazel build --config ci --config=${{ matrix.variant }} 2>&1 | tee build.log
     - name: Update status badge (build)
       uses: Schneegans/dynamic-badges-action@v1.8.0
       with:
