@@ -93,7 +93,7 @@ _component_record_gen = rule(
     },
 )
 
-def rclcpp_components_register_node(name, component, plugin, node_name = None, executor = "SingleThreadedExecutor"):
+def rclcpp_components_register_node(name, component, plugin, node_name = None, executor = "SingleThreadedExecutor", data = []):
     record_name = name + "_record"
     _component_record_gen(
         name = record_name,
@@ -120,7 +120,7 @@ def rclcpp_components_register_node(name, component, plugin, node_name = None, e
             srcs = [src_name],
             deps = ["@rclcpp_components//:rclcpp_components_library"],
             dynamic_deps = ["{0}_transitive".format(name)],
-            data = [":" + record_name],
+            data = [":" + record_name] + list(data),
         )
 
 def rclcpp_components_register_nodes(name, component, plugins):

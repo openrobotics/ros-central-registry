@@ -305,7 +305,7 @@ def ament_index_providers(ctx, extra_files = []):
     # Return a collection of runfiles with manipulated symlinks.
     transitive_runfiles = [
         target[DefaultInfo].default_runfiles
-        for attr_name in ("deps", "executables", "libraries", "data", "lib_data")
+        for attr_name in ("deps", "executables", "libraries", "data", "lib_data", "components")
         for target in getattr(ctx.attr, attr_name, [])
     ]
     return [
