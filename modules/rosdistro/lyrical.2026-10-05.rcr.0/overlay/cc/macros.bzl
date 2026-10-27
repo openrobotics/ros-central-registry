@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def ros_local_defines(name = None):
+def ros_local_defines(name = None, rlocations = None):
     """Common local defines for ROS nodes"""
     package_name = name or native.module_name()
-    return [
+    defines = [
         "ROS_PACKAGE_NAME=\\\"{}\\\"".format(package_name),
         "DEFAULT_RMW_IMPLEMENTATION=\"rmw_fastrtps_cpp\"",
         # Ament's visibility_control.h convention gates dllexport/dllimport
@@ -33,6 +33,15 @@ def ros_local_defines(name = None):
         # when building the library; the unused spelling is harmless.
         "{}_BUILDING_LIBRARY".format(package_name.upper()),
     ]
+    if rlocations:
+        defines.append("RCR_CURRENT_REPOSITORY=\\\"{}\\\"".format(native.repo_name()))
+        for macro_name, rel_path in rlocations.items():
+            if rel_path.startswith("$(") or rel_path.startswith("@"):
+                target_path = rel_path.removeprefix("@").replace("//", "/")
+            else:
+                target_path = "{}/{}".format(package_name, rel_path.lstrip("/")) if rel_path else package_name
+            defines.append("{}=RCR_RLOCATION(\\\"{}\\\")".format(macro_name, target_path))
+    return defines
 
 def ros_exports_header(name, out, library = None, base_name = None, **kwargs):
     """Create an exports header for a ros package"""

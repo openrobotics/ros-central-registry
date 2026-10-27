@@ -1,0 +1,116 @@
+--- a/src/detail/zenoh_config.cpp
++++ b/src/detail/zenoh_config.cpp
+@@ -24,9 +24,8 @@
+ #include <zenoh/api/config.hxx>
+ 
+ #include "logging_macros.hpp"
+-
+-#include <ament_index_cpp/get_package_share_path.hpp>
+-#include <ament_index_cpp/get_package_prefix.hpp> /* for PackageNotFoundError */
++#include "src/detail/default_zenoh_config.hpp"
++
+ #include <rmw/impl/cpp/macros.hpp>
+ 
+ ///=============================================================================
+@@ -35,13 +34,12 @@
+ namespace
+ {
+ /// Map the configurable entity to a pair of environment variable name that
+-/// stores the absolute path to the Zenoh config and the default config filename.
+-/// Note: The default config file should be located within rmw_zenoh_cpp/config/.
++/// stores the absolute path to the Zenoh config and the default config string.
+ static const std::unordered_map<ConfigurableEntity,
+   std::pair<const char *, const char *>> envar_map = {
+   {ConfigurableEntity::Session,
+-    {"ZENOH_SESSION_CONFIG_URI", "DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5"}},
+-  {ConfigurableEntity::Router, {"ZENOH_ROUTER_CONFIG_URI", "DEFAULT_RMW_ZENOH_ROUTER_CONFIG.json5"}}
++    {"ZENOH_SESSION_CONFIG_URI", kDefaultSessionConfig}},
++  {ConfigurableEntity::Router, {"ZENOH_ROUTER_CONFIG_URI", kDefaultRouterConfig}}
+ };
+ 
+ static const char * router_check_attempts_envar = "ZENOH_ROUTER_CHECK_ATTEMPTS";
+@@ -54,9 +52,8 @@
+ 
+ std::optional<zenoh::Config> _get_z_config(
+   const char * envar_name,
+-  const std::filesystem::path & default_uri)
+-{
+-  std::filesystem::path configured_uri;
++  const char * default_config_str)
++{
+   const char * envar_uri;
+   // Get the path to the zenoh configuration file from the environment variable.
+   if (NULL != rcutils_get_env(envar_name, &envar_uri)) {
+@@ -65,17 +62,22 @@
+       "rmw_zenoh_cpp", "Envar %s cannot be read.", envar_name);
+     return std::nullopt;
+   }
+-  std::filesystem::path envar_uri_p(envar_uri);
+   // If the environment variable is set, try to read the configuration from the file,
+   // if the environment variable is not set use internal configuration
+-  configured_uri = envar_uri[0] != '\0' ? envar_uri_p : default_uri;
+-  // Try to read the configuration
+   zenoh::ZResult result;
+-  zenoh::Config config = zenoh::Config::from_file(configured_uri.string(), &result);
++  zenoh::Config config = envar_uri[0] != '\0' ?
++    zenoh::Config::from_file(envar_uri, &result) :
++    zenoh::Config::from_str(default_config_str, &result);
+   if (result != Z_OK) {
+-    RMW_ZENOH_LOG_ERROR_NAMED(
+-      "rmw_zenoh_cpp",
+-      "Invalid configuration file %s", configured_uri.c_str());
++    if (envar_uri[0] != '\0') {
++      RMW_ZENOH_LOG_ERROR_NAMED(
++        "rmw_zenoh_cpp",
++        "Invalid configuration file %s", envar_uri);
++    } else {
++      RMW_ZENOH_LOG_ERROR_NAMED(
++        "rmw_zenoh_cpp",
++        "Invalid built-in default configuration");
++    }
+     return std::nullopt;
+   }
+ 
+@@ -104,9 +106,15 @@
+     }
+   }
+ 
+-  RMW_ZENOH_LOG_DEBUG_NAMED(
+-    "rmw_zenoh_cpp",
+-    "configured using configuration file %s", configured_uri.c_str());
++  if (envar_uri[0] != '\0') {
++    RMW_ZENOH_LOG_DEBUG_NAMED(
++      "rmw_zenoh_cpp",
++      "configured using configuration file %s", envar_uri);
++  } else {
++    RMW_ZENOH_LOG_DEBUG_NAMED(
++      "rmw_zenoh_cpp",
++      "configured using built-in default configuration");
++  }
+   return config;
+ }
+ }  // namespace
+@@ -121,22 +129,7 @@
+     return std::nullopt;
+   }
+ 
+-  std::filesystem::path default_config_path;
+-
+-  try {
+-    // Get the absolute path to the default configuration file.
+-    std::filesystem::path path_to_config_folder =
+-      ament_index_cpp::get_package_share_path("rmw_zenoh_cpp") / "config";
+-
+-    default_config_path = path_to_config_folder / envar_map_it->second.second;
+-  } catch (const ament_index_cpp::PackageNotFoundError & e) {
+-    RMW_ZENOH_LOG_WARN_NAMED(
+-      "rmw_zenoh_cpp",
+-      "Failed to find rmw_zenoh_cpp package in ament_index (%s). "
+-      "Relying on 'ZENOH_*_CONFIG_URI' ENV vars.", e.what());
+-  }
+-
+-  return _get_z_config(envar_map_it->second.first, default_config_path);
++  return _get_z_config(envar_map_it->second.first, envar_map_it->second.second);
+ }
+ 
+ ///=============================================================================
