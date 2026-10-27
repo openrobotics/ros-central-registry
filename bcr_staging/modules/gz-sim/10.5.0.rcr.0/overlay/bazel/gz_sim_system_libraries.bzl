@@ -112,3 +112,23 @@ def gz_sim_system_libraries(static_lib_name, so_lib_name, srcs, includes = [], *
             srcs = srcs,
             **kwargs
         )
+
+        # Building blocks for relinking the plugin elsewhere. The `.so` above
+        # is self-contained (it statically links gz-sim, gz-msgs, protobuf,
+        # ... alongside the plugin code), which only works where the dynamic
+        # loader interposes those against the host's copies. A distribution
+        # that ships the gz stack as shared libraries (e.g. rosdistro's
+        # //cc/gz) can instead build `cc_binary(srcs = [<so>.srcs], deps =
+        # [<so>.deps], dynamic_deps = [...], linkshared = True)` so the
+        # plugin shares one copy of everything with the server.
+        native.filegroup(
+            name = so_lib_name + ".srcs",
+            srcs = srcs,
+            visibility = ["//visibility:public"],
+        )
+        cc_library(
+            name = so_lib_name + ".deps",
+            includes = includes,
+            visibility = ["//visibility:public"],
+            deps = kwargs.get("deps", []),
+        )

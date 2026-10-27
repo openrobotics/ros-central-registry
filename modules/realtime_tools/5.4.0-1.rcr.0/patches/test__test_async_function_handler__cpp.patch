@@ -1,0 +1,59 @@
+--- a/test/test_async_function_handler.cpp
++++ b/test/test_async_function_handler.cpp
+@@ -137,9 +137,12 @@
+   std::this_thread::sleep_for(std::chrono::milliseconds(10));
+ 
+   ASSERT_TRUE(async_class.get_handler().get_thread().joinable());
++#if !defined(__APPLE__)
++  // Thread affinity is not supported on macOS (see realtime_tools::set_thread_affinity).
+   ASSERT_TRUE(
+     realtime_tools::set_thread_affinity(async_class.get_handler().get_thread().native_handle(), 0)
+       .first);
++#endif
+   EXPECT_EQ(async_class.get_state().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+   auto trigger_status = async_class.trigger();
+   ASSERT_TRUE(trigger_status.first);
+@@ -295,7 +298,10 @@
+   std::this_thread::sleep_for(std::chrono::milliseconds(10));
+ 
+   ASSERT_TRUE(async_class.get_handler().get_thread().joinable());
++#if !defined(__APPLE__)
++  // Thread affinity is not supported on macOS (see realtime_tools::set_thread_affinity).
+   ASSERT_TRUE(realtime_tools::set_thread_affinity(async_class.get_handler().get_thread(), 0).first);
++#endif
+   EXPECT_EQ(async_class.get_state().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+   auto trigger_status = async_class.trigger();
+   ASSERT_TRUE(trigger_status.first);
+@@ -467,15 +473,29 @@
+     ASSERT_TRUE(trigger_status.first)
+       << "Trigger should be successful in DETACHED scheduling policy";
+     ASSERT_EQ(realtime_tools::return_type::OK, trigger_status.second);
+-    ASSERT_NEAR(async_class.get_counter(), i * static_cast<int>(params.exec_rate), 10)
++#if defined(__APPLE__)
++    // macOS timers are coalesced, so the cycle count drifts a little more per second.
++    constexpr int kCounterTolerance = 25;
++#else
++    constexpr int kCounterTolerance = 10;
++#endif
++    ASSERT_NEAR(
++      async_class.get_counter(), i * static_cast<int>(params.exec_rate), kCounterTolerance)
+       << "Counter should be close to the number of cycles triggered in DETACHED scheduling policy";
+   }
+   // Make sure that the failed triggers are less than 0.5%
+   const auto missed_triggers = std::abs(
+     static_cast<int>(total_cycles * params.exec_rate) -
+     static_cast<int>(async_class.get_counter()));
+-  ASSERT_LT(missed_triggers, static_cast<int>(0.005 * total_cycles * params.exec_rate))
+-    << "The missed triggers cannot be more than 0.5%!";
++#if defined(__APPLE__)
++  // macOS timers are coalesced, so the detached thread's sleeps wake late a
++  // little more often; allow 2% there instead of 0.5%.
++  constexpr double kAllowedMissRatio = 0.02;
++#else
++  constexpr double kAllowedMissRatio = 0.005;
++#endif
++  ASSERT_LT(missed_triggers, static_cast<int>(kAllowedMissRatio * total_cycles * params.exec_rate))
++    << "The missed triggers cannot be more than " << kAllowedMissRatio * 100.0 << "%!";
+ 
+   // Now, let's pause the thread and then check if it is updating or not
+   ASSERT_TRUE(async_class.get_handler().pause_execution());

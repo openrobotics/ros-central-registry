@@ -12,76 +12,86 @@ licenses(["notice"])
 
 exports_files(["LICENSE"])
 
+# Build settings shared by every platform; the per-OS render system switches
+# are layered on top below.
+OGRE_BUILD_SETTINGS_SUBSTITUTIONS = {
+    "#cmakedefine OGRE_STATIC_LIB": "/* undef OGRE_STATIC_LIB */",
+    "@OGRE_DEBUG_LEVEL_DEBUG@": "3",
+    "@OGRE_DEBUG_LEVEL_RELEASE@": "0",
+    "#cmakedefine OGRE_BUILD_RENDERSYSTEM_D3D11": "/* undef OGRE_BUILD_RENDERSYSTEM_D3D11 */",
+    "#cmakedefine OGRE_BUILD_RENDERSYSTEM_GL3PLUS": "#define OGRE_BUILD_RENDERSYSTEM_GL3PLUS 1",
+    # Order matters for the next two substitutions to avoid malformed directives
+    "#cmakedefine OGRE_BUILD_RENDERSYSTEM_GLES2": "/* undef OGRE_BUILD_RENDERSYSTEM_GLES2 */",
+    "#cmakedefine OGRE_BUILD_RENDERSYSTEM_GLES": "/* undef OGRE_BUILD_RENDERSYSTEM_GLES */",
+    "#cmakedefine OGRE_BUILD_RENDERSYSTEM_VULKAN": "/* undef OGRE_BUILD_RENDERSYSTEM_VULKAN */",
+    "#cmakedefine OGRE_BUILD_PLUGIN_PFX": "#define OGRE_BUILD_PLUGIN_PFX 1",
+    "#cmakedefine OGRE_BUILD_COMPONENT_HLMS_PBS_MOBILE": "/* undef OGRE_BUILD_COMPONENT_HLMS_PBS_MOBILE */",
+    "#cmakedefine OGRE_BUILD_COMPONENT_HLMS_UNLIT_MOBILE": "/* undef OGRE_BUILD_COMPONENT_HLMS_UNLIT_MOBILE */",
+    "#cmakedefine OGRE_BUILD_COMPONENT_HLMS_PBS": "#define OGRE_BUILD_COMPONENT_HLMS_PBS 1",
+    "#cmakedefine OGRE_BUILD_COMPONENT_HLMS_UNLIT": "#define OGRE_BUILD_COMPONENT_HLMS_UNLIT 1",
+    "#cmakedefine OGRE_BUILD_COMPONENT_PAGING": "/* undef OGRE_BUILD_COMPONENT_PAGING */",
+    "#cmakedefine OGRE_BUILD_COMPONENT_PLANAR_REFLECTIONS": "/* undef OGRE_BUILD_COMPONENT_PLANAR_REFLECTIONS */",
+    "#cmakedefine OGRE_BUILD_COMPONENT_SCENE_FORMAT": "/* undef OGRE_BUILD_COMPONENT_SCENE_FORMAT */",
+    "#cmakedefine OGRE_BUILD_COMPONENT_MESHLODGENERATOR": "#define OGRE_BUILD_COMPONENT_MESHLODGENERATOR 1",
+    "#cmakedefine OGRE_BUILD_COMPONENT_TERRAIN": "/* undef OGRE_BUILD_COMPONENT_TERRAIN */",
+    "#cmakedefine OGRE_BUILD_COMPONENT_VOLUME": "/* undef OGRE_BUILD_COMPONENT_VOLUME */",
+    "#cmakedefine OGRE_BUILD_COMPONENT_PROPERTY": "/* undef OGRE_BUILD_COMPONENT_PROPERTY */",
+    "#cmakedefine OGRE_BUILD_COMPONENT_OVERLAY": "#define OGRE_BUILD_COMPONENT_OVERLAY 1",
+    "#cmakedefine OGRE_BUILD_COMPONENT_RTSHADERSYSTEM": "/* undef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM */",
+    "#cmakedefine OGRE_CONFIG_LITTLE_ENDIAN": "#define OGRE_CONFIG_LITTLE_ENDIAN 1",
+    "#cmakedefine OGRE_CONFIG_BIG_ENDIAN": "/* undef OGRE_CONFIG_BIG_ENDIAN */",
+    "#cmakedefine OGRE_CONFIG_UNIX_NO_X11": "#define OGRE_CONFIG_UNIX_NO_X11 1",
+    "@OGRE_SET_DOUBLE@": "0",
+    "@OGRE_SET_NODE_INHERIT_TRANSFORM@": "0",
+    "@OGRE_SET_ALLOCATOR@": "1",
+    "@OGRE_SET_CONTAINERS_USE_ALLOCATOR@": "1",
+    "@OGRE_SET_STRING_USE_ALLOCATOR@": "0",
+    "@OGRE_SET_MEMTRACK_DEBUG@": "0",
+    "@OGRE_SET_MEMTRACK_RELEASE@": "0",
+    "@OGRE_SET_ASSERT_MODE@": "1",
+    "@OGRE_SET_THREADS@": "0",
+    "@OGRE_SET_THREAD_PROVIDER@": "0",
+    "@OGRE_SET_DISABLE_MESHLOD@": "0",
+    "@OGRE_SET_DISABLE_FREEIMAGE@": "0",
+    "@OGRE_SET_DISABLE_JSON@": "0",
+    "@OGRE_SET_DISABLE_DDS@": "0",
+    "@OGRE_SET_DISABLE_PVRTC@": "1",
+    "@OGRE_SET_DISABLE_ETC@": "0",
+    "@OGRE_SET_DISABLE_STBI@": "1",
+    "@OGRE_SET_DISABLE_ASTC@": "1",
+    "@OGRE_SET_DISABLE_ZIP@": "1",
+    "@OGRE_SET_DISABLE_VIEWPORT_ORIENTATIONMODE@": "1",
+    "@OGRE_SET_DISABLE_GLES2_GLSL_OPTIMISER@": "1",
+    "@OGRE_SET_DISABLE_GLES2_VAO_SUPPORT@": "1",
+    "@OGRE_SET_DISABLE_GL_STATE_CACHE_SUPPORT@": "1",
+    "@OGRE_SET_DISABLE_GLES3_SUPPORT@": "1",
+    "@OGRE_SET_RENDERDOC_INTEGRATION@": "1",
+    "@OGRE_SET_DISABLE_TBB_SCHEDULER@": "0",
+    "@OGRE_SET_USE_BOOST@": "0",
+    "@OGRE_SET_PROFILING@": "0",
+    "@OGRE_SET_PROFILING_EXHAUSTIVE@": "0",
+    "@OGRE_SET_DISABLE_QUAD_BUFFER_STEREO@": "1",
+    "@OGRE_SET_DISABLE_AMD_AGS@": "0",
+    "@OGRE_SET_DISABLE_FINE_LIGHT_MASK_GRANULARITY@": "1",
+    "@OGRE_SET_ENABLE_LIGHT_OBB_RESTRAINT@": "0",
+    "@OGRE_SET_USE_SIMD@": "1",
+    "@OGRE_SET_RESTRICT_ALIASING@": "1",
+    "@OGRE_SET_IDSTRING_ALWAYS_READABLE@": "0",
+    "#cmakedefine RTSHADER_SYSTEM_BUILD_CORE_SHADERS": "/* undef RTSHADER_SYSTEM_BUILD_CORE_SHADERS */",
+    "#cmakedefine RTSHADER_SYSTEM_BUILD_EXT_SHADERS": "/* undef RTSHADER_SYSTEM_BUILD_EXT_SHADERS */",
+}
+
 expand_template(
     name = "OgreBuildSettings",
     out = "OgreMain/include/OgreBuildSettings.h",
-    substitutions = {
-        "#cmakedefine OGRE_STATIC_LIB": "/* undef OGRE_STATIC_LIB */",
-        "@OGRE_DEBUG_LEVEL_DEBUG@": "3",
-        "@OGRE_DEBUG_LEVEL_RELEASE@": "0",
-        "#cmakedefine OGRE_BUILD_RENDERSYSTEM_D3D11": "/* undef OGRE_BUILD_RENDERSYSTEM_D3D11 */",
-        "#cmakedefine OGRE_BUILD_RENDERSYSTEM_GL3PLUS": "#define OGRE_BUILD_RENDERSYSTEM_GL3PLUS 1",
-        # Order matters for the next two substitutions to avoid malformed directives
-        "#cmakedefine OGRE_BUILD_RENDERSYSTEM_GLES2": "/* undef OGRE_BUILD_RENDERSYSTEM_GLES2 */",
-        "#cmakedefine OGRE_BUILD_RENDERSYSTEM_GLES": "/* undef OGRE_BUILD_RENDERSYSTEM_GLES */",
-        "#cmakedefine OGRE_BUILD_RENDERSYSTEM_METAL": "/* undef OGRE_BUILD_RENDERSYSTEM_METAL */",
-        "#cmakedefine OGRE_BUILD_RENDERSYSTEM_VULKAN": "/* undef OGRE_BUILD_RENDERSYSTEM_VULKAN */",
-        "#cmakedefine OGRE_BUILD_PLUGIN_PFX": "#define OGRE_BUILD_PLUGIN_PFX 1",
-        "#cmakedefine OGRE_BUILD_COMPONENT_HLMS_PBS_MOBILE": "/* undef OGRE_BUILD_COMPONENT_HLMS_PBS_MOBILE */",
-        "#cmakedefine OGRE_BUILD_COMPONENT_HLMS_UNLIT_MOBILE": "/* undef OGRE_BUILD_COMPONENT_HLMS_UNLIT_MOBILE */",
-        "#cmakedefine OGRE_BUILD_COMPONENT_HLMS_PBS": "#define OGRE_BUILD_COMPONENT_HLMS_PBS 1",
-        "#cmakedefine OGRE_BUILD_COMPONENT_HLMS_UNLIT": "#define OGRE_BUILD_COMPONENT_HLMS_UNLIT 1",
-        "#cmakedefine OGRE_BUILD_COMPONENT_PAGING": "/* undef OGRE_BUILD_COMPONENT_PAGING */",
-        "#cmakedefine OGRE_BUILD_COMPONENT_PLANAR_REFLECTIONS": "/* undef OGRE_BUILD_COMPONENT_PLANAR_REFLECTIONS */",
-        "#cmakedefine OGRE_BUILD_COMPONENT_SCENE_FORMAT": "/* undef OGRE_BUILD_COMPONENT_SCENE_FORMAT */",
-        "#cmakedefine OGRE_BUILD_COMPONENT_MESHLODGENERATOR": "#define OGRE_BUILD_COMPONENT_MESHLODGENERATOR 1",
-        "#cmakedefine OGRE_BUILD_COMPONENT_TERRAIN": "/* undef OGRE_BUILD_COMPONENT_TERRAIN */",
-        "#cmakedefine OGRE_BUILD_COMPONENT_VOLUME": "/* undef OGRE_BUILD_COMPONENT_VOLUME */",
-        "#cmakedefine OGRE_BUILD_COMPONENT_PROPERTY": "/* undef OGRE_BUILD_COMPONENT_PROPERTY */",
-        "#cmakedefine OGRE_BUILD_COMPONENT_OVERLAY": "#define OGRE_BUILD_COMPONENT_OVERLAY 1",
-        "#cmakedefine OGRE_BUILD_COMPONENT_RTSHADERSYSTEM": "/* undef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM */",
-        "#cmakedefine OGRE_CONFIG_LITTLE_ENDIAN": "#define OGRE_CONFIG_LITTLE_ENDIAN 1",
-        "#cmakedefine OGRE_CONFIG_BIG_ENDIAN": "/* undef OGRE_CONFIG_BIG_ENDIAN */",
-        "#cmakedefine OGRE_CONFIG_UNIX_NO_X11": "#define OGRE_CONFIG_UNIX_NO_X11 1",
-        "@OGRE_SET_DOUBLE@": "0",
-        "@OGRE_SET_NODE_INHERIT_TRANSFORM@": "0",
-        "@OGRE_SET_ALLOCATOR@": "1",
-        "@OGRE_SET_CONTAINERS_USE_ALLOCATOR@": "1",
-        "@OGRE_SET_STRING_USE_ALLOCATOR@": "0",
-        "@OGRE_SET_MEMTRACK_DEBUG@": "0",
-        "@OGRE_SET_MEMTRACK_RELEASE@": "0",
-        "@OGRE_SET_ASSERT_MODE@": "1",
-        "@OGRE_SET_THREADS@": "0",
-        "@OGRE_SET_THREAD_PROVIDER@": "0",
-        "@OGRE_SET_DISABLE_MESHLOD@": "0",
-        "@OGRE_SET_DISABLE_FREEIMAGE@": "0",
-        "@OGRE_SET_DISABLE_JSON@": "0",
-        "@OGRE_SET_DISABLE_DDS@": "0",
-        "@OGRE_SET_DISABLE_PVRTC@": "1",
-        "@OGRE_SET_DISABLE_ETC@": "0",
-        "@OGRE_SET_DISABLE_STBI@": "1",
-        "@OGRE_SET_DISABLE_ASTC@": "1",
-        "@OGRE_SET_DISABLE_ZIP@": "1",
-        "@OGRE_SET_DISABLE_VIEWPORT_ORIENTATIONMODE@": "1",
-        "@OGRE_SET_DISABLE_GLES2_GLSL_OPTIMISER@": "1",
-        "@OGRE_SET_DISABLE_GLES2_VAO_SUPPORT@": "1",
-        "@OGRE_SET_DISABLE_GL_STATE_CACHE_SUPPORT@": "1",
-        "@OGRE_SET_DISABLE_GLES3_SUPPORT@": "1",
-        "@OGRE_SET_RENDERDOC_INTEGRATION@": "1",
-        "@OGRE_SET_DISABLE_TBB_SCHEDULER@": "0",
-        "@OGRE_SET_USE_BOOST@": "0",
-        "@OGRE_SET_PROFILING@": "0",
-        "@OGRE_SET_PROFILING_EXHAUSTIVE@": "0",
-        "@OGRE_SET_DISABLE_QUAD_BUFFER_STEREO@": "1",
-        "@OGRE_SET_DISABLE_AMD_AGS@": "0",
-        "@OGRE_SET_DISABLE_FINE_LIGHT_MASK_GRANULARITY@": "1",
-        "@OGRE_SET_ENABLE_LIGHT_OBB_RESTRAINT@": "0",
-        "@OGRE_SET_USE_SIMD@": "1",
-        "@OGRE_SET_RESTRICT_ALIASING@": "1",
-        "@OGRE_SET_IDSTRING_ALWAYS_READABLE@": "0",
-        "#cmakedefine RTSHADER_SYSTEM_BUILD_CORE_SHADERS": "/* undef RTSHADER_SYSTEM_BUILD_CORE_SHADERS */",
-        "#cmakedefine RTSHADER_SYSTEM_BUILD_EXT_SHADERS": "/* undef RTSHADER_SYSTEM_BUILD_EXT_SHADERS */",
-    },
+    substitutions = select({
+        "@platforms//os:macos": OGRE_BUILD_SETTINGS_SUBSTITUTIONS | {
+            "#cmakedefine OGRE_BUILD_RENDERSYSTEM_METAL": "#define OGRE_BUILD_RENDERSYSTEM_METAL 1",
+        },
+        "//conditions:default": OGRE_BUILD_SETTINGS_SUBSTITUTIONS | {
+            "#cmakedefine OGRE_BUILD_RENDERSYSTEM_METAL": "/* undef OGRE_BUILD_RENDERSYSTEM_METAL */",
+        },
+    }),
     template = "CMake/Templates/OgreBuildSettings.h.in",
 )
 
@@ -281,6 +291,22 @@ alias(
     }),
     visibility = ["//visibility:public"],
 )
+
+# macOS link flags for the render system plugins.
+#
+# The plugins are cc_binary(linkshared = True) targets, so each one statically
+# links its own private copy of OgreMain. On Linux that is harmless: ELF
+# symbol interposition binds the plugin's OgreMain references to the copy the
+# host process already loaded (the engine's), so there is only ever one Root
+# singleton. macOS two-level namespaces bind the plugin to its *own* copy
+# instead, and Root::getSingleton() inside the plugin trips
+# `assert(msSingleton)`. `-flat_namespace` + `-interposable` (lld) give the
+# plugin the ELF semantics back: every reference is indirected and resolved
+# to the first definition in the process at dlopen() time.
+OGRE_PLUGIN_MACOS_LINKOPTS = [
+    "-Wl,-flat_namespace",
+    "-Wl,-interposable",
+]
 
 cc_library(
     name = "ogre-main-cpp",
@@ -513,7 +539,7 @@ cc_binary(
         ],
     }),
     linkopts = ["-pthread"] + select({
-        "@platforms//os:macos": [
+        "@platforms//os:macos": OGRE_PLUGIN_MACOS_LINKOPTS + [
             "-framework CoreFoundation",
             "-framework Cocoa",
             "-framework IOKit",
@@ -532,6 +558,103 @@ cc_binary(
         ],
         "//conditions:default": [],
     }),
+)
+
+# On macOS gz-rendering (and OGRE itself) look the render system plugins up as
+# `RenderSystem_<Name>.dylib`, so publish copies under that name there. Linux
+# keeps the `.so` spelling. Consumers should depend on the per-OS
+# `:render_systems` filegroup rather than on a specific file name.
+genrule(
+    name = "RenderSystem_GL3Plus_dylib",
+    srcs = [":RenderSystem_GL3Plus.so"],
+    outs = ["RenderSystem_GL3Plus.dylib"],
+    cmd = "cp $< $@",
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+### RenderSystem: Metal (macOS only)
+#
+# Same `.mm` -> `.cc` + `-x objective-c++` trick as the GL3Plus Cocoa
+# windowing code above, applied to the whole render system. This is the
+# render system gz-gui's MinimalScene asks for by default on macOS
+# (GZ_GUI_HAVE_METAL) and the one Gazebo's own macOS builds ship with.
+ogre_metal_mm_srcs = glob([
+    "RenderSystems/Metal/src/*.mm",
+    "RenderSystems/Metal/src/Vao/*.mm",
+    "RenderSystems/Metal/src/Windowing/OSX/*.mm",
+])
+
+[
+    genrule(
+        name = "copy_metal_" + src.rsplit("/", 1)[1][:-len(".mm")],
+        srcs = [src],
+        outs = [src[:-len(".mm")] + ".cc"],
+        cmd = "cp $< $@",
+        target_compatible_with = ["@platforms//os:macos"],
+    )
+    for src in ogre_metal_mm_srcs
+]
+
+ogre_metal_hdrs = glob([
+    "RenderSystems/Metal/include/*.h",
+    "RenderSystems/Metal/include/*.inl",
+    "RenderSystems/Metal/include/Vao/*.h",
+    "RenderSystems/Metal/include/Windowing/OSX/*.h",
+])
+
+cc_binary(
+    name = "RenderSystem_Metal.dylib",
+    srcs = [src[:-len(".mm")] + ".cc" for src in ogre_metal_mm_srcs] + ogre_metal_hdrs,
+    copts = [
+        "-std=c++17",
+        "-fexceptions",
+        "-fobjc-arc",
+        "-x",
+        "objective-c++",
+        "-Wno-deprecated-declarations",
+        "-Wno-overloaded-virtual",
+        "-Wno-switch",
+        "-Wno-unused-function",
+        "-Wno-unused-variable",
+        "-Wno-unused-but-set-variable",
+        "-Wno-nullability-completeness",
+        "-Wno-unknown-warning-option",
+    ],
+    includes = [
+        "RenderSystems/Metal/include",
+        "RenderSystems/Metal/include/Vao",
+        "RenderSystems/Metal/include/Windowing/OSX",
+    ],
+    linkopts = OGRE_PLUGIN_MACOS_LINKOPTS + [
+        "-pthread",
+        "-fobjc-arc",
+        "-framework AppKit",
+        "-framework CoreFoundation",
+        "-framework Foundation",
+        "-framework IOKit",
+        "-framework Metal",
+        "-framework QuartzCore",
+    ],
+    linkshared = True,
+    target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":ogre-main",
+    ],
+)
+
+# Every render system plugin for the target OS, under the file name OGRE
+# expects there (see above).
+filegroup(
+    name = "render_systems",
+    srcs = select({
+        "@platforms//os:macos": [
+            ":RenderSystem_GL3Plus.dylib",
+            ":RenderSystem_Metal.dylib",
+        ],
+        "//conditions:default": [":RenderSystem_GL3Plus.so"],
+    }),
+    visibility = ["//visibility:public"],
 )
 
 cc_library(

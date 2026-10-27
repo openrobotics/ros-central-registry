@@ -155,7 +155,7 @@ cc_library(
         "-fPIC",
     ],
     data = [
-        "@ogre-next//:RenderSystem_GL3Plus.so",
+        "@ogre-next//:render_systems",
     ],
     defines = select({
         "@platforms//os:windows": [
@@ -185,8 +185,6 @@ cc_library(
         "@gz-plugin//:loader",
         "@gz-rendering//ogre2:gz-rendering-ogre2-engine-static",
         "@gz-transport",
-        "@libx11",
-        "@libxrandr",
         "@opengl-registry//:OpenGL_headers",
         "@qtbase//:core",
         "@qtbase//:gui",
@@ -201,14 +199,23 @@ cc_library(
         "@qtdeclarative//:quickcontrols2impl",
         "@qtdeclarative//:quicktemplates2",
         "@tinyxml2",
-    ],
+    ] + select({
+        # X11 only exists on Linux. Keeping libx11 on the macOS include path
+        # is actively harmful: its `include/X11` dir contains `Xlocale.h`,
+        # which the case-insensitive filesystem hands out for the SDK's own
+        # `#include <xlocale.h>`.
+        "@platforms//os:linux": [
+            "@libx11",
+            "@libxrandr",
+        ],
+        "//conditions:default": [],
+    }),
     alwayslink = True,
 )
 
 cc_shared_library(
     name = "libgz-gui-shared.so",
     dynamic_deps = GZ_GUI_QT_SHARED_DEPS + [
-        "@qtbase//:xcb_qpa_shared",
         "@qtcharts//:charts_shared",
         "@qtcharts//:chartsqml_shared",
         "@qtdeclarative//:labsanimation_shared",
@@ -230,7 +237,10 @@ cc_shared_library(
         "@qtpositioning//:positioning_shared",
         "@qtpositioning//:positioningquick_shared",
         "@qtsvg//:svg_shared",
-    ],
+    ] + select({
+        "@platforms//os:linux": ["@qtbase//:xcb_qpa_shared"],
+        "//conditions:default": [],
+    }),
     exports_filter = [
         "//:__subpackages__",
         "@@abseil-cpp+//:__subpackages__",
@@ -308,7 +318,6 @@ cc_shared_library(
         "@qt5compat//:qtgraphicaleffectsplugin",
         "@qt5compat//:qtgraphicaleffectsprivate",
         "@qtbase//:offscreen",
-        "@qtbase//:xcb",
         "@qtcharts//:qtchartsqml2",
         "@qtdeclarative//:labsanimationplugin",
         "@qtdeclarative//:qmlfolderlistmodelplugin",
@@ -331,7 +340,63 @@ cc_shared_library(
         "@qtpositioning//:positioningquickplugin",
         "@qtsvg//:qsvg",
         "@qtsvg//:qsvgicon",
+    ] + select({
+        # The QPA (windowing) plugin is linked statically into the gz-gui
+        # library, since gz::gui::Application is what instantiates the
+        # QApplication. Pick the native one per OS; `offscreen` above is
+        # always available as a headless fallback.
+        "@platforms//os:linux": ["@qtbase//:xcb"],
+        "@platforms//os:macos": ["@qtbase//:cocoa"],
+        "//conditions:default": [],
+    }),
+)
+
+# MinimalScene's Metal RHI backend is Objective-C++ and is required on macOS:
+# MinimalSceneRhi.hh defines GZ_GUI_HAVE_METAL as __APPLE__, so MinimalScene.cc
+# unconditionally references the GzCameraTextureRhiMetal / RenderThreadRhiMetal
+# / TextureNodeRhiMetal classes there (and the plugin would fail to dlopen
+# with "symbol not found" without them). Same `.mm` -> `.cc` + `-x
+# objective-c++` trick as ogre-next's overlay uses, since the hermetic C++
+# toolchain won't compile `.mm` sources directly in a cc_* rule.
+genrule(
+    name = "copy_MinimalSceneRhiMetal",
+    srcs = ["src/plugins/minimal_scene/MinimalSceneRhiMetal.mm"],
+    outs = ["src/plugins/minimal_scene/MinimalSceneRhiMetal.cc"],
+    cmd = "cp $< $@",
+)
+
+cc_library(
+    name = "MinimalSceneRhiMetal_macos",
+    srcs = [
+        "src/plugins/minimal_scene/MinimalSceneRhiMetal.cc",
     ],
+    hdrs = [
+        "src/plugins/minimal_scene/MinimalScene.hh",
+        "src/plugins/minimal_scene/MinimalSceneRhi.hh",
+        "src/plugins/minimal_scene/MinimalSceneRhiMetal.hh",
+    ],
+    copts = [
+        "-fPIC",
+        "-fexceptions",
+        "-fobjc-arc",
+        "-Wno-nullability-completeness",
+        "-x",
+        "objective-c++",
+    ],
+    includes = ["src/plugins/minimal_scene"],
+    linkopts = [
+        "-framework AppKit",
+        "-framework Metal",
+    ],
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        ":gz-gui",
+        "@gz-rendering",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:quick",
+    ],
+    alwayslink = True,
 )
 
 gz_gui_plugin(
@@ -357,7 +422,10 @@ gz_gui_plugin(
     qrc = "src/plugins/minimal_scene/MinimalScene.qrc",
     deps = [
         "@opengl-registry//:OpenGL_headers",
-    ],
+    ] + select({
+        "@platforms//os:macos": [":MinimalSceneRhiMetal_macos"],
+        "//conditions:default": [],
+    }),
 )
 
 gz_gui_plugin(

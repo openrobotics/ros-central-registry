@@ -1,0 +1,120 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Staged fork of BCR's libuuid@2.41.2.bcr.0. The only change is that macOS
+# consumers get the platform's own libuuid (it ships in libSystem, header at
+# <uuid/uuid.h> in the SDK) instead of the bundled util-linux copy.
+#
+# Exporting util-linux's uuid.h under the `uuid/` include prefix shadows the
+# SDK header for every target that transitively depends on libuuid. That is
+# fatal for any Objective-C++ translation unit in that dependency cone:
+# Foundation -> CoreServices -> CarbonCore/HFSVolumes.h -> <hfs/hfs_format.h>
+# -> <uuid/uuid.h> needs Apple's `uuid_string_t`, which util-linux's header
+# doesn't define ("unknown type name 'uuid_string_t'").
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+cc_library(
+    name = "common",
+    srcs = [
+        "lib/md5.c",
+        "lib/randutils.c",
+        "lib/sha1.c",
+        "lib/strutils.c",
+        "lib/timeutils.c",
+    ],
+    hdrs = [
+        "include/all-io.h",
+        "include/bitops.h",
+        "include/c.h",
+        "include/md5.h",
+        "include/nls.h",
+        "include/pathnames.h",
+        "include/randutils.h",
+        "include/sha1.h",
+        "include/strutils.h",
+        "include/timeutils.h",
+    ],
+    copts = [
+        "-Wno-implicit-function-declaration",
+        "-Wno-int-conversion",
+        "-Wno-return-type",
+    ],
+    defines = [
+        "HAVE_NANOSLEEP",
+        "_PATH_LOCALSTATEDIR=\\\"/var\\\"",
+    ] + select({
+        "@platforms//os:linux": ["HAVE_REALLOCARRAY"],
+        "//conditions:default": [],
+    }),
+    includes = ["include"],
+)
+
+cc_library(
+    name = "uuid_bundled",
+    srcs = [
+        "libuuid/src/clear.c",
+        "libuuid/src/compare.c",
+        "libuuid/src/copy.c",
+        "libuuid/src/gen_uuid.c",
+        "libuuid/src/isnull.c",
+        "libuuid/src/pack.c",
+        "libuuid/src/parse.c",
+        "libuuid/src/predefined.c",
+        "libuuid/src/unpack.c",
+        "libuuid/src/unparse.c",
+        "libuuid/src/uuidP.h",
+        "libuuid/src/uuid_time.c",
+        "libuuid/src/uuidd.h",
+    ],
+    hdrs = [
+        "libuuid/src/uuid.h",
+    ],
+    copts = [
+        "-Wno-implicit-function-declaration",
+        "-Wno-int-conversion",
+        "-Wno-unused-parameter",
+    ],
+    defines = [
+        "_PATH_LOCALSTATEDIR=\\\"/var\\\"",
+    ],
+    include_prefix = "uuid",
+    strip_include_prefix = "libuuid/src",
+    deps = [
+        ":common",
+    ],
+)
+
+# On macOS the uuid_* API lives in libSystem, which every binary already
+# links, and <uuid/uuid.h> comes from the SDK -- so this is intentionally
+# empty.
+cc_library(
+    name = "uuid_system",
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+alias(
+    name = "uuid",
+    actual = select({
+        "@platforms//os:macos": ":uuid_system",
+        "//conditions:default": ":uuid_bundled",
+    }),
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "libuuid",
+    actual = ":uuid",
+    visibility = ["//visibility:public"],
+)

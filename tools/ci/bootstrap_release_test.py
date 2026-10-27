@@ -93,7 +93,7 @@ class TestRenderModuleDotBazel(unittest.TestCase):
         content = bootstrap_release.render_module_dot_bazel(
             "rclcpp", "32.0.0-1.rcr.0", {"rcutils": "7.1.1-3.rcr.0"}, "lyrical", "2026-06-23")
         self.assertIn('module(\n    name = "rclcpp",\n    version = "32.0.0-1.rcr.0",', content)
-        self.assertIn('bazel_dep(name = "rules_python", version = "2.4.1")', content)
+        self.assertIn('bazel_dep(name = "rules_python", version = "2.4.5")', content)
         self.assertIn('bazel_dep(name = "rcutils", version = "7.1.1-3.rcr.0")', content)
         self.assertIn('bazel_dep(name = "rosdistro", version = "lyrical.2026-06-23.rcr.0")', content)
         self.assertIn('pip_ros = use_extension("@rosdistro//python:defs.bzl", "pip_ros")', content)

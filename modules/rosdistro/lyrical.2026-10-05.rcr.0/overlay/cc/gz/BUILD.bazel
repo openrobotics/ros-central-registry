@@ -30,7 +30,7 @@ Naming follows upstream's CMake targets: `gz-sim` is the shared library
 The gz_*_vendor packages alias these as `@gz_sim_vendor//:gz_sim` etc.
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_shared_library")
 load(":defs.bzl", "gz_proto_descriptor_set", "gz_runfiles")
 
 package(default_visibility = ["//visibility:public"])
@@ -479,9 +479,11 @@ alias(
     actual = "@gz-rendering//ogre2:libgz-rendering-ogre2.so",
 )
 
+# Every OGRE-Next render system plugin for the target OS (GL3Plus everywhere;
+# GL3Plus + Metal on macOS), already under the file name OGRE looks up there.
 alias(
-    name = "RenderSystem_GL3Plus.so",
-    actual = "@ogre-next//:RenderSystem_GL3Plus.so",
+    name = "ogre_render_systems",
+    actual = "@ogre-next//:render_systems",
 )
 
 # The ogre2 media files (materials, shaders, ...) the plugin ships as data.
@@ -662,19 +664,58 @@ GZ_SIM_SYSTEMS = [
     "wind-effects",
 ]
 
-[
-    alias(
-        name = "gz-sim-%s-system.so" % system,
-        actual = "@gz-sim//:gz-sim-%s-system.so" % system,
-    )
-    for system in GZ_SIM_SYSTEMS
-]
+# gz-sim's own `gz-sim-<name>-system.so` targets are self-contained: each one
+# statically links gz-sim, gz-msgs, protobuf, abseil, ... next to the plugin
+# code. That only works where the dynamic loader interposes those copies
+# against the host's (ELF); on macOS every plugin ends up with private
+# protobuf/abseil state and gzserver aborts on the second registration of
+# gz/msgs/*.proto. Relink them here against the same shared libraries
+# gzserver itself uses, so there is exactly one copy of everything in the
+# process on every platform.
+GZ_SIM_SYSTEM_DYNAMIC_DEPS = [
+    ":gz-sim",
+    ":gz-sensors",
+    ":gz-sensors-all",
+    ":gz-common",
+    ":gz-common-events",
+    ":gz-common-geospatial",
+    ":gz-common-graphics",
+    ":gz-common-io",
+    ":gz-common-profiler",
+    ":gz-fuel-tools",
+    ":gz-math",
+    ":gz-msgs",
+    ":gz-physics",
+    ":gz-plugin",
+    ":gz-plugin-loader",
+    ":gz-rendering",
+    ":gz-transport",
+    ":gz-transport-parameters",
+    ":gz-utils",
+    ":gz-utils-log",
+    ":sdformat",
+    "//cc:boringssl",
+    "//cc:bzip2",
+    "//cc:libyaml",
+    "//cc:libzip",
+    "//cc:sqlite3",
+    "//cc:tinyxml2",
+    "//cc:zstd",
+] + PROTOBUF_DEPS
 
-# The BCR target for the free-space-explorer system has a typo'd name.
-alias(
-    name = "gz-sim-free-space-explorer-system.so",
-    actual = "@gz-sim//:gz-sim-free-space_explorer--system.so",
-)
+[
+    cc_binary(
+        name = "gz-sim-%s-system.so" % system,
+        srcs = ["@gz-sim//:gz-sim-%s-system.so.srcs" % upstream_name],
+        dynamic_deps = GZ_SIM_SYSTEM_DYNAMIC_DEPS,
+        linkshared = True,
+        deps = ["@gz-sim//:gz-sim-%s-system.so.deps" % upstream_name],
+    )
+    for system, upstream_name in [(s, s) for s in GZ_SIM_SYSTEMS] + [
+        # The BCR target for the free-space-explorer system has a typo'd name.
+        ("free-space-explorer", "free-space_explorer-"),
+    ]
+]
 
 filegroup(
     name = "gz-sim_systems",

@@ -70,17 +70,22 @@ if [[ -n "$gz_sim_shapes_world" ]]; then
   export GZ_SIM_RESOURCE_PATH="$gz_sim_worlds_dir${GZ_SIM_RESOURCE_PATH:+:$GZ_SIM_RESOURCE_PATH}"
 fi
 
-# Qt is built from source: the xcb/offscreen QPA plugins and the QML modules
-# gz-gui imports are linked statically into libgz-gui-shared.so, so there is
-# no QT_PLUGIN_PATH to set up. Prefer xcb, falling back to offscreen when no
-# display is available.
-export QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-"xcb;offscreen"}
+# Qt is built from source: the native QPA plugin (xcb on Linux, cocoa on
+# macOS) plus offscreen, and the QML modules gz-gui imports, are linked
+# statically into libgz-gui-shared.so, so there is no QT_PLUGIN_PATH to set
+# up. Prefer the native plugin, falling back to offscreen when no display is
+# available.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  export QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-"cocoa;offscreen"}
+else
+  export QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-"xcb;offscreen"}
+fi
 
 if [[ -n "${RUNFILES_DIR:-}" && -d "${RUNFILES_DIR}/_main/lib" ]]; then
   export GZ_RENDERING_PLUGIN_PATH="${GZ_RENDERING_PLUGIN_PATH:-${RUNFILES_DIR}/_main/lib}"
   export OGRE2_RESOURCE_PATH="${OGRE2_RESOURCE_PATH:-${RUNFILES_DIR}/_main/lib}"
 else
-  rendersystem_gl3plus=$(find_runfile "ogre-next/RenderSystem_GL3Plus.so" "ogre-next+/RenderSystem_GL3Plus.so" || true)
+  rendersystem_gl3plus=$(find_runfile "ogre-next/RenderSystem_GL3Plus.so" "ogre-next+/RenderSystem_GL3Plus.so" "ogre-next/RenderSystem_GL3Plus.dylib" "ogre-next+/RenderSystem_GL3Plus.dylib" || true)
   if [[ -n "$rendersystem_gl3plus" ]]; then
     export OGRE2_RESOURCE_PATH="${OGRE2_RESOURCE_PATH:-$(dirname "$rendersystem_gl3plus")}"
   fi

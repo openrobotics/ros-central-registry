@@ -1,0 +1,16 @@
+--- a/src/abstract_execution_base.cpp
++++ b/src/abstract_execution_base.cpp
+@@ -88,8 +88,11 @@
+ 
+ std::cv_status AbstractExecutionBase::waitForStateUpdate(std::chrono::microseconds const& duration)
+ {
+-  std::mutex mutex;
+-  std::unique_lock<std::mutex> lock(mutex);
++  // Always pair condition_ with the same mutex: waiting on one condition
++  // variable with different mutexes from different threads is undefined
++  // behaviour, and macOS's pthread_cond_timedwait() rejects it with EINVAL
++  // (libc++ then throws "condition_variable timed_wait failed").
++  std::unique_lock<std::mutex> lock(should_exit_mutex_);
+   return condition_.wait_for(lock, duration);
+ }
+ 

@@ -1,0 +1,32 @@
+--- a/src/rviz_rendering/ogre_render_window_impl.cpp
++++ b/src/rviz_rendering/ogre_render_window_impl.cpp
+@@ -66,6 +66,8 @@
+   ogre_light_node_(nullptr),
+   animating_(false),
+   ogre_viewport_(nullptr),
++  last_width_(0),
++  last_height_(0),
+   ortho_scale_(1.0f),
+   pending_listeners_()
+ {
+@@ -243,6 +245,20 @@
+     return;
+   }
+   if (ogre_render_window_) {
++    // Only forward a genuine size change to Ogre. On macOS the Qt window is
++    // layer-backed and Ogre's CocoaWindow::windowMovedOrResized() always calls
++    // [NSOpenGLContext update], which re-attaches the GL drawable and
++    // invalidates the layer. That schedules another expose event, whose
++    // handler calls resize() again, and so on: the main thread never leaves
++    // this expose/resize cycle and rviz2 appears stuck on "Initializing...".
++    // Skipping the redundant no-op resize breaks that feedback loop and is
++    // harmless on every other platform.
++    if (width == last_width_ && height == last_height_) {
++      this->renderLater();
++      return;
++    }
++    last_width_ = width;
++    last_height_ = height;
+     this->setCameraAspectRatio();
+     ogre_render_window_->resize(
+       static_cast<unsigned int>(width),  // NOLINT

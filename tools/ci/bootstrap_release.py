@@ -62,7 +62,7 @@ BCR_DEPS = {
     "rules_img": "0.3.22",
     "rules_license": "1.0.0",
     "rules_pkg": "1.3.0",
-    "rules_python": "2.4.1",
+    "rules_python": "2.4.5",
     "rules_rs": "0.1.0",
     "rules_shell": "0.8.0",
 }

@@ -1,0 +1,43 @@
+--- a/test/test_loop_rate.cpp
++++ b/test/test_loop_rate.cpp
+@@ -36,6 +36,13 @@
+   static BT::PortsList providedPorts() {return {};}
+ };
+ 
++// macOS timers are coalesced: a 10 ms sleep routinely wakes 3-5 ms late even on
++// an idle machine, so give the scheduling-jitter bounds more headroom there.
++#if defined(__APPLE__)
++constexpr auto kSleepJitter = std::chrono::milliseconds(10);
++#else
++constexpr auto kSleepJitter = std::chrono::milliseconds(3);
++#endif
+ class LoopRateTest : public ::testing::Test
+ {
+ protected:
+@@ -93,7 +100,7 @@
+   // Should sleep for approximately the period.
+   // Allow up to 3ms of jitter (scheduling, context switches) but no large overshoot.
+   EXPECT_GE(elapsed, period - 1ms);
+-  EXPECT_LE(elapsed, period + 3ms);
++  EXPECT_LE(elapsed, period + kSleepJitter);
+ }
+ 
+ // Verify that emitWakeUpSignal() preempts an in-progress sleep() early
+@@ -137,7 +144,7 @@
+   auto expected = period * iterations;
+   // Total time should be close to N * period
+   EXPECT_GE(total, expected - 5ms);
+-  EXPECT_LE(total, expected + 10ms);
++  EXPECT_LE(total, expected + iterations * kSleepJitter);
+ }
+ 
+ // Verify that RCL_ROS_TIME without sim time override behaves like wall clock
+@@ -153,7 +160,7 @@
+ 
+   // Should behave like wall clock: sleep for approximately the period
+   EXPECT_GE(elapsed, period - 1ms);
+-  EXPECT_LE(elapsed, period + 3ms);
++  EXPECT_LE(elapsed, period + kSleepJitter);
+ }
+ 
+ // Verify that sleep() wakes up when sim time is advanced past the period

@@ -735,7 +735,7 @@ bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "protobuf", version = "36.2")
 bazel_dep(name = "rules_cc", version = "0.2.26.rcr.0")
 bazel_dep(name = "rules_go", version = "0.60.0")
-bazel_dep(name = "rules_python", version = "2.4.1")
+bazel_dep(name = "rules_python", version = "2.4.5")
 bazel_dep(name = "rules_rs", version = "0.1.0")
 bazel_dep(name = "rules_shell", version = "0.8.0")
 

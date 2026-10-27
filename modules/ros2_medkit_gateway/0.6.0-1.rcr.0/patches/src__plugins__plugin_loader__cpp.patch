@@ -1,6 +1,36 @@
 --- a/src/plugins/plugin_loader.cpp
 +++ b/src/plugins/plugin_loader.cpp
-@@ -138,7 +138,14 @@
+@@ -120,10 +120,17 @@
+     return tl::make_unexpected("Plugin path must be absolute: " + plugin_path);
+   }
+ 
+-  // Gateway plugins are always unversioned .so files loaded by explicit path.
+-  // Versioned sonames (libfoo.so.1) are a system packaging concern and not supported.
+-  if (fs_path.extension() != ".so") {
+-    return tl::make_unexpected("Plugin path must have .so extension: " + plugin_path);
++  // Gateway plugins are always unversioned shared libraries (.so, or .dylib on
++  // macOS) loaded by explicit path. Versioned sonames (libfoo.so.1) are a
++  // system packaging concern and not supported.
++#if defined(__APPLE__)
++  constexpr const char * kPluginExtension = ".dylib";
++#else
++  constexpr const char * kPluginExtension = ".so";
++#endif
++  if (fs_path.extension() != kPluginExtension) {
++    return tl::make_unexpected(
++        std::string("Plugin path must have ") + kPluginExtension + " extension: " + plugin_path);
+   }
+ 
+   std::error_code ec;
+@@ -133,12 +140,20 @@
+   }
+ 
+   // Re-check extension after symlink resolution
+-  if (canonical_path.extension() != ".so") {
+-    return tl::make_unexpected("Plugin path must have .so extension after resolving symlinks: " + plugin_path);
++  if (canonical_path.extension() != kPluginExtension) {
++    return tl::make_unexpected(std::string("Plugin path must have ") + kPluginExtension +
++                               " extension after resolving symlinks: " + plugin_path);
    }
  
    // --- dlopen ---
