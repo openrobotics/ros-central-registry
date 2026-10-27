@@ -12,12 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
 
 [
     py_pytest(
@@ -79,9 +91,44 @@ py_library(
     ],
     imports = ["."],
     deps = [
+        "@lttngpy",
         requirement("packaging"),
     ],
 )
+
+write_file(
+    name = "trace_entry",
+    out = "trace_entry.py",
+    content = [
+        "import sys",
+        "from tracetools_trace.trace import main",
+        "sys.exit(main())",
+        "",
+    ],
+)
+
+py_binary(
+    name = "trace",
+    srcs = [":trace_entry"],
+    main = "trace_entry.py",
+    deps = [":tracetools_trace"],
+)
+
+[
+    py_pytest(
+        name = "test_{0}".format(test),
+        srcs = ["test/tracetools_trace/test_{0}.py".format(test)],
+        deps = [
+            ":tracetools_trace",
+            requirement("packaging"),
+        ],
+    )
+    for test in [
+        "lttng_tracing",
+        "names",
+        "trace_directory",
+    ]
+]
 
 ### PACKAGING
 

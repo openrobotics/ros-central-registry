@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
 load("@pip_ros//:requirements.bzl", "all_requirements")
 load("@rosdistro//ament:defs.bzl", "ament_package")
@@ -41,6 +41,17 @@ config_setting(
     values = {
         "dynamic_mode": "off",
     },
+)
+
+bool_flag(
+    name = "enable_tracing",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "tracing_enabled_linux",
+    constraint_values = ["@platforms//os:linux"],
+    flag_values = {":enable_tracing": "True"},
 )
 
 # Root of the installed underlay produced by ament_underlay / <pkg>:tar,
@@ -113,7 +124,13 @@ THIRD_PARTY_SHARED_LIBRARIES = [
 
 ament_package(
     name = "ament_package",
-    libraries = THIRD_PARTY_SHARED_LIBRARIES,
+    libraries = THIRD_PARTY_SHARED_LIBRARIES + select({
+        ":tracing_enabled_linux": [
+            "//cc:lttng_ctl_shared",
+            "//cc:lttng_ust_shared",
+        ],
+        "//conditions:default": [],
+    }),
     # Every pip dependency of the distribution, so the underlay's
     # lib/pythonX.Y/site-packages is self-contained.
     python = all_requirements,

@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(
     default_applicable_licenses = [":license"],
@@ -118,8 +119,37 @@ py_library(
         "@tracetools_trace",
         requirement("numpy"),
         requirement("packaging"),
+        requirement("pandas"),
     ],
 )
+
+[
+    (
+        write_file(
+            name = "{0}_entry".format(script),
+            out = "{0}_entry.py".format(script),
+            content = [
+                "import sys",
+                "from {0} import main".format(module),
+                "sys.exit(main())",
+                "",
+            ],
+        ),
+        py_binary(
+            name = script,
+            srcs = [":{0}_entry".format(script)],
+            main = "{0}_entry.py".format(script),
+            deps = [":tracetools_analysis"],
+        ),
+    )
+    for script, module in [
+        ("auto", "tracetools_analysis.scripts.auto"),
+        ("cb_durations", "tracetools_analysis.scripts.cb_durations"),
+        ("convert", "tracetools_analysis.convert"),
+        ("memory_usage", "tracetools_analysis.scripts.memory_usage"),
+        ("process", "tracetools_analysis.process"),
+    ]
+]
 
 ament_index(
     name = "ament_index",

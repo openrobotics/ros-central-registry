@@ -1,0 +1,200 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:GPL-2.0-only",
+        "@rules_license//licenses/spdx:LGPL-2.1-only",
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+_COMMON_COPTS = [
+    "-include",
+    "babeltrace_config.h",
+    "-Wno-unused-parameter",
+    "-Wno-sign-compare",
+    "-Wno-missing-field-initializers",
+    "-Wno-deprecated-declarations",
+    "-Wno-unused-but-set-variable",
+]
+
+cc_library(
+    name = "internal_headers",
+    hdrs = glob([
+        "include/**/*.h",
+        "formats/**/*.h",
+        "bindings/python/babeltrace/*.h",
+    ]),
+    includes = [
+        "bindings/python/babeltrace",
+        "formats/ctf",
+        "formats/ctf/metadata",
+        "include",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "ctf_parser_lib",
+    srcs = [
+        "formats/ctf/metadata/ctf-lexer.c",
+        "formats/ctf/metadata/ctf-parser.c",
+        "formats/ctf/metadata/objstack.c",
+    ],
+    copts = _COMMON_COPTS + [
+        "-include",
+        "formats/ctf/metadata/ctf-scanner-symbols.h",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":internal_headers",
+        "@glib//glib",
+        "@glib//gmodule",
+        "@libuuid",
+        "@popt",
+    ],
+)
+
+cc_library(
+    name = "babeltrace_lib",
+    srcs = [
+        "compat/dummy.c",
+        "formats/bt-dummy/bt-dummy.c",
+        "formats/ctf-metadata/ctf-metadata.c",
+        "formats/ctf-text/ctf-text.c",
+        "formats/ctf/callbacks.c",
+        "formats/ctf/ctf.c",
+        "formats/ctf/events.c",
+        "formats/ctf/iterator.c",
+        "formats/ctf/metadata/ctf-visitor-generate-io-struct.c",
+        "formats/ctf/metadata/ctf-visitor-parent-links.c",
+        "formats/ctf/metadata/ctf-visitor-semantic-validator.c",
+        "formats/ctf/metadata/ctf-visitor-xml.c",
+        "lib/babeltrace.c",
+        "lib/context.c",
+        "lib/error.c",
+        "lib/iterator.c",
+        "lib/prio_heap/prio_heap.c",
+        "lib/registry.c",
+        "lib/trace-collection.c",
+        "lib/trace-handle.c",
+    ] + glob([
+        "formats/ctf/ir/*.c",
+        "formats/ctf/types/*.c",
+        "formats/ctf/writer/*.c",
+        "formats/ctf-text/types/*.c",
+        "types/*.c",
+    ]),
+    hdrs = glob([
+        "include/babeltrace/**/*.h",
+    ]),
+    copts = _COMMON_COPTS,
+    includes = ["include"],
+    linkopts = [
+        "-ldl",
+        "-lpthread",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":ctf_parser_lib",
+        ":internal_headers",
+        "@glib//glib",
+        "@glib//gmodule",
+        "@libuuid",
+        "@popt",
+    ],
+    alwayslink = True,
+)
+
+genrule(
+    name = "generate_swig_bindings",
+    srcs = [
+        "bindings/python/babeltrace/__init__.py.in",
+        "bindings/python/babeltrace/babeltrace.i.in",
+        "bindings/python/babeltrace/python-complements.h",
+        "@swig//:lib_python",
+        "@swig//:swig_swg",
+    ] + glob([
+        "include/**/*.h",
+    ]),
+    outs = [
+        "babeltrace/__init__.py",
+        "babeltrace/babeltrace.py",
+        "babeltrace_wrap.c",
+    ],
+    cmd = """
+        mkdir -p $(RULEDIR)/babeltrace
+        sed 's/@PACKAGE_VERSION@/1.5.11/g' $(location bindings/python/babeltrace/__init__.py.in) > $(location babeltrace/__init__.py)
+        sed 's/BABELTRACE_VERSION_STR/Babeltrace 1.5.11/g' $(location bindings/python/babeltrace/babeltrace.i.in) > $(RULEDIR)/babeltrace.i
+        SWIG_LIB=$$(dirname $(location @swig//:swig_swg)) $(location @swig//:swig) -python \
+            -I$$(dirname $(location bindings/python/babeltrace/python-complements.h)) \
+            -I$$(dirname $(location bindings/python/babeltrace/python-complements.h))/../../../include \
+            -outdir $(RULEDIR)/babeltrace \
+            -o $(location babeltrace_wrap.c) \
+            $(RULEDIR)/babeltrace.i
+    """,
+    tools = ["@swig"],
+)
+
+cc_library(
+    name = "_babeltrace_py_lib",
+    srcs = [
+        "babeltrace_wrap.c",
+        "bindings/python/babeltrace/python-complements.c",
+    ],
+    copts = _COMMON_COPTS,
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":babeltrace_lib",
+        ":internal_headers",
+        "@rules_python//python/cc:current_py_cc_headers",
+    ],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "_babeltrace",
+    shared_lib_name = "babeltrace/_babeltrace.so",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":_babeltrace_py_lib",
+    ],
+)
+
+py_library(
+    name = "babeltrace",
+    srcs = [
+        "babeltrace/__init__.py",
+        "babeltrace/babeltrace.py",
+    ],
+    data = select({
+        "@platforms//os:linux": [":_babeltrace"],
+        "//conditions:default": [],
+    }),
+    imports = ["."],
+)
