@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -346,6 +347,24 @@ py_library(
     ],
 )
 
+# wait_for_robot_description is launched as a node by ur_control.launch.py and
+# ur_moveit_config's ur_moveit.launch.py. A py_binary (rather than the bare
+# python3 script) carries its rclpy/std_msgs deps in its own runfiles, so
+# launch files only need :ament_index in `data`. py_binary sources need a .py
+# extension, hence the copy.
+copy_file(
+    name = "wait_for_robot_description_main",
+    src = "scripts/wait_for_robot_description",
+    out = "_gen/wait_for_robot_description_main.py",
+)
+
+py_binary(
+    name = "wait_for_robot_description",
+    srcs = ["_gen/wait_for_robot_description_main.py"],
+    main = "_gen/wait_for_robot_description_main.py",
+    deps = [":ur_robot_driver_py"],
+)
+
 ament_index(
     name = "ament_index",
     data = [
@@ -381,6 +400,7 @@ ament_index(
         ":robot_state_helper",
         ":trajectory_until_node",
         ":urscript_interface",
+        ":wait_for_robot_description",
         "scripts/example_move.py",
         "examples/examples.py",
         "examples/force_mode.py",
@@ -388,7 +408,6 @@ ament_index(
         "examples/send_dummy_motion_primitives_ur10e.py",
         "scripts/start_ursim.sh",
         "scripts/tool_communication.py",
-        "scripts/wait_for_robot_description",
         "scripts/wait_robot_booted.py",
     ],
     libraries = [
