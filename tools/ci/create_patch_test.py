@@ -449,6 +449,22 @@ class TestComputeRollupOverwriteInPlace(_RollupFixtureTestCase):
         # No stray extra version got minted alongside it.
         self.assertFalse((self.modules_dir / "rclcpp" / "1.0.0.rcr.1").exists())
 
+    def test_second_in_place_amend_is_not_refused_as_drift(self):
+        # Amending once rewrites the packaged directory; a second amend in
+        # the same workspace (after more vendored edits) must not mistake
+        # that first write for concurrent on-disk drift.
+        rollup = create_patch.compute_rollup(
+            "rclcpp", self.modules_dir, self.target_workspace, self.workspace_root)
+        create_patch.apply_rollup(
+            rollup, self.modules_dir / "rclcpp" / "metadata.json",
+            target_workspace=self.target_workspace)
+
+        (self.vendor_module_dir / "src.c").write_text("edited again\n")
+        rollup = create_patch.compute_rollup(
+            "rclcpp", self.modules_dir, self.target_workspace, self.workspace_root)
+        self.assertTrue(rollup.overwrite_in_place)
+        self.assertTrue(rollup.changed)
+
     def test_drift_since_vendoring_is_refused(self):
         # Something (e.g. a concurrent git pull/checkout) changed the
         # packaged directory after this workspace vendored it.

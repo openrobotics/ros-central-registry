@@ -369,6 +369,7 @@ def apply_rollup(
     metadata_path: Path,
     updated_versions: Dict[str, str] = None,
     modules_dir: Path = None,
+    target_workspace: Path = None,
 ) -> None:
     if rollup.new_module_dir != rollup.current_module_dir:
         shutil.copytree(rollup.current_module_dir, rollup.new_module_dir, dirs_exist_ok=True)
@@ -411,6 +412,15 @@ def apply_rollup(
     module_file.write_text(content)
     bzlmod_lib.regenerate_integrity_hashes(rollup.new_module_dir)
     bzlmod_lib.add_version_to_metadata_json(metadata_path, rollup.new_version)
+
+    # Re-snapshot the packaged directory we just wrote, so a follow-up
+    # create_patch run that amends this same branch-only version in place
+    # doesn't mistake our own write for concurrent on-disk drift (see
+    # _check_package_dir_not_stale).
+    if target_workspace is not None:
+        vendor_modules.write_package_manifest(
+            target_workspace, modules_path, rollup.module, rollup.new_version
+        )
 
 
 def discover_vendored_modules(target_workspace: Path, modules_dir: Path) -> List[str]:
@@ -534,6 +544,7 @@ def main():
             modules_dir / args.module / "metadata.json",
             updated_versions={rollup.module: rollup.new_version},
             modules_dir=modules_dir,
+            target_workspace=target_workspace,
         )
         print(f"Done. modules/{args.module}/{rollup.new_version}/ is ready to commit as a PR.")
         return
@@ -586,6 +597,7 @@ def main():
             modules_dir / rollup.module / "metadata.json",
             updated_versions=updated_versions,
             modules_dir=modules_dir,
+            target_workspace=target_workspace,
         )
         print(f"Done. modules/{rollup.module}/{rollup.new_version}/ is ready to commit as a PR.")
 
