@@ -406,14 +406,17 @@ ogre_gl_support_hdrs = glob([
     ]),
 })
 
+# Like upstream's CMake, only build GlSwitchableSupport where there is more than
+# one windowing interface to switch between (not macOS, which uses Cocoa only).
 ogre_gl_support_srcs = glob([
-    "RenderSystems/GL3Plus/src/windowing/*.cpp",
     "RenderSystems/GL3Plus/src/GLSL/*.cpp",
     "RenderSystems/GL3Plus/src/Vao/*.cpp",
     "RenderSystems/GL3Plus/src/*.cpp",
 ]) + select({
     "@platforms//os:macos": [],
-    "//conditions:default": glob([
+    "//conditions:default": [
+        "RenderSystems/GL3Plus/src/windowing/OgreGlSwitchableSupport.cpp",
+    ] + glob([
         "RenderSystems/GL3Plus/src/windowing/EGL/PBuffer/*.cpp",
     ]),
 })
@@ -477,7 +480,6 @@ cc_library(
         "RenderSystems/GL3Plus/include/windowing",
         "RenderSystems/GL3Plus/include/windowing/OSX",
         "RenderSystems/GL3Plus/src/GLSL/include",
-        "RenderSystems/GL3Plus/src/windowing",
         "RenderSystems/GL3Plus/src/windowing/OSX",
     ],
     linkopts = [
@@ -529,13 +531,18 @@ cc_binary(
         "RenderSystems/GL3Plus/include/Vao",
         "RenderSystems/GL3Plus/include/windowing",
         "RenderSystems/GL3Plus/src/GLSL/include",
-        "RenderSystems/GL3Plus/src/windowing",
     ] + select({
+        # OgreGL3PlusRenderSystem.cpp picks its windowing backend via whichever
+        # OgreGL3PlusUtil.h is found first. src/windowing's returns
+        # GlSwitchableSupport, which has no interfaces on macOS ("No Interface
+        # could be loaded"), so -- like upstream's CMake -- use the Cocoa one there.
         "@platforms//os:macos": [
             "RenderSystems/GL3Plus/include/windowing/OSX",
+            "RenderSystems/GL3Plus/src/windowing/OSX",
         ],
         "//conditions:default": [
             "RenderSystems/GL3Plus/include/windowing/EGL",
+            "RenderSystems/GL3Plus/src/windowing",
         ],
     }),
     linkopts = ["-pthread"] + select({
