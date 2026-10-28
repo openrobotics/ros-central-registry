@@ -44,9 +44,11 @@ class Cmd
     value_flags = [
       '--force-version', '-v', '--verbose', '--iterations',
       '--network-role', '--network-secondaries', '--record-path',
-      '--playback', '--seed', '--gui-config', '--physics-engine',
-      '--render-engine', '--render-engine-gui', '--render-engine-server',
-      '--render-engine-gui-api-backend'
+      '--record-topic', '--record-period', '--playback', '--seed',
+      '--gui-config', '--physics-engine', '--render-engine',
+      '--render-engine-gui', '--render-engine-server',
+      '--render-engine-api-backend', '--render-engine-gui-api-backend',
+      '--render-engine-server-api-backend', '-z', '--initial-sim-time'
     ]
     world_file = ''
     gui_config = ''
