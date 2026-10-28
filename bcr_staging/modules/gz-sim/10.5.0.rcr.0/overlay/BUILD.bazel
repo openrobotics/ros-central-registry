@@ -50,6 +50,15 @@ exports_files([
     "src/rendering/MaterialParser/gazebo.material",
 ])
 
+# Where this repository's files are in a binary's runfiles tree, computed by
+# Bazel rather than spelled out: "_main" when built as the root module, else
+# this repository's own directory there (repo_name()). Tests run from
+# <runfiles>/_main, so GZ_SIM_TEST_ROOT is that same location relative to a
+# test's working directory.
+GZ_SIM_RUNFILES_DIR = repo_name() or "_main"
+
+GZ_SIM_TEST_ROOT = "../" + repo_name() if repo_name() else "."
+
 gz_configure_header(
     name = "Config",
     src = "include/gz/sim/config.hh.in",
@@ -297,8 +306,13 @@ genrule(
     ],
     env = {
         "GZ_BAZEL": "1",
-        "GZ_SIM_PHYSICS_ENGINE_PATH": "physics_engine",
-        "GZ_SIM_RESOURCE_PATH": "test/worlds",
+        # gz-common's TestFile()/SourceFile() root, relative to TEST_SRCDIR.
+        "GZ_BAZEL_PATH": GZ_SIM_RUNFILES_DIR,
+        # Install prefix for server.config and system plugins (see
+        # src/bazel/InstallationDirectories.cc), i.e. this repository's root.
+        "GZ_SIM_INSTALL_PREFIX": GZ_SIM_TEST_ROOT,
+        "GZ_SIM_PHYSICS_ENGINE_PATH": GZ_SIM_TEST_ROOT + "/physics_engine",
+        "GZ_SIM_RESOURCE_PATH": GZ_SIM_TEST_ROOT + "/test/worlds",
     },
     deps = [
         ":gz-sim",
@@ -1547,7 +1561,9 @@ physics_test_sources = glob(["src/systems/physics/**/*TEST.cc"])
     data = ["physics_engine/libgz-physics-dartsim-plugin.so"],
     env = {
         "GZ_BAZEL": "1",
-        "GZ_PLUGIN_PATH": "physics_engine",
+        "GZ_BAZEL_PATH": GZ_SIM_RUNFILES_DIR,
+        "GZ_PLUGIN_PATH": GZ_SIM_TEST_ROOT + "/physics_engine",
+        "GZ_SIM_INSTALL_PREFIX": GZ_SIM_TEST_ROOT,
     },
     deps = [
         ":gz-sim",
