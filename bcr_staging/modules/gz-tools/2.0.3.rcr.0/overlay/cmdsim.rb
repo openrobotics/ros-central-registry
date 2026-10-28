@@ -105,7 +105,11 @@ class Cmd
         if !render_engine_gui_backend.nil?
           client_cmd += ['--render-engine-gui-api-backend', render_engine_gui_backend]
         end
-        system(*client_cmd)
+        begin
+          system(*client_cmd)
+        rescue Interrupt
+          nil
+        end
       else
         require 'cmdgui'
         gui_args = ['gui']
