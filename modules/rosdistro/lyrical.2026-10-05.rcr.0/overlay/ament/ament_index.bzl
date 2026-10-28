@@ -159,12 +159,18 @@ def ament_index_symlinks(ctx):
             for file in target.files.to_list():
                 file_path = _package_relative(ctx, file)
                 stripped, was_gen = strip_gen_prefix(file_path)
+
+                # A generated file that already names its install location
+                # (_gen/share/<pkg>/...) is placed verbatim, without applying
+                # data_strip_prefix(es) meant for source-tree paths.
+                install_relative = False
                 if was_gen:
                     file_path = stripped
                     if file_path.startswith("share/" + package_name + "/"):
                         file_path = file_path[len("share/" + package_name + "/"):]
-                matched_prefix = False
-                for p in sorted_data_prefixes:
+                        install_relative = True
+                matched_prefix = install_relative
+                for p in ([] if install_relative else sorted_data_prefixes):
                     if not p:
                         continue
                     if "->" in p:

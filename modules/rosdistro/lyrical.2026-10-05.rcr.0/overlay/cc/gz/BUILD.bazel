@@ -30,7 +30,7 @@ Naming follows upstream's CMake targets: `gz-sim` is the shared library
 The gz_*_vendor packages alias these as `@gz_sim_vendor//:gz_sim` etc.
 """
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_shared_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load(":defs.bzl", "gz_proto_descriptor_set", "gz_runfiles")
 
 package(default_visibility = ["//visibility:public"])
@@ -460,6 +460,18 @@ alias(
     actual = "@gz-rendering//ogre2:gz-rendering-ogre2-engine-static",
 )
 
+# The ogre2 engine calls GL/EGL directly, but upstream's ogre2 BUILD only adds
+# GL linkopts on macOS. Link the libglvnd stubs on Linux so libgz-rendering.so
+# records DT_NEEDED entries for libGL/libEGL; otherwise every executable that
+# depends on it fails to link under --no-allow-shlib-undefined.
+cc_library(
+    name = "gz-rendering-ogre2_with_gl",
+    deps = [":gz-rendering-ogre2_library"] + select({
+        "@platforms//os:linux": ["@qtbase//:glvnd_stubs"],
+        "//conditions:default": [],
+    }),
+)
+
 cc_shared_library(
     name = "gz-rendering",
     dynamic_deps = [
@@ -486,7 +498,7 @@ cc_shared_library(
         "@ogre-next//:__subpackages__",
     ],
     deps = [
-        ":gz-rendering-ogre2_library",
+        ":gz-rendering-ogre2_with_gl",
         ":gz-rendering_library",
     ],
 )

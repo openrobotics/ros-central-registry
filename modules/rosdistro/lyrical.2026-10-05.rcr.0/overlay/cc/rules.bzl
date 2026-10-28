@@ -70,6 +70,7 @@ def _collect_transitive_dynamic_deps_impl(ctx):
         for dep in ctx.attr.extra_link_deps:
             if CcInfo in dep:
                 for li in dep[CcInfo].linking_context.linker_inputs.to_list():
+                    transitive_libs += li.libraries
                     user_link_flags.extend(li.user_link_flags)
                     additional_inputs.extend(li.additional_inputs)
 

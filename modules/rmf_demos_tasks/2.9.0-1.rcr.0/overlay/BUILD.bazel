@@ -13,11 +13,44 @@
 # limitations under the License.
 
 load("@pip_ros//:requirements.bzl", "requirement")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+_SCRIPTS = [
+    "api_request",
+    "cancel_robot_task",
+    "cancel_task",
+    "dispatch_action",
+    "dispatch_cart_delivery",
+    "dispatch_clean",
+    "dispatch_delivery",
+    "dispatch_dynamic_event",
+    "dispatch_go_to_place",
+    "dispatch_json",
+    "dispatch_loop",
+    "dispatch_patrol",
+    "dispatch_teleop",
+    "dynamic_event_client",
+    "emergency_signal",
+    "get_robot_location",
+    "mock_docker",
+    "request_lift",
+    "request_loop",
+    "teleop_robot",
+    "wait_for_task_complete",
+]
 
 [
     py_pytest(
@@ -105,37 +138,53 @@ py_library(
     ],
 )
 
+[
+    (
+        py_binary(
+            name = "lib/{0}".format(script),
+            srcs = ["rmf_demos_tasks/{0}.py".format(script)],
+            data = [":ament_index"],
+            imports = ["."],
+            main_module = "rmf_demos_tasks.{0}".format(script),
+            deps = [":rmf_demos_tasks"],
+        ),
+        alias(
+            name = script,
+            actual = ":lib/{0}".format(script),
+        ),
+    )
+    for script in _SCRIPTS
+]
+
 ### PACKAGING
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+    deps = [
+        "@ament_copyright//:ament_package",
+        "@ament_flake8//:ament_package",
+        "@ament_pep257//:ament_package",
+        "@rmf_dispenser_msgs//:ament_package",
+        "@rmf_fleet_msgs//:ament_package",
+        "@rmf_lift_msgs//:ament_package",
+        "@rmf_task_msgs//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)
 
 ament_package(
     name = "ament_package",
     console_scripts = {
-        "api_request": "rmf_demos_tasks.api_request:main",
-        "cancel_robot_task": "rmf_demos_tasks.cancel_robot_task:main",
-        "cancel_task": "rmf_demos_tasks.cancel_task:main",
-        "dispatch_action": "rmf_demos_tasks.dispatch_action:main",
-        "dispatch_cart_delivery": "rmf_demos_tasks.dispatch_cart_delivery:main",
-        "dispatch_clean": "rmf_demos_tasks.dispatch_clean:main",
-        "dispatch_delivery": "rmf_demos_tasks.dispatch_delivery:main",
-        "dispatch_dynamic_event": "rmf_demos_tasks.dispatch_dynamic_event:main",
-        "dispatch_go_to_place": "rmf_demos_tasks.dispatch_go_to_place:main",
-        "dispatch_json": "rmf_demos_tasks.dispatch_json:main",
-        "dispatch_loop": "rmf_demos_tasks.dispatch_loop:main",
-        "dispatch_patrol": "rmf_demos_tasks.dispatch_patrol:main",
-        "dispatch_teleop": "rmf_demos_tasks.dispatch_teleop:main",
-        "dynamic_event_client": "rmf_demos_tasks.dynamic_event_client:main",
-        "emergency_signal": "rmf_demos_tasks.emergency_signal:main",
-        "get_robot_location": "rmf_demos_tasks.get_robot_location:main",
-        "mock_docker": "rmf_demos_tasks.mock_docker:main",
-        "request_lift": "rmf_demos_tasks.request_lift:main",
-        "request_loop": "rmf_demos_tasks.request_loop:main",
-        "teleop_robot": "rmf_demos_tasks.teleop_robot:main",
-        "wait_for_task_complete": "rmf_demos_tasks.wait_for_task_complete:main",
+        script: "rmf_demos_tasks.{0}:main".format(script)
+        for script in _SCRIPTS
     },
+    executables = [":lib/{0}".format(script) for script in _SCRIPTS],
     package_xml = "package.xml",
     python = [":rmf_demos_tasks"],
     setup_cfg = "setup.cfg",
     deps = [
+        ":ament_index",
         "@ament_copyright//:ament_package",
         "@ament_flake8//:ament_package",
         "@ament_pep257//:ament_package",
