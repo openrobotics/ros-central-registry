@@ -14,7 +14,51 @@
 
 """Bazel rules for running ROS launch tests."""
 
-load("@rules_python//python:defs.bzl", _py_test = "py_test")
+load("@rules_python//python:defs.bzl", "PyInfo", _py_test = "py_test")
+load("@rules_python//python/api:api.bzl", "py_common")
+
+def _launch_deps_impl(ctx):
+    py_info = py_common.get(ctx).merge_py_infos(
+        transitive = [
+            dep[PyInfo]
+            for dep in ctx.attr.deps
+            if PyInfo in dep
+        ],
+    )
+    symlinks = {}
+    runfiles_list = []
+    for dep in ctx.attr.deps:
+        runfiles_list.append(dep[DefaultInfo].default_runfiles)
+        runfiles_list.append(ctx.runfiles(transitive_files = dep[DefaultInfo].files))
+        exec_file = dep[DefaultInfo].files_to_run.executable if dep[DefaultInfo].files_to_run else None
+        if exec_file:
+            pkg_name = dep.label.workspace_name.removesuffix("+")
+            if not pkg_name:
+                pkg_name = ctx.label.workspace_name.removesuffix("+")
+            names = {exec_file.basename: True}
+            target_basename = dep.label.name.rsplit("/", 1)[-1]
+            if target_basename:
+                names[target_basename] = True
+                if pkg_name and target_basename == pkg_name + "_main":
+                    names[pkg_name] = True
+            for n in names:
+                symlinks["bin/" + n] = exec_file
+                if pkg_name:
+                    symlinks["lib/" + pkg_name + "/" + n] = exec_file
+    return [
+        py_info,
+        DefaultInfo(
+            runfiles = ctx.runfiles(symlinks = symlinks).merge_all(runfiles_list),
+        ),
+    ]
+
+_launch_deps = rule(
+    implementation = _launch_deps_impl,
+    attrs = {
+        "deps": attr.label_list(providers = [DefaultInfo]),
+    } | py_common.API_ATTRS,
+    provides = [PyInfo, DefaultInfo],
+)
 
 def _normalize_dep_key(dep):
     s = str(dep)
@@ -74,7 +118,7 @@ def launch_test(name, src, data = [], deps = [], args = [], **kwargs):
         name: Name of the test target (e.g. "test_example.launch").
         src: Path or label of the launch test file.
         data: Runtime data dependencies (typically :ament_index targets).
-        deps: Additional Python library dependencies.
+        deps: Additional Python library, node executable, or launch dependencies.
         args: Additional arguments passed to launch_test (e.g. "key:=value").
         **kwargs: Additional keyword arguments forwarded to py_test.
     """
@@ -94,13 +138,20 @@ def launch_test(name, src, data = [], deps = [], args = [], **kwargs):
     imports = kwargs.pop("imports", ["."])
     main_script = Label("@launch_testing//bazel:launch_test_main.py")
 
+    deps_target = "_" + name + "_launch_deps"
+    _launch_deps(
+        name = deps_target,
+        deps = _merge_deps(deps, extra_deps),
+        visibility = ["//visibility:private"],
+    )
+
     _py_test(
         name = name,
         main = main_script,
         srcs = [main_script],
         args = ["$(location %s)" % src_label] + list(args),
         data = _merge_data(data, [src_label]),
-        deps = _merge_deps(deps, extra_deps),
+        deps = [":" + deps_target],
         imports = imports,
         tags = tags,
         **kwargs
