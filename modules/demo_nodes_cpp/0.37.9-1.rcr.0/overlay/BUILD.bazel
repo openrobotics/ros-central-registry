@@ -15,7 +15,7 @@
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:defs.bzl", "py_library")
@@ -43,6 +43,11 @@ DEPENDENCIES = {
     "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
 }
 
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
 STANDALONE_EXECUTABLES = {
     "allocator_tutorial": "topics/allocator_tutorial_pmr",
     "add_two_ints_client": "services/add_two_ints_client",
@@ -57,6 +62,8 @@ STANDALONE_EXECUTABLES = {
 [cc_binary(
     name = executable,
     srcs = ["src/{0}.cpp".format(src)],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
     includes = ["include"],
     local_defines = ros_local_defines(),
     deps = DEPENDENCIES.values(),
@@ -104,6 +111,7 @@ DEMO_COMPONENTS = {
 [rclcpp_components_register_node(
     name = component,
     component = ":{0}_library".format(component),
+    data = [":ament_index"],
     executor = "SingleThreadedExecutor",
     node_name = component,
     plugin = plugin,
@@ -113,7 +121,6 @@ ament_index(
     name = "ament_index",
     components = [":{0}_record".format(c) for c in DEMO_COMPONENTS.keys()],
     data = ["//launch:launch_files"],
-    executables = [":{0}".format(e) for e in STANDALONE_EXECUTABLES.keys()] + [":{0}".format(c) for c in DEMO_COMPONENTS.keys()],
     libraries = [":{0}_library".format(c) for c in DEMO_COMPONENTS.keys()],
     package_xml = "package.xml",
 )
@@ -139,6 +146,8 @@ ament_package(
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
     cmake_export_targets = False,
+    components = [":{0}_record".format(c) for c in DEMO_COMPONENTS.keys()],
+    executables = [":{0}".format(e) for e in STANDALONE_EXECUTABLES.keys()] + [":{0}".format(c) for c in DEMO_COMPONENTS.keys()],
     libraries = [":{0}_library".format(c) for c in DEMO_COMPONENTS.keys()],
     package_xml = "package.xml",
     deps = [":ament_index"] + [

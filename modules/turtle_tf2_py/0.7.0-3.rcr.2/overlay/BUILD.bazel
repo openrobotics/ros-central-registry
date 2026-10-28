@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(
     default_applicable_licenses = [":license"],
@@ -87,6 +88,38 @@ ament_index(
     package_xml = "package.xml",
 )
 
+CONSOLE_SCRIPTS = [
+    "dynamic_frame_tf2_broadcaster",
+    "fixed_frame_tf2_broadcaster",
+    "static_turtle_tf2_broadcaster",
+    "turtle_tf2_broadcaster",
+    "turtle_tf2_listener",
+    "turtle_tf2_message_broadcaster",
+]
+
+[
+    (
+        write_file(
+            name = "{0}_entry".format(script),
+            out = "{0}_entry.py".format(script),
+            content = [
+                "import sys",
+                "from turtle_tf2_py.{0} import main".format(script),
+                "sys.exit(main())",
+                "",
+            ],
+        ),
+        py_binary(
+            name = script,
+            srcs = [":{0}_entry".format(script)],
+            data = [":ament_index"],
+            main = "{0}_entry.py".format(script),
+            deps = [":turtle_tf2_py"],
+        ),
+    )
+    for script in CONSOLE_SCRIPTS
+]
+
 ament_package(
     name = "ament_package",
     console_scripts = {
@@ -97,6 +130,7 @@ ament_package(
         "turtle_tf2_listener": "turtle_tf2_py.turtle_tf2_listener:main",
         "turtle_tf2_message_broadcaster": "turtle_tf2_py.turtle_tf2_message_broadcaster:main",
     },
+    executables = [":{0}".format(s) for s in CONSOLE_SCRIPTS],
     package_xml = "package.xml",
     python = [":turtle_tf2_py"],
     deps = [":ament_index"] + [

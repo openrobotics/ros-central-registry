@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
 load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(
     default_applicable_licenses = [":license"],
@@ -41,7 +42,34 @@ py_library(
         "simple_launch/simple_substitution.py",
     ],
     imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@launch",
+        "@launch_ros",
+    ],
 )
+
+[
+    (
+        copy_file(
+            name = "{0}_copy".format(script),
+            src = "scripts/{0}".format(script),
+            out = "{0}_main.py".format(script),
+        ),
+        py_binary(
+            name = script,
+            srcs = [":{0}_copy".format(script)],
+            data = [":ament_index"],
+            main = "{0}_main.py".format(script),
+            deps = [":simple_launch"],
+        ),
+    )
+    for script in [
+        "call_service",
+        "generate_gz_world",
+        "set_parameters",
+    ]
+]
 
 ament_index(
     name = "ament_index",
@@ -90,13 +118,14 @@ ament_package(
         "example/turret.xacro",
     ],
     executables = [
-        "scripts/call_service",
-        "scripts/generate_gz_world",
-        "scripts/set_parameters",
+        ":call_service",
+        ":generate_gz_world",
+        ":set_parameters",
     ],
     package_xml = "package.xml",
     python = [":simple_launch"],
     deps = [
+        ":ament_index",
         "@ament_cmake_python//:ament_package",
         "@ament_index_python//:ament_package",
         "@launch//:ament_package",
@@ -109,58 +138,83 @@ ament_package(
 launch_ros_binary(
     name = "example_composition_launch_py",
     src = "example/composition_launch.py",
+    data = [":ament_index"],
     deps = [":simple_launch"],
 )
 
 launch_ros_binary(
     name = "example_condition_launch_py",
     src = "example/condition_launch.py",
-    data = [
-        ":ament_index",
-        "@demo_nodes_cpp//:ament_index",
+    data = [":ament_index"],
+    deps = [
+        ":simple_launch",
+        "@demo_nodes_cpp//:talker",
     ],
-    deps = [":simple_launch"],
 )
 
 launch_ros_binary(
     name = "example_event_example_launch_py",
     src = "example/event_example_launch.py",
+    data = [":ament_index"],
     deps = [":simple_launch"],
 )
 
 launch_ros_binary(
     name = "example_event_tutorial_launch_py",
     src = "example/event_tutorial_launch.py",
-    deps = [":simple_launch"],
+    data = [":ament_index"],
+    deps = [
+        ":call_service",
+        ":set_parameters",
+        ":simple_launch",
+    ],
 )
 
 launch_ros_binary(
     name = "example_example_launch_py",
     src = "example/example_launch.py",
-    deps = [":simple_launch"],
+    data = [":ament_index"],
+    deps = [
+        ":example_included_launch_py",
+        ":simple_launch",
+    ],
 )
 
 launch_ros_binary(
     name = "example_example_opaque_launch_py",
     src = "example/example_opaque_launch.py",
-    deps = [":simple_launch"],
+    data = [":ament_index"],
+    deps = [
+        ":example_included_launch_py",
+        ":simple_launch",
+    ],
 )
 
 launch_ros_binary(
     name = "example_gazebo_gazebo_launch_py",
     src = "example/gazebo/gazebo_launch.py",
-    deps = [":simple_launch"],
+    data = [":ament_index"],
+    deps = [
+        ":generate_gz_world",
+        ":simple_launch",
+        "@xacro",
+    ],
 )
 
 launch_ros_binary(
     name = "example_included_launch_py",
     src = "example/included_launch.py",
-    deps = [":simple_launch"],
+    data = [":ament_index"],
+    deps = [
+        ":simple_launch",
+        "@xacro",
+    ],
 )
 
 launch_ros_binary(
     name = "example_scoped_launch_py",
     src = "example/scoped_launch.py",
+    data = [":ament_index"],
     deps = [":simple_launch"],
 )
 

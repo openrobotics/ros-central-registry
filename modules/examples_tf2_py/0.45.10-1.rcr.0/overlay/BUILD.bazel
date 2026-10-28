@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(
     default_applicable_licenses = [":license"],
@@ -86,6 +87,38 @@ ament_index(
     package_xml = "package.xml",
 )
 
+CONSOLE_SCRIPTS = [
+    "async_waits_for_transform",
+    "blocking_waits_for_transform",
+    "dynamic_broadcaster",
+    "frame_dumper",
+    "static_broadcaster",
+    "waits_for_transform",
+]
+
+[
+    (
+        write_file(
+            name = "{0}_entry".format(script),
+            out = "{0}_entry.py".format(script),
+            content = [
+                "import sys",
+                "from examples_tf2_py.{0} import main".format(script),
+                "sys.exit(main())",
+                "",
+            ],
+        ),
+        py_binary(
+            name = script,
+            srcs = [":{0}_entry".format(script)],
+            data = [":ament_index"],
+            main = "{0}_entry.py".format(script),
+            deps = [":examples_tf2_py"],
+        ),
+    )
+    for script in CONSOLE_SCRIPTS
+]
+
 ament_package(
     name = "ament_package",
     console_scripts = {
@@ -96,6 +129,7 @@ ament_package(
         "static_broadcaster": "examples_tf2_py.static_broadcaster:main",
         "waits_for_transform": "examples_tf2_py.waits_for_transform:main",
     },
+    executables = [":{0}".format(s) for s in CONSOLE_SCRIPTS],
     package_xml = "package.xml",
     python = [":examples_tf2_py"],
     deps = [":ament_index"] + [
