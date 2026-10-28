@@ -261,6 +261,10 @@ common --noexperimental_collect_system_network_usage
 
 ## BUILD OPTIONS
 
+# Just a small amount of compiler optimization leads to signficantly faster
+# simulation speeds. Do not remove this unless you absolutely need to.
+build --@llvm//config:fastbuild_optimization_mode=O1
+
 # Ensure that we always download all outputs, including the shared libraries
 # that are required at runtime for dlopen() calls.
 build --remote_download_outputs=all
