@@ -52,23 +52,13 @@ def gz_sim_gui_plugin(name, srcs = [], hdrs = [], qrc = None, qml = [], moc_head
         )
         rcc_files.append(":" + rcc_name)
 
-    dir_name = srcs[0].rsplit("/", 1)[0] if srcs else ""
-
     cc_binary(
         name = "lib" + name + ".so",
         srcs = srcs + hdrs + moc_headers + moc_files + rcc_files,
-        copts = ([
+        copts = [
             "-fPIC",
             "-Wno-private-header",
-            "-I" + dir_name,
-            "-I$(GENDIR)/" + dir_name,
-            "-Iexternal/gz-sim+/" + dir_name,
-            "-I$(GENDIR)/external/gz-sim+/" + dir_name,
-            "-Isrc/gui",
-            "-Iexternal/gz-sim+/src/gui",
-            "-Iexternal/gz-sim+",
-            "-I$(GENDIR)/external/gz-sim+",
-        ] if dir_name else ["-fPIC", "-Wno-private-header"]),
+        ],
         dynamic_deps = GZ_GUI_QT_SHARED_DEPS + [
             "@gz-gui//:libgz-gui-shared.so",
             "//:libgz-sim-gui-shared.so",
