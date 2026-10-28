@@ -1,0 +1,80 @@
+--- a/src/costmap_2d_ros.cpp
++++ b/src/costmap_2d_ros.cpp
+@@ -38,6 +38,7 @@
+ 
+ #include "nav2_costmap_2d/costmap_2d_ros.hpp"
+ 
++#include <algorithm>
+ #include <memory>
+ #include <chrono>
+ #include <cmath>
+@@ -329,8 +330,16 @@
+ 
+   stop();
+ 
+-  // Map thread stuff
+-  map_update_thread_shutdown_ = true;
++  // Map thread stuff. Wake the update thread rather than letting it finish a
++  // clock sleep: on_deactivate() can run from rclcpp's pre-shutdown callbacks
++  // (nav2::LifecycleNode::on_rcl_preshutdown), i.e. before the context wakes
++  // clock sleepers, and with sim time stopped that sleep would never end --
++  // deadlocking the join() below and hanging the process on Ctrl-C.
++  {
++    std::lock_guard<std::mutex> lock(map_update_thread_mutex_);
++    map_update_thread_shutdown_ = true;
++  }
++  map_update_thread_cv_.notify_all();
+ 
+   if (map_update_thread_->joinable()) {
+     map_update_thread_->join();
+@@ -544,7 +553,11 @@
+ 
+   RCLCPP_DEBUG(get_logger(), "Entering loop");
+ 
+-  nav2::Rate r(this, frequency);    // 200ms by default
++  // Paced like nav2::Rate (sim clock when use_sim_time, else steady), but the
++  // sleep below stays interruptible by on_deactivate(); see the comment there.
++  auto clock = nav2::selectSteadyOrSimClock(this);
++  const rclcpp::Duration period = rclcpp::Duration::from_seconds(1.0 / frequency);  // 200ms by default
++  rclcpp::Time last_interval = clock->now();
+ 
+   while (rclcpp::ok() && !map_update_thread_shutdown_) {
+     nav2_util::ExecutionTimer timer;
+@@ -590,8 +603,35 @@
+       }
+     }
+ 
+-    // Make sure to sleep for the remainder of our cycle time
+-    r.sleep();
++    // Make sure to sleep for the remainder of our cycle time (same semantics as
++    // rclcpp::Rate::sleep()), while staying responsive to deactivation.
++    rclcpp::Time now_time = clock->now();
++    if (now_time < last_interval) {
++      // Time jumped backwards (e.g. sim time reset); restart the cycle.
++      last_interval = now_time;
++    }
++    const rclcpp::Time next_interval = last_interval + period;
++    if (next_interval < now_time) {
++      // This cycle overran; don't try to catch up.
++      last_interval = now_time;
++      continue;
++    }
++    {
++      std::unique_lock<std::mutex> lock(map_update_thread_mutex_);
++      while (rclcpp::ok() && !map_update_thread_shutdown_) {
++        now_time = clock->now();
++        if (now_time >= next_interval || now_time < last_interval) {
++          break;
++        }
++        // Wait in short wall-clock slices: with sim time the clock can stop
++        // advancing altogether (e.g. the simulator has already exited).
++        const auto remaining =
++          std::chrono::nanoseconds((next_interval - now_time).nanoseconds());
++        map_update_thread_cv_.wait_for(
++          lock, std::min<std::chrono::nanoseconds>(remaining, 50ms));
++      }
++    }
++    last_interval = next_interval;
+ 
+ #if 0
+     // TODO(bpwilcox): find ROS2 equivalent or port for r.cycletime()
