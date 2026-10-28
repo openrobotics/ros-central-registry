@@ -1,0 +1,97 @@
+# Bazel build of Gloo's CPU library (gloo/CMakeLists.txt and its
+# subdirectories), as PyTorch builds it for c10d's ProcessGroupGloo (static,
+# without Redis, MPI or ibverbs): with the TCP transport on Linux, and the
+# libuv transport elsewhere. Gloo's CUDA collectives are not built.
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load(":gloo_config.bzl", "gloo_config_substitutions")
+
+package(default_applicable_licenses = [":license"])
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+    license_text = "LICENSE",
+)
+
+exports_files(["LICENSE"])
+
+# gloo/config.h (see gloo_config.bzl).
+expand_template(
+    name = "config_h",
+    out = "gen/gloo/config.h",
+    substitutions = select({
+        "@platforms//os:linux": gloo_config_substitutions(linux = True),
+        "//conditions:default": gloo_config_substitutions(linux = False),
+    }),
+    template = "gloo/config.h.in",
+)
+
+cc_library(
+    name = "gloo",
+    srcs = [
+        "gloo/algorithm.cc",
+        "gloo/allgather.cc",
+        "gloo/allgatherv.cc",
+        "gloo/allreduce.cc",
+        "gloo/allreduce_local.cc",
+        "gloo/alltoall.cc",
+        "gloo/alltoallv.cc",
+        "gloo/barrier.cc",
+        "gloo/broadcast.cc",
+        "gloo/common/logging.cc",
+        "gloo/common/utils.cc",
+        "gloo/context.cc",
+        "gloo/gather.cc",
+        "gloo/gatherv.cc",
+        "gloo/reduce.cc",
+        "gloo/rendezvous/context.cc",
+        "gloo/rendezvous/file_store.cc",
+        "gloo/rendezvous/hash_store.cc",
+        "gloo/rendezvous/prefix_store.cc",
+        "gloo/rendezvous/store.cc",
+        "gloo/scatter.cc",
+        "gloo/transport/address.cc",
+        "gloo/transport/buffer.cc",
+        "gloo/transport/context.cc",
+        "gloo/transport/device.cc",
+        "gloo/transport/pair.cc",
+        "gloo/transport/unbound_buffer.cc",
+        "gloo/types.cc",
+    ] + select({
+        "@platforms//os:linux": ["gloo/common/linux.cc"] + glob(
+            ["gloo/transport/tcp/*.cc"],
+        ),
+        "//conditions:default": glob(["gloo/transport/uv/*.cc"]),
+    }),
+    hdrs = glob(
+        [
+            "gloo/*.h",
+            "gloo/common/*.h",
+            "gloo/rendezvous/*.h",
+            "gloo/transport/*.h",
+            "gloo/transport/tcp/*.h",
+            "gloo/transport/uv/*.h",
+        ],
+        exclude = [
+            "gloo/cuda*.h",
+            "gloo/mpi/**",
+            "gloo/rendezvous/redis_store.h",
+        ],
+    ) + [":config_h"],
+    copts = ["-std=c++17"],
+    includes = [
+        ".",
+        "gen",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": ["-pthread"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+    deps = select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@libuv"],
+    }),
+)

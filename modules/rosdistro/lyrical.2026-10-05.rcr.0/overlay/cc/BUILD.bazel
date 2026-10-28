@@ -2172,10 +2172,90 @@ alias(
     actual = "@glog",
 )
 
+# libglog.so statically links gflags (glog's own dependency), so it must also
+# export it for consumers such as :torch that reach gflags directly.
 cc_shared_library(
     name = "glog",
-    exports_filter = ["@glog//:__subpackages__"],
+    exports_filter = [
+        "@gflags//:__subpackages__",
+        "@glog//:__subpackages__",
+    ],
     deps = [":glog_library"],
+)
+
+# LibTorch (bcr_staging libtorch, built from source; see MODULE.bazel).
+#
+# @libtorch ships no shared libtorch (only libc10), so wrap the whole of
+# :torch -- c10, torch_cpu and, under --config=cuda, torch_cuda -- in one
+# shared library. Every ROS consumer links this single copy: statically linking
+# torch_cpu (alwayslink, hundreds of MB) into each component would bloat every
+# .so and duplicate TORCH_LIBRARY operator registrations in processes that
+# load two of them. Without --config=cuda, :torch is CPU-only.
+
+alias(
+    name = "torch_library",
+    actual = "@libtorch//:torch",
+)
+
+cc_shared_library(
+    name = "torch",
+    dynamic_deps = [":glog"],
+    exports_filter = [
+        "@asmjit//:__subpackages__",
+        "@cpp-httplib//:__subpackages__",
+        "@cpuinfo//:__subpackages__",
+        "@cutlass//:__subpackages__",
+        "@fbgemm//:__subpackages__",
+        "@flatbuffers//:__subpackages__",
+        "@gloo//:__subpackages__",
+        "@ittapi//:__subpackages__",
+        "@kineto//:__subpackages__",
+        "@libtorch//:__subpackages__",
+        "@libuv//:__subpackages__",
+        "@nlohmann_json//:__subpackages__",
+        "@pocketfft//:__subpackages__",
+        "@sleef//:__subpackages__",
+    ],
+    shared_lib_name = select({
+        "@platforms//os:osx": "libtorch.dylib",
+        "//conditions:default": "libtorch.so",
+    }),
+    deps = [":torch_library"],
+)
+
+# The hermetic CUDA toolkit (@cuda, configured by the root module). Only
+# compatible under --config=cuda on Linux, so the cuda_buffer* packages are
+# skipped, rather than failing, in the default CPU-only build.
+
+alias(
+    name = "cuda_enabled",
+    actual = "@libtorch//:cuda_enabled",
+)
+
+cc_library(
+    name = "cuda_runtime",
+    target_compatible_with = select({
+        ":cuda_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = select({
+        ":cuda_enabled": ["@cuda//:cuda_runtime"],
+        "//conditions:default": [],
+    }),
+)
+
+# libcuda.so (link-time stub from the cudart redist; the real driver is loaded
+# at run time).
+cc_library(
+    name = "cuda_driver",
+    target_compatible_with = select({
+        ":cuda_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = select({
+        ":cuda_enabled": ["@cuda"],
+        "//conditions:default": [],
+    }),
 )
 
 # ceres

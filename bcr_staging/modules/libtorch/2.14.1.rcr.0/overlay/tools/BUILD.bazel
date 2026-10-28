@@ -1,0 +1,53 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_python//python:py_binary.bzl", "py_binary")
+load("@rules_python//python:py_library.bzl", "py_library")
+
+package(default_applicable_licenses = ["//:license"])
+
+# Upstream's Vulkan shader generator and the ROCm hipify driver (see
+# //:libtorch_codegen.bzl).
+exports_files([
+    "gen_vulkan_spv.py",
+    "libtorch_hipify.py",
+])
+
+# Used by windows_def_file() in //:libtorch_config.bzl.
+cc_binary(
+    name = "def_filter",
+    srcs = ["def_filter.c"],
+    visibility = ["//visibility:public"],
+)
+
+# tools/autograd and tools/setup_helpers: the autograd, TorchScript tracing
+# and lazy tensor code generators (on top of torchgen).
+py_library(
+    name = "codegen_tools",
+    srcs = glob([
+        "__init__.py",
+        "autograd/**/*.py",
+        "setup_helpers/*.py",
+    ]),
+    data = glob([
+        "autograd/*.yaml",
+        "autograd/templates/**",
+    ]),
+    imports = [".."],
+    deps = ["//:torchgen"],
+)
+
+# Runs a generator module (see libtorch_codegen_main.py and
+# //:libtorch_codegen.bzl).
+py_binary(
+    name = "codegen",
+    srcs = ["libtorch_codegen_main.py"],
+    main = "libtorch_codegen_main.py",
+    python_version = "3.12",
+    # Only ever built for the exec platform (as a tool), not by
+    # `bazel build @libtorch//...` for the target platform.
+    tags = ["manual"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":codegen_tools",
+        "//:torchgen",
+    ],
+)

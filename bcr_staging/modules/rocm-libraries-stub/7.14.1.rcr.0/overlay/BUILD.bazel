@@ -1,0 +1,524 @@
+# The ROCm math libraries (projects/* of ROCm/rocm-libraries) as needed to
+# compile and link HIP programs without a ROCm installation: their headers, in
+# the layout that ROCm installs them in (include/<library>/...), and shims of
+# their shared libraries that load the real libraries at runtime when ROCm is
+# installed (see @hip-stub//bazel:gen_shim.py): rocBLAS, rocSOLVER, hipBLAS,
+# hipBLASLt, hipSOLVER, hipSPARSE, hipFFT and MIOpen. Header-only libraries
+# (rocPRIM, hipCUB, rocThrust) and the device APIs of rocRAND and hipRAND are
+# complete.
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@hip-stub//bazel:rocm_shim.bzl", "rocm_shim_library")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load(":rocm_libraries.bzl", "cmake_export_header", "rocm_version_substitutions")
+
+package(default_applicable_licenses = [":license"])
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+    license_text = "rocblas/LICENSE.md",
+)
+
+exports_files(["rocblas/LICENSE.md"])
+
+# The version of each library (VERSION_STRING or project(VERSION) of its
+# CMakeLists.txt) and, for shared libraries, its SONAME's major version
+# (<library>_SOVERSION).
+VERSIONS = {
+    "hipblas": "3.5.0",
+    "hipblaslt": "1.4.1",
+    "hipcub": "4.5.0",
+    "hipfft": "1.0.24",
+    "hiprand": "3.4.0",
+    "hipsolver": "3.5.0",
+    "hipsparse": "4.6.0",
+    "miopen": "3.5.2",
+    "rocblas": "5.5.0",
+    "rocprim": "4.5.0",
+    "rocrand": "4.5.0",
+    "rocsolver": "3.35.0",
+    "rocthrust": "4.5.0",
+}
+
+# -----------------------------------------------------------------------------
+# Header-only libraries
+# -----------------------------------------------------------------------------
+
+expand_template(
+    name = "rocprim_version",
+    out = "rocprim/rocprim/include/rocprim/rocprim_version.hpp",
+    substitutions = rocm_version_substitutions(
+        "rocprim",
+        VERSIONS["rocprim"],
+    ),
+    template = "rocprim/rocprim/include/rocprim/rocprim_version.hpp.in",
+)
+
+cc_library(
+    name = "rocprim",
+    hdrs = glob(["rocprim/rocprim/include/rocprim/**/*.hpp"]) + [":rocprim_version"],
+    strip_include_prefix = "rocprim/rocprim/include",
+    visibility = ["//visibility:public"],
+    deps = ["@hip-stub//:hip_headers"],
+)
+
+expand_template(
+    name = "hipcub_version",
+    out = "hipcub/hipcub/include/hipcub/hipcub_version.hpp",
+    # HIPCUB_CCCL_VERSION_* of hipcub/CMakeLists.txt (2.8.2).
+    substitutions = rocm_version_substitutions(
+        "hipcub",
+        VERSIONS["hipcub"],
+    ) | {
+        "@HIPCUB_CCCL_VERSION_MAJOR@": "2",
+        "@HIPCUB_CCCL_VERSION_MINOR@": "8",
+        "@HIPCUB_CCCL_VERSION_NUMBER@": "200802",
+        "@HIPCUB_CCCL_VERSION_PATCH@": "2",
+    },
+    template = "hipcub/hipcub/include/hipcub/hipcub_version.hpp.in",
+)
+
+cc_library(
+    name = "hipcub",
+    hdrs = glob(["hipcub/hipcub/include/hipcub/**/*.hpp"]) + [":hipcub_version"],
+    strip_include_prefix = "hipcub/hipcub/include",
+    visibility = ["//visibility:public"],
+    deps = [":rocprim"],
+)
+
+expand_template(
+    name = "rocthrust_version",
+    out = "rocthrust/thrust/rocthrust_version.hpp",
+    substitutions = rocm_version_substitutions(
+        "rocthrust",
+        VERSIONS["rocthrust"],
+    ),
+    template = "rocthrust/thrust/rocthrust_version.hpp.in",
+)
+
+cc_library(
+    name = "rocthrust",
+    hdrs = glob([
+        "rocthrust/thrust/**/*.h",
+        "rocthrust/thrust/**/*.hpp",
+        "rocthrust/thrust/**/*.inl",
+    ]) + [":rocthrust_version"],
+    strip_include_prefix = "rocthrust",
+    visibility = ["//visibility:public"],
+    deps = [":rocprim"],
+)
+
+expand_template(
+    name = "rocrand_version",
+    out = "rocrand/library/include/rocrand/rocrand_version.h",
+    substitutions = rocm_version_substitutions(
+        "rocrand",
+        VERSIONS["rocrand"],
+    ),
+    template = "rocrand/library/include/rocrand/rocrand_version.h.in",
+)
+
+# rocRAND's device API (rocrand_kernel.h); its host API is not used.
+cc_library(
+    name = "rocrand_headers",
+    hdrs = glob([
+        "rocrand/library/include/rocrand/*.h",
+        "rocrand/library/include/rocrand/*.hpp",
+    ]) + [":rocrand_version"],
+    strip_include_prefix = "rocrand/library/include",
+    visibility = ["//visibility:public"],
+    deps = ["@hip-stub//:hip_headers"],
+)
+
+expand_template(
+    name = "hiprand_version",
+    out = "hiprand/library/include/hiprand/hiprand_version.h",
+    substitutions = rocm_version_substitutions(
+        "hiprand",
+        VERSIONS["hiprand"],
+    ),
+    template = "hiprand/library/include/hiprand/hiprand_version.h.in",
+)
+
+# hipRAND's device API (hiprand_kernel.h); its host API is not used.
+cc_library(
+    name = "hiprand_headers",
+    hdrs = glob(
+        [
+            "hiprand/library/include/hiprand/*.h",
+            "hiprand/library/include/hiprand/*.hpp",
+        ],
+        exclude = ["hiprand/library/include/hiprand/*nvcc*.h"],
+    ) + [":hiprand_version"],
+    strip_include_prefix = "hiprand/library/include",
+    visibility = ["//visibility:public"],
+    deps = [":rocrand_headers"],
+)
+
+# -----------------------------------------------------------------------------
+# Shared libraries: their headers and shims
+# -----------------------------------------------------------------------------
+
+cc_library(
+    name = "hipblas_common",
+    hdrs = ["hipblas-common/library/include/hipblas-common/hipblas-common.h"],
+    strip_include_prefix = "hipblas-common/library/include",
+    visibility = ["//visibility:public"],
+)
+
+# rocBLAS (include/rocblas/).
+expand_template(
+    name = "rocblas_version",
+    out = "rocblas/library/include/internal/rocblas-version.h",
+    substitutions = rocm_version_substitutions(
+        "rocblas",
+        VERSIONS["rocblas"],
+    ) | {
+        "@rocblas_VERSION_COMMIT_ID@": "therock-7.14.1",
+        "@tensile_VERSION_COMMIT_ID@": "therock-7.14.1",
+    },
+    template = "rocblas/library/include/internal/rocblas-version.h.in",
+)
+
+cmake_export_header(
+    name = "rocblas_export",
+    out = "rocblas/library/include/rocblas-export.h",
+    base_name = "ROCBLAS",
+)
+
+# Both include paths are used ("rocblas-export.h", "internal/rocblas-export.h").
+cmake_export_header(
+    name = "rocblas_internal_export",
+    out = "rocblas/library/include/internal/rocblas-export.h",
+    base_name = "ROCBLAS",
+)
+
+cc_library(
+    name = "rocblas_headers",
+    hdrs = glob(["rocblas/library/include/**/*.h"]) + [
+        ":rocblas_export",
+        ":rocblas_internal_export",
+        ":rocblas_version",
+    ],
+    include_prefix = "rocblas",
+    strip_include_prefix = "rocblas/library/include",
+    deps = ["@hip-stub//:hip_headers"],
+)
+
+rocm_shim_library(
+    name = "rocblas",
+    error = "2",  # rocblas_status_not_implemented
+    export_macro = "ROCBLAS_EXPORT",
+    headers = glob(["rocblas/library/include/**/*.h"]),
+    soname = "librocblas.so.5",
+    visibility = ["//visibility:public"],
+    deps = [":rocblas_headers"],
+)
+
+# rocSOLVER (include/rocsolver/).
+expand_template(
+    name = "rocsolver_version",
+    out = "rocsolver/library/include/rocsolver/rocsolver-version.h",
+    substitutions = rocm_version_substitutions(
+        "rocsolver",
+        VERSIONS["rocsolver"],
+    ),
+    template = "rocsolver/library/include/rocsolver/rocsolver-version.h.in",
+)
+
+cmake_export_header(
+    name = "rocsolver_export",
+    out = "rocsolver/library/include/rocsolver/rocsolver-export.h",
+    base_name = "ROCSOLVER",
+)
+
+cc_library(
+    name = "rocsolver_headers",
+    hdrs = glob(["rocsolver/library/include/rocsolver/**/*.h"]) + [
+        ":rocsolver_export",
+        ":rocsolver_version",
+    ],
+    strip_include_prefix = "rocsolver/library/include",
+    deps = [":rocblas_headers"],
+)
+
+rocm_shim_library(
+    name = "rocsolver",
+    error = "2",  # rocblas_status_not_implemented
+    export_macro = "ROCSOLVER_EXPORT",
+    headers = glob(["rocsolver/library/include/rocsolver/**/*.h"]),
+    soname = "librocsolver.so.0",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":rocblas",
+        ":rocsolver_headers",
+    ],
+)
+
+# hipBLAS (include/hipblas/).
+expand_template(
+    name = "hipblas_version",
+    out = "hipblas/library/include/hipblas-version.h",
+    substitutions = rocm_version_substitutions(
+        "hipblas",
+        VERSIONS["hipblas"],
+    ),
+    template = "hipblas/library/include/hipblas-version.h.in",
+)
+
+cmake_export_header(
+    name = "hipblas_export",
+    out = "hipblas/library/include/hipblas-export.h",
+    base_name = "HIPBLAS",
+)
+
+cc_library(
+    name = "hipblas_headers",
+    hdrs = glob(["hipblas/library/include/*.h"]) + [
+        ":hipblas_export",
+        ":hipblas_version",
+    ],
+    include_prefix = "hipblas",
+    strip_include_prefix = "hipblas/library/include",
+    deps = [
+        ":hipblas_common",
+        "@hip-stub//:hip_headers",
+    ],
+)
+
+rocm_shim_library(
+    name = "hipblas",
+    error = "7",  # HIPBLAS_STATUS_NOT_SUPPORTED
+    export_macro = "HIPBLAS_EXPORT",
+    headers = glob(["hipblas/library/include/*.h"]),
+    soname = "libhipblas.so.3",
+    visibility = ["//visibility:public"],
+    deps = [":hipblas_headers"],
+)
+
+# hipBLASLt (include/hipblaslt/).
+expand_template(
+    name = "hipblaslt_version",
+    out = "hipblaslt/library/include/hipblaslt/hipblaslt-version.h",
+    substitutions = rocm_version_substitutions(
+        "hipblaslt",
+        VERSIONS["hipblaslt"],
+    ),
+    template = "hipblaslt/library/include/hipblaslt-version.h.in",
+)
+
+cmake_export_header(
+    name = "hipblaslt_export",
+    out = "hipblaslt/library/include/hipblaslt/hipblaslt-export.h",
+    base_name = "HIPBLASLT",
+)
+
+cc_library(
+    name = "hipblaslt_headers",
+    hdrs = glob([
+        "hipblaslt/library/include/hipblaslt/**/*.h",
+        "hipblaslt/library/include/hipblaslt/**/*.hpp",
+    ]) + [
+        ":hipblaslt_export",
+        ":hipblaslt_version",
+    ],
+    strip_include_prefix = "hipblaslt/library/include",
+    deps = [
+        ":hipblas_common",
+        ":hipblas_headers",
+        "@hip-stub//:hip_headers",
+    ],
+)
+
+rocm_shim_library(
+    name = "hipblaslt",
+    error = "7",  # HIPBLAS_STATUS_NOT_SUPPORTED
+    export_macro = "HIPBLASLT_EXPORT",
+    headers = glob(["hipblaslt/library/include/hipblaslt/**/*.h"]),
+    soname = "libhipblaslt.so.1",
+    # The C++ API of hipblaslt-ext.hpp that PyTorch uses (mangled for
+    # libc++). The real library uses libstdc++, so getAllAlgos(), whose
+    # std::vector parameter is mangled (and laid out) differently, always
+    # reports HIPBLAS_STATUS_NOT_SUPPORTED: TunableOp's hipBLASLt candidates
+    # are unavailable.
+    symbols = [
+        "_ZN13hipblaslt_ext11getAllAlgosEPvNS_8GemmTypeE18hipblasOperation_tS2_11hipDataTypeS3_S3_S3_20hipblasComputeType_tRNSt3__16vectorI33_hipblasLtMatmulHeuristicResult_tNS5_9allocatorIS7_EEEE",
+        "_ZN13hipblaslt_ext16getIndexFromAlgoER22_hipblasLtMatmulAlgo_t",
+        "_ZN13hipblaslt_ext21matmulIsAlgoSupportedEPvP27hipblasLtMatmulDescOpaque_tPKvP29hipblasLtMatrixLayoutOpaque_tS6_S4_S6_S6_R22_hipblasLtMatmulAlgo_tRm",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [":hipblaslt_headers"],
+)
+
+# hipSOLVER (include/hipsolver/).
+expand_template(
+    name = "hipsolver_version",
+    out = "hipsolver/library/include/internal/hipsolver-version.h",
+    substitutions = rocm_version_substitutions(
+        "hipsolver",
+        VERSIONS["hipsolver"],
+    ),
+    template = "hipsolver/library/include/internal/hipsolver-version.h.in",
+)
+
+cmake_export_header(
+    name = "hipsolver_export",
+    out = "hipsolver/library/include/internal/hipsolver-export.h",
+    base_name = "HIPSOLVER",
+)
+
+cc_library(
+    name = "hipsolver_headers",
+    hdrs = glob(["hipsolver/library/include/**/*.h"]) + [
+        ":hipsolver_export",
+        ":hipsolver_version",
+    ],
+    include_prefix = "hipsolver",
+    strip_include_prefix = "hipsolver/library/include",
+    deps = ["@hip-stub//:hip_headers"],
+)
+
+rocm_shim_library(
+    name = "hipsolver",
+    error = "7",  # HIPSOLVER_STATUS_NOT_SUPPORTED
+    export_macro = "HIPSOLVER_EXPORT",
+    headers = glob(["hipsolver/library/include/**/*.h"]),
+    soname = "libhipsolver.so.1",
+    visibility = ["//visibility:public"],
+    deps = [":hipsolver_headers"],
+)
+
+# hipSPARSE (include/hipsparse/).
+expand_template(
+    name = "hipsparse_version",
+    out = "hipsparse/library/include/hipsparse-version.h",
+    # HIPSPARSE_ENABLE_SPMV_BSR (ON by default).
+    substitutions = rocm_version_substitutions(
+        "hipsparse",
+        VERSIONS["hipsparse"],
+    ) | {
+        "#cmakedefine HIPSPARSE_WITH_SPMV_BSR": "#define HIPSPARSE_WITH_SPMV_BSR",
+    },
+    template = "hipsparse/library/include/hipsparse-version.h.in",
+)
+
+cmake_export_header(
+    name = "hipsparse_export",
+    out = "hipsparse/library/include/hipsparse-export.h",
+    base_name = "HIPSPARSE",
+)
+
+cc_library(
+    name = "hipsparse_headers",
+    hdrs = glob(["hipsparse/library/include/**/*.h"]) + [
+        ":hipsparse_export",
+        ":hipsparse_version",
+    ],
+    include_prefix = "hipsparse",
+    strip_include_prefix = "hipsparse/library/include",
+    deps = ["@hip-stub//:hip_headers"],
+)
+
+rocm_shim_library(
+    name = "hipsparse",
+    error = "10",  # HIPSPARSE_STATUS_NOT_SUPPORTED
+    export_macro = "HIPSPARSE_EXPORT",
+    headers = glob(["hipsparse/library/include/**/*.h"]),
+    soname = "libhipsparse.so.4",
+    visibility = ["//visibility:public"],
+    deps = [":hipsparse_headers"],
+)
+
+# hipFFT (include/hipfft/).
+expand_template(
+    name = "hipfft_version",
+    out = "hipfft/library/include/hipfft/hipfft-version.h",
+    substitutions = rocm_version_substitutions(
+        "hipfft",
+        VERSIONS["hipfft"],
+    ),
+    template = "hipfft/library/include/hipfft/hipfft-version.h.in",
+)
+
+cmake_export_header(
+    name = "hipfft_export",
+    out = "hipfft/library/include/hipfft/hipfft-export.h",
+    base_name = "HIPFFT",
+)
+
+cc_library(
+    name = "hipfft_headers",
+    hdrs = glob(["hipfft/library/include/hipfft/*.h"]) + [
+        ":hipfft_export",
+        ":hipfft_version",
+    ],
+    strip_include_prefix = "hipfft/library/include",
+    deps = ["@hip-stub//:hip_headers"],
+)
+
+rocm_shim_library(
+    name = "hipfft",
+    error = "16",  # HIPFFT_NOT_SUPPORTED
+    export_macro = "HIPFFT_EXPORT",
+    headers = glob(["hipfft/library/include/hipfft/*.h"]),
+    soname = "libhipfft.so.0",
+    visibility = ["//visibility:public"],
+    deps = [":hipfft_headers"],
+)
+
+# MIOpen (include/miopen/).
+expand_template(
+    name = "miopen_version",
+    out = "miopen/include/miopen/version.h",
+    substitutions = rocm_version_substitutions(
+        "MIOpen",
+        VERSIONS["miopen"],
+    ),
+    template = "miopen/include/miopen/version.h.in",
+)
+
+# Of config.h.in's build options, miopen.h only reads the backend.
+write_file(
+    name = "miopen_config",
+    out = "miopen/include/miopen/config.h",
+    content = [
+        "// The build options of MIOpen's HIP backend that miopen.h reads",
+        "// (include/miopen/config.h.in).",
+        "#ifndef GUARD_CONFIG_H_IN",
+        "#define GUARD_CONFIG_H_IN",
+        "#define MIOPEN_BACKEND_OPENCL 0",
+        "#define MIOPEN_BACKEND_HIP 1",
+        "#endif",
+        "",
+    ],
+)
+
+cmake_export_header(
+    name = "miopen_export",
+    out = "miopen/include/miopen/export.h",
+    base_name = "MIOPEN",
+)
+
+cc_library(
+    name = "miopen_headers",
+    hdrs = [
+        "miopen/include/miopen/miopen.h",
+        ":miopen_config",
+        ":miopen_export",
+        ":miopen_version",
+    ],
+    strip_include_prefix = "miopen/include",
+    deps = ["@hip-stub//:hip_headers"],
+)
+
+rocm_shim_library(
+    name = "miopen",
+    error = "6",  # miopenStatusNotImplemented
+    export_macro = "MIOPEN_EXPORT",
+    headers = ["miopen/include/miopen/miopen.h"],
+    soname = "libMIOpen.so.1",
+    visibility = ["//visibility:public"],
+    deps = [":miopen_headers"],
+)

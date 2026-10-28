@@ -1,0 +1,299 @@
+# Bazel build of the ROCm device libraries (CMakeLists.txt, cmake/OCL.cmake and
+# the CMakeLists.txt of each library): the AMDGPU bitcode that Clang links into
+# HIP device code (--rocm-device-lib-path). Bitcode is target independent, so
+# these build identically on every host for every target platform.
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rules_license//rules:license.bzl", "license")
+load(":rocm_device_libs.bzl", "amdgcn_bitcode_library")
+
+package(default_applicable_licenses = [":license"])
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:NCSA"],
+    license_text = "LICENSE.TXT",
+)
+
+exports_files(["LICENSE.TXT"])
+
+amdgcn_bitcode_library(
+    name = "ocml",
+    srcs = glob(["ocml/src/*.cl"]),
+    hdrs = glob([
+        "irif/inc/*.h",
+        "oclc/inc/*.h",
+        "ocml/inc/*.h",
+        "ocml/src/*.h",
+    ]),
+    includes = [
+        "irif/inc",
+        "oclc/inc",
+        "ocml/inc",
+        "ocml/src",
+    ],
+    library = "ocml",
+    per_file_copts = {
+        "native_expF.cl": ["-fapprox-func"],
+        "native_logF.cl": ["-fapprox-func"],
+        "sqrtF.cl": ["-cl-fp32-correctly-rounded-divide-sqrt"],
+    },
+)
+
+amdgcn_bitcode_library(
+    name = "ockl",
+    srcs = glob([
+        "ockl/src/*.cl",
+        "ockl/src/*.ll",
+    ]),
+    hdrs = glob([
+        "irif/inc/*.h",
+        "ockl/inc/*.h",
+        "oclc/inc/*.h",
+    ]),
+    includes = [
+        "irif/inc",
+        "ockl/inc",
+        "oclc/inc",
+    ],
+    library = "ockl",
+    per_file_copts = {
+        "gaaf.cl": ["-munsafe-fp-atomics"],
+        # __builtin_amdgcn_msad_u8 and __builtin_amdgcn_mqsad_pk_u16_u8,
+        # which upstream Clang (unlike ROCm's) only allows with these
+        # features.
+        "media.cl": [
+            "-Xclang",
+            "-target-feature",
+            "-Xclang",
+            "+msad-insts",
+            "-Xclang",
+            "-target-feature",
+            "-Xclang",
+            "+mqsad-pk-insts",
+        ],
+    },
+)
+
+amdgcn_bitcode_library(
+    name = "opencl",
+    srcs = glob([
+        "opencl/src/{}/*.cl".format(directory)
+        for directory in [
+            "async",
+            "common",
+            "devenq",
+            "geometric",
+            "image",
+            "integer",
+            "math",
+            "media",
+            "misc",
+            "pipes",
+            "relational",
+            "subgroup",
+            "vldst",
+            "workgroup",
+        ]
+    ]),
+    hdrs = glob([
+        "ockl/inc/*.h",
+        "oclc/inc/*.h",
+        "ocml/inc/*.h",
+        "opencl/src/**/*.h",
+    ]),
+    copts = ["-cl-fp32-correctly-rounded-divide-sqrt"],
+    includes = [
+        "ockl/inc",
+        "oclc/inc",
+        "ocml/inc",
+        "opencl/src/integer",
+        "opencl/src/workgroup",
+    ],
+    library = "opencl",
+)
+
+amdgcn_bitcode_library(
+    name = "hip",
+    srcs = glob(["hip/src/*.cl"]),
+    hdrs = glob([
+        "ockl/inc/*.h",
+        "ocml/inc/*.h",
+    ]),
+    includes = [
+        "ockl/inc",
+        "ocml/inc",
+    ],
+    library = "hip",
+)
+
+amdgcn_bitcode_library(
+    name = "asanrtl",
+    srcs = glob(["asanrtl/src/*.cl"]),
+    hdrs = glob([
+        "asanrtl/inc/*.h",
+        "irif/inc/*.h",
+        "ockl/inc/*.h",
+        "oclc/inc/*.h",
+    ]),
+    includes = [
+        "asanrtl/inc",
+        "asanrtl/src",
+        "irif/inc",
+        "ockl/inc",
+        "oclc/inc",
+    ],
+    library = "asanrtl",
+)
+
+# The control libraries (oclc/CMakeLists.txt): one per source, plus one ISA
+# version library per GPU and one ABI version library per code object ABI.
+_OCLC_SOURCES = glob(
+    ["oclc/src/*.cl"],
+    exclude = [
+        "oclc/src/abi_version.cl",
+        "oclc/src/isa_version.cl",
+    ],
+)
+
+[
+    amdgcn_bitcode_library(
+        name = "oclc_" + src[len("oclc/src/"):-len(".cl")],
+        srcs = [src],
+        hdrs = glob(["oclc/inc/*.h"]),
+        includes = ["oclc/inc"],
+        library = "oclc_" + src[len("oclc/src/"):-len(".cl")],
+    )
+    for src in _OCLC_SOURCES
+]
+
+# OCLC_ISA_TARGETS of oclc/CMakeLists.txt: (GPU name suffix, ISA version).
+_OCLC_ISA_TARGETS = [
+    ("600", "6000"),
+    ("601", "6001"),
+    ("602", "6002"),
+    ("700", "7000"),
+    ("701", "7001"),
+    ("702", "7002"),
+    ("703", "7003"),
+    ("704", "7004"),
+    ("705", "7005"),
+    ("801", "8001"),
+    ("802", "8002"),
+    ("803", "8003"),
+    ("805", "8005"),
+    ("810", "8100"),
+    ("900", "9000"),
+    ("902", "9002"),
+    ("904", "9004"),
+    ("906", "9006"),
+    ("908", "9008"),
+    ("909", "9009"),
+    ("90a", "9010"),
+    ("90c", "9012"),
+    ("942", "9402"),
+    ("950", "9500"),
+    ("9-generic", "9000"),
+    ("9-4-generic", "9402"),
+    ("1010", "10100"),
+    ("1011", "10101"),
+    ("1012", "10102"),
+    ("1013", "10103"),
+    ("1030", "10300"),
+    ("1031", "10301"),
+    ("1032", "10302"),
+    ("1033", "10303"),
+    ("1034", "10304"),
+    ("1035", "10305"),
+    ("1036", "10306"),
+    ("10-1-generic", "10100"),
+    ("10-3-generic", "10300"),
+    ("1100", "11000"),
+    ("1101", "11001"),
+    ("1102", "11002"),
+    ("1103", "11003"),
+    ("1150", "11500"),
+    ("1151", "11501"),
+    ("1152", "11502"),
+    ("1153", "11503"),
+    ("1170", "11700"),
+    ("1171", "11701"),
+    ("1172", "11702"),
+    ("11-generic", "11003"),
+    ("1200", "12000"),
+    ("1201", "12001"),
+    ("1250", "12500"),
+    ("1251", "12501"),
+    ("12-generic", "12000"),
+]
+
+[
+    expand_template(
+        name = "isa_version_{}_cl".format(target),
+        out = "oclc/gen/isa_version_{}.cl".format(target),
+        substitutions = {"@ISA_VERSION@": version},
+        template = "oclc/src/isa_version.cl.in",
+    )
+    for target, version in _OCLC_ISA_TARGETS
+]
+
+[
+    amdgcn_bitcode_library(
+        name = "oclc_isa_version_" + target,
+        srcs = [":isa_version_{}_cl".format(target)],
+        hdrs = glob(["oclc/inc/*.h"]),
+        includes = ["oclc/inc"],
+        library = "oclc_isa_version_" + target,
+    )
+    for target, _ in _OCLC_ISA_TARGETS
+]
+
+# OCLC_ABI_VERSIONS of oclc/CMakeLists.txt.
+_OCLC_ABI_VERSIONS = [
+    "400",
+    "500",
+    "600",
+]
+
+[
+    expand_template(
+        name = "abi_version_{}_cl".format(version),
+        out = "oclc/gen/abi_version_{}.cl".format(version),
+        substitutions = {"@ABI_VERSION@": version},
+        template = "oclc/src/abi_version.cl.in",
+    )
+    for version in _OCLC_ABI_VERSIONS
+]
+
+[
+    amdgcn_bitcode_library(
+        name = "oclc_abi_version_" + version,
+        srcs = [":abi_version_{}_cl".format(version)],
+        hdrs = glob(["oclc/inc/*.h"]),
+        includes = ["oclc/inc"],
+        library = "oclc_abi_version_" + version,
+    )
+    for version in _OCLC_ABI_VERSIONS
+]
+
+# Every bitcode library, in amdgcn/bitcode/ (Clang's --rocm-device-lib-path
+# is the directory of any one of them).
+filegroup(
+    name = "bitcode",
+    srcs = [
+        ":asanrtl",
+        ":hip",
+        ":ockl",
+        ":ocml",
+        ":opencl",
+    ] + [
+        ":oclc_" + src[len("oclc/src/"):-len(".cl")]
+        for src in _OCLC_SOURCES
+    ] + [
+        ":oclc_isa_version_" + target
+        for target, _ in _OCLC_ISA_TARGETS
+    ] + [
+        ":oclc_abi_version_" + version
+        for version in _OCLC_ABI_VERSIONS
+    ],
+    visibility = ["//visibility:public"],
+)

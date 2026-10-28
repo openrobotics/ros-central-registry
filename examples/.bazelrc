@@ -144,6 +144,36 @@ build --@llvm//config:experimental_stub_libgcc_s=True
 build --cxxopt=-std=c++23
 build --host_cxxopt=-std=c++23
 
+# ==============================================================================
+# GPU / CUDA (opt-in: --config=cuda)
+# ==============================================================================
+# The default distribution build is CPU-only: @libtorch//:torch degrades to its
+# CPU backend and the Linux-only cuda_buffer* packages are skipped as
+# incompatible. --config=cuda compiles CUDA with the hermetic @llvm Clang (not
+# nvcc) against the hash-pinned CUDA redistributables configured in
+# MODULE.bazel (see tools/ci/setup_workspace.py:CUDA_REDIST_VERSION). No GPU or
+# driver is needed to build; binaries dlopen libcuda.so.1 at run time.
+build --repo_env=CUDA_COMPILER_USE_CC_TOOLCHAIN=true
+build --@rules_cuda//cuda:compiler=clang
+build --@rules_cuda//cuda:enable=False
+build:cuda --@rules_cuda//cuda:enable=True
+# The CUDA headers reject libc++ on x86 (crt/host_defines.h) unless this is
+# defined; the whole stack is Clang + libc++, so there is no ABI mix.
+build:cuda --@rules_cuda//cuda:copts=-D_ALLOW_UNSUPPORTED_LIBCPP
+# Clang can't detect the CUDA version from the nvcc redist (no cuda.h there),
+# so pin CUDA 12.8's PTX ISA (8.7). Update together with CUDA_REDIST_VERSION.
+build:cuda --@rules_cuda//cuda:copts=--cuda-feature=+ptx87
+build:cuda --@rules_cuda//cuda:copts=-Wno-unknown-cuda-version
+# Hopper (sm_90) cubins plus sm_90 PTX for newer GPUs to JIT. Override
+# --@rules_cuda//cuda:archs in user.bazelrc for your own GPU (e.g. sm_89), or
+# list several (sm_80;sm_86;sm_89;sm_90) for a portable build.
+build:cuda --@rules_cuda//cuda:archs=sm_90
+build:cuda --@rules_cuda//cuda:copts=--no-cuda-include-ptx=all
+build:cuda --@rules_cuda//cuda:copts=--cuda-include-ptx=sm_90
+build:cuda --@rules_cuda//cuda:copts=-Xcuda-fatbinary
+build:cuda --@rules_cuda//cuda:copts=--compress-all
+# ==============================================================================
+
 # rules_bison and rules_m4 ship a gnulib Windows configuration written for MSVC
 # (#pragma include_alias, mode_t/pid_t/ssize_t/off_t macro overrides, and
 # omitted C99 extern-inline instantiation units). When cross-compiling Linux

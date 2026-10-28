@@ -40,8 +40,8 @@ VARIANTS = {
 # to (via llvm.version(...) in the generated MODULE.bazel). Newer libc++
 # releases (23.x) dropped transitive standard-library includes that several
 # BCR modules we can't patch from rosdistro (fastdds, uncrustify, ...) still
-# rely on, so hold at 21.x -- the same line the llvm21_third_party_zstd patch
-# (bcr_staging/modules/llvm/*/patches/) targets.
+# rely on, so hold at 21.x -- the line hermetic-llvm's (now upstreamed)
+# llvm21_third_party_zstd fix targets.
 LLVM_VERSION = "21.1.8"
 
 
@@ -93,6 +93,51 @@ def render_qt_deps() -> str:
     """bazel_dep lines for every from-source Qt module."""
     return "".join(
         f'bazel_dep(name = "{name}", version = "{QT_VERSION}")\n' for name in QT_MODULES
+    )
+
+
+# Hermetic CUDA toolkit for @libtorch's (opt-in) CUDA backend and the
+# cuda_buffer* packages. rules_cuda only honours cuda.toolkit() and
+# cuda.redist_json() tags from the root module, so they can't live in
+# rosdistro's MODULE.bazel. The staged rules_cuda (bcr_staging/modules/
+# rules_cuda/*/patches/multiplatform_redist.patch) makes this a no-op on macOS
+# hosts and maps linux-arm64 to NVIDIA's linux-sbsa redist. Only the redist
+# index is fetched eagerly; component archives are fetched lazily, i.e. only
+# by builds that use --config=cuda.
+CUDA_REDIST_VERSION = "12.8.1"
+CUDA_REDIST_COMPONENTS = (
+    "cccl",
+    "cublas",
+    "cudart",
+    "cufft",
+    "cupti",
+    "curand",
+    "cusolver",
+    "cusparse",
+    "nvcc",
+    "nvjitlink",
+    "nvml",
+    "nvrtc",
+    "nvtx",
+)
+
+
+def render_cuda_toolkit() -> str:
+    """Root-module rules_cuda configuration (see CUDA_REDIST_VERSION)."""
+    components = "".join(f'        "{c}",\n' for c in CUDA_REDIST_COMPONENTS)
+    return (
+        "# Hermetic CUDA toolkit (see tools/ci/setup_workspace.py:CUDA_REDIST_VERSION).\n"
+        "# Unused unless a build passes --config=cuda.\n"
+        'cuda = use_extension("@rules_cuda//cuda:extensions.bzl", "toolchain")\n'
+        "cuda.redist_json(\n"
+        '    name = "rules_cuda_redist_json",\n'
+        "    components = [\n"
+        f"{components}"
+        "    ],\n"
+        f'    version = "{CUDA_REDIST_VERSION}",\n'
+        ")\n"
+        'cuda.toolkit(name = "cuda")\n'
+        'use_repo(cuda, "cuda")\n'
     )
 
 
@@ -284,6 +329,43 @@ build --host_per_file_copt=external/.*popf.*@-std=c++17
 #    point and failing `static_assert(sizeof(_Tp) >= 0)`.
 build --per_file_copt=external/.*gz-sim.*@-std=c++20
 build --host_per_file_copt=external/.*gz-sim.*@-std=c++20
+#
+# 4. @libtorch (PyTorch 2.14.1, bcr_staging):
+#    Reason: upstream builds with CMAKE_CXX_STANDARD 20 and the staged module
+#    reproduces that with LIBTORCH_COPTS = ["-std=gnu++20"] on every @libtorch
+#    target (overlay/libtorch_config.bzl), which wins over --cxxopt above.
+#    Consumers that only include torch headers (e.g. torch_conversions) still
+#    compile as C++23 against the same libc++, so no ABI split.
+# ==============================================================================
+
+# ==============================================================================
+# GPU / CUDA (opt-in: --config=cuda)
+# ==============================================================================
+# The default distribution build is CPU-only: @libtorch//:torch degrades to its
+# CPU backend and the Linux-only cuda_buffer* packages are skipped as
+# incompatible. --config=cuda compiles CUDA with the hermetic @llvm Clang (not
+# nvcc) against the hash-pinned CUDA redistributables configured in
+# MODULE.bazel (see tools/ci/setup_workspace.py:CUDA_REDIST_VERSION). No GPU or
+# driver is needed to build; binaries dlopen libcuda.so.1 at run time.
+build --repo_env=CUDA_COMPILER_USE_CC_TOOLCHAIN=true
+build --@rules_cuda//cuda:compiler=clang
+build --@rules_cuda//cuda:enable=False
+build:cuda --@rules_cuda//cuda:enable=True
+# The CUDA headers reject libc++ on x86 (crt/host_defines.h) unless this is
+# defined; the whole stack is Clang + libc++, so there is no ABI mix.
+build:cuda --@rules_cuda//cuda:copts=-D_ALLOW_UNSUPPORTED_LIBCPP
+# Clang can't detect the CUDA version from the nvcc redist (no cuda.h there),
+# so pin CUDA 12.8's PTX ISA (8.7). Update together with CUDA_REDIST_VERSION.
+build:cuda --@rules_cuda//cuda:copts=--cuda-feature=+ptx87
+build:cuda --@rules_cuda//cuda:copts=-Wno-unknown-cuda-version
+# Hopper (sm_90) cubins plus sm_90 PTX for newer GPUs to JIT. Override
+# --@rules_cuda//cuda:archs in user.bazelrc for your own GPU (e.g. sm_89), or
+# list several (sm_80;sm_86;sm_89;sm_90) for a portable build.
+build:cuda --@rules_cuda//cuda:archs=sm_90
+build:cuda --@rules_cuda//cuda:copts=--no-cuda-include-ptx=all
+build:cuda --@rules_cuda//cuda:copts=--cuda-include-ptx=sm_90
+build:cuda --@rules_cuda//cuda:copts=-Xcuda-fatbinary
+build:cuda --@rules_cuda//cuda:copts=--compress-all
 # ==============================================================================
 
 # rules_bison and rules_m4 ship a gnulib Windows configuration written for MSVC
@@ -734,6 +816,7 @@ bazel_dep(name = "llvm", version = "0.8.25.rcr.0")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "protobuf", version = "36.2")
 bazel_dep(name = "rules_cc", version = "0.2.26.rcr.0")
+bazel_dep(name = "rules_cuda", version = "0.3.0.rcr.0")
 bazel_dep(name = "rules_go", version = "0.60.0")
 bazel_dep(name = "rules_python", version = "2.4.5")
 bazel_dep(name = "rules_rs", version = "0.1.0")
@@ -882,6 +965,9 @@ llvm.configure(
 )
 use_repo(llvm, "llvm-project")
 
+""")
+        f.write(render_cuda_toolkit())
+        f.write("""
 # Rust configuration
 
 rs_toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")

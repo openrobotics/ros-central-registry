@@ -1,0 +1,84 @@
+# Bazel build of libkineto (libkineto/CMakeLists.txt), PyTorch's profiler
+# library: CPU-only (:kineto, KINETO_BACKEND=cpu), or with CUDA's CUPTI
+# (:kineto_cupti, KINETO_BACKEND=cuda). The source lists come from
+# libkineto/libkineto_defs.bzl, which the CMake build reads too.
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load(
+    "//:libkineto/libkineto_defs.bzl",
+    "KINETO_COMPILER_FLAGS",
+    "get_libkineto_cpu_only_srcs",
+    "get_libkineto_cupti_srcs",
+)
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+    license_text = "LICENSE",
+)
+
+exports_files(["LICENSE"])
+
+# libkineto's public headers. PyTorch's profiler includes some of them (e.g.
+# <ActivityType.h>) even when it is built without Kineto (USE_KINETO).
+cc_library(
+    name = "kineto_headers",
+    hdrs = glob(["libkineto/include/*.h"]),
+    includes = ["libkineto/include"],
+)
+
+# The CMake build's KINETO_DEFINITIONS and include directories (the
+# directories of libkineto's private headers are public there too).
+_DEFINES = ["KINETO_NAMESPACE=libkineto"] + select({
+    # dynolog's IPC fabric (on-demand tracing by the dynolog daemon), over
+    # Linux's abstract Unix sockets.
+    "@platforms//os:linux": ["ENABLE_IPC_FABRIC"],
+    "//conditions:default": [],
+})
+
+cc_library(
+    name = "dynolog_headers",
+    hdrs = glob(["libkineto/third_party/dynolog_headers/dynolog/src/ipcfabric/*.h"]),
+    includes = [
+        "libkineto/third_party/dynolog_headers",
+        "libkineto/third_party/dynolog_headers/dynolog/src/ipcfabric",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+[
+    cc_library(
+        name = name,
+        srcs = ["libkineto/" + src for src in srcs] + glob(["libkineto/src/*.h"]),
+        copts = KINETO_COMPILER_FLAGS + ["-std=c++20"],
+        defines = _DEFINES + defines,
+        includes = ["libkineto/src"],
+        deps = [
+            ":dynolog_headers",
+            ":kineto_headers",
+            "@fmt",
+        ] + deps,
+    )
+    for name, srcs, defines, deps in [
+        (
+            "kineto",
+            get_libkineto_cpu_only_srcs(),
+            [],
+            [],
+        ),
+        (
+            "kineto_cupti",
+            get_libkineto_cupti_srcs(),
+            ["HAS_CUPTI"],
+            [
+                "@cuda//:cuda_runtime",
+                "@cuda//:cupti",
+            ],
+        ),
+    ]
+]

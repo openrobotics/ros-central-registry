@@ -156,6 +156,26 @@ class TestQtDeps(unittest.TestCase):
         self.assertNotIn("rules_qt", content)
 
 
+class TestCuda(unittest.TestCase):
+
+    def test_render_cuda_toolkit_configures_redist_in_root(self):
+        content = setup_workspace.render_cuda_toolkit()
+        self.assertIn('use_extension("@rules_cuda//cuda:extensions.bzl", "toolchain")', content)
+        self.assertIn(f'version = "{setup_workspace.CUDA_REDIST_VERSION}"', content)
+        self.assertIn('cuda.toolkit(name = "cuda")', content)
+        self.assertIn('use_repo(cuda, "cuda")', content)
+        for component in setup_workspace.CUDA_REDIST_COMPONENTS:
+            self.assertIn(f'"{component}",', content)
+
+    def test_cuda_is_opt_in(self):
+        content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
+        self.assertIn("build --@rules_cuda//cuda:enable=False", content)
+        self.assertIn("build:cuda --@rules_cuda//cuda:enable=True", content)
+        self.assertIn("build:cuda --@rules_cuda//cuda:archs=sm_90", content)
+        self.assertIn("build:cuda --@rules_cuda//cuda:copts=--cuda-include-ptx=sm_90", content)
+        self.assertIn("build --@rules_cuda//cuda:compiler=clang", content)
+
+
 class TestCalculatePackagesForVariant(unittest.TestCase):
 
     def setUp(self):

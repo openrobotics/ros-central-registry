@@ -1,0 +1,822 @@
+# Bazel build of SLEEF's vectorized math library (libsleef), following
+# src/libm/CMakeLists.txt and Configure.cmake for x86_64 and aarch64 targets.
+#
+# The code generators (mkrename, mkalias, mkdisp) are host tools, so
+# cross-compiling works between any (host, target) pair. The GNU ABI, quad
+# precision, DFT and inline-header libraries are not built.
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load(":sleef.bzl", "sleef_concat", "sleef_generate")
+
+package(default_applicable_licenses = [":license"])
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSL-1.0"],
+    license_text = "LICENSE.txt",
+)
+
+exports_files(["LICENSE.txt"])
+
+# -----------------------------------------------------------------------------
+# Host code generators
+# -----------------------------------------------------------------------------
+
+[
+    cc_binary(
+        name = tool,
+        srcs = [
+            "src/libm/funcproto.h",
+            "src/libm/{}.c".format(tool),
+        ],
+        # Its main() is called by bazel/tool_main.c, which redirects stdout.
+        local_defines = ["main=sleef_tool_main"],
+        deps = ["//bazel:tool_main"],
+    )
+    for tool in [
+        "mkalias",
+        "mkdisp",
+        "mkrename",
+    ]
+]
+
+# -----------------------------------------------------------------------------
+# Vector extensions (Configure.cmake, src/libm/CMakeLists.txt)
+# -----------------------------------------------------------------------------
+
+# name: (arguments of mkrename for sleef.h, arguments of mkrename for
+# rename<name>.h, compiler flags, mkalias arguments (DP, SP) for the
+# extensions whose functions get aliases without the extension suffix).
+_X86_64_EXTENSIONS = {
+    "SSE2": (
+        [
+            "cinz_",
+            "2",
+            "4",
+            "__m128d",
+            "__m128",
+            "__m128i",
+            "__m128i",
+            "__SSE2__",
+            "sse2",
+        ],
+        [
+            "cinz_",
+            "2",
+            "4",
+            "sse2",
+        ],
+        ["-msse2"],
+        None,
+    ),
+    "SSE4": (
+        [
+            "cinz_",
+            "2",
+            "4",
+            "__m128d",
+            "__m128",
+            "__m128i",
+            "__m128i",
+            "__SSE2__",
+            "sse4",
+        ],
+        [
+            "cinz_",
+            "2",
+            "4",
+            "sse4",
+        ],
+        ["-msse4.1"],
+        None,
+    ),
+    "AVX": (
+        [
+            "cinz_",
+            "4",
+            "8",
+            "__m256d",
+            "__m256",
+            "__m128i",
+            "struct { __m128i x, y; }",
+            "__AVX__",
+            "avx",
+        ],
+        [
+            "cinz_",
+            "4",
+            "8",
+            "avx",
+        ],
+        ["-mavx"],
+        None,
+    ),
+    "FMA4": (
+        [
+            "finz_",
+            "4",
+            "8",
+            "__m256d",
+            "__m256",
+            "__m128i",
+            "struct { __m128i x, y; }",
+            "__AVX__",
+            "fma4",
+        ],
+        [
+            "finz_",
+            "4",
+            "8",
+            "fma4",
+        ],
+        ["-mfma4"],
+        None,
+    ),
+    "AVX2": (
+        [
+            "finz_",
+            "4",
+            "8",
+            "__m256d",
+            "__m256",
+            "__m128i",
+            "__m256i",
+            "__AVX__",
+            "avx2",
+        ],
+        [
+            "finz_",
+            "4",
+            "8",
+            "avx2",
+        ],
+        [
+            "-mavx2",
+            "-mfma",
+        ],
+        None,
+    ),
+    "AVX2128": (
+        [
+            "finz_",
+            "2",
+            "4",
+            "__m128d",
+            "__m128",
+            "__m128i",
+            "__m128i",
+            "__SSE2__",
+            "avx2128",
+        ],
+        [
+            "finz_",
+            "2",
+            "4",
+            "avx2128",
+        ],
+        [
+            "-mavx2",
+            "-mfma",
+        ],
+        None,
+    ),
+    "AVX512F": (
+        [
+            "finz_",
+            "8",
+            "16",
+            "__m512d",
+            "__m512",
+            "__m256i",
+            "__m512i",
+            "__AVX512F__",
+            "avx512f",
+        ],
+        [
+            "finz_",
+            "8",
+            "16",
+            "avx512f",
+        ],
+        ["-mavx512f"],
+        (
+            [
+                "8",
+                "__m512d",
+                "__m256i",
+                "e",
+                "avx512f",
+            ],
+            [
+                "-16",
+                "__m512",
+                "__m512i",
+                "e",
+                "avx512f",
+            ],
+        ),
+    ),
+    "AVX512FNOFMA": (
+        [
+            "cinz_",
+            "8",
+            "16",
+            "__m512d",
+            "__m512",
+            "__m256i",
+            "__m512i",
+            "__AVX512F__",
+            "avx512fnofma",
+        ],
+        [
+            "cinz_",
+            "8",
+            "16",
+            "avx512fnofma",
+        ],
+        ["-mavx512f"],
+        None,
+    ),
+    "PUREC_SCALAR": (
+        [
+            "cinz_",
+            "1",
+            "1",
+            "double",
+            "float",
+            "int32_t",
+            "int32_t",
+            "__STDC__",
+            "purec",
+        ],
+        [
+            "cinz_",
+            "1",
+            "1",
+            "purec",
+        ],
+        [],
+        None,
+    ),
+    "PURECFMA_SCALAR": (
+        [
+            "finz_",
+            "1",
+            "1",
+            "double",
+            "float",
+            "int32_t",
+            "int32_t",
+            "__STDC__",
+            "purecfma",
+        ],
+        [
+            "finz_",
+            "1",
+            "1",
+            "purecfma",
+        ],
+        [
+            "-mavx2",
+            "-mfma",
+        ],
+        None,
+    ),
+}
+
+_AARCH64_EXTENSIONS = {
+    "ADVSIMD": (
+        [
+            "finz_",
+            "2",
+            "4",
+            "float64x2_t",
+            "float32x4_t",
+            "int32x2_t",
+            "int32x4_t",
+            "__ARM_NEON",
+            "advsimd",
+        ],
+        [
+            "finz_",
+            "2",
+            "4",
+            "advsimd",
+        ],
+        [],
+        (
+            [
+                "2",
+                "float64x2_t",
+                "int32x2_t",
+                "n",
+                "advsimd",
+            ],
+            [
+                "-4",
+                "float32x4_t",
+                "int32x4_t",
+                "n",
+                "advsimd",
+            ],
+        ),
+    ),
+    "ADVSIMDNOFMA": (
+        [
+            "cinz_",
+            "2",
+            "4",
+            "float64x2_t",
+            "float32x4_t",
+            "int32x2_t",
+            "int32x4_t",
+            "__ARM_NEON",
+            "advsimdnofma",
+        ],
+        [
+            "cinz_",
+            "2",
+            "4",
+            "advsimdnofma",
+        ],
+        [],
+        None,
+    ),
+    "SVE": (
+        [
+            "finz_",
+            "x",
+            "x",
+            "svfloat64_t",
+            "svfloat32_t",
+            "svint32_t",
+            "svint32_t",
+            "__ARM_FEATURE_SVE",
+            "sve",
+        ],
+        [
+            "finz_",
+            "x",
+            "x",
+            "sve",
+        ],
+        ["-march=armv8-a+sve"],
+        None,
+    ),
+    "SVENOFMA": (
+        [
+            "cinz_",
+            "x",
+            "x",
+            "svfloat64_t",
+            "svfloat32_t",
+            "svint32_t",
+            "svint32_t",
+            "__ARM_FEATURE_SVE",
+            "svenofma",
+        ],
+        [
+            "cinz_",
+            "x",
+            "x",
+            "svenofma",
+        ],
+        ["-march=armv8-a+sve"],
+        None,
+    ),
+    "PUREC_SCALAR": _X86_64_EXTENSIONS["PUREC_SCALAR"][:2] + ([], None),
+    "PURECFMA_SCALAR": _X86_64_EXTENSIONS["PURECFMA_SCALAR"][:2] + ([], None),
+}
+
+# The order of the sections of sleef.h (SLEEF_HEADER_LIST), with the arguments
+# of the sections that only declare types.
+_X86_64_HEADER_SECTIONS = [
+    (
+        "SSE_",
+        [
+            "-",
+            "2",
+            "4",
+            "__m128d",
+            "__m128",
+            "__m128i",
+            "__m128i",
+            "__SSE2__",
+        ],
+    ),
+    ("SSE2", None),
+    ("SSE4", None),
+    (
+        "AVX_",
+        [
+            "-",
+            "4",
+            "8",
+            "__m256d",
+            "__m256",
+            "__m128i",
+            "struct { __m128i x, y; }",
+            "__AVX__",
+        ],
+    ),
+    ("AVX", None),
+    ("FMA4", None),
+    ("AVX2", None),
+    ("AVX2128", None),
+    (
+        "AVX512F_",
+        [
+            "-",
+            "8",
+            "16",
+            "__m512d",
+            "__m512",
+            "__m256i",
+            "__m512i",
+            "__AVX512F__",
+        ],
+    ),
+    ("AVX512F", None),
+    ("AVX512FNOFMA", None),
+    ("PUREC_SCALAR", None),
+    ("PURECFMA_SCALAR", None),
+    (
+        "DSP_SCALAR",
+        [
+            "-",
+            "1",
+            "1",
+            "double",
+            "float",
+            "int32_t",
+            "int32_t",
+            "__STDC__",
+        ],
+    ),
+]
+
+_AARCH64_HEADER_SECTIONS = [
+    (
+        "ADVSIMD_",
+        [
+            "-",
+            "2",
+            "4",
+            "float64x2_t",
+            "float32x4_t",
+            "int32x2_t",
+            "int32x4_t",
+            "__ARM_NEON",
+        ],
+    ),
+    ("ADVSIMD", None),
+    ("ADVSIMDNOFMA", None),
+    ("SVE", None),
+    ("SVENOFMA", None),
+    ("PUREC_SCALAR", None),
+    ("PURECFMA_SCALAR", None),
+    (
+        "DSP_SCALAR",
+        _X86_64_HEADER_SECTIONS[-1][1],
+    ),
+]
+
+_ARCHS = {
+    "aarch64": (_AARCH64_EXTENSIONS, _AARCH64_HEADER_SECTIONS),
+    "x86_64": (_X86_64_EXTENSIONS, _X86_64_HEADER_SECTIONS),
+}
+
+[
+    config_setting(
+        name = arch,
+        constraint_values = ["@platforms//cpu:" + arch],
+    )
+    for arch in _ARCHS
+]
+
+# -----------------------------------------------------------------------------
+# Generated headers
+# -----------------------------------------------------------------------------
+
+expand_template(
+    name = "sleeflibm_header",
+    out = "gen/sleeflibm_header.h.org",
+    substitutions = {
+        "@SLEEF_VERSION_MAJOR@": "3",
+        "@SLEEF_VERSION_MINOR@": "8",
+        "@SLEEF_VERSION_PATCH@": "0",
+    },
+    template = "src/libm/sleeflibm_header.h.org.in",
+)
+
+# The sections of sleef.h, per architecture.
+[
+    sleef_generate(
+        name = "sleeflibm_{}_{}".format(arch, section),
+        out = "gen/{}/sleeflibm_{}.h.tmp".format(arch, section),
+        arguments = arguments or extensions[section][0],
+        tool = ":mkrename",
+    )
+    for arch, (extensions, sections) in _ARCHS.items()
+    for section, arguments in sections
+]
+
+sleef_concat(
+    name = "sleef_h",
+    srcs = [":sleeflibm_header"] + select({
+        ":" + arch: [
+            ":sleeflibm_{}_{}".format(arch, section)
+            for section, _ in sections
+        ]
+        for arch, (_, sections) in _ARCHS.items()
+    }) + ["src/libm/sleeflibm_footer.h.org"],
+    out = "include/sleef.h",
+)
+
+# rename<extension>.h for every extension, and the headers renaming the
+# dispatchers' functions.
+[
+    sleef_generate(
+        name = "rename" + extension.lower(),
+        out = "gen/rename{}.h".format(extension.lower()),
+        arguments = rename_arguments,
+        tool = ":mkrename",
+    )
+    for extension, (_, rename_arguments, _, _) in (_X86_64_EXTENSIONS | _AARCH64_EXTENSIONS).items()
+]
+
+[
+    sleef_generate(
+        name = "renamed" + name,
+        out = "gen/renamed{}.h".format(name),
+        arguments = arguments,
+        tool = ":mkrename",
+    )
+    for name, arguments in {
+        "sp128": [
+            "-",
+            "2",
+            "4",
+        ],
+        "sp256": [
+            "-",
+            "4",
+            "8",
+        ],
+        "spscalar": [
+            "-",
+            "1",
+            "1",
+        ],
+    }.items()
+]
+
+# alias_<extension>.h: functions without the extension suffix (e.g.
+# Sleef_expf4_u10 for Sleef_expf4_u10advsimd), for the extensions that have
+# no dispatcher.
+[
+    [
+        sleef_generate(
+            name = "alias_{}_{}".format(extension, precision),
+            out = "gen/alias_{}_{}.h.tmp".format(extension, precision),
+            arguments = arguments,
+            tool = ":mkalias",
+        )
+        for precision, arguments in [
+            (
+                "dp",
+                alias[0],
+            ),
+            (
+                "sp",
+                alias[1],
+            ),
+        ]
+    ] + [
+        sleef_concat(
+            name = "alias_" + extension.lower(),
+            srcs = [
+                ":alias_{}_sp".format(extension),
+                ":alias_{}_dp".format(extension),
+            ],
+            out = "gen/alias_{}.h".format(extension.lower()),
+        ),
+    ]
+    for extension, (_, _, _, alias) in (_X86_64_EXTENSIONS | _AARCH64_EXTENSIONS).items()
+    if alias
+]
+
+# The private headers of the library: its sources' and the generated ones.
+cc_library(
+    name = "internal_headers",
+    hdrs = glob([
+        "src/arch/*.h",
+        "src/common/*.h",
+        "src/libm/*.h",
+    ]) + [
+        ":rename" + extension.lower()
+        for extension in (_X86_64_EXTENSIONS | _AARCH64_EXTENSIONS)
+    ] + [
+        ":alias_advsimd",
+        ":alias_avx512f",
+        ":renamedsp128",
+        ":renamedsp256",
+        ":renamedspscalar",
+    ],
+    includes = [
+        "gen",
+        "src/arch",
+        "src/common",
+        "src/libm",
+    ],
+    deps = [":headers"],
+)
+
+cc_library(
+    name = "headers",
+    hdrs = [":sleef_h"],
+    # Without it, MinGW builds declare the functions __declspec(dllimport).
+    defines = ["SLEEF_STATIC_LIBS=1"],
+    includes = ["include"],
+)
+
+# -----------------------------------------------------------------------------
+# libsleef
+# -----------------------------------------------------------------------------
+
+_COPTS = [
+    "-std=gnu99",
+    # Always compile sleef with -ffp-contract=off (Configure.cmake).
+    "-ffp-contract=off",
+] + select({
+    "@platforms//os:windows": ["-fno-asynchronous-unwind-tables"],
+    "//conditions:default": [],
+})
+
+# COMMON_TARGET_DEFINITIONS. Weak aliases (ENABLE_ALIAS) are an ELF feature.
+_DEFINES = [
+    "ENABLE_BUILTIN_MATH=1",
+    "SLEEF_STATIC_LIBS=1",
+] + select({
+    "@platforms//os:linux": [
+        "ENABLE_ALIAS=1",
+        "ENABLE_SYS_getrandom=1",
+    ],
+    "//conditions:default": [],
+})
+
+# The functions of every extension of the target architecture, in their
+# regular and DETERMINISTIC variants.
+[
+    cc_library(
+        name = "sleef_{}_{}{}".format(
+            arch,
+            extension.lower(),
+            "_det" if deterministic else "",
+        ),
+        srcs = [
+            "src/libm/sleefsimddp.c",
+            "src/libm/sleefsimdsp.c",
+        ] + ([":alias_" + extension.lower()] if alias else []),
+        copts = _COPTS + flags,
+        local_defines = _DEFINES + [
+            "DORENAME=1",
+            "ENABLE_{}=1".format(extension),
+        ] + (["DETERMINISTIC=1"] if deterministic else []) + (
+            # Bazel tokenizes defines like a shell, so the quotes are escaped.
+            ['ALIAS_NO_EXT_SUFFIX=\\"alias_{}.h\\"'.format(extension.lower())] if alias else []
+        ),
+        target_compatible_with = ["@platforms//cpu:" + arch],
+        deps = [":internal_headers"],
+    )
+    for arch, (extensions, _) in _ARCHS.items()
+    for extension, (_, _, flags, alias) in extensions.items()
+    for deterministic in [
+        False,
+        True,
+    ]
+]
+
+# The dispatchers, which pick the best extension of a vector width at runtime.
+sleef_generate(
+    name = "dispscalar_body",
+    out = "gen/dispscalar.c.body",
+    arguments = [
+        "1",
+        "1",
+        "double",
+        "float",
+        "int32_t",
+        "purec",
+        "purecfma",
+        "x",
+    ],
+    tool = ":mkdisp",
+)
+
+sleef_concat(
+    name = "dispscalar_c",
+    srcs = [
+        "src/libm/dispscalar.c.org",
+        "src/libm/dispscalar_footer.c.org",
+        ":dispscalar_body",
+    ],
+    out = "gen/dispscalar.c",
+)
+
+[
+    [
+        sleef_generate(
+            name = "disp{}_body".format(name),
+            out = "gen/disp{}.c.tmp".format(name),
+            arguments = arguments,
+            tool = ":mkdisp",
+        ),
+        sleef_concat(
+            name = "disp{}_c".format(name),
+            srcs = [
+                "src/libm/disp{}.c.org".format(name),
+                ":disp{}_body".format(name),
+            ],
+            out = "gen/disp{}.c".format(name),
+        ),
+        cc_library(
+            name = "disp" + name,
+            srcs = [":disp{}_c".format(name)],
+            copts = _COPTS + flags,
+            local_defines = _DEFINES + [
+                "ENABLE_AVX2=1",
+                "ENABLE_FMA4=1",
+            ],
+            target_compatible_with = ["@platforms//cpu:x86_64"],
+            deps = [":internal_headers"],
+        ),
+    ]
+    for name, arguments, flags in [
+        (
+            "sse",
+            [
+                "2",
+                "4",
+                "__m128d",
+                "__m128",
+                "__m128i",
+                "sse2",
+                "sse4",
+                "avx2128",
+            ],
+            ["-msse2"],
+        ),
+        (
+            "avx",
+            [
+                "4",
+                "8",
+                "__m256d",
+                "__m256",
+                "__m128i",
+                "avx",
+                "fma4",
+                "avx2",
+            ],
+            ["-mavx"],
+        ),
+    ]
+]
+
+cc_library(
+    name = "sleef",
+    srcs = [
+        "src/common/common.c",
+        "src/libm/rempitab.c",
+        "src/libm/sleefld.c",
+        ":dispscalar_c",
+    ],
+    copts = _COPTS,
+    local_defines = _DEFINES + ["DORENAME=1"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":headers",
+        ":internal_headers",
+    ] + select({
+        ":" + arch: [
+            ":sleef_{}_{}{}".format(
+                arch,
+                extension.lower(),
+                suffix,
+            )
+            for extension in extensions
+            for suffix in [
+                "",
+                "_det",
+            ]
+        ] + ([
+            ":dispavx",
+            ":dispsse",
+        ] if arch == "x86_64" else [])
+        for arch, (extensions, _) in _ARCHS.items()
+    }),
+    alwayslink = True,
+)
