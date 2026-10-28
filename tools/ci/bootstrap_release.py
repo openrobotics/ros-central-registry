@@ -52,7 +52,7 @@ BCR_DEPS = {
     "cmake_configure_file": "0.2.0",
     "google_benchmark": "1.9.5",
     "googletest": "1.18.0.bcr.1",
-    "llvm": "0.8.24",
+    "llvm": "0.8.25",
     "platforms": "1.1.0",
     "protobuf": "36.2",
     "rules_build_error": "0.11.0",
