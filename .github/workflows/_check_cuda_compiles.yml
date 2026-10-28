@@ -1,0 +1,103 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Reusable workflow: build the opt-in CUDA variant (--config=cuda) of LibTorch
+# and the packages that use it. The default distribution build is CPU-only,
+# so nothing else compiles CUDA code. GitHub-hosted runners have no GPU, so
+# this only builds (and runs the GPU-free tests); the `requires-gpu` tests are
+# tagged manual. CUDA redistributables only exist for linux-x86_64 and
+# linux-sbsa (arm64); macOS has no CUDA.
+
+name: _check_cuda_compiles
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch or ref to check out.'
+        required: true
+        type: string
+
+env:
+  ANDROID_HOME: ""
+
+jobs:
+  checkout-setup-build-test:
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+      id-token: write
+    name: build_cuda_${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: workspace
+        shell: bash
+    env:
+      USE_BAZEL_VERSION: ${{ matrix.bazel }}
+    strategy:
+      fail-fast: false
+      matrix:
+        bazel:
+        - 9.x
+        ros:
+        - lyrical.2026-10-05.rcr.0
+        os:
+        - ubuntu-26.04
+    steps:
+
+    - name: Free disk space (Linux)
+      uses: jlumbroso/free-disk-space@v2.0.0
+
+    - name: Checkout repository
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 1
+        ref: ${{ inputs.branch }}
+
+    - name: Authenticate to Google Cloud
+      if: (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry'
+      uses: "google-github-actions/auth@v3"
+      with:
+        workload_identity_provider: projects/367706864683/locations/global/workloadIdentityPools/github-automation/providers/build-dev
+        service_account: github-automation-bot@gha-openrobotics-rcr.iam.gserviceaccount.com
+        create_credentials_file: true
+
+    - name: Setup Bazel
+      uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: false
+        repository-cache: true
+        bazelrc: common --repo_contents_cache=
+
+    - name: Prepare workspace
+      working-directory: .
+      run: |
+        bazel run //tools/ci:setup_workspace -- --release=${{ matrix.ros }} --tmpdir "$RUNNER_TEMP" \
+            ${{ (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry' && '--remote-cache-write' || '' }}
+
+    - name: Build (--config=cuda)
+      run: |
+        bazel build --config ci --config=cuda \
+            @rosdistro//cc:torch \
+            @cuda_buffer//... \
+            @cuda_buffer_backend//... \
+            @torch_conversions//... 2>&1 | tee build.log
+
+    - name: Test GPU-free targets (--config=cuda)
+      run: |
+        bazel test --config ci --config=cuda @torch_conversions//... 2>&1 | tee test.log
+
