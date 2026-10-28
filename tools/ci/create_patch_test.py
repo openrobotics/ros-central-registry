@@ -499,7 +499,9 @@ class TestMainAutoDetect(_RollupFixtureTestCase):
         super().tearDown()
 
     def run_main(self, argv):
-        sys.argv = ["create_patch.py"] + argv
+        # These exercise rollup logic; real re-vendoring needs a `bazel` binary
+        # (covered separately by TestRevendorRolledUpModules).
+        sys.argv = ["create_patch.py", "--no-revendor"] + argv
         create_patch.main()
 
     def new_version_dir(self) -> Path:
@@ -788,6 +790,83 @@ class TestApplyRollupInterModuleBumps(_RollupFixtureTestCase):
         content = (new_dir / "MODULE.bazel").read_text()
         self.assertIn('bazel_dep(name = "rcutils", version = "1.0.0.rcr.1")', content)
 
+
+
+class TestRevendorRolledUpModules(_RollupFixtureTestCase):
+    """
+    Covers revendor_rolled_up_modules: after an in-place amend, the vendored
+    tree is re-extracted (so Bazel keeps reading it) and the workspace
+    bookkeeping is refreshed, without losing the developer's tree.
+    """
+
+    def _fake_bazel_vendor(self, registry_tree: dict):
+        """Stands in for `bazel vendor`: re-creates vendor/rclcpp+ and its marker."""
+        calls = []
+
+        def run(cmd, cwd, check):
+            calls.append((cmd, cwd))
+            module_dir = Path(cwd) / "vendor" / "rclcpp+"
+            module_dir.mkdir(parents=True, exist_ok=True)
+            for rel, content in registry_tree.items():
+                (module_dir / rel).write_text(content)
+            (Path(cwd) / "vendor" / "@rclcpp+.marker").write_text("marker\n")
+
+        return run, calls
+
+    def _registry_matching_vendor(self) -> dict:
+        return {
+            rel: (self.vendor_module_dir / rel).read_text()
+            for rel in ("MODULE.bazel", "src.c")
+        }
+
+    def test_lossless_revendor_refreshes_bookkeeping(self):
+        (self.target_workspace / "vendor" / "@rclcpp+.marker").write_text("stale\n")
+        run, calls = self._fake_bazel_vendor(self._registry_matching_vendor())
+
+        changed, backup = create_patch.revendor_rolled_up_modules(
+            self.target_workspace, self.modules_dir, ["rclcpp"], run=run)
+
+        self.assertEqual(changed, [])
+        self.assertFalse(backup.exists())
+        self.assertEqual(calls[0][0], ["bazel", "vendor", "--vendor_dir=vendor", "--repo=@rclcpp"])
+        self.assertEqual((self.vendor_module_dir / "src.c").read_text(), "edited\n")
+        # The cheap local-edit check now treats the tree as freshly vendored...
+        self.assertFalse(create_patch.module_has_local_edits(self.target_workspace, "rclcpp"))
+        # ...and the drift snapshot matches the packaged directory again.
+        manifest = json.loads(
+            (self.target_workspace / vendor_modules.PACKAGE_MANIFEST_DIR_NAME / "rclcpp.json").read_text())
+        self.assertEqual(manifest["version"], "1.0.0")
+
+    def test_differing_tree_is_reported_and_backed_up(self):
+        (self.vendor_module_dir / "stray.txt").write_text("not part of the patch\n")
+        run, _ = self._fake_bazel_vendor(self._registry_matching_vendor())
+
+        changed, backup = create_patch.revendor_rolled_up_modules(
+            self.target_workspace, self.modules_dir, ["rclcpp"], run=run)
+
+        self.assertEqual(changed, ["rclcpp"])
+        self.assertEqual((backup / "rclcpp+" / "stray.txt").read_text(), "not part of the patch\n")
+        shutil.rmtree(backup)
+
+    def test_tree_restored_if_bazel_vendor_fails(self):
+        def run(cmd, cwd, check):
+            raise subprocess.CalledProcessError(1, cmd)
+
+        with self.assertRaises(subprocess.CalledProcessError):
+            create_patch.revendor_rolled_up_modules(
+                self.target_workspace, self.modules_dir, ["rclcpp"], run=run)
+        self.assertEqual((self.vendor_module_dir / "src.c").read_text(), "edited\n")
+
+    def test_tree_restored_if_bazel_vendor_skips_module(self):
+        def run(cmd, cwd, check):
+            pass  # vendors nothing
+
+        changed, backup = create_patch.revendor_rolled_up_modules(
+            self.target_workspace, self.modules_dir, ["rclcpp"], run=run)
+
+        self.assertEqual(changed, ["rclcpp"])
+        self.assertEqual((self.vendor_module_dir / "src.c").read_text(), "edited\n")
+        shutil.rmtree(backup)
 
 if __name__ == "__main__":
     unittest.main()

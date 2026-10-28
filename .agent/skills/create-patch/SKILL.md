@@ -69,6 +69,29 @@ When amending a branch-only version in place, the summary line reads
 "Amending X@V in place (branch-only, not yet published)" instead of
 "Creating X@V (from Y)".
 
+## After a rollup: your vendored copy keeps working
+
+Rewriting `modules/<pkg>/<ver>/` makes Bazel consider the vendored copy
+out of date: it silently stops reading `workspace/vendor/<pkg>+/` and builds
+the registry copy instead, so further edits there would appear to do nothing.
+To avoid that, `create_patch` **re-vendors every module it amended in place**
+right after writing it ("Re-vendoring X so further edits keep taking
+effect..."). That's lossless, because the registry entry now describes exactly
+your vendored tree. As a safety net your previous tree is backed up, and a
+warning names any module whose re-vendored tree differs (typically untracked
+files that aren't part of the patch) and where the backup is.
+
+- Pass `--no-revendor` to skip this (then re-run `vendor-module` yourself
+  before editing that package again).
+- When a rollup **creates a new version** instead (the old one was already on
+  `main`), the workspace still resolves the old version, so it prints a note
+  telling you to re-run `setup-workspace` and `vendor-module` before editing
+  that package further.
+- To check what Bazel is actually building from, look at
+  `$(bazel info output_base)/external/<pkg>+`: it's a symlink into
+  `workspace/vendor/` when your edits are live, and into the repository cache
+  when they aren't.
+
 ## What your PR should look like
 
 Exactly the new (or, if amended in place, the same) version directory/
