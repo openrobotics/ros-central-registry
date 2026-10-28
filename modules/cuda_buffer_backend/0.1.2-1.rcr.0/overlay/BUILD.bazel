@@ -13,6 +13,8 @@
 # limitations under the License.
 
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
@@ -25,70 +27,60 @@ license(
     license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
 )
 
-# TODO: re-enable once a hermetic CUDA Bazel module is available.
-# cc_library(
-#     name = "_test_root_headers",
-#     hdrs = ["include/cuda_buffer_backend/cuda_buffer_backend.hpp"] + [
-#     ],
-#     includes = [],
-# )
+HEADERS = ["include/cuda_buffer_backend/cuda_buffer_backend.hpp"]
 
-# DEPENDENCIES = {
-#     "@cuda_buffer//:cuda_buffer": "@cuda_buffer//:cuda_buffer_library",
-#     "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
-#     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
-#     "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
-#     "@rcutils//:rcutils": "@rcutils//:rcutils_library",
-#     "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
-#     "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
-#     "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
-#     "@rosidl_buffer_backend//:rosidl_buffer_backend": "@rosidl_buffer_backend//:rosidl_buffer_backend_library",
-#     "@rosidl_buffer_backend_registry//:rosidl_buffer_backend_registry": "@rosidl_buffer_backend_registry//:rosidl_buffer_backend_registry_library",
-#     "@rosidl_runtime_cpp//:rosidl_runtime_cpp": "@rosidl_runtime_cpp//:rosidl_runtime_cpp_library",
-#     "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp": "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_library",
-# }
+DEPENDENCIES = {
+    "@cuda_buffer//:cuda_buffer": "@cuda_buffer//:cuda_buffer_library",
+    "@cuda_buffer_backend_msgs//:cc_shared": "@cuda_buffer_backend_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosidl_buffer_backend//:rosidl_buffer_backend": "@rosidl_buffer_backend//:rosidl_buffer_backend_library",
+    "@rosidl_buffer_backend_registry//:rosidl_buffer_backend_registry": "@rosidl_buffer_backend_registry//:rosidl_buffer_backend_registry_library",
+    "@rosidl_runtime_cpp//:rosidl_runtime_cpp": "@rosidl_runtime_cpp//:rosidl_runtime_cpp_library",
+    "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp": "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_library",
+}
 
-# CC_DEPS = [
-#     "@cuda_buffer_backend_msgs//:cc",
-#     "@rclcpp//:node_wrapper",
-#     "@rclcpp//:type_adapter",
-#     "@sensor_msgs//:cc",
-#     "@std_msgs//:cc",
-# ]
+# CUDA::cudart + CUDA::cuda_driver: only compatible on Linux under
+# --config=cuda (see @cuda_buffer), so this package is skipped otherwise.
+CUDA_DEPENDENCIES = [
+    "@rosdistro//cc:cuda_driver",
+    "@rosdistro//cc:cuda_runtime",
+]
 
-# cc_library(
-#     name = "cuda_buffer_backend_library",
-#     srcs = ["src/cuda_buffer_backend_plugin.cpp"],
-#     hdrs = ["include/cuda_buffer_backend/cuda_buffer_backend.hpp"] + [
-#     ],
-#     copts = [
-#         "-Wno-missing-template-arg-list-after-template-kw",
-#     ],
-#     includes = [
-#         ".",
-#         "_gen/include",
-#         "include",
-#         "include/cuda_buffer_backend",
-#     ],
-#     local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
-#     deps = DEPENDENCIES.values() + CC_DEPS,
-# )
+cc_library(
+    name = "cuda_buffer_backend_library",
+    srcs = ["src/cuda_buffer_backend_plugin.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CUDA_DEPENDENCIES,
+    # Only referenced through pluginlib's class_loader registration.
+    alwayslink = True,
+)
 
-# cc_shared_library(
-#     name = "cuda_buffer_backend",
-#     dynamic_deps = DEPENDENCIES.keys(),
-#     exports_filter = ["//:__subpackages__"],
-#     deps = [":cuda_buffer_backend_library"],
-# )
+cc_shared_library(
+    name = "cuda_buffer_backend",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [":cuda_buffer_backend_library"],
+)
 
-# collect_transitive_dynamic_deps(
-#     name = "transitive_dynamic_deps",
-#     dynamic_deps = DEPENDENCIES.keys() + [":cuda_buffer_backend"],
-# )
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":cuda_buffer_backend"],
+)
 
+# pluginlib_export_plugin_description_file(rosidl_buffer_backend
+# cuda_buffer_plugin.xml), plus the test components the launch tests load.
 ament_index(
     name = "ament_index",
+    components = ["//test:component_nodes"],
+    libraries = [":cuda_buffer_backend"],
     package_xml = "package.xml",
+    plugin_category = "rosidl_buffer_backend",
+    plugins = ["cuda_buffer_plugin.xml"],
     deps = [
         "@ament_cmake_auto//:ament_package",
         "@ament_cmake_gtest//:ament_package",
@@ -113,15 +105,20 @@ ament_index(
 )
 
 ament_package(
-    build_type = "cmake",
-    cmake_export_dependencies = False,
-    cmake_export_include_directories = False,
-    cmake_export_libraries = False,
-    cmake_export_targets = False,
-    colcon_hooks = False,
-    install_package_xml = False,
+    cmake_export_dependencies_list = [
+        "cuda_buffer",
+        "cuda_buffer_backend_msgs",
+        "pluginlib",
+        "rcutils",
+        "rosidl_buffer_backend",
+        "rosidl_buffer_backend_registry",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_cpp",
+    ],
+    headers = HEADERS,
     package_xml = "package.xml",
-    deps = [":ament_index"] + [
+    deps = [
+        ":ament_index",
         "@ament_cmake_auto//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_lint_auto//:ament_package",

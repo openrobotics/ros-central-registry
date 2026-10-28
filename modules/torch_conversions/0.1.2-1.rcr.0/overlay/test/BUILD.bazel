@@ -13,11 +13,81 @@
 # limitations under the License.
 
 load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 
 package(
     default_applicable_licenses = ["//:package_license"],
     default_visibility = ["//visibility:public"],
 )
+
+# ament_add_gtest(test_torch_conversions): CPU tensors only, no GPU needed.
+cc_test(
+    name = "test_torch_conversions",
+    srcs = ["test_torch_conversions.cpp"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = [
+        "//:torch_conversions",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# The rclcpp_components test components (and their *_node executables) that
+# the launch tests below run.
+COMPONENT_DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+}
+
+collect_transitive_dynamic_deps(
+    name = "component_dynamic_deps",
+    dynamic_deps = COMPONENT_DEPENDENCIES.keys() + ["//:transitive_dynamic_deps"],
+)
+
+[
+    (
+        cc_library(
+            name = "torch_tensor_{}_component_library".format(role),
+            srcs = ["src/torch_tensor_{}_node.cpp".format(role)],
+            local_defines = ros_local_defines(),
+            deps = COMPONENT_DEPENDENCIES.values() + ["//:torch_conversions"],
+            alwayslink = True,
+        ),
+        cc_shared_library(
+            name = "torch_tensor_{}_component".format(role),
+            dynamic_deps = [":component_dynamic_deps"],
+            exports_filter = [":torch_tensor_{}_component_library".format(role)],
+            deps = [":torch_tensor_{}_component_library".format(role)],
+        ),
+        rclcpp_components_register_node(
+            name = "torch_tensor_{}_node".format(role),
+            component = ":torch_tensor_{}_component".format(role),
+            node_name = "torch_tensor_{}_node".format(role),
+            plugin = plugin,
+        ),
+    )
+    for role, plugin in {
+        "publisher": "TorchTensorPublisher",
+        "subscriber": "TorchTensorSubscriber",
+    }.items()
+]
+
+filegroup(
+    name = "component_nodes",
+    srcs = [
+        ":torch_tensor_publisher_node_record",
+        ":torch_tensor_subscriber_node_record",
+    ],
+)
+
+LAUNCH_TEST_DEPS = [
+    "@rclpy",
+    "@std_msgs//:py",
+    "@tensor_msgs//:py",
+]
 
 launch_ros_test(
     name = "test_torch_tensor_intra_pubsub_fastrtps_launch",
@@ -27,62 +97,19 @@ launch_ros_test(
         "@rclcpp_components//:ament_index",
         "@rclcpp_components//:component_container",
     ],
-    # xfail: test assertion fails under Bazel: AssertionError: False is not true : Failed to receive 5 messages within timeout (intra-process). Received: 0
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@rclpy",
-        "@std_msgs//:py",
-        "@tensor_msgs//:py",
-    ],
+    deps = LAUNCH_TEST_DEPS,
 )
 
-launch_ros_test(
-    name = "test_torch_tensor_inter_pubsub_fastrtps_launch",
-    src = "test_torch_tensor_inter_pubsub_fastrtps_launch.py",
-    data = ["//:ament_index"],
-    # xfail: fails under Bazel: executable 'torch_tensor_subscriber_node' not found on the libexec
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@rclpy",
-        "@std_msgs//:py",
-        "@tensor_msgs//:py",
-    ],
-)
-
-launch_ros_test(
-    name = "test_torch_tensor_multi_pub_fastrtps_launch",
-    src = "test_torch_tensor_multi_pub_fastrtps_launch.py",
-    data = ["//:ament_index"],
-    # xfail: fails under Bazel: executable 'torch_tensor_subscriber_node' not found on the libexec
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@rclpy",
-        "@std_msgs//:py",
-        "@tensor_msgs//:py",
-    ],
-)
-
-launch_ros_test(
-    name = "test_torch_tensor_multi_sub_fastrtps_launch",
-    src = "test_torch_tensor_multi_sub_fastrtps_launch.py",
-    data = ["//:ament_index"],
-    # xfail: fails under Bazel: executable 'torch_tensor_subscriber_node' not found on the libexec
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@rclpy",
-        "@std_msgs//:py",
-        "@tensor_msgs//:py",
-    ],
-)
+[
+    launch_ros_test(
+        name = "test_torch_tensor_{}_fastrtps_launch".format(kind),
+        src = "test_torch_tensor_{}_fastrtps_launch.py".format(kind),
+        data = ["//:ament_index"],
+        deps = LAUNCH_TEST_DEPS,
+    )
+    for kind in [
+        "inter_pubsub",
+        "multi_pub",
+        "multi_sub",
+    ]
+]

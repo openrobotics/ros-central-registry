@@ -12,34 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
 package(
     default_applicable_licenses = ["//:package_license"],
     default_visibility = ["//visibility:public"],
 )
 
-# TODO: re-enable once a hermetic CUDA Bazel module is available.
-# DEPENDENCIES = {
-#     "@rcutils//:rcutils": "@rcutils//:rcutils_library",
-#     "@rmw//:rmw": "@rmw//:rmw_library",
-#     "@rosidl_buffer//:rosidl_buffer": "@rosidl_buffer//:rosidl_buffer_library",
-# }
-
-# CC_DEPS = ["@cuda_buffer_backend_msgs//:cc"]
-
-# cc_test(
-#     name = "test_cuda_buffer",
-#     srcs = ["test_cuda_buffer.cpp"] + [] + [
-#     ],
-#     copts = [
-#         "-Wno-missing-template-arg-list-after-template-kw",
-#     ],
-#     data = ["//:ament_index"],
-#     dynamic_deps = ["//:transitive_dynamic_deps"],
-#     includes = ["."],
-#     local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
-#     deps = DEPENDENCIES.values() + CC_DEPS + [
-#         "//:cuda_buffer_library",
-#         "@rosdistro//cc:bazel_test_helper",
-#         "@rosdistro//cc:googletest",
-#     ] + ["//:_test_root_headers"],
-# )
+# ament_add_gtest(test_cuda_buffer). Its fixture creates a CUDA stream and
+# allocates device memory unconditionally, so it needs a GPU and driver:
+# run it explicitly on a GPU host with
+#   bazel test --config=cuda @cuda_buffer//test:test_cuda_buffer
+cc_test(
+    name = "test_cuda_buffer",
+    srcs = ["test_cuda_buffer.cpp"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    tags = [
+        "manual",
+        "requires-gpu",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        "//:cuda_buffer_library",
+        "@rosdistro//cc:cuda_driver",
+        "@rosdistro//cc:cuda_runtime",
+        "@rosdistro//cc:googletest",
+    ],
+)

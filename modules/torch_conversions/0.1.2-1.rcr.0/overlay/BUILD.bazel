@@ -27,25 +27,33 @@ license(
     license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
 )
 
-cc_library(
-    name = "_test_root_headers",
-    hdrs = ["include/torch_conversions/torch_conversions.hpp"],
-    includes = [
-        ".",
-        "include",
-        "include/torch_conversions",
-    ],
-)
+HEADERS = ["include/torch_conversions/torch_conversions.hpp"]
 
+# Upstream's find_package(Torch) comes from libtorch_vendor, which downloads a
+# prebuilt LibTorch. Here LibTorch is built from source (@rosdistro//cc:torch,
+# CPU-only unless --config=cuda).
 DEPENDENCIES = {
-    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
-    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
     "@rcutils//:rcutils": "@rcutils//:rcutils_library",
     "@rmw//:rmw": "@rmw//:rmw_library",
-    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
-    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:torch": "@rosdistro//cc:torch_library",
     "@rosidl_buffer//:rosidl_buffer": "@rosidl_buffer//:rosidl_buffer_library",
+    "@tensor_msgs//:cc_shared": "@tensor_msgs//:cc",
 }
+
+# Header-only, like upstream's INTERFACE library.
+#
+# torch_conversions.hpp enables its CUDA path only when
+# __has_include("cuda_buffer/cuda_buffer_api.hpp") in the *consumer's*
+# translation unit, mirroring upstream's optional find_package(cuda_buffer
+# QUIET). package.xml doesn't depend on cuda_buffer, so neither does this
+# target: a consumer that also depends on @cuda_buffer (Linux, --config=cuda)
+# gets the CUDA path automatically.
+cc_library(
+    name = "torch_conversions",
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = DEPENDENCIES.values(),
+)
 
 collect_transitive_dynamic_deps(
     name = "transitive_dynamic_deps",
@@ -54,6 +62,11 @@ collect_transitive_dynamic_deps(
 
 ament_index(
     name = "ament_index",
+    components = ["//test:component_nodes"],
+    executables = [
+        "//test:torch_tensor_publisher_node",
+        "//test:torch_tensor_subscriber_node",
+    ],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -73,15 +86,18 @@ ament_index(
 )
 
 ament_package(
-    build_type = "cmake",
-    cmake_export_dependencies = False,
-    cmake_export_include_directories = False,
+    cmake_export_dependencies_list = [
+        "libtorch_vendor",
+        "rcutils",
+        "rmw",
+        "rosidl_buffer",
+        "tensor_msgs",
+    ],
     cmake_export_libraries = False,
-    cmake_export_targets = False,
-    colcon_hooks = False,
-    install_package_xml = False,
+    headers = HEADERS,
     package_xml = "package.xml",
-    deps = [":ament_index"] + [
+    deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_lint_auto//:ament_package",

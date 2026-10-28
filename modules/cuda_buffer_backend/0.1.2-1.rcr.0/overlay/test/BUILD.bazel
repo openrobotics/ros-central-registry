@@ -13,449 +13,122 @@
 # limitations under the License.
 
 load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 
 package(
     default_applicable_licenses = ["//:package_license"],
     default_visibility = ["//visibility:public"],
 )
 
-launch_ros_test(
-    name = "test_cuda_image_cpu_fallback_fastrtps_launch_py",
-    src = "test_cuda_image_cpu_fallback_fastrtps_launch.py",
-    data = [
-        "//:ament_index",
-        "@rclcpp_components//:ament_index",
-    ],
-    # xfail: composable nodes are not registered in the ament index under Bazel
+# ament_add_gtest(test_cuda_buffer_backend). It only constructs and queries
+# the backend, but (like upstream, via CUDA::cuda_driver) libcuda_buffer.so
+# links the CUDA driver API, so the test binary can't even load without the
+# host's NVIDIA driver (libcuda.so.1). Run it explicitly on a GPU host with
+#   bazel test --config=cuda @cuda_buffer_backend//test:test_cuda_buffer_backend
+cc_test(
+    name = "test_cuda_buffer_backend",
+    srcs = ["test_cuda_buffer_backend.cpp"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
     tags = [
         "manual",
-        "xfail",
+        "requires-gpu",
     ],
+    target_compatible_with = ["@platforms//os:linux"],
     deps = [
-        "@std_msgs//:py",
+        "//:cuda_buffer_backend_library",
+        "@rosdistro//cc:googletest",
     ],
 )
 
-launch_ros_test(
-    name = "test_cuda_image_gpu_pipeline_fastrtps_launch_py",
-    src = "test_cuda_image_gpu_pipeline_fastrtps_launch.py",
-    data = [
-        "//:ament_index",
-        "@rclcpp_components//:ament_index",
-    ],
-    # xfail: composable nodes are not registered in the ament index under Bazel
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@std_msgs//:py",
+# The rclcpp_components test components that the launch tests below load into
+# a component container. They allocate and exchange GPU memory.
+COMPONENT_DEPENDENCIES = {
+    "@cuda_buffer//:cuda_buffer": "@cuda_buffer//:cuda_buffer_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+}
+
+collect_transitive_dynamic_deps(
+    name = "component_dynamic_deps",
+    dynamic_deps = COMPONENT_DEPENDENCIES.keys(),
+)
+
+[
+    (
+        cc_library(
+            name = "cuda_image_{}_component_library".format(role),
+            srcs = ["src/cuda_image_{}_node.cpp".format(role)],
+            local_defines = ros_local_defines(),
+            target_compatible_with = ["@platforms//os:linux"],
+            deps = COMPONENT_DEPENDENCIES.values() + ["@rosdistro//cc:cuda_runtime"],
+            alwayslink = True,
+        ),
+        cc_shared_library(
+            name = "cuda_image_{}_component".format(role),
+            dynamic_deps = [":component_dynamic_deps"],
+            exports_filter = [":cuda_image_{}_component_library".format(role)],
+            target_compatible_with = ["@platforms//os:linux"],
+            deps = [":cuda_image_{}_component_library".format(role)],
+        ),
+        # rclcpp_components_register_nodes(): no standalone executable.
+        rclcpp_components_register_node(
+            name = "cuda_image_{}".format(role),
+            component = ":cuda_image_{}_component".format(role),
+            plugin = plugin,
+        ),
+    )
+    for role, plugin in {
+        "gpu_relay": "CudaImageGpuRelay",
+        "publisher": "CudaImagePublisher",
+        "subscriber": "CudaImageSubscriber",
+    }.items()
+]
+
+filegroup(
+    name = "component_nodes",
+    srcs = [
+        ":cuda_image_gpu_relay_record",
+        ":cuda_image_publisher_record",
+        ":cuda_image_subscriber_record",
     ],
 )
 
-launch_ros_test(
-    name = "test_cuda_image_inter_pubsub_fastrtps_launch_py",
-    src = "test_cuda_image_inter_pubsub_fastrtps_launch.py",
-    data = [
-        "//:ament_index",
-        "@rclcpp_components//:ament_index",
-    ],
-    # xfail: composable nodes are not registered in the ament index under Bazel
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@std_msgs//:py",
-    ],
-)
-
-launch_ros_test(
-    name = "test_cuda_image_intra_pubsub_fastrtps_launch_py",
-    src = "test_cuda_image_intra_pubsub_fastrtps_launch.py",
-    data = [
-        "//:ament_index",
-        "@rclcpp_components//:ament_index",
-    ],
-    # xfail: composable nodes are not registered in the ament index under Bazel
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@std_msgs//:py",
-    ],
-)
-
-launch_ros_test(
-    name = "test_cuda_image_mixed_no_duplicate_fastrtps_launch_py",
-    src = "test_cuda_image_mixed_no_duplicate_fastrtps_launch.py",
-    data = [
-        "//:ament_index",
-        "@rclcpp_components//:ament_index",
-    ],
-    # xfail: composable nodes are not registered in the ament index under Bazel
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@std_msgs//:py",
-    ],
-)
-
-launch_ros_test(
-    name = "test_cuda_image_mixed_pubsub_fastrtps_launch_py",
-    src = "test_cuda_image_mixed_pubsub_fastrtps_launch.py",
-    data = [
-        "//:ament_index",
-        "@rclcpp_components//:ament_index",
-    ],
-    # xfail: composable nodes are not registered in the ament index under Bazel
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@std_msgs//:py",
-    ],
-)
-
-launch_ros_test(
-    name = "test_cuda_image_multi_pub_fastrtps_launch_py",
-    src = "test_cuda_image_multi_pub_fastrtps_launch.py",
-    data = [
-        "//:ament_index",
-        "@rclcpp_components//:ament_index",
-    ],
-    # xfail: composable nodes are not registered in the ament index under Bazel
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@std_msgs//:py",
-    ],
-)
-
-launch_ros_test(
-    name = "test_cuda_image_multiprocess_fastrtps_launch_py",
-    src = "test_cuda_image_multiprocess_fastrtps_launch.py",
-    data = [
-        "//:ament_index",
-        "@rclcpp_components//:ament_index",
-    ],
-    # xfail: composable nodes are not registered in the ament index under Bazel
-    tags = [
-        "manual",
-        "xfail",
-    ],
-    deps = [
-        "@std_msgs//:py",
-    ],
-)
-
-# TODO: re-enable once a hermetic CUDA Bazel module is available.
-# DEPENDENCIES = {
-#     "@cuda_buffer//:cuda_buffer": "@cuda_buffer//:cuda_buffer_library",
-#     "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
-#     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
-#     "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
-#     "@rcutils//:rcutils": "@rcutils//:rcutils_library",
-#     "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
-#     "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
-#     "@rosidl_buffer_backend//:rosidl_buffer_backend": "@rosidl_buffer_backend//:rosidl_buffer_backend_library",
-#     "@rosidl_buffer_backend_registry//:rosidl_buffer_backend_registry": "@rosidl_buffer_backend_registry//:rosidl_buffer_backend_registry_library",
-#     "@rosidl_runtime_cpp//:rosidl_runtime_cpp": "@rosidl_runtime_cpp//:rosidl_runtime_cpp_library",
-#     "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp": "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_library",
-# }
-
-# CC_DEPS = [
-#     "@cuda_buffer_backend_msgs//:cc",
-#     "@rclcpp//:node_wrapper",
-#     "@rclcpp//:type_adapter",
-#     "@sensor_msgs//:cc",
-#     "@std_msgs//:cc",
-# ]
-
-# cc_library(
-#     name = "cuda_image_publisher_component_library",
-#     srcs = ["src/cuda_image_publisher_node.cpp"],
-#     hdrs = [
-#     ],
-#     copts = [
-#         "-Wno-missing-template-arg-list-after-template-kw",
-#     ],
-#     includes = ["."],
-#     local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
-#     deps = DEPENDENCIES.values() + CC_DEPS + ["//:cuda_buffer_backend_library"] + ["//:_test_root_headers"],
-# )
-
-# cc_shared_library(
-#     name = "cuda_image_publisher_component",
-#     dynamic_deps = DEPENDENCIES.keys() + ["//:cuda_buffer_backend"],
-#     exports_filter = ["//:__subpackages__"],
-#     deps = [":cuda_image_publisher_component_library"],
-# )
-
-# cc_library(
-#     name = "cuda_image_subscriber_component_library",
-#     srcs = ["src/cuda_image_subscriber_node.cpp"],
-#     hdrs = [
-#     ],
-#     copts = [
-#         "-Wno-missing-template-arg-list-after-template-kw",
-#     ],
-#     includes = ["."],
-#     local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
-#     deps = DEPENDENCIES.values() + CC_DEPS + [
-#         ":cuda_image_publisher_component_library",
-#         "//:cuda_buffer_backend_library",
-#     ] + ["//:_test_root_headers"],
-# )
-
-# cc_shared_library(
-#     name = "cuda_image_subscriber_component",
-#     dynamic_deps = DEPENDENCIES.keys() + [
-#         "//:cuda_buffer_backend",
-#         ":cuda_image_publisher_component",
-#     ],
-#     exports_filter = ["//:__subpackages__"],
-#     deps = [":cuda_image_subscriber_component_library"],
-# )
-
-# cc_library(
-#     name = "cuda_image_gpu_relay_component_library",
-#     srcs = ["src/cuda_image_gpu_relay_node.cpp"],
-#     hdrs = [
-#     ],
-#     copts = [
-#         "-Wno-missing-template-arg-list-after-template-kw",
-#     ],
-#     includes = ["."],
-#     local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
-#     deps = DEPENDENCIES.values() + CC_DEPS + [
-#         ":cuda_image_publisher_component_library",
-#         ":cuda_image_subscriber_component_library",
-#         "//:cuda_buffer_backend_library",
-#     ] + ["//:_test_root_headers"],
-# )
-
-# cc_shared_library(
-#     name = "cuda_image_gpu_relay_component",
-#     dynamic_deps = DEPENDENCIES.keys() + [
-#         "//:cuda_buffer_backend",
-#         ":cuda_image_publisher_component",
-#         ":cuda_image_subscriber_component",
-#     ],
-#     deps = [":cuda_image_gpu_relay_component_library"],
-# )
-
-# cc_test(
-#     name = "test_cuda_buffer_backend",
-#     srcs = ["test_cuda_buffer_backend.cpp"] + [] + [
-#     ],
-#     copts = [
-#         "-Wno-missing-template-arg-list-after-template-kw",
-#     ],
-#     data = [
-#         ":cuda_image_gpu_relay_component",
-#         ":cuda_image_publisher_component",
-#         ":cuda_image_subscriber_component",
-#         "//:ament_index",
-#     ] + [
-#         "test_cuda_image_cpu_fallback_fastrtps_launch.py",
-#         "test_cuda_image_gpu_pipeline_fastrtps_launch.py",
-#         "test_cuda_image_inter_pubsub_fastrtps_launch.py",
-#         "test_cuda_image_intra_pubsub_fastrtps_launch.py",
-#         "test_cuda_image_mixed_no_duplicate_fastrtps_launch.py",
-#         "test_cuda_image_mixed_pubsub_fastrtps_launch.py",
-#         "test_cuda_image_multi_pub_fastrtps_launch.py",
-#         "test_cuda_image_multiprocess_fastrtps_launch.py",
-#     ],
-#     dynamic_deps = ["//:transitive_dynamic_deps"],
-#     includes = ["."],
-#     local_defines = ros_local_defines() + [
-#         "GTEST_HAS_PTHREAD=1",
-#         "_FILE_OFFSET_BITS=64",
-#     ],
-#     tags = [
-#         "manual",
-#         "xfail",
-#     ],
-#     deps = DEPENDENCIES.values() + CC_DEPS + [
-#         "//:cuda_buffer_backend_library",
-#         "@rosdistro//cc:bazel_test_helper",
-#         "@rosdistro//cc:googletest",
-#     ] + ["//:_test_root_headers"],
-# )
-
-# launch_ros_test(
-#     name = "test_cuda_image_inter_pubsub_fastrtps_launch",
-#     src = "test_cuda_image_inter_pubsub_fastrtps_launch.py",
-#     data = [
-#         "//:ament_index",
-#         "@rclcpp_components//:ament_index",
-#         "@rclcpp_components//:component_container",
-#     ],
-#     tags = [
-#         "manual",
-#         "xfail",
-#     ],
-#     deps = [
-#         "@cuda_buffer_backend_msgs//:py",
-#         "@rclpy",
-#         "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_py",
-#         "@sensor_msgs//:py",
-#         "@std_msgs//:py",
-#     ],
-# )
-
-# launch_ros_test(
-#     name = "test_cuda_image_intra_pubsub_fastrtps_launch",
-#     src = "test_cuda_image_intra_pubsub_fastrtps_launch.py",
-#     data = [
-#         "//:ament_index",
-#         "@rclcpp_components//:ament_index",
-#         "@rclcpp_components//:component_container",
-#     ],
-#     tags = [
-#         "manual",
-#         "xfail",
-#     ],
-#     deps = [
-#         "@cuda_buffer_backend_msgs//:py",
-#         "@rclpy",
-#         "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_py",
-#         "@sensor_msgs//:py",
-#         "@std_msgs//:py",
-#     ],
-# )
-
-# launch_ros_test(
-#     name = "test_cuda_image_mixed_pubsub_fastrtps_launch",
-#     src = "test_cuda_image_mixed_pubsub_fastrtps_launch.py",
-#     data = [
-#         "//:ament_index",
-#         "@rclcpp_components//:ament_index",
-#         "@rclcpp_components//:component_container",
-#         "@rclcpp_components//:component_container_mt",
-#     ],
-#     tags = [
-#         "manual",
-#         "xfail",
-#     ],
-#     deps = [
-#         "@cuda_buffer_backend_msgs//:py",
-#         "@rclpy",
-#         "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_py",
-#         "@sensor_msgs//:py",
-#         "@std_msgs//:py",
-#     ],
-# )
-
-# launch_ros_test(
-#     name = "test_cuda_image_multiprocess_fastrtps_launch",
-#     src = "test_cuda_image_multiprocess_fastrtps_launch.py",
-#     data = [
-#         "//:ament_index",
-#         "@rclcpp_components//:ament_index",
-#         "@rclcpp_components//:component_container",
-#     ],
-#     tags = [
-#         "manual",
-#         "xfail",
-#     ],
-#     deps = [
-#         "@cuda_buffer_backend_msgs//:py",
-#         "@rclpy",
-#         "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_py",
-#         "@sensor_msgs//:py",
-#         "@std_msgs//:py",
-#     ],
-# )
-
-# launch_ros_test(
-#     name = "test_cuda_image_cpu_fallback_fastrtps_launch",
-#     src = "test_cuda_image_cpu_fallback_fastrtps_launch.py",
-#     data = [
-#         "//:ament_index",
-#         "@rclcpp_components//:ament_index",
-#         "@rclcpp_components//:component_container",
-#     ],
-#     tags = [
-#         "manual",
-#         "xfail",
-#     ],
-#     deps = [
-#         "@cuda_buffer_backend_msgs//:py",
-#         "@rclpy",
-#         "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_py",
-#         "@sensor_msgs//:py",
-#         "@std_msgs//:py",
-#     ],
-# )
-
-# launch_ros_test(
-#     name = "test_cuda_image_mixed_no_duplicate_fastrtps_launch",
-#     src = "test_cuda_image_mixed_no_duplicate_fastrtps_launch.py",
-#     data = [
-#         "//:ament_index",
-#         "@rclcpp_components//:ament_index",
-#         "@rclcpp_components//:component_container",
-#         "@rclcpp_components//:component_container_mt",
-#     ],
-#     tags = [
-#         "manual",
-#         "xfail",
-#     ],
-#     deps = [
-#         "@cuda_buffer_backend_msgs//:py",
-#         "@rclpy",
-#         "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_py",
-#         "@sensor_msgs//:py",
-#         "@std_msgs//:py",
-#     ],
-# )
-
-# launch_ros_test(
-#     name = "test_cuda_image_multi_pub_fastrtps_launch",
-#     src = "test_cuda_image_multi_pub_fastrtps_launch.py",
-#     data = [
-#         "//:ament_index",
-#         "@rclcpp_components//:ament_index",
-#         "@rclcpp_components//:component_container",
-#     ],
-#     tags = [
-#         "manual",
-#         "xfail",
-#     ],
-#     deps = [
-#         "@cuda_buffer_backend_msgs//:py",
-#         "@rclpy",
-#         "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_py",
-#         "@sensor_msgs//:py",
-#         "@std_msgs//:py",
-#     ],
-# )
-
-# launch_ros_test(
-#     name = "test_cuda_image_gpu_pipeline_fastrtps_launch",
-#     src = "test_cuda_image_gpu_pipeline_fastrtps_launch.py",
-#     data = [
-#         "//:ament_index",
-#         "@rclcpp_components//:ament_index",
-#         "@rclcpp_components//:component_container",
-#     ],
-#     tags = [
-#         "manual",
-#         "xfail",
-#     ],
-#     deps = [
-#         "@cuda_buffer_backend_msgs//:py",
-#         "@rclpy",
-#         "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_py",
-#         "@sensor_msgs//:py",
-#         "@std_msgs//:py",
-#     ],
-# )
+# add_launch_test(): every one of these moves images through GPU memory, so
+# they need a GPU and driver. Run explicitly on a GPU host with
+#   bazel test --config=cuda @cuda_buffer_backend//test:<name>
+[
+    launch_ros_test(
+        name = "test_cuda_image_{}_fastrtps_launch_py".format(kind),
+        src = "test_cuda_image_{}_fastrtps_launch.py".format(kind),
+        data = [
+            "//:ament_index",
+            "@rclcpp_components//:ament_index",
+            "@rclcpp_components//:component_container",
+        ],
+        tags = [
+            "manual",
+            "requires-gpu",
+        ],
+        target_compatible_with = ["@platforms//os:linux"],
+        deps = [
+            "@rclpy",
+            "@sensor_msgs//:py",
+            "@std_msgs//:py",
+        ],
+    )
+    for kind in [
+        "cpu_fallback",
+        "gpu_pipeline",
+        "inter_pubsub",
+        "intra_pubsub",
+        "mixed_no_duplicate",
+        "mixed_pubsub",
+        "multi_pub",
+        "multiprocess",
+    ]
+]

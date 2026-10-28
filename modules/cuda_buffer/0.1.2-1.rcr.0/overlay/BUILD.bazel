@@ -13,6 +13,8 @@
 # limitations under the License.
 
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
@@ -25,82 +27,67 @@ license(
     license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
 )
 
-# TODO: re-enable once a hermetic CUDA Bazel module is available.
-# cc_library(
-#     name = "_test_root_headers",
-#     hdrs = [
-#         "include/cuda_buffer/cuda_buffer.hpp",
-#         "include/cuda_buffer/cuda_buffer_api.hpp",
-#         "include/cuda_buffer/cuda_buffer_handle.hpp",
-#         "include/cuda_buffer/cuda_buffer_impl.hpp",
-#         "include/cuda_buffer/cuda_buffer_ipc_manager.hpp",
-#         "include/cuda_buffer/cuda_error.hpp",
-#         "include/cuda_buffer/cuda_memory_pool.hpp",
-#         "include/cuda_buffer/host_endpoint_manager.hpp",
-#         "include/cuda_buffer/visibility_control.h",
-#     ] + [
-#     ],
-#     includes = [],
-# )
+HEADERS = [
+    "include/cuda_buffer/cuda_buffer.hpp",
+    "include/cuda_buffer/cuda_buffer_api.hpp",
+    "include/cuda_buffer/cuda_buffer_handle.hpp",
+    "include/cuda_buffer/cuda_buffer_impl.hpp",
+    "include/cuda_buffer/cuda_buffer_ipc_manager.hpp",
+    "include/cuda_buffer/cuda_error.hpp",
+    "include/cuda_buffer/cuda_memory_pool.hpp",
+    "include/cuda_buffer/host_endpoint_manager.hpp",
+    "include/cuda_buffer/visibility_control.h",
+]
 
-# DEPENDENCIES = {
-#     "@rcutils//:rcutils": "@rcutils//:rcutils_library",
-#     "@rmw//:rmw": "@rmw//:rmw_library",
-#     "@rosidl_buffer//:rosidl_buffer": "@rosidl_buffer//:rosidl_buffer_library",
-# }
+DEPENDENCIES = {
+    "@cuda_buffer_backend_msgs//:cc_shared": "@cuda_buffer_backend_msgs//:cc",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+    "@rosidl_buffer//:rosidl_buffer": "@rosidl_buffer//:rosidl_buffer_library",
+}
 
-# CC_DEPS = [
-#     "@cuda_buffer_backend_msgs//:cc",
-# ]
+# Upstream's <depend>nvidia-cuda</depend> (CUDA::cudart + CUDA::cuda_driver)
+# is the hermetic CUDA toolkit. Both targets are only compatible on Linux under
+# --config=cuda, so this package is skipped (not failed) in the default
+# CPU-only build and on macOS. The public headers include <cuda.h> and
+# <cuda_runtime.h>, so the CUDA headers are a public dependency.
+CUDA_DEPENDENCIES = [
+    "@rosdistro//cc:cuda_driver",
+    "@rosdistro//cc:cuda_runtime",
+]
 
-# cc_library(
-#     name = "cuda_buffer_library",
-#     srcs = [
-#         "src/cuda_buffer.cpp",
-#         "src/cuda_buffer_ipc_manager.cpp",
-#         "src/cuda_memory_pool.cpp",
-#         "src/host_endpoint_manager.cpp",
-#     ],
-#     hdrs = [
-#         "include/cuda_buffer/cuda_buffer.hpp",
-#         "include/cuda_buffer/cuda_buffer_api.hpp",
-#         "include/cuda_buffer/cuda_buffer_handle.hpp",
-#         "include/cuda_buffer/cuda_buffer_impl.hpp",
-#         "include/cuda_buffer/cuda_buffer_ipc_manager.hpp",
-#         "include/cuda_buffer/cuda_error.hpp",
-#         "include/cuda_buffer/cuda_memory_pool.hpp",
-#         "include/cuda_buffer/host_endpoint_manager.hpp",
-#         "include/cuda_buffer/visibility_control.h",
-#     ] + [
-#     ],
-#     copts = [
-#         "-Wno-missing-template-arg-list-after-template-kw",
-#     ],
-#     includes = [
-#         ".",
-#         "_gen/include",
-#         "include",
-#         "include/cuda_buffer",
-#     ],
-#     linkopts = ["-lrt"],
-#     local_defines = ros_local_defines(),
-#     deps = DEPENDENCIES.values() + CC_DEPS,
-# )
+cc_library(
+    name = "cuda_buffer_library",
+    srcs = [
+        "src/cuda_buffer.cpp",
+        "src/cuda_buffer_ipc_manager.cpp",
+        "src/cuda_memory_pool.cpp",
+        "src/host_endpoint_manager.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    linkopts = ["-lrt"],
+    local_defines = ros_local_defines() + ["CUDA_BUFFER_BUILDING_DLL"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CUDA_DEPENDENCIES,
+)
 
-# cc_shared_library(
-#     name = "cuda_buffer",
-#     dynamic_deps = DEPENDENCIES.keys(),
-#     exports_filter = ["//:__subpackages__"],
-#     deps = [":cuda_buffer_library"],
-# )
+cc_shared_library(
+    name = "cuda_buffer",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [":cuda_buffer_library"],
+)
 
-# collect_transitive_dynamic_deps(
-#     name = "transitive_dynamic_deps",
-#     dynamic_deps = DEPENDENCIES.keys() + [":cuda_buffer"],
-# )
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":cuda_buffer"],
+)
 
 ament_index(
     name = "ament_index",
+    libraries = [":cuda_buffer"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -121,19 +108,11 @@ ament_package(
         "rmw",
         "rosidl_buffer",
     ],
-    headers = [
-        "include/cuda_buffer/cuda_buffer.hpp",
-        "include/cuda_buffer/cuda_buffer_api.hpp",
-        "include/cuda_buffer/cuda_buffer_handle.hpp",
-        "include/cuda_buffer/cuda_buffer_impl.hpp",
-        "include/cuda_buffer/cuda_buffer_ipc_manager.hpp",
-        "include/cuda_buffer/cuda_error.hpp",
-        "include/cuda_buffer/cuda_memory_pool.hpp",
-        "include/cuda_buffer/host_endpoint_manager.hpp",
-        "include/cuda_buffer/visibility_control.h",
-    ],
+    headers = HEADERS,
+    libraries = [":cuda_buffer"],
     package_xml = "package.xml",
-    deps = [":ament_index"] + [
+    deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_lint_auto//:ament_package",
