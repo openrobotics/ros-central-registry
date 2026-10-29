@@ -89,7 +89,17 @@ jobs:
         bazel run //tools/ci:setup_workspace -- --release=${{ matrix.ros }} --tmpdir "$RUNNER_TEMP" \
             ${{ (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry' && '--remote-cache-write' || '' }}
 
+    - name: Analyze (--config=cuda)
+      id: analyze
+      run: |
+        bazel build --nobuild --config ci --config=cuda \
+            @rosdistro//cc:torch \
+            @cuda_buffer//... \
+            @cuda_buffer_backend//... \
+            @torch_conversions//... 2>&1 | tee analyze.log
+
     - name: Build (--config=cuda)
+      id: build
       run: |
         bazel build --config ci --config=cuda \
             @rosdistro//cc:torch \
@@ -98,15 +108,18 @@ jobs:
             @torch_conversions//... 2>&1 | tee build.log
 
     - name: Test GPU-free targets (--config=cuda)
+      id: test
       run: |
-        test_status=0
         bazel test --config ci --config=cuda --test_output=errors \
-            @torch_conversions//... 2>&1 | tee test.log || test_status=$?
+            @torch_conversions//... 2>&1 | tee test.log
+
+    - name: Collect test logs
+      if: always()
+      run: |
         if [ -d bazel-testlogs ]; then
           find -L bazel-testlogs -name "*.xml" -print0 | tar -czf cuda_${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}.xml.tar.gz --null -T - || true
           find -L bazel-testlogs -name "*.log" -print0 | tar -czf cuda_${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}.log.tar.gz --null -T - || true
         fi
-        exit ${test_status}
 
     - name: Test logs
       uses: actions/upload-artifact@v7

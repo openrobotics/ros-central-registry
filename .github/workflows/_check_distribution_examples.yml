@@ -42,6 +42,8 @@ jobs:
         shell: bash
     env:
       USE_BAZEL_VERSION: ${{ matrix.bazel }}
+      # Only write to the shared remote cache from the upstream repo, never from forks.
+      CACHE_WRITE_CONFIG: ${{ (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry' && '--config=ci-cache-write' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -110,17 +112,32 @@ jobs:
         bazelrc: common --repo_contents_cache=
 
     # Checks examples
-    - name: Examples
+    - name: Analyze (examples)
+      id: analyze
+      working-directory: ./examples
+      env:
+        TMPDIR: ${{ runner.temp }}
+      run: |
+        bazel build --nobuild --config ci $CACHE_WRITE_CONFIG //... 2>&1 | tee examples_analyze.log
+
+    - name: Build (examples)
       id: examples
       working-directory: ./examples
+      env:
+        TMPDIR: ${{ runner.temp }}
       run: |
-        export TMPDIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
-        CACHE_WRITE_CONFIG="${{ (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry' && '--config=ci-cache-write' || '' }}"
         bazel build --config ci $CACHE_WRITE_CONFIG //... 2>&1 | tee examples_dynamic.log
-        bazel build --config ci $CACHE_WRITE_CONFIG --config portable --@rosdistro//:rmw=rmw_fastrtps_cpp //:example_ros_publisher_cc 2>&1 | tee examples_static_rmw_fastrtps_cpp.log
-        bazel build --config ci $CACHE_WRITE_CONFIG --config portable --@rosdistro//:rmw=rmw_fastrtps_dynamic_cpp //:example_ros_publisher_cc 2>&1 | tee examples_static_rmw_fastrtps_dynamic_cpp.log
-        bazel build --config ci $CACHE_WRITE_CONFIG --config portable --@rosdistro//:rmw=rmw_cyclonedds_cpp //:example_ros_publisher_cc 2>&1 | tee examples_static_rmw_cyclonedds_cpp.log
-        bazel build --config ci $CACHE_WRITE_CONFIG --config portable --@rosdistro//:rmw=rmw_zenoh_cpp //:example_ros_publisher_cc 2>&1 | tee examples_static_rmw_zenoh_cpp.log
+
+    # Statically linked (--config portable) builds of one example, once per RMW.
+    - name: Build (examples, portable)
+      id: examples_portable
+      working-directory: ./examples
+      env:
+        TMPDIR: ${{ runner.temp }}
+      run: |
+        for rmw in rmw_fastrtps_cpp rmw_fastrtps_dynamic_cpp rmw_cyclonedds_cpp rmw_zenoh_cpp; do
+          bazel build --config ci $CACHE_WRITE_CONFIG --config portable --@rosdistro//:rmw=$rmw //:example_ros_publisher_cc 2>&1 | tee examples_static_$rmw.log
+        done
     - name: Update status badge (examples)
       uses: Schneegans/dynamic-badges-action@v1.8.0
       with:
@@ -128,8 +145,8 @@ jobs:
         gistID: f796805a77e0f05cc837b18e60142773
         filename: ${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}_examples.json
         label: ${{ matrix.bazel }}
-        message: ${{ steps.examples.outcome == 'success' && '✓' || 'x' }}
-        color: ${{ steps.examples.outcome == 'success' && 'green' || 'red' }}
+        message: ${{ steps.examples.outcome == 'success' && steps.examples_portable.outcome == 'success' && '✓' || 'x' }}
+        color: ${{ steps.examples.outcome == 'success' && steps.examples_portable.outcome == 'success' && 'green' || 'red' }}
       if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push' && (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry'
 
     - name: Example logs
