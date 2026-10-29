@@ -31,11 +31,15 @@ def _collect_transitive_dynamic_deps_impl(ctx):
             DefaultInfo(),
         ]
     transitive_cc_shared_library_infos = []
+    transitive_runfiles_depsets = []
     for dep in ctx.attr.dynamic_deps:
         if CollectedCcSharedLibraryInfo in dep:
             transitive_cc_shared_library_infos.append(dep[CollectedCcSharedLibraryInfo].cc_shared_library_info)
+            transitive_runfiles_depsets.append(dep[CollectedCcSharedLibraryInfo].runfiles)
         elif CcSharedLibraryInfo in dep:
             transitive_cc_shared_library_infos.append(dep[CcSharedLibraryInfo])
+            if DefaultInfo in dep and dep[DefaultInfo].default_runfiles:
+                transitive_runfiles_depsets.append(dep[DefaultInfo].default_runfiles.files)
 
     # 1. Flatten the list of depsets into a single depset and include each
     # CcSharedLibraryInfo's own dynamic_deps closure (e.g. cc_ros_shared_library's
@@ -71,7 +75,6 @@ def _collect_transitive_dynamic_deps_impl(ctx):
             if CcInfo in dep:
                 for li in dep[CcInfo].linking_context.linker_inputs.to_list():
                     transitive_libs += li.libraries
-                    user_link_flags.extend(li.user_link_flags)
                     additional_inputs.extend(li.additional_inputs)
 
     linker_input = cc_common.create_linker_input(
@@ -79,6 +82,11 @@ def _collect_transitive_dynamic_deps_impl(ctx):
         libraries = depset(direct = transitive_libs, order = "topological"),
         user_link_flags = depset(direct = user_link_flags),
         additional_inputs = depset(direct = additional_inputs),
+    )
+
+    all_runfiles = depset(
+        direct = files_to_propagate,
+        transitive = transitive_runfiles_depsets,
     )
 
     return [
@@ -94,8 +102,8 @@ def _collect_transitive_dynamic_deps_impl(ctx):
             link_once_static_libs = [],
         ),
         DefaultInfo(
-            files = depset(direct = files_to_propagate),
-            runfiles = ctx.runfiles(files = files_to_propagate),
+            files = all_runfiles,
+            runfiles = ctx.runfiles(transitive_files = all_runfiles),
         ),
     ]
 

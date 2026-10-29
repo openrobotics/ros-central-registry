@@ -24,11 +24,22 @@ def _collect_transitive_dynamic_deps_aspect_impl(target, ctx):
         for dep in getattr(ctx.rule.attr, "dynamic_deps", [])
         if CollectedCcSharedLibraryInfo in dep
     ]
+    direct_runfiles = [
+        target[DefaultInfo].default_runfiles.files,
+    ] if CcSharedLibraryInfo in target and DefaultInfo in target and target[DefaultInfo].default_runfiles else []
+    transitive_runfiles = [
+        dep[CollectedCcSharedLibraryInfo].runfiles
+        for dep in getattr(ctx.rule.attr, "dynamic_deps", [])
+        if CollectedCcSharedLibraryInfo in dep
+    ]
     return [
         CollectedCcSharedLibraryInfo(
             cc_shared_library_info = depset(
                 direct = direct_cc_shared_library_infos,
                 transitive = transitive_cc_shared_library_infos,
+            ),
+            runfiles = depset(
+                transitive = direct_runfiles + transitive_runfiles,
             ),
         ),
     ]

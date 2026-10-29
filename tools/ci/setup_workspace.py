@@ -463,6 +463,12 @@ test --sandbox_default_allow_network=false
 # at a time on macOS, matching the CI configuration below.
 test:macos --local_test_jobs=1
 test:macos --strategy=TestRunner=standalone
+# Without linux-sandbox's isolated loopback namespace, CycloneDDS on macOS
+# selects en0 over lo0 and sees IFF_MULTICAST on lo0, so it tries UDP multicast
+# discovery (blocked on macOS CI VMs) instead of its automatic loopback unicast
+# fallback. Pin CycloneDDS to 127.0.0.1 with multicast="false" so q_init.c
+# applies the same loopback unicast peer discovery as inside linux-sandbox.
+test:macos --test_env=CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address="127.0.0.1" multicast="false"/></Interfaces></General></Domain></CycloneDDS>
 
 # Don't allow a flaky test to fail the entire run.
 test:ci --flaky_test_attempts=3

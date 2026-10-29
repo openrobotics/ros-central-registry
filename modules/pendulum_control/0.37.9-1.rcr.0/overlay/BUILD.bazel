@@ -15,7 +15,7 @@
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
 load("@rosdistro//ament:defs.bzl", "ament_package")
-load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_python//python:defs.bzl", "py_library")
@@ -28,6 +28,16 @@ package(
 license(
     name = "license",
     license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+DEPENDENCIES = {
+    "@pendulum_msgs//:cc_shared": "@pendulum_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
 )
 
 cc_library(
@@ -43,11 +53,10 @@ cc_library(
 cc_binary(
     name = "pendulum_demo",
     srcs = ["src/pendulum_demo.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
     local_defines = ros_local_defines(),
-    deps = [
+    deps = DEPENDENCIES.values() + [
         ":pendulum_control_headers",
-        "@pendulum_msgs//:cc",
-        "@rclcpp//:rclcpp_library",
         "@rttest",
         "@tlsf_cpp",
     ],
@@ -56,11 +65,10 @@ cc_binary(
 cc_binary(
     name = "pendulum_logger",
     srcs = ["src/pendulum_logger.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
     local_defines = ros_local_defines(),
-    deps = [
+    deps = DEPENDENCIES.values() + [
         ":pendulum_control_headers",
-        "@pendulum_msgs//:cc",
-        "@rclcpp//:rclcpp_library",
         "@rttest",
     ],
 )
@@ -68,11 +76,10 @@ cc_binary(
 cc_binary(
     name = "pendulum_teleop",
     srcs = ["src/pendulum_teleop.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
     local_defines = ros_local_defines(),
-    deps = [
+    deps = DEPENDENCIES.values() + [
         ":pendulum_control_headers",
-        "@pendulum_msgs//:cc",
-        "@rclcpp//:rclcpp_library",
         "@rttest",
     ],
 )
@@ -99,10 +106,6 @@ launch_ros_test(
         "//test:pendulum_demo.regex",
         "//test:pendulum_logger.regex",
     ],
-    env = {
-        "RCL_ASSERT_RMW_ID_MATCHES": "rmw_cyclonedds_cpp",
-        "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
-    },
     deps = [
         ":pendulum_demo",
         ":pendulum_logger",
@@ -118,10 +121,6 @@ launch_ros_test(
         "//test:pendulum_demo_teleop.regex",
         "//test:pendulum_teleop.txt",
     ],
-    env = {
-        "RCL_ASSERT_RMW_ID_MATCHES": "rmw_cyclonedds_cpp",
-        "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
-    },
     deps = [
         ":pendulum_demo",
         ":pendulum_teleop",

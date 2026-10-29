@@ -48,6 +48,10 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertIn("test --sandbox_default_allow_network=false", content)
         self.assertIn("test:macos --local_test_jobs=1", content)
         self.assertIn("test:macos --strategy=TestRunner=standalone", content)
+        self.assertIn(
+            'test:macos --test_env=CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address="127.0.0.1" multicast="false"/></Interfaces></General></Domain></CycloneDDS>',
+            content,
+        )
 
     def test_runfile_links_disabled_everywhere(self):
         content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")

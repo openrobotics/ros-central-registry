@@ -229,6 +229,10 @@ def ament_index_symlinks(ctx):
                 dynamic_library = library.resolved_symlink_dynamic_library or library.dynamic_library
                 if dynamic_library and "lib/" + dynamic_library.basename not in symlinks:
                     symlinks["lib/" + dynamic_library.basename] = dynamic_library
+        if DefaultInfo in target and target[DefaultInfo].default_runfiles:
+            for file in target[DefaultInfo].default_runfiles.files.to_list():
+                if _is_shared_library(file.basename) and "lib/" + file.basename not in symlinks:
+                    symlinks["lib/" + file.basename] = file
 
     # LIB_DATA
     if hasattr(ctx.attr, "lib_data"):

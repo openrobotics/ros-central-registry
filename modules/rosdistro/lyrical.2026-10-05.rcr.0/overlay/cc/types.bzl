@@ -16,5 +16,6 @@ CollectedCcSharedLibraryInfo = provider(
     "Collection of cc_shared_library providers.",
     fields = [
         "cc_shared_library_info",
+        "runfiles",
     ],
 )
