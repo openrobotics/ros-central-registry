@@ -50,7 +50,17 @@ If you touched multiple packages, running `bazel run //tools/ci:create_patch` wi
 > [!NOTE]
 > While a PR can contain changes/additions for more than one module, large PRs affecting multiple unrelated modules are discouraged. Prefer submitting smaller, focused PRs per module (or per closely-related set of modules) to make reviews and CI runs more manageable.
 
-### 5. Recovering From a Stale Workspace
+### 5. Commit (Signed Off) and Open the PR
+Every commit you make must be signed off for the [Developer Certificate of Origin](https://developercertificate.org/). Always commit with `-s` so it gets a `Signed-off-by:` trailer matching the commit author's email:
+```shell
+git commit -s -m "<module>: <what changed>"
+```
+> [!IMPORTANT]
+> This applies to **every** commit on the branch, including fixups and amends (`git commit -s --amend --no-edit`), not just the last one. A PR can't merge while any of its commits lacks a matching sign-off. If earlier commits are missing it, fix them with `git rebase --signoff <oldest-offending-sha>^`, and ask the user before force-pushing.
+
+Before pushing, run the local lint and module checks and write the PR description from the repository's PR template. See the `setup-pull-request` skill for the exact commands and template rules.
+
+### 6. Recovering From a Stale Workspace
 If `create_patch` refuses because `modules/<package>/<version>/` changed on disk since you vendored it (e.g. a `git pull` brought in a concurrent edit), or you otherwise need to re-baseline against the current `modules/` state without losing uncommitted edits, see the `rebase-module` skill instead of re-running `setup-workspace`/`vendor-module` by hand.
 
 ---

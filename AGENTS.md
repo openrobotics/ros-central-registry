@@ -52,6 +52,12 @@ and packages what already exists upstream in
 Don't hand-edit files under `modules/`. Use the setup → vendor → edit/test →
 patch pipeline — see the skills in `.agent/skills/`:
 
+- `.agent/skills/edit-module/` — start here: the end-to-end
+  setup → vendor → edit → patch → PR workflow, plus the build-file rules
+  every overlay/patch must follow (no `@@` canonical repo references,
+  explicit file lists over globs, minimal deps, launch targets depending on
+  the nodes they launch, cross-platform target naming), `ament_index` vs
+  `ament_package`, licensing, and dependency/`MODULE.bazel` constraints.
 - `.agent/skills/setup-workspace/` — generate a throwaway Bazel workspace for
   a release.
 - `.agent/skills/vendor-module/` — check out one or more packages' real
@@ -68,6 +74,9 @@ patch pipeline — see the skills in `.agent/skills/`:
   version) without losing your own uncommitted edits.
 - `.agent/skills/release-automation/` — what's automated (bootstrap, rollup)
   and what you should never try to do by hand.
+- `.agent/skills/setup-pull-request/` — get a change ready to merge: sign off
+  every commit (DCO), run the local lint/tooling/module checks CI gates on,
+  and fill in `.github/PULL_REQUEST_TEMPLATE.md` in full.
 
 **Re-running `vendor-module` on a package you've already vendored discards
 any uncommitted edits to it**, even extensive ones — it re-fetches from
