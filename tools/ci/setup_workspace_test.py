@@ -49,10 +49,8 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertIn("test --sandbox_default_allow_network=false", content)
         self.assertNotIn("test:macos --local_test_jobs", content)
         self.assertNotIn("test:macos --strategy=TestRunner", content)
-        self.assertIn(
-            "test:macos '--test_env=CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address=\"127.0.0.1\" multicast=\"false\"/></Interfaces></General></Domain></CycloneDDS>'",
-            content,
-        )
+        self.assertIn("test --test_env=ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST\n", content)
+        self.assertNotIn("CYCLONEDDS_URI", content)
 
     def test_bazelrc_lines_tokenize_to_flags_only(self):
         # .bazelrc lines are shell-tokenized by Bazel; a token after the

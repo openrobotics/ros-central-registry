@@ -246,15 +246,15 @@ build:macos --host_copt=-Wno-elaborated-enum-base
 #       in proceswrapper-sandbox and run 1 test at a time.
 test --sandbox_default_allow_network=false
 
-# Without linux-sandbox's isolated loopback namespace, CycloneDDS on macOS
-# selects en0 over lo0 and sees IFF_MULTICAST on lo0, so it tries UDP multicast
-# discovery (blocked on macOS CI VMs) instead of its automatic loopback unicast
-# fallback. Pin CycloneDDS to 127.0.0.1 with multicast="false" so q_init.c
-# applies the same loopback unicast peer discovery as inside linux-sandbox.
-# The whole flag is single-quoted: .bazelrc lines are shell-tokenized, so the
-# unquoted space inside <NetworkInterface ...> would otherwise split it and
-# leak "address=..." / "multicast=..." onto the command line as target patterns.
-test:macos '--test_env=CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address="127.0.0.1" multicast="false"/></Interfaces></General></Domain></CycloneDDS>'
+# Every test's nodes run on this host, so restrict DDS discovery to localhost.
+# Both rmw_fastrtps_cpp and rmw_cyclonedds_cpp implement this by disabling
+# multicast and using unicast peer discovery against 127.0.0.1 (rmw_zenoh_cpp
+# ignores it). That is what makes inter-process tests work where multicast is
+# unavailable: inside darwin-sandbox (which only permits localhost traffic),
+# on macOS CI VMs, and on hosts where CycloneDDS would otherwise pick en0 over
+# lo0. On Linux, linux-sandbox already isolates loopback, so this is harmless
+# there and additionally keeps test traffic off the LAN.
+test --test_env=ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
 
 ## STATIC compilation
 
