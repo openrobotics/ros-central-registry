@@ -1,6 +1,6 @@
 ---
 name: edit-module
-description: Add, fix, or patch Bazel modules in the ROS Central Registry. Describes the end-to-end setup-vendor-edit-patch workflow, core build-file principles (no canonical @@ repo references, explicit file lists over globs, minimal transitive deps, launch targets depending on the nodes they launch), overlay rules (including ros_interface files), licensing rules, dependency constraints, and MODULE.bazel validation rules.
+description: Add, fix, or patch Bazel modules in the ROS Central Registry. Describes the end-to-end setup-vendor-edit-patch workflow, core build-file principles (no canonical @@ repo references, explicit file lists over globs, minimal transitive deps, launch targets depending on the nodes they launch, cross-platform target naming without shared_lib_name or platform suffixes), overlay rules (including ros_interface files), licensing rules, dependency constraints, and MODULE.bazel validation rules.
 ---
 
 Editing, fixing, or patching Bazel modules in the ROS Central Registry (RCR) follows a structured setup, vendor, edit, and patch pipeline. You must always use the automated tools (`setup_workspace`, `vendor_modules`, and `create_patch`) rather than manually creating or editing files under `modules/` directly.
@@ -57,7 +57,7 @@ If `create_patch` refuses because `modules/<package>/<version>/` changed on disk
 
 ## Core Principles for Build Files
 
-These four rules apply to every `BUILD.bazel`, `.bzl`, and `MODULE.bazel` you author or edit — overlays, patches, and staged BCR modules alike. They take precedence over any example elsewhere in this skill or in existing modules that predate them.
+These five rules apply to every `BUILD.bazel`, `.bzl`, and `MODULE.bazel` you author or edit — overlays, patches, and staged BCR modules alike. They take precedence over any example elsewhere in this skill or in existing modules that predate them.
 
 ### 1. Never use canonical (`@@`) repository references
 
@@ -142,6 +142,14 @@ This keeps both `data` and `deps` small, and means fixing a node's runtime depen
 
 > [!IMPORTANT]
 > Verify launch targets by actually running them (`bazel run @<pkg>//launch:<target>`) and reading the log for `process has died`, tracebacks, `package not found`, or missing-library errors. A launch target that builds can still fail at runtime if a node or included launch file is missing from `deps`.
+
+### 5. Cross-platform target naming: never use `shared_lib_name` or platform-specific target names
+
+All `BUILD.bazel` files must be platform-agnostic across Linux (`x86_64`, `aarch64`), macOS (`darwin_arm64`), and Windows:
+
+- **Do NOT set `shared_lib_name` on `cc_shared_library`**: Hardcoding `shared_lib_name = "libfoo.so"` or `shared_lib_name = "pkg/_foo.so"` forces a Linux `.so` filename and breaks on macOS (`.dylib`) and Windows (`.dll`). Omit `shared_lib_name` completely and let `cc_shared_library` use its built-in toolchain logic to name the shared library artifact appropriately for the target platform (`lib<name>.so`, `lib<name>.dylib`, or `<name>.dll`).
+- **Never bake platform, architecture, or Python ABI triples into target names**: Target names must never contain suffixes like `.cpython-314-x86_64-linux-gnu`, `x86_64-unknown-linux-gnu`, or `_solib_k8`. For example, name targets `"state_machine_library"` and `"state_machine"`, never `"state_machine.cpython-314-x86_64-linux-gnu_library"` or `"state_machine.cpython-314-x86_64-linux-gnu"`.
+- **Never hardcode architecture-specific solib rpaths**: Do not add `-Wl,-rpath,$ORIGIN/../_solib_k8/...` in `user_link_flags`; Bazel and `ament_index` manage runtime library paths across platforms automatically.
 
 ---
 
@@ -254,6 +262,9 @@ cc_shared_library(
     deps = [":my_lib_library"],
 )
 ```
+
+> [!WARNING]
+> Do **not** set `shared_lib_name` on `cc_shared_library` (e.g. `shared_lib_name = "libmy_lib.so"`), and do **not** include platform/ABI triples (such as `.cpython-314-x86_64-linux-gnu`) in `name`. `cc_shared_library` automatically names the output `lib<name>.so` on Linux, `lib<name>.dylib` on macOS, and `<name>.dll` on Windows based on `name`.
 
 #### Transitive Dynamic Dependency Collection
 To ensure binaries (e.g. `cc_binary`) and tests (e.g. `cc_test`) are linked correctly, you must call `collect_transitive_dynamic_deps` right before defining the binary/test targets.
