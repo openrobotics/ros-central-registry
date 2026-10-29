@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import shlex
 import shutil
 import tempfile
 import unittest
@@ -46,12 +47,34 @@ class TestRenderBazelrc(unittest.TestCase):
     def test_macos_test_sandbox_options(self):
         content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
         self.assertIn("test --sandbox_default_allow_network=false", content)
-        self.assertIn("test:macos --local_test_jobs=1", content)
-        self.assertIn("test:macos --strategy=TestRunner=standalone", content)
+        self.assertNotIn("test:macos --local_test_jobs", content)
+        self.assertNotIn("test:macos --strategy=TestRunner", content)
         self.assertIn(
-            'test:macos --test_env=CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address="127.0.0.1" multicast="false"/></Interfaces></General></Domain></CycloneDDS>',
+            "test:macos '--test_env=CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address=\"127.0.0.1\" multicast=\"false\"/></Interfaces></General></Domain></CycloneDDS>'",
             content,
         )
+
+    def test_bazelrc_lines_tokenize_to_flags_only(self):
+        # .bazelrc lines are shell-tokenized by Bazel; a token after the
+        # command[:config] that is neither a flag nor the space-separated value
+        # of the preceding flag (e.g. "-c opt") is treated as a target pattern.
+        content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
+        # Bazel joins backslash-continued lines before tokenizing.
+        content = content.replace("\\\n", " ")
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            tokens = shlex.split(line)
+            for prev, token in zip(tokens[1:], tokens[2:]):
+                if token.startswith("-"):
+                    continue
+                self.assertTrue(
+                    prev.startswith("-") and "=" not in prev,
+                    f"stray non-flag token {token!r} in .bazelrc line: {line}",
+                )
+            if len(tokens) > 1:
+                self.assertTrue(tokens[1].startswith("-"), line)
 
     def test_runfile_links_disabled_everywhere(self):
         content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")

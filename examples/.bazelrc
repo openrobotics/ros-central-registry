@@ -246,13 +246,15 @@ build:macos --host_copt=-Wno-elaborated-enum-base
 #       in proceswrapper-sandbox and run 1 test at a time.
 test --sandbox_default_allow_network=false
 
-# Unlike linux-sandbox (which creates an isolated CLONE_NEWNET loopback
-# namespace per test), darwin-sandbox blocks all network and POSIX SHM IPC
-# with sandbox-exec '(deny network*)' / '(deny default)', which breaks DDS
-# participant discovery and shared-memory transport. Run tests standalone one
-# at a time on macOS, matching the CI configuration below.
-test:macos --local_test_jobs=1
-test:macos --strategy=TestRunner=standalone
+# Without linux-sandbox's isolated loopback namespace, CycloneDDS on macOS
+# selects en0 over lo0 and sees IFF_MULTICAST on lo0, so it tries UDP multicast
+# discovery (blocked on macOS CI VMs) instead of its automatic loopback unicast
+# fallback. Pin CycloneDDS to 127.0.0.1 with multicast="false" so q_init.c
+# applies the same loopback unicast peer discovery as inside linux-sandbox.
+# The whole flag is single-quoted: .bazelrc lines are shell-tokenized, so the
+# unquoted space inside <NetworkInterface ...> would otherwise split it and
+# leak "address=..." / "multicast=..." onto the command line as target patterns.
+test:macos '--test_env=CYCLONEDDS_URI=<CycloneDDS><Domain><General><Interfaces><NetworkInterface address="127.0.0.1" multicast="false"/></Interfaces></General></Domain></CycloneDDS>'
 
 ## STATIC compilation
 
