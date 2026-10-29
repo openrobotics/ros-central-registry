@@ -56,6 +56,7 @@ makes it easy to transitively collect ament index layers into something that loo
 like an underlay (getting it to this point requires more work, though).
 """
 
+load("@rules_cc//cc/common:cc_shared_library_info.bzl", "CcSharedLibraryInfo")
 load("@rules_pkg//pkg:providers.bzl", "PackageFilesInfo")
 
 # Shared library suffixes across the platforms we build for: ELF (.so, .so.1.2.3),
@@ -215,6 +216,19 @@ def ament_index_symlinks(ctx):
                 for alias in sonames.get(key, []):
                     if not alias.endswith("."):
                         symlinks["lib/" + alias] = file
+
+    # A library in lib/ may be dlopen()ed through that path (e.g. as a
+    # component or plugin), in which case its RUNPATH (relative to where Bazel
+    # built it) does not resolve; make its shared-library dependencies
+    # available next to it, as an install tree would.
+    for target in ctx.attr.libraries:
+        if CcSharedLibraryInfo not in target:
+            continue
+        for dep in target[CcSharedLibraryInfo].dynamic_deps.to_list():
+            for library in dep.linker_input.libraries:
+                dynamic_library = library.resolved_symlink_dynamic_library or library.dynamic_library
+                if dynamic_library and "lib/" + dynamic_library.basename not in symlinks:
+                    symlinks["lib/" + dynamic_library.basename] = dynamic_library
 
     # LIB_DATA
     if hasattr(ctx.attr, "lib_data"):

@@ -15,7 +15,7 @@
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(
     default_applicable_licenses = [":license"],
@@ -79,6 +79,52 @@ py_library(
     ],
 )
 
+_CONSOLE_SCRIPTS = {
+    "mock-battery": "py_trees_ros_tutorials.mock.battery:main",
+    "mock-dashboard": "py_trees_ros_tutorials.mock.dashboard:main",
+    "mock-dock-client": "py_trees_ros_tutorials.mock.actions:dock_client",
+    "mock-docking-controller": "py_trees_ros_tutorials.mock.dock:main",
+    "mock-led-strip": "py_trees_ros_tutorials.mock.led_strip:main",
+    "mock-move-base": "py_trees_ros_tutorials.mock.move_base:main",
+    "mock-move-base-client": "py_trees_ros_tutorials.mock.actions:move_base_client",
+    "mock-rotate-client": "py_trees_ros_tutorials.mock.actions:rotate_client",
+    "mock-rotation-controller": "py_trees_ros_tutorials.mock.rotate:main",
+    "mock-safety-sensors": "py_trees_ros_tutorials.mock.safety_sensors:main",
+    "tree-action-clients": "py_trees_ros_tutorials.five_action_clients:tutorial_main",
+    "tree-battery-check": "py_trees_ros_tutorials.two_battery_check:tutorial_main",
+    "tree-context-switching": "py_trees_ros_tutorials.six_context_switching:tutorial_main",
+    "tree-data-gathering": "py_trees_ros_tutorials.one_data_gathering:tutorial_main",
+    "tree-docking-cancelling-failing": "py_trees_ros_tutorials.seven_docking_cancelling_failing:tutorial_main",
+    "tree-dynamic-application-loading": "py_trees_ros_tutorials.eight_dynamic_application_loading:tutorial_main",
+}
+
+# Runnable console scripts, so the launch files can start them via
+# Node(package='py_trees_ros_tutorials', executable=...).
+[
+    (
+        genrule(
+            name = "_gen_{0}".format(script),
+            outs = ["_bin/{0}.py".format(script.replace("-", "_"))],
+            cmd = "printf 'import sys\\nfrom %s import %s\\nsys.exit(%s())\\n' {0} {1} {1} > $@".format(
+                entry_point.split(":")[0],
+                entry_point.split(":")[1],
+            ),
+        ),
+        py_binary(
+            name = "lib/{0}".format(script),
+            srcs = [":_gen_{0}".format(script)],
+            data = [":ament_index"],
+            main = "_bin/{0}.py".format(script.replace("-", "_")),
+            deps = [":py_trees_ros_tutorials"],
+        ),
+        alias(
+            name = script,
+            actual = ":lib/{0}".format(script),
+        ),
+    )
+    for script, entry_point in _CONSOLE_SCRIPTS.items()
+]
+
 ament_index(
     name = "ament_index",
     data = ["//launch:launch_files"],
@@ -87,24 +133,8 @@ ament_index(
 
 ament_package(
     name = "ament_package",
-    console_scripts = {
-        "mock-battery": "py_trees_ros_tutorials.mock.battery:main",
-        "mock-dashboard": "py_trees_ros_tutorials.mock.dashboard:main",
-        "mock-dock-client": "py_trees_ros_tutorials.mock.actions:dock_client",
-        "mock-docking-controller": "py_trees_ros_tutorials.mock.dock:main",
-        "mock-led-strip": "py_trees_ros_tutorials.mock.led_strip:main",
-        "mock-move-base": "py_trees_ros_tutorials.mock.move_base:main",
-        "mock-move-base-client": "py_trees_ros_tutorials.mock.actions:move_base_client",
-        "mock-rotate-client": "py_trees_ros_tutorials.mock.actions:rotate_client",
-        "mock-rotation-controller": "py_trees_ros_tutorials.mock.rotate:main",
-        "mock-safety-sensors": "py_trees_ros_tutorials.mock.safety_sensors:main",
-        "tree-action-clients": "py_trees_ros_tutorials.five_action_clients:tutorial_main",
-        "tree-battery-check": "py_trees_ros_tutorials.two_battery_check:tutorial_main",
-        "tree-context-switching": "py_trees_ros_tutorials.six_context_switching:tutorial_main",
-        "tree-data-gathering": "py_trees_ros_tutorials.one_data_gathering:tutorial_main",
-        "tree-docking-cancelling-failing": "py_trees_ros_tutorials.seven_docking_cancelling_failing:tutorial_main",
-        "tree-dynamic-application-loading": "py_trees_ros_tutorials.eight_dynamic_application_loading:tutorial_main",
-    },
+    console_scripts = _CONSOLE_SCRIPTS,
+    executables = [":lib/{0}".format(script) for script in _CONSOLE_SCRIPTS],
     package_xml = "package.xml",
     python = [":py_trees_ros_tutorials"],
     deps = [":ament_index"] + [
@@ -132,4 +162,5 @@ launch_ros_binary(
     name = "py_trees_ros_tutorials_mock_launch_py",
     src = "py_trees_ros_tutorials/mock/launch.py",
     data = [":ament_index"],
+    deps = [":lib/{0}".format(script) for script in _CONSOLE_SCRIPTS if script.startswith("mock-")],
 )

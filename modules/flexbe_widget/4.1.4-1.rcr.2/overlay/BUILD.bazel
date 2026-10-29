@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rules_license//rules:license.bzl", "license")
-load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 package(
     default_applicable_licenses = [":license"],
@@ -36,7 +37,46 @@ py_library(
         "flexbe_widget/flexbe_status_listener.py",
     ],
     imports = ["."],
+    deps = [
+        "@flexbe_core",
+        "@flexbe_msgs//:py",
+        "@rclpy",
+        "@std_msgs//:py",
+        requirement("pyyaml"),
+    ],
 )
+
+# Upstream installs the Python scripts in bin/ to lib/flexbe_widget/; make
+# them runnable with the hermetic interpreter so launch files (and ros2 run)
+# can start them.
+_PY_SCRIPTS = [
+    "be_action_server",
+    "be_launcher",
+    "evaluate_logs",
+    "flexbe_status_listener",
+]
+
+[
+    (
+        genrule(
+            name = "_gen_{0}".format(script),
+            srcs = ["bin/{0}".format(script)],
+            outs = ["_bin/{0}.py".format(script)],
+            cmd = "cp $< $@",
+        ),
+        py_binary(
+            name = "lib/{0}".format(script),
+            srcs = [":_gen_{0}".format(script)],
+            main = "_bin/{0}.py".format(script),
+            deps = [":flexbe_widget"],
+        ),
+        alias(
+            name = script,
+            actual = ":lib/{0}".format(script),
+        ),
+    )
+    for script in _PY_SCRIPTS
+]
 
 ament_index(
     name = "ament_index",
@@ -48,6 +88,7 @@ ament_index(
         "bin/evaluate_logs",
         "bin/flexbe_status_listener",
     ],
+    lib_data = [":lib/{0}".format(script) for script in _PY_SCRIPTS] + ["bin/create_repo"],
     package_xml = "package.xml",
 )
 

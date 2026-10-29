@@ -30,6 +30,12 @@ def _launch_deps_impl(ctx):
     for dep in ctx.attr.deps:
         runfiles_list.append(dep[DefaultInfo].default_runfiles)
         runfiles_list.append(ctx.runfiles(transitive_files = dep[DefaultInfo].files))
+
+    # Executables can be listed in either `deps` or `data`; both must be
+    # reachable as lib/<pkg>/<name> so that launch_ros' Node(package=...,
+    # executable=...) can find them. (Runfiles of `data` are added by the
+    # py_binary itself.)
+    for dep in ctx.attr.deps + ctx.attr.data_executables:
         exec_file = dep[DefaultInfo].files_to_run.executable if dep[DefaultInfo].files_to_run else None
         if exec_file:
             pkg_name = dep.label.workspace_name.removesuffix("+")
@@ -55,6 +61,7 @@ def _launch_deps_impl(ctx):
 _launch_deps = rule(
     implementation = _launch_deps_impl,
     attrs = {
+        "data_executables": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [DefaultInfo]),
     } | py_common.API_ATTRS,
     provides = [PyInfo, DefaultInfo],
@@ -138,6 +145,7 @@ def launch_binary(name, src, data = [], deps = [], args = [], **kwargs):
     deps_target = "_" + name + "_launch_deps"
     _launch_deps(
         name = deps_target,
+        data_executables = data,
         deps = _merge_deps(deps, extra_deps),
         visibility = ["//visibility:private"],
     )
