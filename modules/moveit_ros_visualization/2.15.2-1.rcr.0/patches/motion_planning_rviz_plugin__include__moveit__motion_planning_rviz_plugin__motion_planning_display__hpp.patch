@@ -1,0 +1,44 @@
+--- a/motion_planning_rviz_plugin/include/moveit/motion_planning_rviz_plugin/motion_planning_display.hpp
++++ b/motion_planning_rviz_plugin/include/moveit/motion_planning_rviz_plugin/motion_planning_display.hpp
+@@ -155,8 +155,12 @@
+     trajectory_visual_->dropTrajectory();
+   }
+ 
+-  void setQueryStartState(const moveit::core::RobotState& start);
+-  void setQueryGoalState(const moveit::core::RobotState& goal);
++  /// Set the query start/goal state. By default this counts as a user edit of the
++  /// active planning group, so that group's joints stop following the robot's
++  /// current state in updateQueryStates(). Pass mark_modified=false to sync the
++  /// state without claiming it for the user (e.g. seeding from the current state).
++  void setQueryStartState(const moveit::core::RobotState& start, bool mark_modified = true);
++  void setQueryGoalState(const moveit::core::RobotState& goal, bool mark_modified = true);
+ 
+   void updateQueryStates(const moveit::core::RobotState& current_state);
+   void updateQueryStartState();
+@@ -258,7 +262,10 @@
+   void computeMetricsInternal(std::map<std::string, double>& metrics,
+                               const robot_interaction::EndEffectorInteraction& eef,
+                               const moveit::core::RobotState& state, double payload);
+-  void updateStateExceptModified(moveit::core::RobotState& dest, const moveit::core::RobotState& src);
++  void updateStateExceptModified(moveit::core::RobotState& dest, const moveit::core::RobotState& src,
++                                 const std::set<std::string>& modified_groups);
++  /// Record that the user has edited the start (or goal) query state of the active planning group.
++  void markCurrentGroupModified(bool start_state);
+   void updateBackgroundJobProgressBar();
+   void backgroundJobUpdate(moveit::tools::BackgroundProcessing::JobEvent event, const std::string& jobname);
+ 
+@@ -300,9 +307,11 @@
+   /// remember previous start state (updated before starting execution)
+   moveit::core::RobotStatePtr previous_state_;
+ 
+-  /// Hold the names of the groups for which the query states have been updated (and should not be altered when new info
+-  /// is received from the planning scene)
+-  std::set<std::string> modified_groups_;
++  /// Hold the names of the groups for which the start / goal query state has been edited by the user (and should not
++  /// be altered when new info is received from the planning scene). Tracked separately so that e.g. dragging the goal
++  /// marker does not stop the (usually hidden) start state from following the robot's current state.
++  std::set<std::string> modified_start_groups_;
++  std::set<std::string> modified_goal_groups_;
+ 
+   /// The metrics are pairs of name-value for each of the active end effectors, for both start & goal states.
+   /// computed_metrics_[std::make_pair(IS_START_STATE, GROUP_NAME)] = a map of key-value pairs
