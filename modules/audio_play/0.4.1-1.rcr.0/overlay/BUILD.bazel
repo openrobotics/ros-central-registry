@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
@@ -25,11 +28,49 @@ license(
     license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
 )
 
-# TODO: re-enable once a hermetic gstreamer Bazel module is available.
+DEPENDENCIES = {
+    "@audio_common_msgs//:cc_shared": "@audio_common_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:boost.thread_shared": "@rosdistro//cc:boost.thread_library",
+    "@rosdistro//cc:gstreamer": "@rosdistro//cc:gstreamer_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "audio_play_library",
+    srcs = [
+        "src/audio_play_node.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "audio_play",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":audio_play_library"],
+    deps = [":audio_play_library"],
+)
+
+rclcpp_components_register_node(
+    name = "audio_play_node",
+    component = ":audio_play",
+    data = [":ament_index"],
+    node_name = "audio_play_node",
+    plugin = "audio_play::AudioPlayNode",
+)
 
 ament_index(
     name = "ament_index",
+    components = [":audio_play_node_record"],
     data = ["//launch:launch_files"],
+    libraries = [":audio_play"],
     package_xml = "package.xml",
     deps = [
         "@ament_cmake//:ament_package",
@@ -44,6 +85,8 @@ ament_package(
     cmake_export_dependencies = False,
     cmake_export_include_directories = False,
     cmake_export_targets = False,
+    executables = [":audio_play_node"],
+    libraries = [":audio_play"],
     package_xml = "package.xml",
     deps = [":ament_index"] + [
         "@ament_cmake//:ament_package",

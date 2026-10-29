@@ -1,0 +1,1127 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@bison//:bison.bzl", "bison")
+load("@flex//:flex.bzl", "flex")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load(":gstreamer.bzl", "gst_mkenums_simple")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-2.0-or-later",
+    ],
+    license_text = "subprojects/gstreamer/COPYING",
+)
+
+# ---------------------------------------------------------------------------
+# Template expansions & Orc fallback copies
+# ---------------------------------------------------------------------------
+
+expand_template(
+    name = "gstversion_h",
+    out = "subprojects/gstreamer/gst/gstversion.h",
+    substitutions = {
+        "@GST_VERSION_MAJOR@": "1",
+        "@GST_VERSION_MINOR@": "24",
+        "@GST_VERSION_MICRO@": "10",
+        "@GST_VERSION_NANO@": "0",
+    },
+    template = "subprojects/gstreamer/gst/gstversion.h.in",
+)
+
+expand_template(
+    name = "gstconfig_h",
+    out = "subprojects/gstreamer/gst/gstconfig.h",
+    substitutions = {
+        "@GST_DISABLE_ALLOC_TRACE_DEFINE@": "#undef GST_DISABLE_ALLOC_TRACE",
+        "@GST_DISABLE_CAST_CHECKS_DEFINE@": "#undef GST_DISABLE_CAST_CHECKS",
+        "@GST_DISABLE_GLIB_ASSERTS_DEFINE@": "#undef GST_DISABLE_GLIB_ASSERTS",
+        "@GST_DISABLE_GLIB_CHECKS_DEFINE@": "#undef GST_DISABLE_GLIB_CHECKS",
+        "@GST_DISABLE_GST_DEBUG_DEFINE@": "#undef GST_DISABLE_GST_DEBUG",
+        "@GST_DISABLE_GST_TRACER_HOOKS_DEFINE@": "#undef GST_DISABLE_GST_TRACER_HOOKS",
+        "@GST_DISABLE_PARSE_DEFINE@": "#undef GST_DISABLE_PARSE",
+        "@GST_DISABLE_PLUGIN_DEFINE@": "#undef GST_DISABLE_PLUGIN",
+        "@GST_DISABLE_REGISTRY_DEFINE@": "#undef GST_DISABLE_REGISTRY",
+        "@GST_HAVE_UNALIGNED_ACCESS_DEFINE@": "#define GST_HAVE_UNALIGNED_ACCESS 1",
+    },
+    template = "subprojects/gstreamer/gst/gstconfig.h.in",
+)
+
+expand_template(
+    name = "gstpluginsbaseversion_h",
+    out = "subprojects/gst-plugins-base/gst-libs/gst/pbutils/gstpluginsbaseversion.h",
+    substitutions = {
+        "@PACKAGE_VERSION_MAJOR@": "1",
+        "@PACKAGE_VERSION_MINOR@": "24",
+        "@PACKAGE_VERSION_MICRO@": "10",
+        "@PACKAGE_VERSION_NANO@": "0",
+    },
+    template = "subprojects/gst-plugins-base/gst-libs/gst/pbutils/gstpluginsbaseversion.h.in",
+)
+
+copy_file(
+    name = "video_orc_h",
+    src = "subprojects/gst-plugins-base/gst-libs/gst/video/video-orc-dist.h",
+    out = "subprojects/gst-plugins-base/gst-libs/gst/video/video-orc.h",
+)
+
+copy_file(
+    name = "video_orc_c",
+    src = "subprojects/gst-plugins-base/gst-libs/gst/video/video-orc-dist.c",
+    out = "subprojects/gst-plugins-base/gst-libs/gst/video/video-orc.c",
+)
+
+copy_file(
+    name = "gstaudiopack_h",
+    src = "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiopack-dist.h",
+    out = "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiopack.h",
+)
+
+copy_file(
+    name = "gstaudiopack_c",
+    src = "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiopack-dist.c",
+    out = "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiopack.c",
+)
+
+copy_file(
+    name = "gstvideotestsrcorc_h",
+    src = "subprojects/gst-plugins-base/gst/videotestsrc/gstvideotestsrcorc-dist.h",
+    out = "subprojects/gst-plugins-base/gst/videotestsrc/gstvideotestsrcorc.h",
+)
+
+copy_file(
+    name = "gstvideotestsrcorc_c",
+    src = "subprojects/gst-plugins-base/gst/videotestsrc/gstvideotestsrcorc-dist.c",
+    out = "subprojects/gst-plugins-base/gst/videotestsrc/gstvideotestsrcorc.c",
+)
+
+# ---------------------------------------------------------------------------
+# Bison & Flex parser generation for gst/parse
+# ---------------------------------------------------------------------------
+
+expand_template(
+    name = "grammar_y",
+    out = "subprojects/gstreamer/gst/parse/grammar.y",
+    substitutions = {
+        "@BISON_PURE_PARSER@": "%define api.pure full",
+    },
+    template = "subprojects/gstreamer/gst/parse/grammar.y.in",
+)
+
+flex(
+    name = "parse_lex",
+    srcs = ["subprojects/gstreamer/gst/parse/parse.l"],
+    outs = [
+        "subprojects/gstreamer/gst/parse/lex.priv_gst_parse_yy.c",
+        "subprojects/gstreamer/gst/parse/parse_lex.h",
+    ],
+    args = [
+        "--header-file=$(execpath subprojects/gstreamer/gst/parse/parse_lex.h)",
+        "-o",
+        "$(execpath subprojects/gstreamer/gst/parse/lex.priv_gst_parse_yy.c)",
+        "-Ppriv_gst_parse_yy",
+        "$(execpath subprojects/gstreamer/gst/parse/parse.l)",
+    ],
+)
+
+bison(
+    name = "parse_grammar",
+    srcs = [":grammar_y"],
+    outs = [
+        "subprojects/gstreamer/gst/parse/grammar.tab.c",
+        "subprojects/gstreamer/gst/parse/grammar.tab.h",
+    ],
+    args = [
+        "-d",
+        "-ppriv_gst_parse_yy",
+        "-o",
+        "$(execpath subprojects/gstreamer/gst/parse/grammar.tab.c)",
+        "$(execpath :grammar_y)",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# GObject enum generation (glib-mkenums)
+# ---------------------------------------------------------------------------
+
+GST_HEADERS = [
+    "subprojects/gstreamer/gst/gst.h",
+    "subprojects/gstreamer/gst/glib-compat.h",
+    "subprojects/gstreamer/gst/gstobject.h",
+    "subprojects/gstreamer/gst/gstallocator.h",
+    "subprojects/gstreamer/gst/gstbin.h",
+    "subprojects/gstreamer/gst/gstbuffer.h",
+    "subprojects/gstreamer/gst/gstbufferlist.h",
+    "subprojects/gstreamer/gst/gstbufferpool.h",
+    "subprojects/gstreamer/gst/gstbus.h",
+    "subprojects/gstreamer/gst/gstbytearrayinterface.h",
+    "subprojects/gstreamer/gst/gstcaps.h",
+    "subprojects/gstreamer/gst/gstcapsfeatures.h",
+    "subprojects/gstreamer/gst/gstchildproxy.h",
+    "subprojects/gstreamer/gst/gstclock.h",
+    "subprojects/gstreamer/gst/gstcompat.h",
+    "subprojects/gstreamer/gst/gstcontext.h",
+    "subprojects/gstreamer/gst/gstcontrolbinding.h",
+    "subprojects/gstreamer/gst/gstcontrolsource.h",
+    "subprojects/gstreamer/gst/gstdatetime.h",
+    "subprojects/gstreamer/gst/gstdebugutils.h",
+    "subprojects/gstreamer/gst/gstelement.h",
+    "subprojects/gstreamer/gst/gstelementmetadata.h",
+    "subprojects/gstreamer/gst/gstdevice.h",
+    "subprojects/gstreamer/gst/gstdeviceprovider.h",
+    "subprojects/gstreamer/gst/gstdeviceproviderfactory.h",
+    "subprojects/gstreamer/gst/gstdynamictypefactory.h",
+    "subprojects/gstreamer/gst/gstelementfactory.h",
+    "subprojects/gstreamer/gst/gsterror.h",
+    "subprojects/gstreamer/gst/gstevent.h",
+    "subprojects/gstreamer/gst/gstformat.h",
+    "subprojects/gstreamer/gst/gstghostpad.h",
+    "subprojects/gstreamer/gst/gstdevicemonitor.h",
+    "subprojects/gstreamer/gst/gstinfo.h",
+    "subprojects/gstreamer/gst/gstiterator.h",
+    "subprojects/gstreamer/gst/gstatomicqueue.h",
+    "subprojects/gstreamer/gst/gstmacros.h",
+    "subprojects/gstreamer/gst/gstmessage.h",
+    "subprojects/gstreamer/gst/gstmeta.h",
+    "subprojects/gstreamer/gst/gstmemory.h",
+    "subprojects/gstreamer/gst/gstminiobject.h",
+    "subprojects/gstreamer/gst/gstpad.h",
+    "subprojects/gstreamer/gst/gstpadtemplate.h",
+    "subprojects/gstreamer/gst/gstparamspecs.h",
+    "subprojects/gstreamer/gst/gstpipeline.h",
+    "subprojects/gstreamer/gst/gstplugin.h",
+    "subprojects/gstreamer/gst/gstpluginfeature.h",
+    "subprojects/gstreamer/gst/gstpoll.h",
+    "subprojects/gstreamer/gst/gstpreset.h",
+    "subprojects/gstreamer/gst/gstprotection.h",
+    "subprojects/gstreamer/gst/gstquery.h",
+    "subprojects/gstreamer/gst/gstpromise.h",
+    "subprojects/gstreamer/gst/gstsample.h",
+    "subprojects/gstreamer/gst/gstsegment.h",
+    "subprojects/gstreamer/gst/gststreamcollection.h",
+    "subprojects/gstreamer/gst/gststreams.h",
+    "subprojects/gstreamer/gst/gststructure.h",
+    "subprojects/gstreamer/gst/gstsystemclock.h",
+    "subprojects/gstreamer/gst/gsttaglist.h",
+    "subprojects/gstreamer/gst/gsttagsetter.h",
+    "subprojects/gstreamer/gst/gsttask.h",
+    "subprojects/gstreamer/gst/gsttaskpool.h",
+    "subprojects/gstreamer/gst/gsttoc.h",
+    "subprojects/gstreamer/gst/gsttocsetter.h",
+    "subprojects/gstreamer/gst/gsttracer.h",
+    "subprojects/gstreamer/gst/gsttracerfactory.h",
+    "subprojects/gstreamer/gst/gsttracerrecord.h",
+    "subprojects/gstreamer/gst/gsttypefind.h",
+    "subprojects/gstreamer/gst/gsttypefindfactory.h",
+    "subprojects/gstreamer/gst/gsturi.h",
+    "subprojects/gstreamer/gst/gstutils.h",
+    "subprojects/gstreamer/gst/gstvalue.h",
+    "subprojects/gstreamer/gst/gstregistry.h",
+    "subprojects/gstreamer/gst/gstparse.h",
+    "subprojects/gstreamer/gst/math-compat.h",
+]
+
+gst_mkenums_simple(
+    name = "gstenumtypes",
+    srcs = GST_HEADERS,
+    body_prefix = "#include \"gst/gst_private.h\"\n#include <gst/gst.h>",
+    decorator = "GST_API",
+    header_prefix = "#include <gst/gstconfig.h>",
+    include_prefix = "gst",
+    out_c = "subprojects/gstreamer/gst/gstenumtypes.c",
+    out_h = "subprojects/gstreamer/gst/gstenumtypes.h",
+)
+
+gst_mkenums_simple(
+    name = "controller_enumtypes",
+    srcs = [
+        "subprojects/gstreamer/libs/gst/controller/gstinterpolationcontrolsource.h",
+        "subprojects/gstreamer/libs/gst/controller/gstlfocontrolsource.h",
+    ],
+    body_prefix = "#ifdef HAVE_CONFIG_H\n#include \"config.h\"\n#endif",
+    decorator = "GST_CONTROLLER_API",
+    header_prefix = "#include <gst/controller/controller-prelude.h>",
+    include_prefix = "gst/controller",
+    out_c = "subprojects/gstreamer/libs/gst/controller/controller-enumtypes.c",
+    out_h = "subprojects/gstreamer/libs/gst/controller/controller-enumtypes.h",
+)
+
+gst_mkenums_simple(
+    name = "app_enumtypes",
+    srcs = [
+        "subprojects/gst-plugins-base/gst-libs/gst/app/gstappsrc.h",
+    ],
+    body_prefix = "#ifdef HAVE_CONFIG_H\n#include \"config.h\"\n#endif",
+    decorator = "GST_APP_API",
+    header_prefix = "#include <gst/app/app-prelude.h>",
+    include_prefix = "gst/app",
+    out_c = "subprojects/gst-plugins-base/gst-libs/gst/app/app-enumtypes.c",
+    out_h = "subprojects/gst-plugins-base/gst-libs/gst/app/app-enumtypes.h",
+)
+
+gst_mkenums_simple(
+    name = "tag_enumtypes",
+    srcs = [
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gsttagdemux.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/tag.h",
+    ],
+    body_prefix = "#ifdef HAVE_CONFIG_H\n#include \"config.h\"\n#endif",
+    decorator = "GST_TAG_API",
+    header_prefix = "#include <gst/gst.h>\n#include <gst/tag/tag-prelude.h>",
+    include_prefix = "gst/tag",
+    out_c = "subprojects/gst-plugins-base/gst-libs/gst/tag/tag-enumtypes.c",
+    out_h = "subprojects/gst-plugins-base/gst-libs/gst/tag/tag-enumtypes.h",
+)
+
+VIDEO_MKENUM_HEADERS = [
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-anc.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-format.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-frame.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-chroma.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-color.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-converter.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-dither.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-info.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-overlay-composition.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-resampler.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-scaler.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-tile.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideometa.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideotimecode.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoutils.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodecoder.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/colorbalance.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/navigation.h",
+]
+
+VIDEO_HEADERS = [
+    "subprojects/gst-plugins-base/gst-libs/gst/video/colorbalance.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/colorbalancechannel.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoaffinetransformationmeta.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoaggregator.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideocodecalphameta.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodecoder.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideofilter.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideometa.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideopool.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideosink.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideotimecode.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoutils.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/navigation.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-anc.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-blend.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-chroma.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-color.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-converter.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-dither.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-event.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-format.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-frame.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-hdr.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-info-dma.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-info.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-multiview.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-overlay-composition.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-prelude.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-resampler.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-scaler.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-sei.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video-tile.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/video.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/videodirection.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/videoorientation.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/video/videooverlay.h",
+]
+
+gst_mkenums_simple(
+    name = "video_enumtypes",
+    srcs = VIDEO_MKENUM_HEADERS,
+    body_prefix = "#ifdef HAVE_CONFIG_H\n#include \"config.h\"\n#endif",
+    decorator = "GST_VIDEO_API",
+    header_prefix = "#include <gst/video/video-prelude.h>",
+    include_prefix = "gst/video",
+    out_c = "subprojects/gst-plugins-base/gst-libs/gst/video/video-enumtypes.c",
+    out_h = "subprojects/gst-plugins-base/gst-libs/gst/video/video-enumtypes.h",
+)
+
+AUDIO_MKENUM_HEADERS = [
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/audio.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-format.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-channels.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-channel-mixer.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-converter.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-info.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-quantize.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-resampler.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioaggregator.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioringbuffer.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiobasesrc.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiocdsrc.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiobasesink.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiostreamalign.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstdsd.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstdsdformat.h",
+]
+
+AUDIO_HEADERS = AUDIO_MKENUM_HEADERS + [
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-buffer.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-prelude.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioclock.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiodecoder.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioencoder.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiofilter.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioiec61937.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiometa.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiosink.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiosrc.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioutilsprivate.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/audio/streamvolume.h",
+]
+
+gst_mkenums_simple(
+    name = "audio_enumtypes",
+    srcs = AUDIO_MKENUM_HEADERS,
+    body_prefix = "#ifdef HAVE_CONFIG_H\n#include \"config.h\"\n#endif",
+    decorator = "GST_AUDIO_API",
+    header_prefix = "#include <gst/audio/audio-prelude.h>",
+    include_prefix = "gst/audio",
+    out_c = "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-enumtypes.c",
+    out_h = "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-enumtypes.h",
+)
+
+PBUTILS_ENUM_HEADERS = [
+    "subprojects/gst-plugins-base/gst-libs/gst/pbutils/pbutils.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/pbutils/pbutils-prelude.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/pbutils/descriptions.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/pbutils/encoding-profile.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/pbutils/encoding-target.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/pbutils/install-plugins.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/pbutils/missing-plugins.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/pbutils/gstdiscoverer.h",
+    "subprojects/gst-plugins-base/gst-libs/gst/pbutils/gstaudiovisualizer.h",
+]
+
+gst_mkenums_simple(
+    name = "pbutils_enumtypes",
+    srcs = PBUTILS_ENUM_HEADERS,
+    body_prefix = "#ifdef HAVE_CONFIG_H\n#include \"config.h\"\n#endif",
+    decorator = "GST_PBUTILS_API",
+    header_prefix = "#include <gst/gst.h>\n#include <gst/audio/audio.h>\n#include <gst/video/video.h>\n#include <gst/pbutils/pbutils-prelude.h>",
+    include_prefix = "gst/pbutils",
+    out_c = "subprojects/gst-plugins-base/gst-libs/gst/pbutils/pbutils-enumtypes.c",
+    out_h = "subprojects/gst-plugins-base/gst-libs/gst/pbutils/pbutils-enumtypes.h",
+)
+
+# ---------------------------------------------------------------------------
+# Internal gstprintf library (isolated copts for STATIC=G_GNUC_INTERNAL)
+# ---------------------------------------------------------------------------
+
+cc_library(
+    name = "gst_printf",
+    srcs = [
+        "subprojects/gstreamer/gst/printf/asnprintf.c",
+        "subprojects/gstreamer/gst/printf/printf.c",
+        "subprojects/gstreamer/gst/printf/printf-args.c",
+        "subprojects/gstreamer/gst/printf/printf-extension.c",
+        "subprojects/gstreamer/gst/printf/printf-parse.c",
+        "subprojects/gstreamer/gst/printf/vasnprintf.c",
+    ],
+    hdrs = [
+        "config.h",
+        "subprojects/gstreamer/gst/printf/gst-printf.h",
+        "subprojects/gstreamer/gst/printf/printf.h",
+        "subprojects/gstreamer/gst/printf/printf-args.h",
+        "subprojects/gstreamer/gst/printf/printf-extension.h",
+        "subprojects/gstreamer/gst/printf/printf-parse.h",
+        "subprojects/gstreamer/gst/printf/vasnprintf.h",
+        ":gstconfig_h",
+    ],
+    copts = [
+        "-w",
+        "-DHAVE_CONFIG_H",
+        "-DSTATIC=G_GNUC_INTERNAL",
+        "-DHAVE_LONG_LONG",
+        "-DHAVE_INTTYPES_H_WITH_UINTMAX",
+        "-DHAVE_STDINT_H_WITH_UINTMAX",
+        "-DHAVE_INTMAX_T",
+        "-UHAVE_LONG_DOUBLE",
+        "-UHAVE_LONG_LONG_FORMAT",
+        "-UHAVE_WCHAR_T",
+        "-UHAVE_WCSLEN",
+        "-UHAVE_WINT_T",
+    ],
+    includes = [
+        ".",
+        "subprojects/gstreamer",
+        "subprojects/gstreamer/gst",
+    ],
+    visibility = ["//visibility:private"],
+    deps = [
+        "@glib//glib",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# Unified GStreamer library (core + base/good libs + static built-in plugins)
+# ---------------------------------------------------------------------------
+
+cc_library(
+    name = "gstreamer",
+    srcs = [
+        "gstinitstaticplugins.c",
+        # subprojects/gstreamer/gst
+        "subprojects/gstreamer/gst/gst.c",
+        "subprojects/gstreamer/gst/gstallocator.c",
+        "subprojects/gstreamer/gst/gstatomicqueue.c",
+        "subprojects/gstreamer/gst/gstbin.c",
+        "subprojects/gstreamer/gst/gstbuffer.c",
+        "subprojects/gstreamer/gst/gstbufferlist.c",
+        "subprojects/gstreamer/gst/gstbufferpool.c",
+        "subprojects/gstreamer/gst/gstbus.c",
+        "subprojects/gstreamer/gst/gstcaps.c",
+        "subprojects/gstreamer/gst/gstcapsfeatures.c",
+        "subprojects/gstreamer/gst/gstchildproxy.c",
+        "subprojects/gstreamer/gst/gstclock.c",
+        "subprojects/gstreamer/gst/gstcontext.c",
+        "subprojects/gstreamer/gst/gstcontrolbinding.c",
+        "subprojects/gstreamer/gst/gstcontrolsource.c",
+        "subprojects/gstreamer/gst/gstdatetime.c",
+        "subprojects/gstreamer/gst/gstdebugutils.c",
+        "subprojects/gstreamer/gst/gstdevice.c",
+        "subprojects/gstreamer/gst/gstdevicemonitor.c",
+        "subprojects/gstreamer/gst/gstdeviceprovider.c",
+        "subprojects/gstreamer/gst/gstdeviceproviderfactory.c",
+        "subprojects/gstreamer/gst/gstdynamictypefactory.c",
+        "subprojects/gstreamer/gst/gstelement.c",
+        "subprojects/gstreamer/gst/gstelementfactory.c",
+        "subprojects/gstreamer/gst/gsterror.c",
+        "subprojects/gstreamer/gst/gstevent.c",
+        "subprojects/gstreamer/gst/gstformat.c",
+        "subprojects/gstreamer/gst/gstghostpad.c",
+        "subprojects/gstreamer/gst/gstinfo.c",
+        "subprojects/gstreamer/gst/gstiterator.c",
+        "subprojects/gstreamer/gst/gstmemory.c",
+        "subprojects/gstreamer/gst/gstmessage.c",
+        "subprojects/gstreamer/gst/gstmeta.c",
+        "subprojects/gstreamer/gst/gstminiobject.c",
+        "subprojects/gstreamer/gst/gstobject.c",
+        "subprojects/gstreamer/gst/gstpad.c",
+        "subprojects/gstreamer/gst/gstpadtemplate.c",
+        "subprojects/gstreamer/gst/gstparamspecs.c",
+        "subprojects/gstreamer/gst/gstparse.c",
+        "subprojects/gstreamer/gst/gstpipeline.c",
+        "subprojects/gstreamer/gst/gstplugin.c",
+        "subprojects/gstreamer/gst/gstpluginfeature.c",
+        "subprojects/gstreamer/gst/gstpluginloader.c",
+        "subprojects/gstreamer/gst/gstpoll.c",
+        "subprojects/gstreamer/gst/gstpreset.c",
+        "subprojects/gstreamer/gst/gstpromise.c",
+        "subprojects/gstreamer/gst/gstprotection.c",
+        "subprojects/gstreamer/gst/gstquark.c",
+        "subprojects/gstreamer/gst/gstquery.c",
+        "subprojects/gstreamer/gst/gstregistry.c",
+        "subprojects/gstreamer/gst/gstregistrybinary.c",
+        "subprojects/gstreamer/gst/gstregistrychunks.c",
+        "subprojects/gstreamer/gst/gstsample.c",
+        "subprojects/gstreamer/gst/gstsegment.c",
+        "subprojects/gstreamer/gst/gststreamcollection.c",
+        "subprojects/gstreamer/gst/gststreams.c",
+        "subprojects/gstreamer/gst/gststructure.c",
+        "subprojects/gstreamer/gst/gstsystemclock.c",
+        "subprojects/gstreamer/gst/gsttaglist.c",
+        "subprojects/gstreamer/gst/gsttagsetter.c",
+        "subprojects/gstreamer/gst/gsttask.c",
+        "subprojects/gstreamer/gst/gsttaskpool.c",
+        "subprojects/gstreamer/gst/gsttoc.c",
+        "subprojects/gstreamer/gst/gsttocsetter.c",
+        "subprojects/gstreamer/gst/gsttracer.c",
+        "subprojects/gstreamer/gst/gsttracerfactory.c",
+        "subprojects/gstreamer/gst/gsttracerrecord.c",
+        "subprojects/gstreamer/gst/gsttracerutils.c",
+        "subprojects/gstreamer/gst/gsttypefind.c",
+        "subprojects/gstreamer/gst/gsttypefindfactory.c",
+        "subprojects/gstreamer/gst/gsturi.c",
+        "subprojects/gstreamer/gst/gstutils.c",
+        "subprojects/gstreamer/gst/gstvalue.c",
+        ":gstenumtypes_c",
+        ":parse_grammar",
+        ":parse_lex",
+        # subprojects/gstreamer/libs/gst/base
+        "subprojects/gstreamer/libs/gst/base/gstadapter.c",
+        "subprojects/gstreamer/libs/gst/base/gstaggregator.c",
+        "subprojects/gstreamer/libs/gst/base/gstbaseparse.c",
+        "subprojects/gstreamer/libs/gst/base/gstbasesink.c",
+        "subprojects/gstreamer/libs/gst/base/gstbasesrc.c",
+        "subprojects/gstreamer/libs/gst/base/gstbasetransform.c",
+        "subprojects/gstreamer/libs/gst/base/gstbitreader.c",
+        "subprojects/gstreamer/libs/gst/base/gstbitwriter.c",
+        "subprojects/gstreamer/libs/gst/base/gstbytereader.c",
+        "subprojects/gstreamer/libs/gst/base/gstbytewriter.c",
+        "subprojects/gstreamer/libs/gst/base/gstcollectpads.c",
+        "subprojects/gstreamer/libs/gst/base/gstdataqueue.c",
+        "subprojects/gstreamer/libs/gst/base/gstflowcombiner.c",
+        "subprojects/gstreamer/libs/gst/base/gstpushsrc.c",
+        "subprojects/gstreamer/libs/gst/base/gstqueuearray.c",
+        "subprojects/gstreamer/libs/gst/base/gsttypefindhelper.c",
+        # subprojects/gstreamer/libs/gst/controller
+        "subprojects/gstreamer/libs/gst/controller/gstargbcontrolbinding.c",
+        "subprojects/gstreamer/libs/gst/controller/gstdirectcontrolbinding.c",
+        "subprojects/gstreamer/libs/gst/controller/gstinterpolationcontrolsource.c",
+        "subprojects/gstreamer/libs/gst/controller/gstlfocontrolsource.c",
+        "subprojects/gstreamer/libs/gst/controller/gstproxycontrolbinding.c",
+        "subprojects/gstreamer/libs/gst/controller/gsttimedvaluecontrolsource.c",
+        "subprojects/gstreamer/libs/gst/controller/gsttriggercontrolsource.c",
+        ":controller_enumtypes_c",
+        # subprojects/gst-plugins-base/gst-libs/gst/allocators
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/gstdmabuf.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/gstdrmdumb.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/gstfdmemory.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/gstphysmemory.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/gstshmallocator.c",
+        # subprojects/gst-plugins-base/gst-libs/gst/tag
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gstexiftag.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gstid3tag.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gsttagdemux.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gsttageditingprivate.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gsttagmux.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gstvorbistag.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gstxmptag.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/id3v2.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/id3v2frames.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/lang.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/licenses.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/tags.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/xmpwriter.c",
+        ":tag_enumtypes_c",
+        # subprojects/gst-plugins-base/gst-libs/gst/fft
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/gstfft.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/gstfftf32.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/gstfftf64.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/gstffts16.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/gstffts32.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fft_f32.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fft_f64.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fft_s16.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fft_s32.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fftr_f32.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fftr_f64.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fftr_s16.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fftr_s32.c",
+        # subprojects/gst-plugins-base/gst-libs/gst/audio
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-buffer.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-channel-mixer.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-channels.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-converter.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-format.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-info.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-quantize.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-resampler.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioaggregator.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiobasesink.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiobasesrc.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiocdsrc.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioclock.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiodecoder.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioencoder.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiofilter.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioiec61937.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiometa.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioringbuffer.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiosink.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiosrc.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudiostreamalign.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstaudioutilsprivate.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstdsd.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/gstdsdformat.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/streamvolume.c",
+        ":audio_enumtypes_c",
+        ":gstaudiopack_c",
+        # subprojects/gst-plugins-base/gst-libs/gst/video
+        "subprojects/gst-plugins-base/gst-libs/gst/video/colorbalance.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/colorbalancechannel.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/convertframe.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoaffinetransformationmeta.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoaggregator.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideocodecalphameta.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideodecoder.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoencoder.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideofilter.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideometa.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideopool.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideosink.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideotimecode.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoutils.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoutilsprivate.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/navigation.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-anc.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-blend.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-chroma.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-color.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-converter.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-dither.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-event.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-format.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-frame.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-hdr.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-info.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-info-dma.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-multiview.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-overlay-composition.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-resampler.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-scaler.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-sei.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-tile.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/videodirection.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/videoorientation.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/videooverlay.c",
+        ":video_enumtypes_c",
+        ":video_orc_c",
+        # subprojects/gst-plugins-base/gst-libs/gst/pbutils
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/codec-utils.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/descriptions.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/encoding-profile.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/encoding-target.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/gstaudiovisualizer.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/gstdiscoverer.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/gstdiscoverer-types.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/gstpluginsbaseversion.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/install-plugins.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/missing-plugins.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/pbutils.c",
+        ":pbutils_enumtypes_c",
+        # subprojects/gst-plugins-base/gst-libs/gst/riff
+        "subprojects/gst-plugins-base/gst-libs/gst/riff/riff.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/riff/riff-media.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/riff/riff-read.c",
+        # subprojects/gst-plugins-base/gst-libs/gst/app
+        "subprojects/gst-plugins-base/gst-libs/gst/app/gstappsink.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/app/gstappsrc.c",
+        "subprojects/gst-plugins-base/gst-libs/gst/app/gstapputils.c",
+        ":app_enumtypes_c",
+        # Plugin: coreelements
+        "subprojects/gstreamer/plugins/elements/gstcapsfilter.c",
+        "subprojects/gstreamer/plugins/elements/gstclocksync.c",
+        "subprojects/gstreamer/plugins/elements/gstconcat.c",
+        "subprojects/gstreamer/plugins/elements/gstcoreelementsplugin.c",
+        "subprojects/gstreamer/plugins/elements/gstdataurisrc.c",
+        "subprojects/gstreamer/plugins/elements/gstdownloadbuffer.c",
+        "subprojects/gstreamer/plugins/elements/gstelements_private.c",
+        "subprojects/gstreamer/plugins/elements/gstfakesink.c",
+        "subprojects/gstreamer/plugins/elements/gstfakesrc.c",
+        "subprojects/gstreamer/plugins/elements/gstfdsrc.c",
+        "subprojects/gstreamer/plugins/elements/gstfdsink.c",
+        "subprojects/gstreamer/plugins/elements/gstfilesink.c",
+        "subprojects/gstreamer/plugins/elements/gstfilesrc.c",
+        "subprojects/gstreamer/plugins/elements/gstfunnel.c",
+        "subprojects/gstreamer/plugins/elements/gstidentity.c",
+        "subprojects/gstreamer/plugins/elements/gstinputselector.c",
+        "subprojects/gstreamer/plugins/elements/gstmultiqueue.c",
+        "subprojects/gstreamer/plugins/elements/gstoutputselector.c",
+        "subprojects/gstreamer/plugins/elements/gstqueue.c",
+        "subprojects/gstreamer/plugins/elements/gstqueue2.c",
+        "subprojects/gstreamer/plugins/elements/gstsparsefile.c",
+        "subprojects/gstreamer/plugins/elements/gststreamiddemux.c",
+        "subprojects/gstreamer/plugins/elements/gsttee.c",
+        "subprojects/gstreamer/plugins/elements/gsttypefindelement.c",
+        "subprojects/gstreamer/plugins/elements/gstvalve.c",
+        # Plugin: app
+        "subprojects/gst-plugins-base/gst/app/gstapp.c",
+        "subprojects/gst-plugins-base/gst/app/gstappsink.c",
+        "subprojects/gst-plugins-base/gst/app/gstappsrc.c",
+        # Plugin: videotestsrc
+        "subprojects/gst-plugins-base/gst/videotestsrc/gstvideotestsrc.c",
+        "subprojects/gst-plugins-base/gst/videotestsrc/videotestsrc.c",
+        ":gstvideotestsrcorc_c",
+        # Plugin: videoconvertscale
+        "subprojects/gst-plugins-base/gst/videoconvertscale/gstvideoconvert.c",
+        "subprojects/gst-plugins-base/gst/videoconvertscale/gstvideoconvertscale.c",
+        "subprojects/gst-plugins-base/gst/videoconvertscale/gstvideoconvertscaleplugin.c",
+        "subprojects/gst-plugins-base/gst/videoconvertscale/gstvideoscale.c",
+        # Plugin: audioconvert
+        "subprojects/gst-plugins-base/gst/audioconvert/gstaudioconvert.c",
+        "subprojects/gst-plugins-base/gst/audioconvert/plugin.c",
+        # Plugin: audioresample
+        "subprojects/gst-plugins-base/gst/audioresample/gstaudioresample.c",
+        # Plugin: playback
+        "subprojects/gst-plugins-base/gst/playback/gstdecodebin2.c",
+        "subprojects/gst-plugins-base/gst/playback/gstdecodebin3.c",
+        "subprojects/gst-plugins-base/gst/playback/gstparsebin.c",
+        "subprojects/gst-plugins-base/gst/playback/gstplaybackelement.c",
+        "subprojects/gst-plugins-base/gst/playback/gstplaybackplugin.c",
+        "subprojects/gst-plugins-base/gst/playback/gstplaybackutils.c",
+        "subprojects/gst-plugins-base/gst/playback/gstplaybin2.c",
+        "subprojects/gst-plugins-base/gst/playback/gstplaybin3.c",
+        "subprojects/gst-plugins-base/gst/playback/gstplay-enum.c",
+        "subprojects/gst-plugins-base/gst/playback/gstplaysink.c",
+        "subprojects/gst-plugins-base/gst/playback/gstplaysinkaudioconvert.c",
+        "subprojects/gst-plugins-base/gst/playback/gstplaysinkconvertbin.c",
+        "subprojects/gst-plugins-base/gst/playback/gstplaysinkvideoconvert.c",
+        "subprojects/gst-plugins-base/gst/playback/gststreamsynchronizer.c",
+        "subprojects/gst-plugins-base/gst/playback/gstsubtitleoverlay.c",
+        "subprojects/gst-plugins-base/gst/playback/gsturidecodebin.c",
+        "subprojects/gst-plugins-base/gst/playback/gsturidecodebin3.c",
+        "subprojects/gst-plugins-base/gst/playback/gsturisourcebin.c",
+        # Plugin: typefindfunctions
+        "subprojects/gst-plugins-base/gst/typefind/gsttypefindfunctions.c",
+        "subprojects/gst-plugins-base/gst/typefind/gsttypefindfunctionsdata.c",
+        "subprojects/gst-plugins-base/gst/typefind/gsttypefindfunctionsplugin.c",
+        "subprojects/gst-plugins-base/gst/typefind/gsttypefindfunctionsriff.c",
+        "subprojects/gst-plugins-base/gst/typefind/gsttypefindfunctionsstartwith.c",
+        # Plugin: jpeg
+        "subprojects/gst-plugins-good/ext/jpeg/gstjpeg.c",
+        "subprojects/gst-plugins-good/ext/jpeg/gstjpegdec.c",
+        "subprojects/gst-plugins-good/ext/jpeg/gstjpegenc.c",
+        "subprojects/gst-plugins-good/ext/jpeg/gstjpegplugin.c",
+        # Plugin: png
+        "subprojects/gst-plugins-good/ext/libpng/gstpng.c",
+        "subprojects/gst-plugins-good/ext/libpng/gstpngdec.c",
+        "subprojects/gst-plugins-good/ext/libpng/gstpngenc.c",
+        # Plugin: wavenc
+        "subprojects/gst-plugins-good/gst/wavenc/gstwavenc.c",
+    ] + select({
+        "@platforms//os:linux": [
+            "subprojects/gst-plugins-base/ext/alsa/gstalsa.c",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsadeviceprovider.c",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsaelement.c",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsamidisrc.c",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsaplugin.c",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsasink.c",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsasrc.c",
+        ],
+        "//conditions:default": [],
+    }),
+    hdrs = [
+        "config.h",
+        ":app_enumtypes_h",
+        ":audio_enumtypes_h",
+        ":controller_enumtypes_h",
+        ":gstaudiopack_h",
+        ":gstconfig_h",
+        ":gstenumtypes_h",
+        ":gstpluginsbaseversion_h",
+        ":gstversion_h",
+        ":gstvideotestsrcorc_h",
+        ":pbutils_enumtypes_h",
+        ":tag_enumtypes_h",
+        ":video_enumtypes_h",
+        ":video_orc_h",
+    ] + GST_HEADERS + VIDEO_HEADERS + AUDIO_HEADERS + PBUTILS_ENUM_HEADERS + [
+        # Internal / private headers in gst
+        "subprojects/gstreamer/gst/glib-compat-private.h",
+        "subprojects/gstreamer/gst/gst_private.h",
+        "subprojects/gstreamer/gst/gstmacos.h",
+        "subprojects/gstreamer/gst/gstpluginloader.h",
+        "subprojects/gstreamer/gst/gstquark.h",
+        "subprojects/gstreamer/gst/gstregistrybinary.h",
+        "subprojects/gstreamer/gst/gstregistrychunks.h",
+        "subprojects/gstreamer/gst/gsttracerutils.h",
+        "subprojects/gstreamer/gst/parse/types.h",
+        # libs/gst/base
+        "subprojects/gstreamer/libs/gst/base/base.h",
+        "subprojects/gstreamer/libs/gst/base/base-prelude.h",
+        "subprojects/gstreamer/libs/gst/base/gstadapter.h",
+        "subprojects/gstreamer/libs/gst/base/gstaggregator.h",
+        "subprojects/gstreamer/libs/gst/base/gstbaseparse.h",
+        "subprojects/gstreamer/libs/gst/base/gstbasesink.h",
+        "subprojects/gstreamer/libs/gst/base/gstbasesrc.h",
+        "subprojects/gstreamer/libs/gst/base/gstbasetransform.h",
+        "subprojects/gstreamer/libs/gst/base/gstbitreader.h",
+        "subprojects/gstreamer/libs/gst/base/gstbitreader-docs.h",
+        "subprojects/gstreamer/libs/gst/base/gstbitwriter.h",
+        "subprojects/gstreamer/libs/gst/base/gstbitwriter-docs.h",
+        "subprojects/gstreamer/libs/gst/base/gstbytereader.h",
+        "subprojects/gstreamer/libs/gst/base/gstbytereader-docs.h",
+        "subprojects/gstreamer/libs/gst/base/gstbytewriter.h",
+        "subprojects/gstreamer/libs/gst/base/gstbytewriter-docs.h",
+        "subprojects/gstreamer/libs/gst/base/gstcollectpads.h",
+        "subprojects/gstreamer/libs/gst/base/gstdataqueue.h",
+        "subprojects/gstreamer/libs/gst/base/gstflowcombiner.h",
+        "subprojects/gstreamer/libs/gst/base/gstindex.h",
+        "subprojects/gstreamer/libs/gst/base/gstpushsrc.h",
+        "subprojects/gstreamer/libs/gst/base/gstqueuearray.h",
+        "subprojects/gstreamer/libs/gst/base/gsttypefindhelper.h",
+        # libs/gst/controller
+        "subprojects/gstreamer/libs/gst/controller/controller.h",
+        "subprojects/gstreamer/libs/gst/controller/controller-prelude.h",
+        "subprojects/gstreamer/libs/gst/controller/gstargbcontrolbinding.h",
+        "subprojects/gstreamer/libs/gst/controller/gstdirectcontrolbinding.h",
+        "subprojects/gstreamer/libs/gst/controller/gstinterpolationcontrolsource.h",
+        "subprojects/gstreamer/libs/gst/controller/gstlfocontrolsource.h",
+        "subprojects/gstreamer/libs/gst/controller/gstproxycontrolbinding.h",
+        "subprojects/gstreamer/libs/gst/controller/gsttimedvaluecontrolsource.h",
+        "subprojects/gstreamer/libs/gst/controller/gsttriggercontrolsource.h",
+        # gst-libs/gst/tag
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gsttagdemux.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gsttageditingprivate.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/gsttagmux.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/id3v2.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/lang-tables.dat",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/licenses-tables.dat",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/tag.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/tag-prelude.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag/xmpwriter.h",
+        # gst-libs/gst/fft
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/_kiss_fft_guts_f32.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/_kiss_fft_guts_f64.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/_kiss_fft_guts_s16.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/_kiss_fft_guts_s32.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/fft.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/fft-prelude.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/gstfft.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/gstfftf32.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/gstfftf64.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/gstffts16.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/gstffts32.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fft_f32.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fft_f64.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fft_s16.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fft_s32.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fftr_f32.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fftr_f64.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fftr_s16.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/fft/kiss_fftr_s32.h",
+        # gst-libs/gst/audio private headers
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-resampler-macros.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/audio-resampler-private.h",
+        # gst-libs/gst/video private headers
+        "subprojects/gst-plugins-base/gst-libs/gst/video/gstvideoutilsprivate.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/video/video-orc-dist.h",
+        # gst-libs/gst/pbutils private headers
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils/pbutils-private.h",
+        # gst-libs/gst/allocators
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/allocators.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/allocators-prelude.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/gstdmabuf.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/gstdrmdumb.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/gstfdmemory.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/gstphysmemory.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators/gstshmallocator.h",
+        # gst-libs/gst/riff
+        "subprojects/gst-plugins-base/gst-libs/gst/riff/riff.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/riff/riff-ids.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/riff/riff-media.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/riff/riff-prelude.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/riff/riff-read.h",
+        # gst-libs/gst/app
+        "subprojects/gst-plugins-base/gst-libs/gst/app/app.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/app/app-prelude.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/app/gstappsink.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/app/gstappsrc.h",
+        "subprojects/gst-plugins-base/gst-libs/gst/app/gstapputils.h",
+        # Plugin private headers
+        "subprojects/gstreamer/plugins/elements/gstcapsfilter.h",
+        "subprojects/gstreamer/plugins/elements/gstclocksync.h",
+        "subprojects/gstreamer/plugins/elements/gstconcat.h",
+        "subprojects/gstreamer/plugins/elements/gstcoreelementselements.h",
+        "subprojects/gstreamer/plugins/elements/gstdataurisrc.h",
+        "subprojects/gstreamer/plugins/elements/gstdownloadbuffer.h",
+        "subprojects/gstreamer/plugins/elements/gstelements_private.h",
+        "subprojects/gstreamer/plugins/elements/gstfakesink.h",
+        "subprojects/gstreamer/plugins/elements/gstfakesrc.h",
+        "subprojects/gstreamer/plugins/elements/gstfdsink.h",
+        "subprojects/gstreamer/plugins/elements/gstfdsrc.h",
+        "subprojects/gstreamer/plugins/elements/gstfilesink.h",
+        "subprojects/gstreamer/plugins/elements/gstfilesrc.h",
+        "subprojects/gstreamer/plugins/elements/gstfunnel.h",
+        "subprojects/gstreamer/plugins/elements/gstidentity.h",
+        "subprojects/gstreamer/plugins/elements/gstinputselector.h",
+        "subprojects/gstreamer/plugins/elements/gstmultiqueue.h",
+        "subprojects/gstreamer/plugins/elements/gstoutputselector.h",
+        "subprojects/gstreamer/plugins/elements/gstqueue.h",
+        "subprojects/gstreamer/plugins/elements/gstqueue2.h",
+        "subprojects/gstreamer/plugins/elements/gstsparsefile.h",
+        "subprojects/gstreamer/plugins/elements/gststreamiddemux.h",
+        "subprojects/gstreamer/plugins/elements/gsttee.h",
+        "subprojects/gstreamer/plugins/elements/gsttypefindelement.h",
+        "subprojects/gstreamer/plugins/elements/gstvalve.h",
+        "subprojects/gst-plugins-base/gst/app/gstappelements.h",
+        "subprojects/gst-plugins-base/gst/videotestsrc/gstvideotestsrc.h",
+        "subprojects/gst-plugins-base/gst/videotestsrc/videotestsrc.h",
+        "subprojects/gst-plugins-base/gst/videoconvertscale/gstvideoconvert.h",
+        "subprojects/gst-plugins-base/gst/videoconvertscale/gstvideoconvertscale.h",
+        "subprojects/gst-plugins-base/gst/videoconvertscale/gstvideoscale.h",
+        "subprojects/gst-plugins-base/gst/audioconvert/gstaudioconvert.h",
+        "subprojects/gst-plugins-base/gst/audioresample/gstaudioresample.h",
+        "subprojects/gst-plugins-base/gst/playback/gstplaybackelements.h",
+        "subprojects/gst-plugins-base/gst/playback/gstplaybackutils.h",
+        "subprojects/gst-plugins-base/gst/playback/gstplay-enum.h",
+        "subprojects/gst-plugins-base/gst/playback/gstplaysink.h",
+        "subprojects/gst-plugins-base/gst/playback/gstplaysinkaudioconvert.h",
+        "subprojects/gst-plugins-base/gst/playback/gstplaysinkconvertbin.h",
+        "subprojects/gst-plugins-base/gst/playback/gstplaysinkvideoconvert.h",
+        "subprojects/gst-plugins-base/gst/playback/gstrawcaps.h",
+        "subprojects/gst-plugins-base/gst/playback/gststreamsynchronizer.h",
+        "subprojects/gst-plugins-base/gst/playback/gstsubtitleoverlay.h",
+        "subprojects/gst-plugins-base/gst/typefind/gsttypefindfunctionsdata.h",
+        "subprojects/gst-plugins-base/gst/typefind/gsttypefindfunctionsplugin.h",
+        "subprojects/gst-plugins-good/ext/jpeg/gstjpeg.h",
+        "subprojects/gst-plugins-good/ext/jpeg/gstjpegdec.h",
+        "subprojects/gst-plugins-good/ext/jpeg/gstjpegelements.h",
+        "subprojects/gst-plugins-good/ext/jpeg/gstjpegenc.h",
+        "subprojects/gst-plugins-good/ext/libpng/gstpng.h",
+        "subprojects/gst-plugins-good/ext/libpng/gstpngdec.h",
+        "subprojects/gst-plugins-good/ext/libpng/gstpngenc.h",
+        "subprojects/gst-plugins-good/gst/wavenc/gstwavenc.h",
+    ] + select({
+        "@platforms//os:linux": [
+            "subprojects/gst-plugins-base/ext/alsa/gstalsa.h",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsadeviceprovider.h",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsaelements.h",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsamidisrc.h",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsasink.h",
+            "subprojects/gst-plugins-base/ext/alsa/gstalsasrc.h",
+        ],
+        "//conditions:default": [],
+    }),
+    copts = [
+        "-w",
+        "-fno-strict-aliasing",
+        "-D_GNU_SOURCE",
+        "-DHAVE_CONFIG_H",
+        "-DGST_DISABLE_DEPRECATED",
+        "-DGST_EXPORTS",
+        "-DGST_FULL_STATIC_COMPILATION",
+        "-DBUILDING_GST",
+        "-DBUILDING_GST_BASE",
+        "-DBUILDING_GST_CONTROLLER",
+        "-DBUILDING_GST_TAG",
+        "-DBUILDING_GST_FFT",
+        "-DBUILDING_GST_AUDIO",
+        "-DBUILDING_GST_VIDEO",
+        "-DBUILDING_GST_PBUTILS",
+        "-DBUILDING_GST_RIFF",
+        "-DBUILDING_GST_APP",
+        "-DBUILDING_GST_ALLOCATORS",
+        "-DHAVE_MEMFD_CREATE",
+    ],
+    includes = [
+        ".",
+        "subprojects/gst-plugins-base",
+        "subprojects/gst-plugins-base/gst-libs",
+        "subprojects/gst-plugins-base/gst-libs/gst/allocators",
+        "subprojects/gst-plugins-base/gst-libs/gst/app",
+        "subprojects/gst-plugins-base/gst-libs/gst/audio",
+        "subprojects/gst-plugins-base/gst-libs/gst/pbutils",
+        "subprojects/gst-plugins-base/gst-libs/gst/riff",
+        "subprojects/gst-plugins-base/gst-libs/gst/tag",
+        "subprojects/gst-plugins-base/gst-libs/gst/video",
+        "subprojects/gst-plugins-base/gst/videotestsrc",
+        "subprojects/gstreamer",
+        "subprojects/gstreamer/gst",
+        "subprojects/gstreamer/gst/parse",
+        "subprojects/gstreamer/libs",
+        "subprojects/gstreamer/libs/gst/controller",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-ldl",
+            "-lm",
+            "-lpthread",
+            "-lrt",
+        ],
+        "//conditions:default": [
+            "-ldl",
+            "-lm",
+            "-lpthread",
+        ],
+    }),
+    textual_hdrs = [
+        "subprojects/gst-plugins-base/gst-libs/gst/audio/dbesi0.c",
+        "subprojects/gstreamer/libs/gst/base/gstindex.c",
+        "subprojects/gstreamer/libs/gst/base/gstmemindex.c",
+    ],
+    deps = [
+        ":gst_printf",
+        "@glib//gio",
+        "@glib//glib",
+        "@glib//gmodule",
+        "@glib//gobject",
+        "@libjpeg_turbo//:jpeg",
+        "@libpng",
+        "@zlib",
+    ] + select({
+        "@platforms//os:linux": ["@alsa_lib//:asound"],
+        "//conditions:default": [],
+    }),
+)
+
+alias(
+    name = "gstreamer-1.0",
+    actual = ":gstreamer",
+)
+
+alias(
+    name = "gstreamer-base-1.0",
+    actual = ":gstreamer",
+)
+
+alias(
+    name = "gstreamer-controller-1.0",
+    actual = ":gstreamer",
+)
+
+alias(
+    name = "gstreamer-app-1.0",
+    actual = ":gstreamer",
+)
+
+alias(
+    name = "gstreamer-video-1.0",
+    actual = ":gstreamer",
+)
+
+alias(
+    name = "gstreamer-audio-1.0",
+    actual = ":gstreamer",
+)
+
+alias(
+    name = "gstreamer-pbutils-1.0",
+    actual = ":gstreamer",
+)
+
+alias(
+    name = "gstreamer-tag-1.0",
+    actual = ":gstreamer",
+)
+
+alias(
+    name = "gstreamer-riff-1.0",
+    actual = ":gstreamer",
+)
+
+alias(
+    name = "gstreamer-fft-1.0",
+    actual = ":gstreamer",
+)
+
+alias(
+    name = "gstreamer-allocators-1.0",
+    actual = ":gstreamer",
+)
