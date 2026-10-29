@@ -28,6 +28,7 @@ from launch import LaunchService
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import AnyLaunchDescriptionSource
 import launch.logging
+from rcr_launch_guard import launch_process_guard
 
 
 def _cleanup_log_symlinks(log_dir: str) -> None:
@@ -228,7 +229,9 @@ def main(argv: List[Text] = sys.argv[1:]) -> int:
         debug=args.debug,
     )
     launch_service.include_launch_description(launch_description)
-    return launch_service.run()
+    # Abort if a previous launch left processes behind; clean up our own on exit.
+    with launch_process_guard(target=os.path.basename(args.launch_file)):
+        return launch_service.run()
 
 
 if __name__ == '__main__':

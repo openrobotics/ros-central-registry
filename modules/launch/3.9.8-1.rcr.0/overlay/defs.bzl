@@ -132,6 +132,7 @@ def launch_binary(name, src, data = [], deps = [], args = [], **kwargs):
     src_label = _src_label(src)
     extra_deps = [
         Label("@launch//:launch"),
+        Label("@launch//bazel:rcr_launch_guard"),
         Label("@rules_python//python/runfiles"),
     ]
     if src.endswith(".xml"):

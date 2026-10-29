@@ -125,6 +125,7 @@ def launch_test(name, src, data = [], deps = [], args = [], **kwargs):
     src_label = _src_label(src)
     extra_deps = [
         Label("@launch//:launch"),
+        Label("@launch//bazel:rcr_launch_guard"),
         Label("@launch_testing//:launch_testing"),
         Label("@launch_xml//:launch_xml"),
         Label("@launch_yaml//:launch_yaml"),

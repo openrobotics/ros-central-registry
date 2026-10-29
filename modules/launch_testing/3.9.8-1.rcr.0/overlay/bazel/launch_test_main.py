@@ -21,6 +21,7 @@ import sys
 
 import launch.logging
 from launch_testing.launch_test import main
+from rcr_launch_guard import launch_process_guard
 
 
 def _cleanup_log_symlinks(log_dir: str) -> None:
@@ -118,4 +119,7 @@ def _configure_bazel_environment() -> None:
 
 if __name__ == '__main__':
     _configure_bazel_environment()
-    main()
+    # Under `bazel test` the guard kills (rather than aborts on) processes a
+    # previous, e.g. timed-out, attempt left behind; see rcr_launch_guard.
+    with launch_process_guard(target=os.environ.get('TEST_TARGET')):
+        main()
