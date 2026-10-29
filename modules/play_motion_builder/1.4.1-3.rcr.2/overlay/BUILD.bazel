@@ -12,16 +12,92 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+# add_compile_definitions(RCLCPP_VERSION_MAJOR=${rclcpp_VERSION_MAJOR})
+LOCAL_DEFINES = ros_local_defines() + ["RCLCPP_VERSION_MAJOR=32"]
+
+DEPENDENCIES = {
+    "@play_motion2//:client": "@play_motion2//:client_library",
+    "@play_motion2_msgs//:cc_shared": "@play_motion2_msgs//:cc",
+    "@play_motion_builder_msgs//:cc_shared": "@play_motion_builder_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+}
+
+# ament_auto_add_library(motion_model_lib SHARED src/motion_model.cpp)
+cc_library(
+    name = "motion_model_lib_library",
+    srcs = ["src/motion_model.cpp"],
+    hdrs = ["include/play_motion_builder/motion_model.hpp"],
+    includes = ["include"],
+    local_defines = LOCAL_DEFINES,
+    deps = DEPENDENCIES.values() + ["@rosdistro//cc:boost.property_tree"],
+)
+
+cc_shared_library(
+    name = "motion_model_lib",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":motion_model_lib_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":motion_model_lib"],
+)
+
+# ament_auto_add_executable(play_motion_builder_node ...); ament_auto links
+# the package's own libraries.
+cc_binary(
+    name = "play_motion_builder_node",
+    srcs = [
+        "src/play_motion_builder.cpp",
+        "src/play_motion_builder.hpp",
+        "src/play_motion_builder_node.cpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = LOCAL_DEFINES,
+    deps = [":motion_model_lib_library"],
+)
+
+# The upstream gtests (test_motion_model, test_motion_builder) are commented
+# out in CMakeLists.txt, so none are ported.
 
 ### PACKAGING
 
+ament_index(
+    name = "ament_index",
+    libraries = [":motion_model_lib"],
+    package_xml = "package.xml",
+)
+
 ament_package(
     name = "ament_package",
+    executables = [":play_motion_builder_node"],
+    headers = ["include/play_motion_builder/motion_model.hpp"],
+    libraries = [":motion_model_lib"],
     package_xml = "package.xml",
     deps = [
+        ":ament_index",
         "@ament_cmake_auto//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_lint_auto//:ament_package",

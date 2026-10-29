@@ -12,21 +12,99 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    "@lanelet2_core//:lanelet2_core": "@lanelet2_core//:lanelet2_core_library",
+    "@lanelet2_traffic_rules//:lanelet2_traffic_rules": "@lanelet2_traffic_rules//:lanelet2_traffic_rules_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+]
+
+HEADERS = [
+    "include/lanelet2_matching/Exceptions.h",
+    "include/lanelet2_matching/LaneletMatching.h",
+    "include/lanelet2_matching/Types.h",
+    "include/lanelet2_matching/Utilities.h",
+]
+
+cc_library(
+    name = "lanelet2_matching_library",
+    srcs = [
+        "src/LaneletMatching.cpp",
+        "src/Utilities.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = [
+        "include",
+        "include/lanelet2_matching",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "lanelet2_matching",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":lanelet2_matching_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":lanelet2_matching"],
+)
+
+# mrt_add_tests(test): one gtest per test/*.cpp.
+cc_test(
+    name = "lanelet2_matching-gtest-lanelet2_matching",
+    srcs = [
+        "test/lanelet2_matching.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["test"],
+    deps = [
+        ":lanelet2_matching_library",
+        "@lanelet2_io//:lanelet2_io_library",
+        "@lanelet2_projection//:lanelet2_projection_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
 
 ### PACKAGING
 
+ament_index(
+    name = "ament_index",
+    libraries = [":lanelet2_matching"],
+    package_xml = "package.xml",
+)
+
 ament_package(
     name = "ament_package",
+    build_type = "cmake",
+    cmake_export_targets = False,
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [":lanelet2_matching"],
     package_xml = "package.xml",
     deps = [
+        ":ament_index",
         "@ament_cmake_core//:ament_package",
         "@lanelet2_core//:ament_package",
-        "@lanelet2_io//:ament_package",
-        "@lanelet2_maps//:ament_package",
-        "@lanelet2_projection//:ament_package",
         "@lanelet2_traffic_rules//:ament_package",
         "@mrt_cmake_modules//:ament_package",
         "@rosdistro//:ament_package",

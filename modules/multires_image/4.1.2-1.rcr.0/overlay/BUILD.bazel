@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@pip_ros//:requirements.bzl", "requirement")
 load("@qt//:qt.bzl", "qt_cc_library")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -263,9 +266,62 @@ collect_transitive_dynamic_deps(
     ],
 )
 
+qt_cc_library(
+    name = "multires_view_node_library",
+    srcs = ["src/nodes/multires_view_node.cpp"],
+    hdrs = ["include/multires_image/multires_view_node.hpp"],
+    local_defines = ros_local_defines() + ["WFlags=WindowFlags"],
+    moc_hdrs = ["include/multires_image/multires_view_node.hpp"],
+    deps = [":multires_widget_library"],
+)
+
+cc_binary(
+    name = "multires_view_node",
+    data = [":ament_index"],
+    dynamic_deps = [
+        ":multires_widget",
+        ":transitive_dynamic_deps",
+    ],
+    deps = [":multires_view_node_library"],
+)
+
+# install(PROGRAMS nodes/mapviz_tile_loader DESTINATION lib/multires_image)
+copy_file(
+    name = "mapviz_tile_loader_py",
+    src = "nodes/mapviz_tile_loader",
+    out = "_gen/mapviz_tile_loader.py",
+)
+
+py_binary(
+    name = "mapviz_tile_loader",
+    srcs = [":mapviz_tile_loader_py"],
+    data = [":ament_index"],
+    main = "_gen/mapviz_tile_loader.py",
+    deps = [
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@mapviz_interfaces//:py",
+        "@marti_common_msgs//:py",
+        "@rclpy",
+        requirement("pyproj"),
+        requirement("pyyaml"),
+    ],
+)
+
 ament_index(
     name = "ament_index",
+    data = [
+        "launch/mapviz_tile_loader.launch.py",
+        "launch/multires.launch.xml",
+    ],
+    libraries = [
+        ":multires_image",
+        ":multires_image_plugin",
+        ":multires_widget",
+    ],
     package_xml = "package.xml",
+    plugin_category = "mapviz",
+    plugins = ["mapviz_plugins.xml"],
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
@@ -291,6 +347,10 @@ ament_package(
     cmake_export_libraries = False,
     cmake_export_targets = False,
     colcon_hooks = False,
+    executables = [
+        ":mapviz_tile_loader",
+        ":multires_view_node",
+    ],
     install_package_xml = False,
     package_xml = "package.xml",
     deps = [":ament_index"] + [
@@ -316,13 +376,19 @@ launch_ros_binary(
     src = "launch/mapviz_tile_loader.launch.py",
     data = [
         ":ament_index",
-        "@mapviz//:ament_index",
         "@swri_transform_util//:ament_index",
+    ],
+    deps = [
+        ":mapviz_tile_loader",
+        "@mapviz",
     ],
 )
 
+# Blocked on data: upstream points image_path at $(find-pkg-share test_data),
+# a package that does not exist in rosdistro.
 launch_ros_binary(
     name = "launch_multires_launch_xml",
     src = "launch/multires.launch.xml",
     data = [":ament_index"],
+    deps = [":multires_view_node"],
 )

@@ -12,8 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@qt//:qt.bzl", "qt_cc_library")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary")
 
 package(
     default_applicable_licenses = [":package_license"],
@@ -27,36 +32,159 @@ license(
     ],
 )
 
+DEPENDENCIES = {
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@qt_gui_cpp//:qt_gui_cpp_shared": "@qt_gui_cpp//:qt_gui_cpp",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@ros_image_to_qimage//:ros_image_to_qimage": "@ros_image_to_qimage//:ros_image_to_qimage_library",
+    "@rqt_gui_cpp//:rqt_gui_cpp_shared": "@rqt_gui_cpp//:rqt_gui_cpp",
+}
+
+HEADERS = [
+    "src/color_dialog_delegate.hpp",
+    "src/composition_frame.hpp",
+    "src/compositor.hpp",
+    "src/exceptions.hpp",
+    "src/image_manager.hpp",
+    "src/image_overlay.hpp",
+    "src/image_topic.hpp",
+    "src/list_image_topics.hpp",
+    "src/msg_storage.hpp",
+    "src/overlay.hpp",
+    "src/overlay_manager.hpp",
+    "src/overlay_manager_view.hpp",
+    "src/overlay_time_info.hpp",
+    "src/user_roles.hpp",
+]
+
+# qt5_wrap_ui(resource/image_overlay.ui resource/configuration_dialog.ui)
+[genrule(
+    name = "gen_ui_{0}_h".format(ui),
+    srcs = ["resource/{0}.ui".format(ui)],
+    outs = ["_gen/include/ui_{0}.h".format(ui)],
+    cmd = "$(execpath @qtbase//:uic) $< -o $@",
+    tools = ["@qtbase//:uic"],
+) for ui in [
+    "configuration_dialog",
+    "image_overlay",
+]]
+
+qt_cc_library(
+    name = "rqt_image_overlay_library",
+    srcs = [
+        "src/color_dialog_delegate.cpp",
+        "src/composition_frame.cpp",
+        "src/compositor.cpp",
+        "src/image_manager.cpp",
+        "src/image_overlay.cpp",
+        "src/list_image_topics.cpp",
+        "src/overlay.cpp",
+        "src/overlay_manager.cpp",
+        "src/overlay_manager_view.cpp",
+    ],
+    hdrs = HEADERS + [
+        ":gen_ui_configuration_dialog_h",
+        ":gen_ui_image_overlay_h",
+    ],
+    includes = [
+        "_gen/include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    moc_hdrs = [
+        "src/color_dialog_delegate.hpp",
+        "src/composition_frame.hpp",
+        "src/compositor.hpp",
+        "src/image_manager.hpp",
+        "src/image_overlay.hpp",
+        "src/overlay_manager_view.hpp",
+    ],
+    deps = DEPENDENCIES.values() + [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+        "@rqt_image_overlay_layer",
+    ],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "rqt_image_overlay",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:widgets_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rqt_image_overlay_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rqt_image_overlay"],
+)
+
+# install(PROGRAMS scripts/rqt_image_overlay DESTINATION lib/rqt_image_overlay)
+copy_file(
+    name = "rqt_image_overlay_script_py",
+    src = "scripts/rqt_image_overlay",
+    out = "_gen/rqt_image_overlay_script.py",
+)
+
+py_binary(
+    name = "rqt_image_overlay_script",
+    srcs = [":rqt_image_overlay_script_py"],
+    data = [":ament_index"],
+    main = "_gen/rqt_image_overlay_script.py",
+    deps = ["@rqt_gui"],
+)
+
+### TESTS (test/CMakeLists.txt)
+
+[cc_test(
+    name = name,
+    srcs = ["test/{0}.cpp".format(name)],
+    # This image_transport also advertises a "<topic>/_buf_cpu" buffer-backend
+    # topic per publisher, which ListImageTopics reports as an extra raw topic,
+    # so the two exact-count cases don't hold here.
+    args = [
+        "--gtest_filter=-TestListImageTopics.TestOne:TestListImageTopics.TestThree",
+    ] if name == "test_list_image_topics" else [],
+    # pluginlib loads the image_transport (and, for the topic listing test,
+    # compressed_image_transport) plugins through the ament index.
+    data = ["@image_transport//:ament_index"] + (
+        ["@compressed_image_transport//:ament_index"] if name == "test_list_image_topics" else []
+    ),
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":rqt_image_overlay_library",
+        "@rosdistro//cc:googletest",
+    ],
+) for name in [
+    "test_image_manager",
+    "test_list_image_topics",
+    "test_msg_storage",
+]]
+
+### PACKAGING
+
 ament_index(
     name = "ament_index",
+    libraries = [":rqt_image_overlay"],
     package_xml = "package.xml",
-    deps = [
-        "@ament_cmake//:ament_package",
-        "@ament_cmake_gtest//:ament_package",
-        "@ament_lint_auto//:ament_package",
-        "@ament_lint_common//:ament_package",
-        "@compressed_image_transport//:ament_package",
-        "@image_transport//:ament_package",
-        "@pluginlib//:ament_package",
-        "@rclcpp//:ament_package",
-        "@ros_image_to_qimage//:ament_package",
-        "@rqt_gui//:ament_package",
-        "@rqt_gui_cpp//:ament_package",
-        "@rqt_image_overlay_layer//:ament_package",
-        "@std_msgs//:ament_package",
-    ],
+    plugin_category = "rqt_gui",
+    plugins = ["plugin.xml"],
 )
 
 ament_package(
-    build_type = "cmake",
-    cmake_export_dependencies = False,
-    cmake_export_include_directories = False,
-    cmake_export_libraries = False,
-    cmake_export_targets = False,
-    colcon_hooks = False,
-    install_package_xml = False,
+    name = "ament_package",
+    libraries = [":rqt_image_overlay"],
     package_xml = "package.xml",
-    deps = [":ament_index"] + [
+    programs = [":rqt_image_overlay_script"],
+    deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_lint_auto//:ament_package",
@@ -66,6 +194,7 @@ ament_package(
         "@pluginlib//:ament_package",
         "@rclcpp//:ament_package",
         "@ros_image_to_qimage//:ament_package",
+        "@rosdistro//:ament_package",
         "@rqt_gui//:ament_package",
         "@rqt_gui_cpp//:ament_package",
         "@rqt_image_overlay_layer//:ament_package",

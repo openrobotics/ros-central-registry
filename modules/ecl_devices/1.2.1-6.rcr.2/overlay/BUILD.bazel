@@ -12,20 +12,154 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    "@ecl_errors//:ecl_errors": "@ecl_errors//:ecl_errors_library",
+    "@ecl_formatters//:ecl_formatters": "@ecl_formatters//:ecl_formatters_library",
+    "@ecl_threads//:ecl_threads": "@ecl_threads//:ecl_threads_library",
+    "@ecl_type_traits//:ecl_type_traits": "@ecl_type_traits//:ecl_type_traits_library",
+}
+
+CC_DEPS = [
+    "@ecl_config",
+    "@ecl_containers//:ecl_containers_library",
+    "@ecl_mpl",
+    "@ecl_utilities//:ecl_utilities_library",
+]
+
+HEADERS = [
+    "include/ecl/devices.hpp",
+    "include/ecl/devices/console.hpp",
+    "include/ecl/devices/detail/character_buffer.hpp",
+    "include/ecl/devices/detail/error_handler.hpp",
+    "include/ecl/devices/detail/exception_handler_pos.hpp",
+    "include/ecl/devices/detail/socket_error_handler_pos.hpp",
+    "include/ecl/devices/detail/socket_exception_handler_pos.hpp",
+    "include/ecl/devices/macros.hpp",
+    "include/ecl/devices/modes.hpp",
+    "include/ecl/devices/ofile.hpp",
+    "include/ecl/devices/ofile_pos.hpp",
+    "include/ecl/devices/ofile_w32.hpp",
+    "include/ecl/devices/serial.hpp",
+    "include/ecl/devices/serial_parameters.hpp",
+    "include/ecl/devices/serial_pos.hpp",
+    "include/ecl/devices/serial_w32.hpp",
+    "include/ecl/devices/shared_file.hpp",
+    "include/ecl/devices/socket.hpp",
+    "include/ecl/devices/socket_client_pos.hpp",
+    "include/ecl/devices/socket_connection_status.hpp",
+    "include/ecl/devices/socket_server_pos.hpp",
+    "include/ecl/devices/string.hpp",
+    "include/ecl/devices/traits.hpp",
+]
+
+cc_library(
+    name = "ecl_devices_library",
+    srcs = [
+        "src/lib/console.cpp",
+        "src/lib/detail/character_buffer.cpp",
+        "src/lib/detail/error_handler.cpp",
+        "src/lib/detail/exception_handler_pos.cpp",
+        "src/lib/detail/socket_exception_handler_pos.cpp",
+        "src/lib/ofile_pos.cpp",
+        "src/lib/ofile_w32.cpp",
+        "src/lib/serial_pos.cpp",
+        "src/lib/serial_w32.cpp",
+        "src/lib/shared_file.cpp",
+        "src/lib/socket_client_pos.cpp",
+        "src/lib/socket_server_pos.cpp",
+        "src/lib/string.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ecl_devices",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    shared_lib_name = "libecl_devices.so",
+    deps = [":ecl_devices_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ecl_devices"],
+)
+
+cc_binary(
+    name = "demo_serial_timeouts",
+    srcs = ["src/examples/serial_timeouts.cpp"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":ecl_devices_library"],
+)
+
+cc_test(
+    name = "ecl_test_shared_files",
+    srcs = ["src/test/shared_files.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":ecl_devices_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "ecl_test_files",
+    srcs = ["src/test/files.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":ecl_devices_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
 
 ### PACKAGING
 
+ament_index(
+    name = "ament_index",
+    libraries = [":ecl_devices"],
+    package_xml = "package.xml",
+    sonames = {"ecl_devices": ["libecl_devices.so.1.2.1"]},
+)
+
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies_list = [
+        "ecl_config",
+        "ecl_containers",
+        "ecl_errors",
+        "ecl_mpl",
+        "ecl_threads",
+        "ecl_type_traits",
+        "ecl_utilities",
+    ],
+    executables = [
+        ":demo_serial_timeouts",
+    ],
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [":ecl_devices"],
     package_xml = "package.xml",
+    sonames = {"ecl_devices": ["libecl_devices.so.1.2.1"]},
     deps = [
-        "@ament_cmake_gtest//:ament_package",
-        "@ament_cmake_ros//:ament_package",
-        "@ament_lint_auto//:ament_package",
-        "@ament_lint_common//:ament_package",
+        ":ament_index",
         "@ecl_build//:ament_package",
         "@ecl_config//:ament_package",
         "@ecl_containers//:ament_package",

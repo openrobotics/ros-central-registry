@@ -13,13 +13,58 @@
 # limitations under the License.
 
 load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+HEADERS = ["include/autoware_utils_uuid/uuid_helper.hpp"]
+
+DEPENDENCIES = {
+    "@unique_identifier_msgs//:cc_shared": "@unique_identifier_msgs//:cc",
+}
+
+# Header-only (upstream's autoware_package() builds no library here).
+cc_library(
+    name = "autoware_utils_uuid",
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + ["@rosdistro//cc:boost.uuid"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_test(
+    name = "test_autoware_utils_uuid",
+    srcs = [
+        "test/cases/uuid_helper.cpp",
+        "test/main.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":autoware_utils_uuid",
+        "@rosdistro//cc:googletest",
+    ],
+)
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake_export_targets = False,
+    headers = HEADERS,
     package_xml = "package.xml",
     deps = [
         "@ament_cmake_auto//:ament_package",

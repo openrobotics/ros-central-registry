@@ -12,17 +12,134 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    "@lanelet2_core//:lanelet2_core": "@lanelet2_core//:lanelet2_core_library",
+    "@lanelet2_io//:lanelet2_io": "@lanelet2_io//:lanelet2_io_library",
+    "@rosdistro//cc:geographiclib": "@rosdistro//cc:geographiclib_library",
+}
+
+CC_DEPS = [
+]
+
+HEADERS = [
+    "include/lanelet2_projection/Geocentric.h",
+    "include/lanelet2_projection/LocalCartesian.h",
+    "include/lanelet2_projection/Mercator.h",
+    "include/lanelet2_projection/UTM.h",
+]
+
+cc_library(
+    name = "lanelet2_projection_library",
+    srcs = [
+        "src/Geocentric.cpp",
+        "src/LocalCartesian.cpp",
+        "src/UTM.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "lanelet2_projection",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":lanelet2_projection_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":lanelet2_projection"],
+)
+
+# mrt_add_tests(test): one gtest per test/*.cpp.
+cc_test(
+    name = "lanelet2_projection-gtest-test_Geocentric",
+    srcs = [
+        "test/test_Geocentric.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["test"],
+    deps = [
+        ":lanelet2_projection_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "lanelet2_projection-gtest-test_LocalCartesian",
+    srcs = [
+        "test/test_LocalCartesian.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["test"],
+    deps = [
+        ":lanelet2_projection_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "lanelet2_projection-gtest-test_Mercator",
+    srcs = [
+        "test/test_Mercator.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["test"],
+    deps = [
+        ":lanelet2_projection_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "lanelet2_projection-gtest-test_UTM",
+    srcs = [
+        "test/test_UTM.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["test"],
+    deps = [
+        ":lanelet2_projection_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
 
 ### PACKAGING
 
+ament_index(
+    name = "ament_index",
+    libraries = [":lanelet2_projection"],
+    package_xml = "package.xml",
+)
+
 ament_package(
     name = "ament_package",
+    build_type = "cmake",
+    cmake_export_targets = False,
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [":lanelet2_projection"],
     package_xml = "package.xml",
     deps = [
+        ":ament_index",
         "@ament_cmake_core//:ament_package",
+        "@lanelet2_core//:ament_package",
         "@lanelet2_io//:ament_package",
         "@mrt_cmake_modules//:ament_package",
         "@rosdistro//:ament_package",
