@@ -13,27 +13,206 @@
 # limitations under the License.
 
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+# mola_relocalization is optional upstream (find_package(... QUIET)); it isn't
+# ported yet, so HAVE_MOLA_RELOCALIZATION is left undefined, exactly as a CMake
+# build without it would.
+
+CORE_DEPENDENCIES = {
+    "@mp2p_icp_core//:mp2p_icp": "@mp2p_icp_core//:mp2p_icp_library",
+    "@mp2p_icp_core//:mp2p_icp_filters": "@mp2p_icp_core//:mp2p_icp_filters_library",
+    "@mp2p_icp_core//:mp2p_icp_map": "@mp2p_icp_core//:mp2p_icp_map_library",
+    "@mrpt_gui//:mrpt_gui": "@mrpt_gui//:mrpt_gui_library",
+    "@mrpt_libros_bridge//:mrpt_libros_bridge": "@mrpt_libros_bridge//:mrpt_libros_bridge_library",
+    "@mrpt_slam//:mrpt_slam": "@mrpt_slam//:mrpt_slam_library",
+    "@mrpt_viz//:mrpt_viz": "@mrpt_viz//:mrpt_viz_library",
+}
+
+NODE_DEPENDENCIES = {
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@mrpt_msgs//:cc_shared": "@mrpt_msgs//:cc",
+    "@mrpt_msgs_bridge//:mrpt_msgs_bridge": "@mrpt_msgs_bridge//:mrpt_msgs_bridge_library",
+    "@nav_msgs//:cc_shared": "@nav_msgs//:cc",
+    "@pose_cov_ops//:pose_cov_ops": "@pose_cov_ops//:pose_cov_ops_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+### LIBRARIES
+
+cc_library(
+    name = "mrpt_pf_localization_core_library",
+    srcs = ["src/mrpt_pf_localization/mrpt_pf_localization_core.cpp"],
+    hdrs = ["include/mrpt_pf_localization/mrpt_pf_localization_core.h"],
+    includes = ["include"],
+    deps = CORE_DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "mrpt_pf_localization_core",
+    dynamic_deps = CORE_DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mrpt_pf_localization_core_library"],
+)
+
+cc_library(
+    name = "mrpt_pf_localization_node_headers",
+    hdrs = ["include/mrpt_pf_localization_node.h"],
+    includes = ["include"],
+    deps = [":mrpt_pf_localization_core_library"] + NODE_DEPENDENCIES.values(),
+)
+
+cc_library(
+    name = "mrpt_pf_localization_component_library",
+    srcs = ["src/mrpt_pf_localization_component.cpp"],
+    local_defines = ros_local_defines(),
+    deps = [":mrpt_pf_localization_node_headers"],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "mrpt_pf_localization_component",
+    dynamic_deps = CORE_DEPENDENCIES.keys() + NODE_DEPENDENCIES.keys() + [
+        ":mrpt_pf_localization_core",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mrpt_pf_localization_component_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = CORE_DEPENDENCIES.keys() + NODE_DEPENDENCIES.keys() + [
+        ":mrpt_pf_localization_core",
+    ],
+)
+
+### EXECUTABLES
+
+# src/main.cpp #includes the component source and spins it in a plain main().
+cc_library(
+    name = "mrpt_pf_localization_component_source",
+    textual_hdrs = ["src/mrpt_pf_localization_component.cpp"],
+)
+
+cc_binary(
+    name = "mrpt_pf_localization_node",
+    srcs = ["src/main.cpp"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":mrpt_pf_localization_component_source",
+        ":mrpt_pf_localization_node_headers",
+    ],
+)
+
+rclcpp_components_register_node(
+    name = "mrpt_pf_localization_composable",
+    component = ":mrpt_pf_localization_component",
+    data = [":ament_index"],
+    node_name = "mrpt_pf_localization_composable",
+    plugin = "PFLocalizationNode",
+)
+
+### TESTS
+
+cc_test(
+    name = "mrpt_pf_localization-test",
+    srcs = ["test/test_pf_localization.cpp"],
+    data = [
+        ":ament_index",
+        "@mrpt_tutorials//:ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    # The test reads its params from MRPT_LOCALIZATION_SOURCE_DIR "/params/"
+    # and the mrpt_tutorials maps/datasets from MRPT_LOCALIZATION_SOURCE_DIR
+    # "/../mrpt_tutorials/"; in the runfiles both live under share/.
+    local_defines = ['MRPT_LOCALIZATION_SOURCE_DIR=\\"share/mrpt_pf_localization\\"'],
+    deps = [
+        ":mrpt_pf_localization_core_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
 
 ### PACKAGING
 
-ament_package(
-    name = "ament_package",
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/localization.launch.py",
+        "params/default.config.yaml",
+        "params/default-relocalization-pipeline.yaml",
+        "params/map-occgrid2d.ini",
+        "params/no-overrides.yaml",
+    ],
+    libraries = [
+        ":mrpt_pf_localization_component",
+        ":mrpt_pf_localization_core",
+    ],
     package_xml = "package.xml",
     deps = [
+        "@mp2p_icp_core//:ament_index",
+        "@mrpt_gui//:ament_index",
+        "@mrpt_libros_bridge//:ament_index",
+        "@mrpt_slam//:ament_index",
+        "@mrpt_viz//:ament_index",
+    ],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_name = "export_mrpt_pf_localization",
+    components = [":mrpt_pf_localization_composable_record"],
+    executables = [
+        ":mrpt_pf_localization_composable",
+        ":mrpt_pf_localization_node",
+    ],
+    headers = [
+        "include/mrpt_pf_localization/mrpt_pf_localization_core.h",
+        "include/mrpt_pf_localization_node.h",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":mrpt_pf_localization_component",
+        ":mrpt_pf_localization_core",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_cmake_lint_cmake//:ament_package",
         "@ament_cmake_xmllint//:ament_package",
         "@ament_lint_auto//:ament_package",
-        "@mola_relocalization//:ament_package",
+        "@geometry_msgs//:ament_package",
         "@mp2p_icp//:ament_package",
+        "@mp2p_icp_core//:ament_package",
+        "@mrpt_gui//:ament_package",
         "@mrpt_libros_bridge//:ament_package",
         "@mrpt_msgs//:ament_package",
         "@mrpt_msgs_bridge//:ament_package",
-        "@mrpt_tutorials//:ament_package",
+        "@mrpt_slam//:ament_package",
+        "@mrpt_viz//:ament_package",
         "@nav_msgs//:ament_package",
         "@pose_cov_ops//:ament_package",
         "@rclcpp//:ament_package",
@@ -43,10 +222,16 @@ ament_package(
         "@std_msgs//:ament_package",
         "@tf2//:ament_package",
         "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
     ],
 )
 
 launch_ros_binary(
     name = "launch_localization_launch_py",
     src = "launch/localization.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":mrpt_pf_localization_composable",
+        ":mrpt_pf_localization_node",
+    ],
 )

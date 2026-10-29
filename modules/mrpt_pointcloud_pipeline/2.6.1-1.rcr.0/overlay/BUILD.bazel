@@ -13,22 +13,138 @@
 # limitations under the License.
 
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    "@mp2p_icp_core//:mp2p_icp": "@mp2p_icp_core//:mp2p_icp_library",
+    "@mp2p_icp_core//:mp2p_icp_filters": "@mp2p_icp_core//:mp2p_icp_filters_library",
+    "@mrpt_gui//:mrpt_gui": "@mrpt_gui//:mrpt_gui_library",
+    "@mrpt_libros_bridge//:mrpt_libros_bridge": "@mrpt_libros_bridge//:mrpt_libros_bridge_library",
+    "@mrpt_maps//:mrpt_maps": "@mrpt_maps//:mrpt_maps_library",
+    "@mrpt_obs//:mrpt_obs": "@mrpt_obs//:mrpt_obs_library",
+    "@nav_msgs//:cc_shared": "@nav_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+cc_library(
+    name = "mrpt_pointcloud_pipeline_headers",
+    hdrs = ["include/mrpt_pointcloud_pipeline/mrpt_pointcloud_pipeline_node.h"],
+    includes = ["include"],
+    deps = DEPENDENCIES.values(),
+)
+
+### COMPONENT
+
+cc_library(
+    name = "mrpt_pointcloud_pipeline_component_library",
+    srcs = ["src/mrpt_pointcloud_pipeline_component.cpp"],
+    local_defines = ros_local_defines(),
+    deps = [":mrpt_pointcloud_pipeline_headers"],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "mrpt_pointcloud_pipeline_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mrpt_pointcloud_pipeline_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "mrpt_pointcloud_pipeline_composable",
+    component = ":mrpt_pointcloud_pipeline_component",
+    data = [":ament_index"],
+    node_name = "mrpt_pointcloud_pipeline_composable",
+    plugin = "LocalObstaclesNode",
+)
+
+### EXECUTABLE
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+# src/main.cpp #includes the component source and spins it in a plain main().
+cc_library(
+    name = "mrpt_pointcloud_pipeline_component_source",
+    textual_hdrs = ["src/mrpt_pointcloud_pipeline_component.cpp"],
+)
+
+cc_binary(
+    name = "mrpt_pointcloud_pipeline_node",
+    srcs = ["src/main.cpp"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":mrpt_pointcloud_pipeline_component_source",
+        ":mrpt_pointcloud_pipeline_headers",
+    ],
+)
 
 ### PACKAGING
 
-ament_package(
-    name = "ament_package",
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/pointcloud_pipeline.launch.py",
+        "params/point-cloud-pipeline.yaml",
+    ],
+    libraries = [":mrpt_pointcloud_pipeline_component"],
     package_xml = "package.xml",
     deps = [
+        "@mp2p_icp_core//:ament_index",
+        "@mrpt_gui//:ament_index",
+        "@mrpt_libros_bridge//:ament_index",
+        "@mrpt_maps//:ament_index",
+        "@mrpt_obs//:ament_index",
+    ],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_name = "export_mrpt_pointcloud_pipeline",
+    components = [":mrpt_pointcloud_pipeline_composable_record"],
+    executables = [
+        ":mrpt_pointcloud_pipeline_composable",
+        ":mrpt_pointcloud_pipeline_node",
+    ],
+    headers = ["include/mrpt_pointcloud_pipeline/mrpt_pointcloud_pipeline_node.h"],
+    include_prefix = "",
+    libraries = [":mrpt_pointcloud_pipeline_component"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_lint_cmake//:ament_package",
         "@ament_cmake_xmllint//:ament_package",
         "@ament_lint_auto//:ament_package",
         "@mp2p_icp//:ament_package",
+        "@mp2p_icp_core//:ament_package",
+        "@mrpt_gui//:ament_package",
         "@mrpt_libros_bridge//:ament_package",
+        "@mrpt_maps//:ament_package",
+        "@mrpt_obs//:ament_package",
         "@nav_msgs//:ament_package",
         "@rclcpp//:ament_package",
         "@rclcpp_components//:ament_package",
@@ -36,10 +152,16 @@ ament_package(
         "@sensor_msgs//:ament_package",
         "@tf2//:ament_package",
         "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
     ],
 )
 
 launch_ros_binary(
     name = "launch_pointcloud_pipeline_launch_py",
     src = "launch/pointcloud_pipeline.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":mrpt_pointcloud_pipeline_composable",
+        ":mrpt_pointcloud_pipeline_node",
+    ],
 )

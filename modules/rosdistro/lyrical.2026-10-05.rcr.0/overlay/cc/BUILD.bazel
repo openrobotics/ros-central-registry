@@ -2307,20 +2307,23 @@ cc_library(
 
 # libcairo.so also statically links (and so must export) cairo's own BCR
 # dependencies (declared as bazel_deps in MODULE.bazel for this purpose).
+# fontconfig/expat are linked and exported once by Qt's libgui_shared.so, and
+# libX11/libxcb/libXau by Qt's x11_shared on Linux (as for :vtk); take them
+# from there so a process loading both cairo and Qt/VTK (e.g. through PCL)
+# has a single copy, and so cc_shared_library doesn't see two exporters.
 cc_shared_library(
     name = "cairo",
     dynamic_deps = [
         ":libpng",
         ":zlib",
-    ],
+        "@qtbase//:gui_shared",
+    ] + select({
+        "@platforms//os:linux": ["@qtbase//:x11_shared"],
+        "//conditions:default": [],
+    }),
     exports_filter = [
         ":cairo_library",
         "@cairo//:__subpackages__",
-        "@fontconfig//:__subpackages__",
-        "@libexpat//:__subpackages__",
-        "@libx11//:__subpackages__",
-        "@libxau//:__subpackages__",
-        "@libxcb//:__subpackages__",
         "@libxext//:__subpackages__",
         "@libxrender//:__subpackages__",
         "@pixman//:__subpackages__",
@@ -3306,7 +3309,14 @@ cc_shared_library(
         "@qtbase//:printsupport_shared",
         "@qtbase//:test_shared",
         "@qtbase//:widgets_shared",
-    ],
+    ] + select({
+        "@platforms//os:linux": [
+            "@qtbase//:dbus_shared",
+            "@qtbase//:x11_shared",
+            "@qtbase//:xcb_qpa_shared",
+        ],
+        "//conditions:default": [],
+    }),
     exports_filter = [
         "@libexpat//:__subpackages__",
         "@wxwidgets//:__subpackages__",
@@ -3315,7 +3325,25 @@ cc_shared_library(
         "@platforms//os:linux": ["-L$(location @libglvnd//:glvnd_stubs)"],
         "//conditions:default": [],
     }),
-    deps = [":wxwidgets_library"],
+    # wxWidgets is built on its Qt port, so every wx window needs a Qt platform
+    # (QPA) plugin at runtime. Qt is linked dynamically but its QPA plugins only
+    # exist as static (Q_IMPORT_PLUGIN) libraries, which qt_cc_binary links into
+    # Qt executables; wx programs are plain cc_binary targets, so link the
+    # per-OS platform plugins (plus offscreen) into libwxwidgets.so itself,
+    # where their static registration runs when the library is loaded.
+    deps = [
+        ":wxwidgets_library",
+        "@qtbase//:offscreen",
+    ] + select({
+        "@platforms//os:linux": [
+            "@qtbase//:qxcb_egl_integration",
+            "@qtbase//:qxcb_glx_integration",
+            "@qtbase//:xcb",
+        ],
+        "@platforms//os:macos": ["@qtbase//:cocoa"],
+        "@platforms//os:windows": ["@qtbase//:windows"],
+        "//conditions:default": [],
+    }),
 )
 
 alias(

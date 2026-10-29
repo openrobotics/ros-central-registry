@@ -13,26 +13,101 @@
 # limitations under the License.
 
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@mp2p_icp_core//:mp2p_icp_map": "@mp2p_icp_core//:mp2p_icp_map_library",
+    "@mrpt_libros_bridge//:mrpt_libros_bridge": "@mrpt_libros_bridge//:mrpt_libros_bridge_library",
+    "@mrpt_maps//:mrpt_maps": "@mrpt_maps//:mrpt_maps_library",
+    "@mrpt_msgs//:cc_shared": "@mrpt_msgs//:cc",
+    "@mrpt_nav_interfaces//:cc_shared": "@mrpt_nav_interfaces//:cc",
+    "@mrpt_topography//:mrpt_topography": "@mrpt_topography//:mrpt_topography_library",
+    "@nav_msgs//:cc_shared": "@nav_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "map_server_node",
+    srcs = [
+        "include/mrpt_map_server/map_server_node.h",
+        "src/map_server_node.cpp",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/mrpt_map_server.launch.py",
+        "params/README.md",
+        "params/metric-map-gridmap.ini",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@mp2p_icp_core//:ament_index",
+        "@mrpt_libros_bridge//:ament_index",
+        "@mrpt_maps//:ament_index",
+        "@mrpt_topography//:ament_index",
+    ],
+)
 
 ### PACKAGING
 
 ament_package(
     name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    executables = [":map_server_node"],
     package_xml = "package.xml",
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_lint_cmake//:ament_package",
         "@ament_cmake_xmllint//:ament_package",
         "@ament_lint_auto//:ament_package",
+        "@geometry_msgs//:ament_package",
         "@mp2p_icp//:ament_package",
+        "@mp2p_icp_core//:ament_package",
         "@mrpt_libros_bridge//:ament_package",
+        "@mrpt_maps//:ament_package",
         "@mrpt_msgs//:ament_package",
         "@mrpt_nav_interfaces//:ament_package",
+        "@mrpt_obs//:ament_package",
+        "@mrpt_topography//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
         "@rclcpp_components//:ament_package",
         "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
         "@tf2//:ament_package",
         "@tf2_geometry_msgs//:ament_package",
         "@tf2_ros//:ament_package",
@@ -42,4 +117,6 @@ ament_package(
 launch_ros_binary(
     name = "launch_mrpt_map_server_launch_py",
     src = "launch/mrpt_map_server.launch.py",
+    data = [":ament_index"],
+    deps = [":map_server_node"],
 )
