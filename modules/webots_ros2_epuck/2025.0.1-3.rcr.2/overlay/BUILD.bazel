@@ -13,10 +13,64 @@
 # limitations under the License.
 
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+py_library(
+    name = "webots_ros2_epuck",
+    srcs = [
+        "webots_ros2_epuck/__init__.py",
+        "webots_ros2_epuck/drive_calibrator.py",
+        "webots_ros2_epuck/epuck_node.py",
+        "webots_ros2_epuck/simple_mapper.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@builtin_interfaces//:py",
+        "@geometry_msgs//:py",
+        "@nav_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+        "@webots_ros2_driver",
+        "@webots_ros2_msgs//:py",
+    ],
+)
+
+py_binary(
+    name = "epuck_node",
+    srcs = ["webots_ros2_epuck/epuck_node.py"],
+    main = "webots_ros2_epuck/epuck_node.py",
+    deps = [":webots_ros2_epuck"],
+)
+
+py_binary(
+    name = "drive_calibrator",
+    srcs = ["webots_ros2_epuck/drive_calibrator.py"],
+    main = "webots_ros2_epuck/drive_calibrator.py",
+    deps = [":webots_ros2_epuck"],
+)
+
+py_binary(
+    name = "simple_mapper",
+    srcs = ["webots_ros2_epuck/simple_mapper.py"],
+    main = "webots_ros2_epuck/simple_mapper.py",
+    deps = [":webots_ros2_epuck"],
+)
 
 [
     py_pytest(
@@ -70,17 +124,57 @@ package(default_visibility = ["//visibility:public"])
 
 ### PACKAGING
 
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/rats_life_launch.py",
+        "launch/rats_life_waypoints_launch.py",
+        "launch/robot_launch.py",
+        "launch/robot_tools_launch.py",
+        "protos/LegoTallInterval.proto",
+        "protos/LegoTallWall.proto",
+        "resource/all.rviz",
+        "resource/epuck_webots.urdf",
+        "resource/epuck_world_map.pgm",
+        "resource/epuck_world_map.yaml",
+        "resource/map_rats_life.pgm",
+        "resource/map_rats_life.yaml",
+        "resource/nav2_params.yaml",
+        "resource/nav2_params_iron.yaml",
+        "resource/nav2_rats_life_waypoints.yaml",
+        "resource/ros2_control.yml",
+        "worlds/.epuck_world.wbproj",
+        "worlds/.rats_life_benchmark.wbproj",
+        "worlds/epuck_world.wbt",
+        "worlds/rats_life_benchmark.wbt",
+    ],
+    executables = [
+        ":drive_calibrator",
+        ":epuck_node",
+        ":simple_mapper",
+    ],
+    package_xml = "package.xml",
+)
+
 ament_package(
     name = "ament_package",
+    console_scripts = {
+        "drive_calibrator": "webots_ros2_epuck.drive_calibrator:main",
+        "epuck_node": "webots_ros2_epuck.epuck_node:main",
+        "simple_mapper": "webots_ros2_epuck.simple_mapper:main",
+    },
     package_xml = "package.xml",
+    python = [":webots_ros2_epuck"],
     setup_cfg = "setup.cfg",
     deps = [
+        ":ament_index",
         "@ament_copyright//:ament_package",
         "@builtin_interfaces//:ament_package",
         "@controller_manager//:ament_package",
         "@diff_drive_controller//:ament_package",
         "@geometry_msgs//:ament_package",
         "@joint_state_broadcaster//:ament_package",
+        "@nav2_bringup//:ament_package",
         "@nav_msgs//:ament_package",
         "@rclpy//:ament_package",
         "@robot_state_publisher//:ament_package",
@@ -98,6 +192,11 @@ ament_package(
 launch_ros_binary(
     name = "launch_rats_life_launch_py",
     src = "launch/rats_life_launch.py",
+    data = [
+        ":ament_index",
+        "@nav2_bringup//:ament_index",
+        "@rviz2//:ament_index",
+    ],
     deps = [
         ":launch_robot_launch_py",
         "@nav2_bringup//launch:bringup_launch",
@@ -106,14 +205,21 @@ launch_ros_binary(
         "@nav2_bringup//launch:navigation_launch",
         "@nav2_bringup//launch:slam_launch",
         "@nav2_bringup//launch:speed_zone_launch",
+        "@rviz2",
     ],
 )
 
 launch_ros_binary(
     name = "launch_rats_life_waypoints_launch_py",
     src = "launch/rats_life_waypoints_launch.py",
+    data = [
+        ":ament_index",
+        "@nav2_bringup//:ament_index",
+        "@rviz2//:ament_index",
+    ],
     deps = [
         ":launch_robot_launch_py",
+        ":simple_mapper",
         "@geometry_msgs//:py",
         "@nav2_bringup//launch:bringup_launch",
         "@nav2_bringup//launch:keepout_zone_launch",
@@ -121,6 +227,7 @@ launch_ros_binary(
         "@nav2_bringup//launch:navigation_launch",
         "@nav2_bringup//launch:slam_launch",
         "@nav2_bringup//launch:speed_zone_launch",
+        "@rviz2",
     ],
 )
 
@@ -128,18 +235,31 @@ launch_ros_binary(
     name = "launch_robot_launch_py",
     src = "launch/robot_launch.py",
     data = [
+        ":ament_index",
         "@controller_manager//:ament_index",
+        "@diff_drive_controller//:ament_index",
+        "@joint_state_broadcaster//:ament_index",
         "@robot_state_publisher//:ament_index",
         "@tf2_ros//:ament_index",
+        "@webots_ros2_control//:ament_index",
+        "@webots_ros2_driver//:ament_index",
     ],
     deps = [
+        ":epuck_node",
         ":launch_robot_tools_launch_py",
+        ":webots_ros2_epuck",
+        "@controller_manager//:spawner",
         "@nav2_bringup//launch:bringup_launch",
         "@nav2_bringup//launch:keepout_zone_launch",
         "@nav2_bringup//launch:localization_launch",
         "@nav2_bringup//launch:navigation_launch",
         "@nav2_bringup//launch:slam_launch",
         "@nav2_bringup//launch:speed_zone_launch",
+        "@robot_state_publisher",
+        "@tf2_ros//:static_transform_publisher",
+        "@webots_ros2_driver",
+        "@webots_ros2_driver//:driver",
+        "@webots_ros2_driver//:ros2_supervisor.py",
     ],
 )
 
@@ -147,14 +267,19 @@ launch_ros_binary(
     name = "launch_robot_tools_launch_py",
     src = "launch/robot_tools_launch.py",
     data = [
+        ":ament_index",
+        "@nav2_bringup//:ament_index",
         "@rviz2//:ament_index",
     ],
     deps = [
+        ":simple_mapper",
+        ":webots_ros2_epuck",
         "@nav2_bringup//launch:bringup_launch",
         "@nav2_bringup//launch:keepout_zone_launch",
         "@nav2_bringup//launch:localization_launch",
         "@nav2_bringup//launch:navigation_launch",
         "@nav2_bringup//launch:slam_launch",
         "@nav2_bringup//launch:speed_zone_launch",
+        "@rviz2",
     ],
 )

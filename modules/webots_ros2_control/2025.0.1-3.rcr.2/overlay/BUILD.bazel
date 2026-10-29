@@ -12,16 +12,148 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+HEADERS = [
+    "include/webots_ros2_control/Ros2Control.hpp",
+    "include/webots_ros2_control/Ros2ControlSystem.hpp",
+    "include/webots_ros2_control/Ros2ControlSystemInterface.hpp",
+]
+
+DEPENDENCIES = {
+    "@controller_manager//:controller_manager": "@controller_manager//:controller_manager_library",
+    "@hardware_interface//:hardware_interface": "@hardware_interface//:hardware_interface_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@webots_ros2_driver//:Controller": "@webots_ros2_driver//:Controller_library",
+    "@webots_ros2_driver//:CppController": "@webots_ros2_driver//:CppController_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+LOCAL_DEFINES = ros_local_defines() + [
+    "HARDWARE_INTERFACE_VERSION_MAJOR=6",
+    "HARDWARE_INTERFACE_VERSION_MINOR=10",
+    "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+    "ROLLING",
+    "_FILE_OFFSET_BITS=64",
+]
+
+collect_transitive_dynamic_deps(
+    name = "deps_dynamic",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_library(
+    name = "webots_ros2_control_library",
+    srcs = ["src/Ros2Control.cpp"],
+    hdrs = HEADERS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = ["include"],
+    local_defines = LOCAL_DEFINES,
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "webots_ros2_control",
+    dynamic_deps = [":deps_dynamic"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":webots_ros2_control_library"],
+)
+
+cc_library(
+    name = "webots_ros2_control_system_library",
+    srcs = ["src/Ros2ControlSystem.cpp"],
+    hdrs = HEADERS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = ["include"],
+    local_defines = LOCAL_DEFINES,
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "webots_ros2_control_system",
+    dynamic_deps = [":deps_dynamic"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":webots_ros2_control_system_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":webots_ros2_control",
+        ":webots_ros2_control_system",
+    ],
+)
 
 ### PACKAGING
 
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":webots_ros2_control",
+        ":webots_ros2_control_system",
+    ],
+    package_xml = "package.xml",
+    plugin_categories = {
+        "webots_ros2_control.xml": "webots_ros2_driver",
+        "webots_ros2_control_system.xml": "webots_ros2_control",
+    },
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@controller_manager//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosdistro//:ament_package",
+        "@webots_ros2_driver//:ament_package",
+    ],
+)
+
 ament_package(
     name = "ament_package",
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [
+        ":webots_ros2_control",
+        ":webots_ros2_control_system",
+    ],
     package_xml = "package.xml",
+    plugin_categories = {
+        "webots_ros2_control.xml": "webots_ros2_driver",
+        "webots_ros2_control_system.xml": "webots_ros2_control",
+    },
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_lint_auto//:ament_package",
         "@ament_lint_common//:ament_package",

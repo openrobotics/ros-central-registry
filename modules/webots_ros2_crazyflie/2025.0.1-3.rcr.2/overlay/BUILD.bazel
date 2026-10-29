@@ -13,17 +13,62 @@
 # limitations under the License.
 
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+py_library(
+    name = "webots_ros2_crazyflie",
+    srcs = [
+        "webots_ros2_crazyflie/__init__.py",
+        "webots_ros2_crazyflie/crazyflie_driver.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@builtin_interfaces//:py",
+        "@rclpy",
+        "@tf_transformations",
+        "@webots_ros2_driver",
+        requirement("numpy"),
+    ],
+)
 
 ### PACKAGING
 
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/robot_launch.py",
+        "resource/crazyflie_webots.urdf",
+        "worlds/.crazyflie_apartment.wbproj",
+        "worlds/crazyflie_apartment.wbt",
+    ],
+    package_xml = "package.xml",
+)
+
 ament_package(
     name = "ament_package",
+    console_scripts = {
+        "crazyflie_driver": "webots_ros2_crazyflie.crazyflie_driver:main",
+    },
     package_xml = "package.xml",
+    python = [":webots_ros2_crazyflie"],
     setup_cfg = "setup.cfg",
     deps = [
+        ":ament_index",
         "@ament_copyright//:ament_package",
         "@ament_flake8//:ament_package",
         "@ament_pep257//:ament_package",
@@ -38,4 +83,14 @@ ament_package(
 launch_ros_binary(
     name = "launch_robot_launch_py",
     src = "launch/robot_launch.py",
+    data = [
+        ":ament_index",
+        "@webots_ros2_driver//:ament_index",
+    ],
+    deps = [
+        ":webots_ros2_crazyflie",
+        "@webots_ros2_driver",
+        "@webots_ros2_driver//:driver",
+        "@webots_ros2_driver//:ros2_supervisor.py",
+    ],
 )

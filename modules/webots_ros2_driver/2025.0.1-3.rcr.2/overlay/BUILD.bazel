@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@pip_ros//:requirements.bzl", "requirement")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
@@ -473,7 +474,6 @@ cc_binary(
         "-Wno-missing-template-arg-list-after-template-kw",
         "-Wno-parentheses",
     ],
-    data = [":ament_index"],
     dynamic_deps = [":transitive_dynamic_deps"],
     local_defines = ros_local_defines() + [
         "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
@@ -487,8 +487,13 @@ cc_binary(
 )
 
 cc_binary(
-    name = "webots-controller",
+    name = "scripts/webots-controller",
     srcs = ["webots/src/controller/launcher/webots_controller.c"],
+)
+
+alias(
+    name = "webots-controller",
+    actual = ":scripts/webots-controller",
 )
 
 py_library(
@@ -547,25 +552,40 @@ py_library(
         "webots_ros2_driver/webots_controller.py",
         "webots_ros2_driver/webots_launcher.py",
     ],
+    data = [
+        "scripts/webots_tcp_client.py",
+        ":Controller",
+        ":scripts/webots-controller",
+        "@rosdistro//cc:webots-bin",
+        "@rosdistro//cc:webots_runtime_data",
+    ],
     imports = [
         ".",
         "webots/lib/controller/python",
     ],
     deps = [
         "@geometry_msgs//:py",
+        "@rcl_interfaces//:py",
         "@rclpy",
         "@sensor_msgs//:py",
         "@std_msgs//:py",
+        "@tf2_geometry_msgs//:tf2_geometry_msgs_py",
         "@vision_msgs//:py",
         "@webots_ros2_importer",
         "@webots_ros2_msgs//:py",
+        requirement("packaging"),
+        requirement("pyyaml"),
     ],
+)
+
+alias(
+    name = "webots_ros2_driver",
+    actual = ":webots_ros2_driver_py",
 )
 
 py_binary(
     name = "ros2_supervisor.py",
     srcs = ["webots_ros2_driver/ros2_supervisor.py"],
-    data = [":ament_index"],
     main = "webots_ros2_driver/ros2_supervisor.py",
     deps = [":webots_ros2_driver_py"],
 )
@@ -574,7 +594,11 @@ ament_index(
     name = "ament_index",
     data = [
         "scripts/webots_tcp_client.py",
-        ":webots-controller",
+        ":scripts/webots-controller",
+    ],
+    executables = [
+        ":driver",
+        ":ros2_supervisor.py",
     ],
     libraries = [
         ":Controller",
@@ -583,12 +607,10 @@ ament_index(
         ":webots_ros2_driver_rgbd",
     ],
     package_xml = "package.xml",
-    plugins = {
-        "webots_ros2_driver": [
-            "webots_ros2_imu.xml",
-            "webots_ros2_rgbd.xml",
-        ],
-    },
+    plugins = [
+        "webots_ros2_imu.xml",
+        "webots_ros2_rgbd.xml",
+    ],
     deps = [
         "@ament_cmake//:ament_package",
         "@ament_cmake_python//:ament_package",
@@ -613,23 +635,16 @@ ament_index(
 )
 
 ament_package(
-    build_type = "cmake",
-    cmake_export_dependencies = False,
-    cmake_export_include_directories = False,
-    cmake_export_libraries = False,
-    cmake_export_targets = False,
-    colcon_hooks = False,
     data = [
         "scripts/webots_tcp_client.py",
+        ":scripts/webots-controller",
     ],
     executables = [
         ":driver",
         ":ros2_supervisor.py",
-        ":webots-controller",
     ],
     headers = WEBOTS_HEADERS,
     include_prefix = "",
-    install_package_xml = False,
     libraries = [
         ":Controller",
         ":CppController",
@@ -637,14 +652,13 @@ ament_package(
         ":webots_ros2_driver_rgbd",
     ],
     package_xml = "package.xml",
-    plugins = {
-        "webots_ros2_driver": [
-            "webots_ros2_imu.xml",
-            "webots_ros2_rgbd.xml",
-        ],
-    },
+    plugins = [
+        "webots_ros2_imu.xml",
+        "webots_ros2_rgbd.xml",
+    ],
     python = [":webots_ros2_driver_py"],
-    deps = [":ament_index"] + [
+    deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_python//:ament_package",
         "@ament_lint_auto//:ament_package",

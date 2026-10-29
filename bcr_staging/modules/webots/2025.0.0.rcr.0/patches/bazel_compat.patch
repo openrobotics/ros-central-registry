@@ -1,0 +1,311 @@
+diff --git a/lib/controller/python/controller/wb.py b/lib/controller/python/controller/wb.py
+--- a/lib/controller/python/controller/wb.py
++++ b/lib/controller/python/controller/wb.py
+@@ -16,14 +16,17 @@
+ import os
+ import sys
+ 
++webots_home = os.environ.get('WEBOTS_HOME', os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+ if sys.platform == 'linux' or sys.platform == 'linux2':
+     path = os.path.join('lib', 'controller', 'libController.so')
+ elif sys.platform == 'win32':
+     path = os.path.join('lib', 'controller', 'Controller.dll')
+ elif sys.platform == 'darwin':
+     path = os.path.join('Contents', 'lib', 'controller', 'libController.dylib')
++    if not os.path.exists(os.path.join(webots_home, path)):
++        path = os.path.join('lib', 'controller', 'libController.dylib')
+ 
+-wb = ctypes.cdll.LoadLibrary(os.path.join(os.environ['WEBOTS_HOME'], path))
++wb = ctypes.cdll.LoadLibrary(os.path.join(webots_home, path))
+ 
+ if sys.platform == 'win32':
+-    ctypes.cdll.LoadLibrary(os.path.join(os.environ['WEBOTS_HOME'], 'lib', 'controller', 'generic_robot_window.dll'))
++    ctypes.cdll.LoadLibrary(os.path.join(webots_home, 'lib', 'controller', 'generic_robot_window.dll'))
+diff --git a/lib/controller/python/vehicle/car.py b/lib/controller/python/vehicle/car.py
+--- a/lib/controller/python/vehicle/car.py
++++ b/lib/controller/python/vehicle/car.py
+@@ -36,13 +36,16 @@
+ 
+     def __init__(self):
+         super().__init__()
++        webots_home = os.environ.get('WEBOTS_HOME', os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+         if sys.platform == 'linux' or sys.platform == 'linux2':
+             path = os.path.join('lib', 'controller', 'libcar.so')
+         elif sys.platform == 'win32':
+             path = os.path.join('lib', 'controller', 'car.dll')
+         elif sys.platform == 'darwin':
+             path = os.path.join('Contents', 'lib', 'controller', 'libcar.dylib')
+-        self.api = ctypes.cdll.LoadLibrary(os.path.join(os.environ['WEBOTS_HOME'], path))
++            if not os.path.exists(os.path.join(webots_home, path)):
++                path = os.path.join('lib', 'controller', 'libcar.dylib')
++        self.api = ctypes.cdll.LoadLibrary(os.path.join(webots_home, path))
+         self.api.wbu_car_get_front_wheel_radius.restype = ctypes.c_double
+         self.api.wbu_car_get_indicator_period.restype = ctypes.c_double
+         self.api.wbu_car_get_left_steering_angle.restype = ctypes.c_double
+diff --git a/lib/controller/python/vehicle/driver.py b/lib/controller/python/vehicle/driver.py
+--- a/lib/controller/python/vehicle/driver.py
++++ b/lib/controller/python/vehicle/driver.py
+@@ -34,6 +34,7 @@
+ 
+     @staticmethod
+     def loadApi() -> ctypes.cdll:
++        webots_home = os.environ.get('WEBOTS_HOME', os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+         if sys.platform == 'linux' or sys.platform == 'linux2':
+             path = os.path.join('lib', 'controller')
+             car = 'libcar.so'
+@@ -44,10 +45,12 @@
+             driver = 'driver.dll'
+         elif sys.platform == 'darwin':
+             path = os.path.join('Contents', 'lib', 'controller')
++            if not os.path.exists(os.path.join(webots_home, path)):
++                path = os.path.join('lib', 'controller')
+             car = 'libcar.dylib'
+             driver = 'libdriver.dylib'
+-        ctypes.cdll.LoadLibrary(os.path.join(os.environ['WEBOTS_HOME'], path, car))
+-        Driver.api = ctypes.cdll.LoadLibrary(os.path.join(os.environ['WEBOTS_HOME'], path, driver))
++        ctypes.cdll.LoadLibrary(os.path.join(webots_home, path, car))
++        Driver.api = ctypes.cdll.LoadLibrary(os.path.join(webots_home, path, driver))
+ 
+     def __init__(self):
+         super().__init__()
+diff --git a/src/controller/launcher/webots_controller.c b/src/controller/launcher/webots_controller.c
+--- a/src/controller/launcher/webots_controller.c
++++ b/src/controller/launcher/webots_controller.c
+@@ -156,14 +156,55 @@
+ }
+ 
+ // Gets and stores the path to the Webots installation folder from the WEBOTS_HOME environment variable.
+-static bool get_webots_home() {
+-  if (!getenv("WEBOTS_HOME")) {
+-    fprintf(stderr, "Set the path to your webots installation folder in WEBOTS_HOME environment variable.\n");
+-    return false;
+-  } else
+-    WEBOTS_HOME = malloc(strlen(getenv("WEBOTS_HOME")) + 1);
+-  strcpy(WEBOTS_HOME, getenv("WEBOTS_HOME"));
+-  return true;
++static bool get_webots_home(const char *argv0) {
++  const char *env_home = getenv("WEBOTS_HOME");
++  if (env_home && env_home[0] != '\0') {
++    WEBOTS_HOME = strdup(env_home);
++    return true;
++  }
++  char candidate[4096];
++  char version_file[4096];
++  const char *runfiles_dir = getenv("RUNFILES_DIR");
++  const char *test_srcdir = getenv("TEST_SRCDIR");
++  const char *suffixes[] = {"webots+", "_main"};
++  if (argv0 && argv0[0] != '\0') {
++    for (int i = 0; i < 2; ++i) {
++      snprintf(candidate, sizeof(candidate), "%s.runfiles/%s", argv0, suffixes[i]);
++      snprintf(version_file, sizeof(version_file), "%s/resources/version.txt", candidate);
++      if (access(version_file, F_OK) == 0) {
++        WEBOTS_HOME = strdup(candidate);
++        return true;
++      }
++    }
++  }
++  const char *env_dirs[] = {runfiles_dir, test_srcdir};
++  for (int d = 0; d < 2; ++d) {
++    if (!env_dirs[d] || env_dirs[d][0] == '\0')
++      continue;
++    for (int i = 0; i < 2; ++i) {
++      snprintf(candidate, sizeof(candidate), "%s/%s", env_dirs[d], suffixes[i]);
++      snprintf(version_file, sizeof(version_file), "%s/resources/version.txt", candidate);
++      if (access(version_file, F_OK) == 0) {
++        WEBOTS_HOME = strdup(candidate);
++        return true;
++      }
++    }
++  }
++  if (argv0 && argv0[0] != '\0') {
++    char *dir = strdup(argv0);
++    char *slash = strrchr(dir, PATH_SEPARATOR[0]);
++    if (slash) {
++      *slash = '\0';
++      snprintf(version_file, sizeof(version_file), "%s/resources/version.txt", dir);
++      if (access(version_file, F_OK) == 0) {
++        WEBOTS_HOME = dir;
++        return true;
++      }
++    }
++    free(dir);
++  }
++  fprintf(stderr, "Set the path to your webots installation folder in WEBOTS_HOME environment variable.\n");
++  return false;
+ }
+ 
+ // Gets and stores the path to the latest installed version of Matlab on the system.
+@@ -757,7 +798,7 @@
+ 
+ int main(int argc, char **argv) {
+   // Check WEBOTS_HOME and exit if empty
+-  if (!get_webots_home())
++  if (!get_webots_home(argc > 0 ? argv[0] : NULL))
+     exit(1);
+ 
+   // Parse command line options
+diff --git a/src/webots/core/WbStandardPaths.cpp b/src/webots/core/WbStandardPaths.cpp
+--- a/src/webots/core/WbStandardPaths.cpp
++++ b/src/webots/core/WbStandardPaths.cpp
+@@ -23,6 +23,7 @@
+ #include <QtCore/QCoreApplication>
+ #include <QtCore/QDateTime>
+ #include <QtCore/QDir>
++#include <QtCore/QFileInfo>
+ #include <QtCore/QProcess>
+ #include <QtCore/QStandardPaths>
+ #include <QtCore/QString>
+@@ -46,7 +47,34 @@
+   const int depth = 3;
+ #endif
+   if (path.isEmpty()) {
++    const QString envHome = qEnvironmentVariable("WEBOTS_HOME");
++    if (!envHome.isEmpty() && QDir(envHome).exists()) {
++      path = QDir(envHome).absolutePath() + "/";
++      return path;
++    }
++    const QString appFilePath = QCoreApplication::applicationFilePath();
++    const QString runfilesDir = qEnvironmentVariable("RUNFILES_DIR");
++    const QString testSrcDir = qEnvironmentVariable("TEST_SRCDIR");
++    const QString candidates[] = {
++      appFilePath.isEmpty() ? QString() : appFilePath + ".runfiles/webots+",
++      appFilePath.isEmpty() ? QString() : appFilePath + ".runfiles/_main",
++      runfilesDir.isEmpty() ? QString() : runfilesDir + "/webots+",
++      runfilesDir.isEmpty() ? QString() : runfilesDir + "/_main",
++      testSrcDir.isEmpty() ? QString() : testSrcDir + "/webots+",
++      testSrcDir.isEmpty() ? QString() : testSrcDir + "/_main",
++    };
++    for (const QString &candidate : candidates) {
++      if (!candidate.isEmpty() && QFileInfo::exists(candidate + "/resources/version.txt")) {
++        path = QDir(candidate).absolutePath() + "/";
++        return path;
++      }
++    }
+     QDir dir(QCoreApplication::applicationDirPath());
++    if (QFileInfo::exists(dir.absoluteFilePath("../resources/version.txt"))) {
++      dir.cdUp();
++      path = dir.absolutePath() + "/";
++      return path;
++    }
+     for (int i = 0; i < depth; i++)
+       if (!dir.cdUp())
+         assert(false);
+@@ -56,7 +84,7 @@
+ };
+ 
+ #ifdef __APPLE__
+-static const QString cMacOsContents = "Contents/";
++static const QString cMacOsContents = QDir(WbStandardPaths::webotsHomePath() + "Contents").exists() ? "Contents/" : "";
+ #else
+ static const QString cMacOsContents;
+ #endif
+@@ -90,7 +118,7 @@
+ 
+ const QString &WbStandardPaths::resourcesPath() {
+ #ifdef __APPLE__
+-  static QString path(webotsHomePath() + "Contents/Resources/");
++  static QString path(webotsHomePath() + (cMacOsContents.isEmpty() ? "resources/" : "Contents/Resources/"));
+ #else
+   static QString path(webotsHomePath() + "resources/");
+ #endif
+diff --git a/src/webots/gui/main.cpp b/src/webots/gui/main.cpp
+--- a/src/webots/gui/main.cpp
++++ b/src/webots/gui/main.cpp
+@@ -119,10 +119,43 @@
+ #endif  // NDEBUG
+ #elif defined(__linux__)
+   // on Linux, the webots binary is located in $WEBOTS_HOME/bin/webots-bin
+-  const QString webotsDirPath = QDir(QFileInfo(argv[0]).absolutePath() + "/..").canonicalPath();
++  QString webotsDirPath = QDir(QFileInfo(argv[0]).absolutePath() + "/..").canonicalPath();
+ #elif defined(__APPLE__)
+   // on macOS, the webots binary is located in $WEBOTS_HOME/Contents/MacOS/webots
+-  const QString webotsDirPath = QDir(QFileInfo(argv[0]).absolutePath() + "/../..").canonicalPath();
++  QString webotsDirPath = QDir(QFileInfo(argv[0]).absolutePath() + "/../..").canonicalPath();
++#endif
++  {
++    const QString envHome = qEnvironmentVariable("WEBOTS_HOME");
++    if (!envHome.isEmpty() && QDir(envHome).exists()) {
++      webotsDirPath = QDir(envHome).absolutePath();
++    } else {
++      const QString argv0Path = QFileInfo(argv[0]).absoluteFilePath();
++      const QString runfilesDir = qEnvironmentVariable("RUNFILES_DIR");
++      const QString testSrcDir = qEnvironmentVariable("TEST_SRCDIR");
++      const QString candidates[] = {
++        argv0Path + ".runfiles/webots+",
++        argv0Path + ".runfiles/_main",
++        runfilesDir.isEmpty() ? QString() : runfilesDir + "/webots+",
++        runfilesDir.isEmpty() ? QString() : runfilesDir + "/_main",
++        testSrcDir.isEmpty() ? QString() : testSrcDir + "/webots+",
++        testSrcDir.isEmpty() ? QString() : testSrcDir + "/_main",
++        QFileInfo(argv[0]).absolutePath() + "/..",
++      };
++      for (const QString &candidate : candidates) {
++        if (!candidate.isEmpty() && QFileInfo::exists(candidate + "/resources/version.txt")) {
++          webotsDirPath = QDir(candidate).absolutePath();
++          break;
++        }
++      }
++      if (!webotsDirPath.isEmpty())
++        qputenv("WEBOTS_HOME", webotsDirPath.toUtf8());
++    }
++  }
++#ifdef __linux__
++  if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM") &&
++      qEnvironmentVariableIsEmpty("DISPLAY") &&
++      qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY"))
++    qputenv("QT_QPA_PLATFORM", "offscreen");
+ #endif
+   QLocale::setDefault(QLocale::c());
+ 
+@@ -149,6 +182,8 @@
+ 
+ #ifdef __APPLE__
+   QString qtFiltersFilePath = QDir::fromNativeSeparators(webotsDirPath + "/Contents/Resources/qt_warning_filters.conf");
++  if (!QFileInfo::exists(qtFiltersFilePath))
++    qtFiltersFilePath = QDir::fromNativeSeparators(webotsDirPath + "/resources/qt_warning_filters.conf");
+ #else
+   QString qtFiltersFilePath = QDir::fromNativeSeparators(webotsDirPath + "/resources/qt_warning_filters.conf");
+ #endif
+diff --git a/src/webots/vrml/WbUrl.cpp b/src/webots/vrml/WbUrl.cpp
+--- a/src/webots/vrml/WbUrl.cpp
++++ b/src/webots/vrml/WbUrl.cpp
+@@ -33,6 +33,20 @@
+ 
+ namespace {
+   static QString gWorldFileName;
++
++  QString resolveLocalWebotsAsset(const QString &url) {
++    if (!WbUrl::isWeb(url))
++      return url;
++    const QRegularExpression re("^" + WbUrl::remoteWebotsAssetRegex(true));
++    const QRegularExpressionMatch match = re.match(url);
++    if (match.hasMatch()) {
++      const QString localCandidate =
++        QDir::cleanPath(WbStandardPaths::webotsHomePath() + url.mid(match.capturedLength(0)));
++      if (QFileInfo::exists(localCandidate))
++        return localCandidate;
++    }
++    return url;
++  }
+ };
+ 
+ void WbUrl::setWorldFileName(const QString &fileName) {
+@@ -121,6 +135,7 @@
+ 
+   QString url = rawUrl;
+   url.replace("\\", "/");
++  url = resolveLocalWebotsAsset(url);
+ 
+   if (isWeb(url))
+     return url;
+@@ -262,8 +277,10 @@
+   // use cross-platform forward slashes
+   QString url = rawUrl;
+   url.replace("\\", "/");
++  url = resolveLocalWebotsAsset(url);
+   QString parentUrl = rawParentUrl;
+   parentUrl.replace("\\", "/");
++  parentUrl = resolveLocalWebotsAsset(parentUrl);
+ 
+   // cases where no URL manipulation is necessary
+   if (isWeb(url))

@@ -13,10 +13,36 @@
 # limitations under the License.
 
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
 load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+py_library(
+    name = "webots_ros2_mavic",
+    srcs = [
+        "webots_ros2_mavic/__init__.py",
+        "webots_ros2_mavic/mavic_driver.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@builtin_interfaces//:py",
+        "@rclpy",
+        "@webots_ros2_driver",
+    ],
+)
 
 [
     py_pytest(
@@ -46,11 +72,24 @@ package(default_visibility = ["//visibility:public"])
 
 ### PACKAGING
 
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/robot_launch.py",
+        "resource/mavic_webots.urdf",
+        "worlds/.mavic_world.wbproj",
+        "worlds/mavic_world.wbt",
+    ],
+    package_xml = "package.xml",
+)
+
 ament_package(
     name = "ament_package",
     package_xml = "package.xml",
+    python = [":webots_ros2_mavic"],
     setup_cfg = "setup.cfg",
     deps = [
+        ":ament_index",
         "@ament_copyright//:ament_package",
         "@builtin_interfaces//:ament_package",
         "@rclpy//:ament_package",
@@ -62,4 +101,14 @@ ament_package(
 launch_ros_binary(
     name = "launch_robot_launch_py",
     src = "launch/robot_launch.py",
+    data = [
+        ":ament_index",
+        "@webots_ros2_driver//:ament_index",
+    ],
+    deps = [
+        ":webots_ros2_mavic",
+        "@webots_ros2_driver",
+        "@webots_ros2_driver//:driver",
+        "@webots_ros2_driver//:ros2_supervisor.py",
+    ],
 )
