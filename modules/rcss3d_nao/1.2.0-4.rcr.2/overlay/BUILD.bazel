@@ -12,29 +12,137 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
 load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
-    default_applicable_licenses = [":package_license"],
+    default_applicable_licenses = [":license"],
     default_visibility = ["//visibility:public"],
 )
 
 license(
-    name = "package_license",
-    license_kinds = [
-        "@rules_license//licenses/spdx:Apache-2.0",
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+HEADERS = ["include/rcss3d_nao/rcss3d_nao_node.hpp"]
+
+DEPENDENCIES = {
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@nao_lola_command_msgs//:cc_shared": "@nao_lola_command_msgs//:cc",
+    "@nao_lola_sensor_msgs//:cc_shared": "@nao_lola_sensor_msgs//:cc",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rcss3d_agent//:rcss3d_agent": "@rcss3d_agent//:rcss3d_agent_library",
+    "@rcss3d_agent_msgs_to_soccer_interfaces//:rcss3d_agent_msgs_to_soccer_interfaces": "@rcss3d_agent_msgs_to_soccer_interfaces//:rcss3d_agent_msgs_to_soccer_interfaces_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@soccer_vision_3d_msgs//:cc_shared": "@soccer_vision_3d_msgs//:cc",
+}
+
+cc_library(
+    name = "rcss3d_nao_node_library",
+    srcs = [
+        "src/angle_conversion.hpp",
+        "src/complementary_filter.cpp",
+        "src/complementary_filter.hpp",
+        "src/conversion.cpp",
+        "src/conversion.hpp",
+        "src/joint_pid.hpp",
+        "src/nao_joint_velocities.hpp",
+        "src/nao_joints_pid.cpp",
+        "src/nao_joints_pid.hpp",
+        "src/nao_to_sim.cpp",
+        "src/nao_to_sim.hpp",
+        "src/rcss3d_nao_node.cpp",
+        "src/sim_to_nao.cpp",
+        "src/sim_to_nao.hpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "rcss3d_nao_node",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rcss3d_nao_node_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rcss3d_nao_node"],
+)
+
+rclcpp_components_register_node(
+    name = "rcss3d_nao",
+    component = ":rcss3d_nao_node",
+    data = [":ament_index"],
+    node_name = "rcss3d_nao",
+    plugin = "rcss3d_nao::Rcss3dNaoNode",
+)
+
+### TESTS
+
+cc_library(
+    name = "_test_internal_headers",
+    hdrs = [
+        "src/angle_conversion.hpp",
+        "src/complementary_filter.hpp",
+        "src/conversion.hpp",
+        "src/joint_pid.hpp",
+        "src/nao_joint_velocities.hpp",
+        "src/nao_joints_pid.hpp",
+        "src/nao_to_sim.hpp",
+        "src/sim_to_nao.hpp",
+    ],
+    includes = ["src"],
+)
+
+cc_test(
+    name = "test_nao_to_sim",
+    srcs = ["test/test_nao_to_sim.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":_test_internal_headers",
+        ":rcss3d_nao_node_library",
+        "@rosdistro//cc:googletest",
     ],
 )
 
+cc_test(
+    name = "test_sim_to_nao",
+    srcs = ["test/test_sim_to_nao.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":_test_internal_headers",
+        ":rcss3d_nao_node_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_joint_pid",
+    srcs = ["test/test_joint_pid.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = DEPENDENCIES.values() + [
+        ":_test_internal_headers",
+        ":rcss3d_nao_node_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
 ament_index(
     name = "ament_index",
+    components = [":rcss3d_nao_record"],
+    libraries = [":rcss3d_nao_node"],
     package_xml = "package.xml",
     deps = [
-        "@ament_cmake//:ament_package",
-        "@ament_cmake_gtest//:ament_package",
-        "@ament_lint_auto//:ament_package",
-        "@ament_lint_common//:ament_package",
         "@geometry_msgs//:ament_package",
         "@nao_lola_command_msgs//:ament_package",
         "@nao_lola_sensor_msgs//:ament_package",
@@ -47,15 +155,28 @@ ament_index(
 )
 
 ament_package(
-    build_type = "cmake",
-    cmake_export_dependencies = False,
+    name = "ament_package",
+    cmake_export_dependencies_list = [
+        "geometry_msgs",
+        "nao_lola_command_msgs",
+        "nao_lola_sensor_msgs",
+        "rclcpp_components",
+        "rcss3d_agent",
+        "rcss3d_agent_msgs_to_soccer_interfaces",
+        "sensor_msgs",
+        "soccer_vision_3d_msgs",
+    ],
+    cmake_export_has_library_target = True,
     cmake_export_include_directories = False,
     cmake_export_libraries = False,
-    cmake_export_targets = False,
-    colcon_hooks = False,
-    install_package_xml = False,
+    cmake_export_name = "export_rcss3d_nao",
+    executables = [":rcss3d_nao"],
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [":rcss3d_nao_node"],
     package_xml = "package.xml",
-    deps = [":ament_index"] + [
+    deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_lint_auto//:ament_package",
@@ -66,6 +187,7 @@ ament_package(
         "@rclcpp_components//:ament_package",
         "@rcss3d_agent//:ament_package",
         "@rcss3d_agent_msgs_to_soccer_interfaces//:ament_package",
+        "@rosdistro//:ament_package",
         "@sensor_msgs//:ament_package",
         "@soccer_vision_3d_msgs//:ament_package",
     ],

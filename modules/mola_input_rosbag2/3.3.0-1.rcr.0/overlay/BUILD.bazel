@@ -12,20 +12,113 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:GPL-3.0-only"],
+)
+
+DEPENDENCIES = {
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@gps_msgs//:cc_shared": "@gps_msgs//:cc",
+    "@mola_kernel//:mola_kernel": "@mola_kernel//:mola_kernel_library",
+    "@mrpt_libros_bridge//:mrpt_libros_bridge": "@mrpt_libros_bridge//:mrpt_libros_bridge_library",
+    "@mrpt_obs//:mrpt_obs": "@mrpt_obs//:mrpt_obs_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_msgs//:cc_shared": "@tf2_msgs//:cc",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+HEADERS = ["include/mola_input_rosbag2/Rosbag2Dataset.h"]
+
+cc_library(
+    name = "mola_input_rosbag2_library",
+    srcs = ["src/Rosbag2Dataset.cpp"],
+    hdrs = HEADERS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+        "include/mola_input_rosbag2",
+        "src",
+    ],
+    local_defines = ros_local_defines() + [
+        "CV_BRIDGE_VERSION=0x040100",
+        "HAS_GPS_MSGS",
+        "MOLA_MAJOR_VERSION=3",
+        "MOLA_MINOR_VERSION=3",
+        "MOLA_PATCH_VERSION=0",
+        "MRPT_ROS2_BRIDGE_VERSION=0x040000",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "mola_input_rosbag2",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mola_input_rosbag2_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":mola_input_rosbag2"],
+)
 
 ### PACKAGING
 
-ament_package(
-    name = "ament_package",
+ament_index(
+    name = "ament_index",
+    libraries = [":mola_input_rosbag2"],
     package_xml = "package.xml",
+    sonames = {"mola_input_rosbag2": [
+        "libmola_input_rosbag2.so.3.3",
+        "libmola_input_rosbag2.so.3.3.0",
+    ]},
     deps = [
         "@cv_bridge//:ament_package",
         "@gps_msgs//:ament_package",
         "@mola_kernel//:ament_package",
         "@mrpt_libros_bridge//:ament_package",
+        "@mrpt_obs//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = HEADERS,
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [":mola_input_rosbag2"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@cv_bridge//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@mola_kernel//:ament_package",
+        "@mrpt_libros_bridge//:ament_package",
+        "@mrpt_obs//:ament_package",
         "@rosbag2_cpp//:ament_package",
         "@rosdistro//:ament_package",
         "@sensor_msgs//:ament_package",

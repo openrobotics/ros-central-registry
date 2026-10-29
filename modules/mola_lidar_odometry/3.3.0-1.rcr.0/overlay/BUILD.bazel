@@ -13,16 +13,380 @@
 # limitations under the License.
 
 load("@launch_ros//:defs.bzl", "launch_ros_binary")
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:GPL-3.0-only"],
+)
+
+DEPENDENCIES = {
+    "@mola_imu_preintegration//:mola_imu_preintegration": "@mola_imu_preintegration//:mola_imu_preintegration_library",
+    "@mola_kernel//:mola_kernel": "@mola_kernel//:mola_kernel_library",
+    "@mola_pose_list//:mola_pose_list": "@mola_pose_list//:mola_pose_list_library",
+    "@mola_yaml//:mola_yaml": "@mola_yaml//:mola_yaml_library",
+    "@mp2p_icp//:mp2p_icp": "@mp2p_icp//:mp2p_icp_library",
+    "@mp2p_icp//:mp2p_icp_common": "@mp2p_icp//:mp2p_icp_common_library",
+    "@mp2p_icp//:mp2p_icp_filters": "@mp2p_icp//:mp2p_icp_filters_library",
+    "@mp2p_icp//:mp2p_icp_map": "@mp2p_icp//:mp2p_icp_map_library",
+    "@mrpt_maps//:mrpt_maps": "@mrpt_maps//:mrpt_maps_library",
+    "@mrpt_obs//:mrpt_obs": "@mrpt_obs//:mrpt_obs_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+]
+
+HEADERS = [
+    "module/include/mola_lidar_odometry/GravityMapAligner.h",
+    "module/include/mola_lidar_odometry/ImuScanSync.h",
+    "module/include/mola_lidar_odometry/KeyframeDecider.h",
+    "module/include/mola_lidar_odometry/LidarOdometry.h",
+    "module/include/mola_lidar_odometry/MapFrameRelevel.h",
+]
+
+DATA_FILES = [
+    "config/diagnostics_aggregator.yaml",
+    "mola-cli-launchs/lidar_odometry_from_botanicgarden.yaml",
+    "mola-cli-launchs/lidar_odometry_from_botanicgarden_livox.yaml",
+    "mola-cli-launchs/lidar_odometry_from_citrusfarm.yaml",
+    "mola-cli-launchs/lidar_odometry_from_kitti.yaml",
+    "mola-cli-launchs/lidar_odometry_from_kitti360.yaml",
+    "mola-cli-launchs/lidar_odometry_from_kitti_output_ros2.yaml",
+    "mola-cli-launchs/lidar_odometry_from_mulran.yaml",
+    "mola-cli-launchs/lidar_odometry_from_ouster.yaml",
+    "mola-cli-launchs/lidar_odometry_from_oxford_spires.yaml",
+    "mola-cli-launchs/lidar_odometry_from_paris_luco.yaml",
+    "mola-cli-launchs/lidar_odometry_from_rawlog.yaml",
+    "mola-cli-launchs/lidar_odometry_from_rosbag1.yaml",
+    "mola-cli-launchs/lidar_odometry_from_rosbag2.yaml",
+    "mola-cli-launchs/lidar_odometry_ros2.yaml",
+    "pipelines/blocks/acceptance.yaml",
+    "pipelines/blocks/adaptive-threshold.yaml",
+    "pipelines/blocks/deskew-early.yaml",
+    "pipelines/blocks/deskew-viz.yaml",
+    "pipelines/blocks/icp-gicp.yaml",
+    "pipelines/blocks/icp-ndt.yaml",
+    "pipelines/blocks/icp-pt2pt.yaml",
+    "pipelines/blocks/imu-gravity.yaml",
+    "pipelines/blocks/initial-localization.yaml",
+    "pipelines/blocks/inputs.yaml",
+    "pipelines/blocks/localmap-gicp.yaml",
+    "pipelines/blocks/localmap-ndt.yaml",
+    "pipelines/blocks/localmap-pt2pt.yaml",
+    "pipelines/blocks/localmap-updates.yaml",
+    "pipelines/blocks/observations-common.yaml",
+    "pipelines/blocks/observations-gicp.yaml",
+    "pipelines/blocks/observations-ndt.yaml",
+    "pipelines/blocks/observations-pt2pt.yaml",
+    "pipelines/blocks/runtime.yaml",
+    "pipelines/blocks/simplemap.yaml",
+    "pipelines/blocks/visualization.yaml",
+    "pipelines/extras/lidar3d-kissicp-like.yaml",
+    "pipelines/lidar2d.yaml",
+    "pipelines/lidar3d-default-voxelavg.yaml",
+    "pipelines/lidar3d-default.yaml",
+    "pipelines/lidar3d-fastlio-matching.yaml",
+    "pipelines/lidar3d-gicp-dual-tsdf.yaml",
+    "pipelines/lidar3d-gicp-single-filter.yaml",
+    "pipelines/lidar3d-gicp.yaml",
+    "pipelines/lidar3d-icp-blend.yaml",
+    "pipelines/lidar3d-icp.yaml",
+    "pipelines/lidar3d-ndt-blend.yaml",
+    "pipelines/lidar3d-ndt.yaml",
+    "ros2-launchs/kitti-ros2-lidar-odometry.launch.py",
+    "ros2-launchs/ros2-lidar-odometry.launch.py",
+    "rviz2/kitti-lidar-odometry.rviz",
+    "rviz2/lidar-odometry.rviz",
+    "state-estimator-params/state-estimation-simple.yaml",
+    "test/kitti_00_fragment_gt.tum",
+    "test/mulran_KAIST01_fragment_gt.tum",
+    "test/rslidar_fragment_gt.tum",
+]
+
+cc_library(
+    name = "mola_lidar_odometry_library",
+    srcs = [
+        "module/src/GravityMapAligner.cpp",
+        "module/src/KeyframeDecider.cpp",
+        "module/src/LidarOdometry_AdaptiveVariables.cpp",
+        "module/src/LidarOdometry_GUI.cpp",
+        "module/src/LidarOdometry_InitialLocalization.cpp",
+        "module/src/LidarOdometry_Initialize.cpp",
+        "module/src/LidarOdometry_Main.cpp",
+        "module/src/LidarOdometry_MapServer.cpp",
+        "module/src/LidarOdometry_Parameters.cpp",
+        "module/src/LidarOdometry_ProcessScan.cpp",
+        "module/src/LidarOdometry_Publish.cpp",
+        "module/src/LidarOdometry_Relocalization.cpp",
+        "module/src/LidarOdometry_SensorCallbacks.cpp",
+        "module/src/MapFrameRelevel.cpp",
+        "module/src/libcfgpath/cfgpath.h",
+        "module/src/register.cpp",
+    ],
+    hdrs = HEADERS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    defines = [
+        "MOLA_MAJOR_VERSION=3",
+        "MOLA_MINOR_VERSION=3",
+        "MOLA_PATCH_VERSION=0",
+        "MP2P_ICP_HAS_MOLA_IMU_PREINTEGRATION",
+    ],
+    includes = [
+        "module/include",
+        "module/include/mola_lidar_odometry",
+        "module/src",
+    ],
+    local_defines = ros_local_defines() + [
+        "MOLA_LO_HAS_ONLINE_VERSION_CHECK",
+        'MOLA_LO_VERSION=\\"3.3.0\\"',
+        "MP2P_ICP_VERSION=0x030000",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mola_lidar_odometry",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mola_lidar_odometry_library"],
+)
+
+CLI_DEPENDENCIES = DEPENDENCIES | {
+    "@mola_input_kitti360_dataset//:mola_input_kitti360_dataset": "@mola_input_kitti360_dataset//:mola_input_kitti360_dataset_library",
+    "@mola_input_kitti_dataset//:mola_input_kitti_dataset": "@mola_input_kitti_dataset//:mola_input_kitti_dataset_library",
+    "@mola_input_mulran_dataset//:mola_input_mulran_dataset": "@mola_input_mulran_dataset//:mola_input_mulran_dataset_library",
+    "@mola_input_paris_luco_dataset//:mola_input_paris_luco_dataset": "@mola_input_paris_luco_dataset//:mola_input_paris_luco_dataset_library",
+    "@mola_input_rawlog//:mola_input_rawlog": "@mola_input_rawlog//:mola_input_rawlog_library",
+    "@mola_input_rosbag2//:mola_input_rosbag2": "@mola_input_rosbag2//:mola_input_rosbag2_library",
+    "@mola_metric_maps//:mola_metric_maps": "@mola_metric_maps//:mola_metric_maps_library",
+    "@mola_state_estimation_simple//:mola_state_estimation_simple": "@mola_state_estimation_simple//:mola_state_estimation_simple_library",
+    "@mola_state_estimation_smoother//:mola_state_estimation_smoother": "@mola_state_estimation_smoother//:mola_state_estimation_smoother_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = CLI_DEPENDENCIES.keys() + [
+        ":mola_lidar_odometry",
+        "@rosdistro//cc:cli11_shared",
+    ],
+)
+
+cc_binary(
+    name = "mola-lidar-odometry-cli",
+    srcs = ["apps/mola-lidar-odometry-cli.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + [
+        "HAVE_MOLA_INPUT_KITTI",
+        "HAVE_MOLA_INPUT_KITTI360",
+        "HAVE_MOLA_INPUT_MULRAN",
+        "HAVE_MOLA_INPUT_PARIS_LUCO",
+        "HAVE_MOLA_INPUT_RAWLOG",
+        "HAVE_MOLA_INPUT_ROSBAG2",
+        "HAVE_MOLA_SE_SIMPLE",
+        'MOLA_LO_VERSION=\\"3.3.0\\"',
+    ],
+    deps = CLI_DEPENDENCIES.values() + CC_DEPS + [
+        ":mola_lidar_odometry_library",
+        "@rosdistro//cc:cli11",
+    ],
+)
+
+### TESTS
+
+[
+    cc_test(
+        name = test_name,
+        srcs = ["test/{}.cpp".format(test_name)],
+        copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+        data = [":ament_index"],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        deps = CLI_DEPENDENCIES.values() + CC_DEPS + [
+            ":mola_lidar_odometry_library",
+            "@rosdistro//cc:bazel_test_helper",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test_name in [
+        "test_gravity_map_aligner",
+        "test_imu_scan_sync",
+        "test_keyframe_decider",
+        "test_map_frame_relevel",
+    ]
+]
+
+cc_test(
+    name = "test_pipelines_load",
+    srcs = ["test/test_pipelines_load.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    env = {
+        "LO_PIPELINES_DIR": "share/mola_lidar_odometry/pipelines",
+    },
+    deps = CLI_DEPENDENCIES.values() + CC_DEPS + [
+        ":mola_lidar_odometry_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_relocalization_request",
+    srcs = ["test/test_relocalization_request.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    env = {
+        "LO_PIPELINE_YAML": "share/mola_lidar_odometry/pipelines/lidar3d-default.yaml",
+        "LO_STATE_ESTIM_YAML": "share/mola_lidar_odometry/state-estimator-params/state-estimation-simple.yaml",
+        "MOLA_PROFILER": "false",
+    },
+    deps = CLI_DEPENDENCIES.values() + CC_DEPS + [
+        ":mola_lidar_odometry_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_lidar_odometry_kitti",
+    srcs = ["test/test_lidar_odometry_rawlog.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        "@mola_test_datasets//:ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    env = {
+        "LO_PIPELINE_YAML": "share/mola_lidar_odometry/pipelines/lidar3d-default.yaml",
+        "LO_STATE_ESTIM_YAML": "share/mola_lidar_odometry/state-estimator-params/state-estimation-simple.yaml",
+        "LO_TEST_GT_TUM": "share/mola_lidar_odometry/test/kitti_00_fragment_gt.tum",
+        "LO_TEST_RAWLOG": "share/mola_test_datasets/datasets/kitti/kitti_00_extract.rawlog",
+        "MOLA_PROFILER": "false",
+    },
+    deps = CLI_DEPENDENCIES.values() + CC_DEPS + [
+        ":mola_lidar_odometry_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_lidar_odometry_mulran",
+    srcs = ["test/test_lidar_odometry_rawlog.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        "@mola_test_datasets//:ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    env = {
+        "LO_PIPELINE_YAML": "share/mola_lidar_odometry/pipelines/lidar3d-default.yaml",
+        "LO_STATE_ESTIM_YAML": "share/mola_lidar_odometry/state-estimator-params/state-estimation-simple.yaml",
+        "LO_TEST_GT_TUM": "share/mola_lidar_odometry/test/mulran_KAIST01_fragment_gt.tum",
+        "LO_TEST_RAWLOG": "share/mola_test_datasets/datasets/mulran/mulran_KAIST01_extract.rawlog",
+        "MOLA_DESKEW_METHOD": "MotionCompensationMethod::IMU",
+        "MOLA_PROFILER": "false",
+    },
+    deps = CLI_DEPENDENCIES.values() + CC_DEPS + [
+        ":mola_lidar_odometry_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_lidar_odometry_rslidar",
+    srcs = ["test/test_lidar_odometry_rosbag2.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+        "@mola_test_datasets//:ament_index",
+        "@rosbag2_storage_mcap//:ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    env = {
+        "LO_PIPELINE_YAML": "share/mola_lidar_odometry/pipelines/lidar3d-default.yaml",
+        "LO_STATE_ESTIM_YAML": "share/mola_lidar_odometry/state-estimator-params/state-estimation-simple.yaml",
+        "LO_TEST_GT_TUM": "share/mola_lidar_odometry/test/rslidar_fragment_gt.tum",
+        "LO_TEST_LIDAR_TOPIC": "/rslidar_points",
+        "LO_TEST_ROSBAG2": "share/mola_test_datasets/datasets/rslidar_warehouse/rslidar_fragment.mcap",
+        "MOLA_IGNORE_NO_POINT_STAMPS": "false",
+        "MOLA_PROFILER": "false",
+        "MOLA_USE_FIXED_LIDAR_POSE": "true",
+    },
+    deps = CLI_DEPENDENCIES.values() + CC_DEPS + [
+        ":mola_lidar_odometry_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
 
 ### PACKAGING
 
+ament_index(
+    name = "ament_index",
+    data = DATA_FILES,
+    libraries = [":mola_lidar_odometry"],
+    package_xml = "package.xml",
+    sonames = {"mola_lidar_odometry": [
+        "libmola_lidar_odometry.so.0.10",
+        "libmola_lidar_odometry.so.0.10.0",
+    ]},
+    deps = [
+        "@mola_bridge_ros2//:ament_package",
+        "@mola_common//:ament_package",
+        "@mola_imu_preintegration//:ament_package",
+        "@mola_input_kitti360_dataset//:ament_package",
+        "@mola_input_kitti_dataset//:ament_package",
+        "@mola_input_mulran_dataset//:ament_package",
+        "@mola_input_paris_luco_dataset//:ament_package",
+        "@mola_input_rawlog//:ament_package",
+        "@mola_input_rosbag2//:ament_package",
+        "@mola_kernel//:ament_package",
+        "@mola_launcher//:ament_package",
+        "@mola_metric_maps//:ament_package",
+        "@mola_pose_list//:ament_package",
+        "@mola_state_estimation_simple//:ament_package",
+        "@mola_state_estimation_smoother//:ament_package",
+        "@mola_viz//:ament_package",
+        "@mola_yaml//:ament_package",
+        "@mp2p_icp//:ament_package",
+        "@mrpt_maps//:ament_package",
+        "@mrpt_obs//:ament_package",
+        "@rosbag2_storage_mcap//:ament_package",
+    ],
+)
+
 ament_package(
     name = "ament_package",
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    data = DATA_FILES,
+    executables = [":mola-lidar-odometry-cli"],
+    headers = HEADERS,
+    headers_strip_prefixes = ["module/include"],
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [":mola_lidar_odometry"],
     package_xml = "package.xml",
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_cmake_xmllint//:ament_package",
@@ -47,6 +411,8 @@ ament_package(
         "@mola_viz//:ament_package",
         "@mola_yaml//:ament_package",
         "@mp2p_icp//:ament_package",
+        "@mrpt_maps//:ament_package",
+        "@mrpt_obs//:ament_package",
         "@ros_environment//:ament_package",
         "@rosbag2_storage_mcap//:ament_package",
         "@rosdistro//:ament_package",
@@ -56,18 +422,22 @@ ament_package(
 launch_ros_binary(
     name = "ros2_launchs_kitti_ros2_lidar_odometry_launch_py",
     src = "ros2-launchs/kitti-ros2-lidar-odometry.launch.py",
-    data = [
-        "@mola_launcher//:ament_index",
-        "@rviz2//:ament_index",
+    data = [":ament_index"],
+    deps = [
+        ":mola-lidar-odometry-cli",
+        "@mola_launcher//:mola-cli",
+        "@rviz2",
     ],
 )
 
 launch_ros_binary(
     name = "ros2_launchs_ros2_lidar_odometry_launch_py",
     src = "ros2-launchs/ros2-lidar-odometry.launch.py",
-    data = [
-        "@diagnostic_aggregator//:ament_index",
-        "@mola_state_estimation_smoother//:ament_package",
-        "@rviz2//:ament_index",
+    data = [":ament_index"],
+    deps = [
+        ":mola-lidar-odometry-cli",
+        "@diagnostic_aggregator//:aggregator_node",
+        "@mola_launcher//:mola-cli",
+        "@rviz2",
     ],
 )

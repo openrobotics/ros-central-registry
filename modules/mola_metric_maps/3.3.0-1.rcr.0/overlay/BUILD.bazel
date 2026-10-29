@@ -12,16 +12,245 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
 
-package(default_visibility = ["//visibility:public"])
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:GPL-3.0-only"],
+)
+
+DEPENDENCIES = {
+    "@mola_kernel//:mola_kernel": "@mola_kernel//:mola_kernel_library",
+    "@mp2p_icp//:mp2p_icp_common": "@mp2p_icp//:mp2p_icp_common_library",
+    "@mp2p_icp//:mp2p_icp_map": "@mp2p_icp//:mp2p_icp_map_library",
+    "@mrpt_maps//:mrpt_maps": "@mrpt_maps//:mrpt_maps_library",
+    "@mrpt_viz//:mrpt_viz": "@mrpt_viz//:mrpt_viz_library",
+    "@rosdistro//cc:tbb": "@rosdistro//cc:tbb_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+]
+
+HEADERS = [
+    "include/mola_metric_maps/FixedDenseGrid3D.h",
+    "include/mola_metric_maps/HashedVoxelPointCloud.h",
+    "include/mola_metric_maps/IncrementalPointCloud.h",
+    "include/mola_metric_maps/KeyframePointCloudMap.h",
+    "include/mola_metric_maps/MatchingDistanceProfileCompat.h",
+    "include/mola_metric_maps/NDT.h",
+    "include/mola_metric_maps/OccGrid.h",
+    "include/mola_metric_maps/OptionsCapable.h",
+    "include/mola_metric_maps/OptionsIniIO.h",
+    "include/mola_metric_maps/SparseTreesPointCloud.h",
+    "include/mola_metric_maps/SparseVoxelPointCloud.h",
+    "include/mola_metric_maps/TSDF.h",
+    "include/mola_metric_maps/index3d_t.h",
+]
+
+ROBIN_MAP_HEADERS = [
+    "3rdparty/robin-map/include/tsl/robin_growth_policy.h",
+    "3rdparty/robin-map/include/tsl/robin_hash.h",
+    "3rdparty/robin-map/include/tsl/robin_map.h",
+    "3rdparty/robin-map/include/tsl/robin_set.h",
+]
+
+cc_library(
+    name = "_incremental_kdtree",
+    srcs = ["src/IncrementalKDTree.cpp"],
+    hdrs = ["src/IncrementalKDTree.h"],
+    local_defines = ['MOLA_NANOFLANN_HEADER=\\"nanoflann.hpp\\"'],
+    deps = ["@nanoflann_vendor//:nanoflann"],
+)
+
+cc_library(
+    name = "mola_metric_maps_library",
+    srcs = [
+        "src/HashedVoxelPointCloud.cpp",
+        "src/IncrementalKDTree.h",
+        "src/IncrementalPointCloud.cpp",
+        "src/KeyframePointCloudMap.cpp",
+        "src/NDT.cpp",
+        "src/OccGrid.cpp",
+        "src/OptionsIniIO.cpp",
+        "src/SparseTreesPointCloud.cpp",
+        "src/SparseVoxelPointCloud.cpp",
+        "src/TSDF.cpp",
+        "src/cov_diagnostics.h",
+        "src/covariance_shape.h",
+        "src/register.cpp",
+    ],
+    hdrs = HEADERS + ROBIN_MAP_HEADERS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-Wno-psabi",
+    ],
+    defines = [
+        "MOLA_METRIC_MAPS_HAS_INCREMENTAL_KDTREE_BAKE",
+        "MOLA_METRIC_MAPS_HAS_INCREMENTAL_POINT_CLOUD",
+        "MP2P_ICP_HAS_MOLA_IMU_PREINTEGRATION",
+    ],
+    includes = [
+        "3rdparty/robin-map/include",
+        "include",
+        "include/mola_metric_maps",
+        "src",
+    ],
+    local_defines = ros_local_defines() + [
+        "MOLA_MAJOR_VERSION=3",
+        "MOLA_METRIC_MAPS_USE_TBB",
+        "MOLA_MINOR_VERSION=3",
+        "MOLA_PATCH_VERSION=0",
+        "NDEBUG",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":_incremental_kdtree"],
+)
+
+cc_shared_library(
+    name = "mola_metric_maps",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mola_metric_maps_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":mola_metric_maps",
+        "@rosdistro//cc:cli11_shared",
+    ],
+)
+
+[
+    cc_binary(
+        name = app,
+        srcs = [
+            "apps/kf_cli_utils.h",
+            "apps/mm_cli_utils.h",
+            "apps/{}/main.cpp".format(app),
+        ],
+        copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+        data = [":ament_index"],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        deps = DEPENDENCIES.values() + CC_DEPS + [
+            ":mola_metric_maps_library",
+            "@rosdistro//cc:cli11",
+        ],
+    )
+    for app in [
+        "ini2mm",
+        "mm-ipc-bake-kdtree",
+        "mm-kf-bake-kdtrees",
+        "mm-kf-regroup",
+        "mm2ini",
+    ]
+]
+
+### TESTS
+
+cc_library(
+    name = "_test_internal_headers",
+    hdrs = [
+        "src/cov_diagnostics.h",
+        "src/covariance_shape.h",
+        "tests/incrementalpointcloud_test_scans.h",
+    ],
+    includes = [
+        "src",
+        "tests",
+    ],
+)
+
+[
+    cc_test(
+        name = test_name,
+        srcs = ["tests/{}".format(test_src)],
+        copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+        data = [
+            ":ament_index",
+            "@mola_test_datasets//:ament_index",
+        ],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        local_defines = ros_local_defines() + [
+            'TEST_DATASETS_ROOT=\\"share/mola_test_datasets/datasets/\\"',
+        ],
+        deps = DEPENDENCIES.values() + CC_DEPS + [
+            ":_test_internal_headers",
+            ":mola_metric_maps_library",
+            "@rosdistro//cc:bazel_test_helper",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test_name, test_src in [
+        ("test-mola_metric_maps_occgrid", "test-occgrid.cpp"),
+        ("test-mola_metric_maps_sparsevoxelpointcloud", "test-sparsevoxelpointcloud.cpp"),
+        ("test-mola_metric_maps_hashedvoxels", "test-mola_metric_maps_hashedvoxels.cpp"),
+        ("test-mola_metric_maps_ndt", "test-mola_metric_maps_ndt.cpp"),
+        ("test-mola_metric_maps_index3d_hash", "test-mola_metric_maps_index3d_hash.cpp"),
+        ("test-mola_metric_maps_tsdf", "test-mola_metric_maps_tsdf.cpp"),
+        ("test-mola_metric_maps_serialization", "test-serialization.cpp"),
+        ("test-mola_metric_maps_keyframemap", "test-mola_metric_maps_keyframemap.cpp"),
+        ("test-mola_metric_maps_options_ini_io", "test-options-ini-io.cpp"),
+        ("test-mola_metric_maps_incrementalpointcloud", "test-mola_metric_maps_incrementalpointcloud.cpp"),
+        ("test-mola_metric_maps_incrementalpointcloud_stress", "test-mola_metric_maps_incrementalpointcloud-stress.cpp"),
+        ("test-mola_metric_maps_incrementalpointcloud_covcache", "test-mola_metric_maps_incrementalpointcloud-covcache.cpp"),
+        ("test-mola_metric_maps_covariance_shape", "test-covariance-shape.cpp"),
+    ]
+]
 
 ### PACKAGING
 
+ament_index(
+    name = "ament_index",
+    libraries = [":mola_metric_maps"],
+    package_xml = "package.xml",
+    sonames = {"mola_metric_maps": [
+        "libmola_metric_maps.so.3.3",
+        "libmola_metric_maps.so.3.3.0",
+    ]},
+    deps = [
+        "@mola_common//:ament_package",
+        "@mola_kernel//:ament_package",
+        "@mp2p_icp//:ament_package",
+        "@mrpt_maps//:ament_package",
+        "@mrpt_viz//:ament_package",
+        "@nanoflann_vendor//:ament_package",
+    ],
+)
+
 ament_package(
     name = "ament_package",
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    executables = [
+        ":ini2mm",
+        ":mm-ipc-bake-kdtree",
+        ":mm-kf-bake-kdtrees",
+        ":mm-kf-regroup",
+        ":mm2ini",
+    ],
+    headers = HEADERS + ROBIN_MAP_HEADERS,
+    headers_strip_prefixes = [
+        "3rdparty/robin-map/include",
+        "include",
+    ],
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [":mola_metric_maps"],
     package_xml = "package.xml",
     deps = [
+        ":ament_index",
         "@ament_cmake//:ament_package",
         "@ament_cmake_gtest//:ament_package",
         "@ament_cmake_xmllint//:ament_package",
@@ -31,6 +260,9 @@ ament_package(
         "@mola_kernel//:ament_package",
         "@mola_test_datasets//:ament_package",
         "@mp2p_icp//:ament_package",
+        "@mrpt_maps//:ament_package",
+        "@mrpt_viz//:ament_package",
+        "@nanoflann_vendor//:ament_package",
         "@ros_environment//:ament_package",
         "@rosdistro//:ament_package",
     ],
