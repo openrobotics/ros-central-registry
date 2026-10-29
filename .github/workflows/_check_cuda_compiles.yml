@@ -99,5 +99,24 @@ jobs:
 
     - name: Test GPU-free targets (--config=cuda)
       run: |
-        bazel test --config ci --config=cuda @torch_conversions//... 2>&1 | tee test.log
+        test_status=0
+        bazel test --config ci --config=cuda --test_output=errors \
+            @torch_conversions//... 2>&1 | tee test.log || test_status=$?
+        if [ -d bazel-testlogs ]; then
+          find -L bazel-testlogs -name "*.xml" -print0 | tar -czf cuda_${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}.xml.tar.gz --null -T - || true
+          find -L bazel-testlogs -name "*.log" -print0 | tar -czf cuda_${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}.log.tar.gz --null -T - || true
+        fi
+        exit ${test_status}
+
+    - name: Test logs
+      uses: actions/upload-artifact@v7
+      with:
+        name: CUDA logs ${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}
+        path: |
+          workspace/MODULE.bazel
+          workspace/.bazelrc
+          workspace/*.xml.tar.gz
+          workspace/*.log.tar.gz
+          workspace/*.log
+      if: always()
 
