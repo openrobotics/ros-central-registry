@@ -93,8 +93,10 @@ class TestRenderBazelrc(unittest.TestCase):
 
     def test_ci_memory_options(self):
         content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
-        self.assertIn("startup --host_jvm_args=-XX:MaxRAMPercentage=50.0", content)
-        self.assertIn("build:ci --jobs=4", content)
+        self.assertNotIn("MaxRAMPercentage", content)
+        self.assertNotIn("build:ci --jobs=", content)
+        self.assertIn("build:ci --local_resources=memory=HOST_RAM*.5\n", content)
+        self.assertIn("build:ci --local_resources=cpu=HOST_CPUS\n", content)
         self.assertNotIn("build:ci --discard_analysis_cache", content)
 
     def test_portable_and_sanitizer_configs(self):
