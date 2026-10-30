@@ -87,8 +87,7 @@ def cc_ros_library(name, deps = [], shared = None, **kwargs):
         deps = deps,
         shared = select({
             Label("@rosdistro//:dynamic_mode_off"): None,
-            Label("@rosdistro//:rmw_dynamic"): shared,
-            "//conditions:default": None,
+            "//conditions:default": shared,
         }),
         **kwargs
     )

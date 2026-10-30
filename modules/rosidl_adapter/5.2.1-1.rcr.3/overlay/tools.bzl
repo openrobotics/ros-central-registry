@@ -190,19 +190,18 @@ ROSIDL_COMMON_ATTRS = {
 def rosidl_static_typesupport(ctx):
     """Whether typesupports are expected to be linked statically into binaries.
 
-    True when `--@rosdistro//:rmw` pins a single middleware (the README's
-    "static compilation" mode). The generated typesupport archives are then
-    marked alwayslink, because nothing references their symbols directly:
-    the rosidl_typesupport_c/cpp dispatch finds them through
-    dlsym(dlopen(NULL)) at runtime.
+    True when `--dynamic_mode=off` (the README's "static compilation" mode).
+    The generated typesupport archives are then marked alwayslink, because
+    nothing references their symbols directly: the rosidl_typesupport_c/cpp
+    dispatch finds them through dlsym(dlopen(NULL)) at runtime.
 
     Args:
-        ctx: a rule or aspect context whose attrs include ROSIDL_COMMON_ATTRS.
+        ctx: a rule or aspect context with the `cpp` configuration fragment.
 
     Returns:
         bool
     """
-    return ctx.attr._rosidl_rmw[BuildSettingInfo].value != "dynamic"
+    return ctx.fragments.cpp.dynamic_mode() == "OFF"
 
 def rosidl_export_dynamic_link_flags(cc_toolchain):
     """Linker flags that keep statically linked typesupport symbols dlsym-able.

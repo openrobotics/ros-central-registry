@@ -20,7 +20,7 @@ load(":aspects.bzl", "collect_transitive_dynamic_deps_aspect")
 load(":types.bzl", "CollectedCcSharedLibraryInfo")
 
 def _collect_transitive_dynamic_deps_impl(ctx):
-    if ctx.fragments.cpp.dynamic_mode() == "OFF" or ctx.attr._rmw[BuildSettingInfo].value != "dynamic":
+    if ctx.fragments.cpp.dynamic_mode() == "OFF":
         return [
             CcSharedLibraryInfo(
                 dynamic_deps = depset(),
@@ -133,8 +133,7 @@ def collect_transitive_dynamic_deps(name, dynamic_deps = [], **kwargs):
     if type(dynamic_deps) != "select":
         dynamic_deps = select({
             Label("//:dynamic_mode_off"): [],
-            Label("//:rmw_dynamic"): list(dynamic_deps),
-            "//conditions:default": [],
+            "//conditions:default": list(dynamic_deps),
         })
     _collect_transitive_dynamic_deps_rule(
         name = name,
