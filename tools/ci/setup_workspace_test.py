@@ -99,6 +99,13 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertIn("build:ci --local_resources=cpu=HOST_CPUS\n", content)
         self.assertNotIn("build:ci --discard_analysis_cache", content)
 
+    def test_tests_run_concurrently_in_sandbox_with_isolated_domains(self):
+        content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
+        self.assertIn("test --run_under=@rosdistro//python:run_test_isolated\n", content)
+        self.assertNotIn("--local_test_jobs", content)
+        self.assertNotIn("--test_strategy=exclusive", content)
+        self.assertNotIn("--strategy=TestRunner=standalone", content)
+
     def test_portable_and_sanitizer_configs(self):
         content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
         self.assertIn("build:portable --@rosdistro//:rmw=rmw_cyclonedds_cpp", content)

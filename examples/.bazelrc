@@ -249,6 +249,15 @@ test --sandbox_default_allow_network=false
 # there and additionally keeps test traffic off the LAN.
 test --test_env=ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
 
+# Give every test its own ROS_DOMAIN_ID. Tests run concurrently (as many as
+# the resource budget allows) in the platform's default sandbox, and
+# darwin-sandbox (macOS) and processwrapper-sandbox (Linux without user
+# namespaces, e.g. the GitHub runners and most containers) share the host
+# loopback, so without this concurrently running tests would discover each
+# other's nodes. Under linux-sandbox each test already has a private loopback
+# and the wrapper is harmless. A ROS_DOMAIN_ID set by the test itself wins.
+test --run_under=@rosdistro//python:run_test_isolated
+
 ## STATIC compilation
 
 build:portable --@rosdistro//:rmw=rmw_cyclonedds_cpp
@@ -356,16 +365,6 @@ common:ci --ui_event_filters=-INFO,-DEBUG
 # made per-platform here.
 build:ci --local_resources=memory=HOST_RAM*.5
 build:ci --local_resources=cpu=HOST_CPUS
-
-# Run at most one test at a time on this machine.
-test:ci --local_test_jobs=1
-
-# Run each test exclusively, with no other test running alongside it.
-test:ci --test_strategy=exclusive
-
-# Run tests without a sandbox, so they get the host's real network and
-# shared memory, which DDS discovery and shared-memory transport need.
-test:ci --strategy=TestRunner=standalone
 
 # Re-run a failing test up to 3 times; it passes (marked FLAKY) if any
 # attempt passes.

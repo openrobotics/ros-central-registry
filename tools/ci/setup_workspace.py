@@ -450,8 +450,6 @@ build:ci --local_resources=cpu=HOST_CPUS
 
 # This restricts our test sandboxes from accessing the network, which is
 # important if you want to prevent destructive interference between tests.
-# Note: this only applies to developer builds because github runners are
-#       in proceswrapper-sandbox and run 1 test at a time.
 test --sandbox_default_allow_network=false
 
 # Every test's nodes run on this host, so restrict DDS discovery to localhost.
@@ -464,14 +462,17 @@ test --sandbox_default_allow_network=false
 # there and additionally keeps test traffic off the LAN.
 test --test_env=ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
 
+# Give every test its own ROS_DOMAIN_ID. Tests run concurrently (as many as
+# the resource budget allows) in the platform's default sandbox, and
+# darwin-sandbox (macOS) and processwrapper-sandbox (Linux without user
+# namespaces, e.g. the GitHub runners and most containers) share the host
+# loopback, so without this concurrently running tests would discover each
+# other's nodes. Under linux-sandbox each test already has a private loopback
+# and the wrapper is harmless. A ROS_DOMAIN_ID set by the test itself wins.
+test --run_under=@rosdistro//python:run_test_isolated
+
 # Don't allow a flaky test to fail the entire run.
 test:ci --flaky_test_attempts=3
-
-# Limit local test concurrency on CI to prevent resource starvation, as
-# well as destructive interference between tests.
-test:ci --local_test_jobs=1
-test:ci --test_strategy=exclusive
-test:ci --strategy=TestRunner=standalone
 
 ## STATIC compilation
 
