@@ -205,11 +205,14 @@ jobs:
       run: |
         bazel build --config ci --build_tests_only --config=${{ matrix.variant }} 2>&1 | tee ${{ inputs.rmw }}.build.log
 
-    # Run the distribution tests for the implementation.
+    # Run the distribution tests for the implementation. --build_tests_only
+    # matches the build step above: without it `bazel test` first builds every
+    # non-test target in the variant too (Qt/ICU/Bullet/... that no test needs),
+    # which showed up as hundreds of compile actions inside the test step.
     - name: Test (${{ inputs.rmw }})
       id: test
       run: |
-        bazel test --config ci --config=${{ matrix.variant }} --test_env=RMW_IMPLEMENTATION=${{ inputs.rmw }} 2>&1 | tee ${{ inputs.rmw }}.test.log
+        bazel test --config ci --build_tests_only --config=${{ matrix.variant }} --test_env=RMW_IMPLEMENTATION=${{ inputs.rmw }} 2>&1 | tee ${{ inputs.rmw }}.test.log
 
     # Also build/test whatever package(s) this PR actually touches, in case
     # they aren't part of the variant above -- see changed_packages' input
@@ -233,7 +236,7 @@ jobs:
         if [ -n "$TARGETS" ]; then
           if ! bazel build --config ci --build_tests_only $TARGETS 2>&1 | tee ${{ inputs.rmw }}.changed_packages.build.log; then
             echo "::warning title=Build changed packages failed::Building changed packages ($TARGETS) tests failed, but will not block CI as some modules may be outside the supported collection."
-          elif ! bazel test --config ci --test_env=RMW_IMPLEMENTATION=${{ inputs.rmw }} $TARGETS 2>&1 | tee ${{ inputs.rmw }}.changed_packages.test.log; then
+          elif ! bazel test --config ci --build_tests_only --test_env=RMW_IMPLEMENTATION=${{ inputs.rmw }} $TARGETS 2>&1 | tee ${{ inputs.rmw }}.changed_packages.test.log; then
             rc=${PIPESTATUS[0]}
             # Bazel exits with 4 when no test targets match the pattern,
             # which is expected for packages that don't declare any tests.
