@@ -1,0 +1,26 @@
+--- a/src/rosbag2_py/_transport.cpp
++++ b/src/rosbag2_py/_transport.cpp
+@@ -17,6 +17,7 @@
+ #include <chrono>
+ #include <filesystem>
+ #include <memory>
++#include <thread>
+ #include <string>
+ #include <unordered_map>
+ #include <utility>
+@@ -537,6 +538,15 @@
+       if (wait_for_exit_thread.joinable()) {
+         wait_for_exit_thread.join();
+       }
++
++      // Keep the node (and its executor) alive briefly before tearing it down.
++      // Playback often ends as the direct result of a service request (Stop,
++      // or Resume on a player with nothing to play) whose reply is written
++      // right about now; a client whose reply reader matched this writer late
++      // only receives it through reliable retransmission, which needs this
++      // process to still exist. --wait-for-all-acked covers topic publishers
++      // but nothing covers service replies, so give them a short grace period.
++      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+ 
+       stop_spin();
+     } catch (...) {
