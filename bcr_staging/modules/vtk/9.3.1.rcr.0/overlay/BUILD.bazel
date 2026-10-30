@@ -34,6 +34,17 @@ exports_files([
     "vtk_gen.py",
 ])
 
+# The OpenGL rendering stack here is written for X11/GLX (vtkXRenderWindow*,
+# the libglvnd link-time stubs, GLX headers), none of which exist on macOS or
+# Windows. Rather than making every VTK consumer incompatible there, confine
+# that stack -- and the modules that depend on it -- to Linux. The non-rendering
+# modules (Common*, Filters*, IO*, Imaging*, ...) are what PCL's io/surface need
+# and build everywhere.
+_LINUX_ONLY = select({
+    "@platforms//os:linux": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
 _VTK_MODULES = [
     "ChartsCore",
     "CommonColor",
@@ -364,15 +375,25 @@ cc_library(
         "KWSYS_CXX_HAS_ENVIRON_IN_STDLIB_H=0",
         "KWSYS_CXX_HAS_UTIMES=1",
         "KWSYS_CXX_HAS_UTIMENSAT=1",
-        "KWSYS_CXX_STAT_HAS_ST_MTIM=1",
-        "KWSYS_CXX_STAT_HAS_ST_MTIMESPEC=0",
         "KWSYS_SYSTEMTOOLS_SUPPORT_WINDOWS_SLASHES=1",
         "SIZEOF_VOID_P=8",
         "KWSYS_SYS_HAS_IFADDRS_H=1",
-        "KWSYS_CXX_HAS_RLIMIT64=1",
         "KWSYS_CXX_HAS_GETLOADAVG=1",
         "KWSYS_ENCODING_DEFAULT_CODEPAGE=CP_UTF8",
-    ],
+    ] + select({
+        # struct stat spells the nanosecond mtime field st_mtim on Linux and
+        # st_mtimespec on macOS; getrlimit64 is glibc-only.
+        "@platforms//os:macos": [
+            "KWSYS_CXX_STAT_HAS_ST_MTIM=0",
+            "KWSYS_CXX_STAT_HAS_ST_MTIMESPEC=1",
+            "KWSYS_CXX_HAS_RLIMIT64=0",
+        ],
+        "//conditions:default": [
+            "KWSYS_CXX_STAT_HAS_ST_MTIM=1",
+            "KWSYS_CXX_STAT_HAS_ST_MTIMESPEC=0",
+            "KWSYS_CXX_HAS_RLIMIT64=1",
+        ],
+    }),
     deps = [":vtk_gen_hdrs"],
 )
 
@@ -472,6 +493,7 @@ cc_library(
         "ThirdParty/glew",
         "ThirdParty/glew/vtkglew/include",
     ],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":opengl",
         ":vtk_gen_hdrs",
@@ -528,7 +550,11 @@ cc_library(
         "gen_include/vtklzma_config",
     ],
     linkopts = ["-lpthread"],
-    local_defines = ["HAVE_CONFIG_H"],
+    local_defines = [
+        "HAVE_CONFIG_H",
+        # See the lzma config.h notes in vtk_gen.py.
+        "HAVE___BUILTIN_BSWAPXX",
+    ],
     deps = [":vtk_gen_hdrs"],
 )
 
@@ -614,6 +640,7 @@ cc_library(
 
 cc_library(
     name = "opengl",
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":vtk_gen_hdrs",
         "@egl-registry//:EGL_headers",
@@ -1462,6 +1489,7 @@ cc_library(
     ],
     copts = _VTK_COPTS,
     includes = ["Rendering/UI"],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":CommonCore",
         ":CommonDataModel",
@@ -1512,6 +1540,7 @@ cc_library(
     copts = _VTK_COPTS,
     includes = ["Rendering/OpenGL2"],
     local_defines = ["VTK_HAVE_XCURSOR=0"],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":CommonColor",
         ":CommonCore",
@@ -1545,6 +1574,7 @@ cc_library(
     hdrs = glob(["Rendering/ContextOpenGL2/*.h"]),
     copts = _VTK_COPTS,
     includes = ["Rendering/ContextOpenGL2"],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":CommonCore",
         ":CommonDataModel",
@@ -1634,6 +1664,7 @@ cc_library(
     ]),
     copts = _VTK_COPTS,
     includes = ["Rendering/VolumeOpenGL2"],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":CommonCore",
         ":CommonDataModel",
@@ -1686,6 +1717,7 @@ cc_library(
     hdrs = glob(["Interaction/Widgets/*.h"]),
     copts = _VTK_COPTS,
     includes = ["Interaction/Widgets"],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":CommonComputationalGeometry",
         ":CommonCore",
@@ -1721,6 +1753,7 @@ cc_library(
     hdrs = glob(["Interaction/Image/*.h"]),
     copts = _VTK_COPTS,
     includes = ["Interaction/Image"],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":CommonCore",
         ":CommonDataModel",
@@ -1741,6 +1774,7 @@ cc_library(
     hdrs = glob(["Views/Core/*.h"]),
     copts = _VTK_COPTS,
     includes = ["Views/Core"],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":CommonCore",
         ":CommonDataModel",
@@ -1758,6 +1792,7 @@ cc_library(
     hdrs = glob(["Views/Context2D/*.h"]),
     copts = _VTK_COPTS,
     includes = ["Views/Context2D"],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":CommonCore",
         ":RenderingContext2D",
@@ -1793,6 +1828,7 @@ cc_library(
     hdrs = glob(["Charts/Core/*.h"]),
     copts = _VTK_COPTS,
     includes = ["Charts/Core"],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":CommonColor",
         ":CommonCore",
@@ -1821,6 +1857,7 @@ qt_cc_library(
     copts = _VTK_COPTS,
     includes = ["GUISupport/Qt"],
     local_defines = ["QT_NO_KEYWORDS"],
+    target_compatible_with = _LINUX_ONLY,
     deps = [
         ":CommonCore",
         ":CommonDataModel",
@@ -1847,7 +1884,6 @@ qt_cc_library(
 cc_library(
     name = "vtk",
     deps = [
-        ":ChartsCore",
         ":CommonColor",
         ":CommonComputationalGeometry",
         ":CommonCore",
@@ -1869,7 +1905,6 @@ cc_library(
         ":FiltersStatistics",
         ":FiltersTexture",
         ":FiltersVerdict",
-        ":GUISupportQt",
         ":IOCore",
         ":IOGeometry",
         ":IOImage",
@@ -1884,24 +1919,30 @@ cc_library(
         ":ImagingMath",
         ":ImagingSources",
         ":InfovisCore",
-        ":InteractionImage",
         ":InteractionStyle",
-        ":InteractionWidgets",
         ":ParallelCore",
         ":ParallelDIY",
         ":RenderingAnnotation",
         ":RenderingContext2D",
-        ":RenderingContextOpenGL2",
         ":RenderingCore",
         ":RenderingFreeType",
         ":RenderingHyperTreeGrid",
         ":RenderingLOD",
-        ":RenderingOpenGL2",
-        ":RenderingUI",
         ":RenderingVolume",
-        ":RenderingVolumeOpenGL2",
-        ":ViewsContext2D",
-        ":ViewsCore",
         ":vtksys",
-    ],
+    ] + select({
+        "@platforms//os:linux": [
+            ":ChartsCore",
+            ":GUISupportQt",
+            ":InteractionImage",
+            ":InteractionWidgets",
+            ":RenderingContextOpenGL2",
+            ":RenderingOpenGL2",
+            ":RenderingUI",
+            ":RenderingVolumeOpenGL2",
+            ":ViewsContext2D",
+            ":ViewsCore",
+        ],
+        "//conditions:default": [],
+    }),
 )

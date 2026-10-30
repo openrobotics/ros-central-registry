@@ -20,6 +20,8 @@ import re
 import shutil
 import sys
 
+_IS_DARWIN = sys.platform == "darwin"
+
 
 def write_file(path, content):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -88,9 +90,13 @@ def generate_vtksys_headers(vtk_root, gen_include):
         "KWSYS_CXX_HAS_PUTENV": 1,
         "KWSYS_CXX_HAS_UTIMES": 1,
         "KWSYS_CXX_HAS_UTIMENSAT": 1,
-        "KWSYS_CXX_STAT_HAS_ST_MTIM": 1,
-        "KWSYS_CXX_STAT_HAS_ST_MTIMESPEC": 0,
-        "KWSYS_CXX_HAS_RLIMIT64": 1,
+        # struct stat spells the nanosecond mtime field st_mtim on Linux and
+        # st_mtimespec on macOS; getrlimit64 and <ext/stdio_filebuf.h> are
+        # glibc/libstdc++-only. The generator runs on the build host, which is
+        # the target platform for every build this registry does.
+        "KWSYS_CXX_STAT_HAS_ST_MTIM": 0 if _IS_DARWIN else 1,
+        "KWSYS_CXX_STAT_HAS_ST_MTIMESPEC": 1 if _IS_DARWIN else 0,
+        "KWSYS_CXX_HAS_RLIMIT64": 0 if _IS_DARWIN else 1,
         "KWSYS_CXX_HAS_ATOL": 1,
         "KWSYS_CXX_HAS_ATOLL": 1,
         "KWSYS_CXX_HAS__ATOI64": 0,
@@ -99,7 +105,7 @@ def generate_vtksys_headers(vtk_root, gen_include):
         "KWSYS_SYSTEMINFORMATION_HAS_SYMBOL_LOOKUP": 1,
         "KWSYS_SYSTEMINFORMATION_HAS_DEBUG_BUILD": 0,
         "KWSYS_STL_HAS_WSTRING": 1,
-        "KWSYS_CXX_HAS_EXT_STDIO_FILEBUF_H": 1,
+        "KWSYS_CXX_HAS_EXT_STDIO_FILEBUF_H": 0 if _IS_DARWIN else 1,
         "KWSYS_CONSOLE_BUF_USE_ANSI": 1,
     }
     h_in_files = [
@@ -301,10 +307,14 @@ def generate_thirdparty_headers(vtk_root, gen_include):
         "HAVE_MF_BT4": 1,
         "HAVE_MF_HC3": 1,
         "HAVE_MF_HC4": 1,
-        "HAVE_BSWAP_16": 1,
-        "HAVE_BSWAP_32": 1,
-        "HAVE_BSWAP_64": 1,
-        "HAVE_BYTESWAP_H": 1,
+        # <byteswap.h> is glibc-only; tuklib_integer.h prefers the compiler
+        # builtins when told they exist (clang/gcc both have them), which is
+        # portable to macOS. config.h.in has no #cmakedefine for the builtin
+        # flag, so it is passed as a define on the lzma target instead.
+        "HAVE_BSWAP_16": 0,
+        "HAVE_BSWAP_32": 0,
+        "HAVE_BSWAP_64": 0,
+        "HAVE_BYTESWAP_H": 0,
         "HAVE_SYS_ENDIAN_H": 0,
         "HAVE_CHECK_CRC32": 1,
         "HAVE_CHECK_CRC64": 1,
