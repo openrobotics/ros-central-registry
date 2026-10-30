@@ -174,44 +174,21 @@ jobs:
           exit 1
         fi
 
-    # Diagnostic (macOS only): the timing-sensitive tests (rcl test_wait /
-    # test_timer, rclcpp test_rate, rclpy test_rate, ...) fail on the macOS
-    # runners with short sleeps overshooting ~2x even though tests run one at a
-    # time. Measure sleep accuracy of a bare process, once as-is and once with
-    # background scheduling cleared (`taskpolicy -B`) / at raised priority, to
-    # tell a coarse VM timer apart from a low-priority/background-QoS process.
-    # Informational only; never fails the job.
-    - name: Probe timer accuracy (macOS)
+    # macOS runners coalesce kernel timers aggressively: measured on the CI VMs,
+    # a 10 ms sleep takes ~55 ms and a 100 ms sleep ~150-250 ms, which fails
+    # every timing-sensitive test (rcl test_wait/test_timer, rclcpp test_rate,
+    # rclpy test_rate/test_timer, diagnostic_updater, tf2_ros test_buffer, ...)
+    # even though tests run one at a time. Process priority / QoS make no
+    # difference; disabling coalescing brings sleeps back to within ~1% of
+    # their requested duration. Print a quick before/after so a regression on
+    # the runner image shows up in the log.
+    - name: Disable kernel timer coalescing (macOS)
       if: runner.os == 'macOS'
-      continue-on-error: true
       run: |
-        cat > "$RUNNER_TEMP/sleep_probe.py" <<'EOF'
-        import os, statistics, sys, time
-        label = sys.argv[1] if len(sys.argv) > 1 else "plain"
-        for target_ms in (1, 10, 100):
-            samples = []
-            for _ in range(30 if target_ms < 100 else 10):
-                t0 = time.perf_counter()
-                time.sleep(target_ms / 1000.0)
-                samples.append((time.perf_counter() - t0) * 1000.0)
-            samples.sort()
-            print(f"[{label:>14}] sleep {target_ms:3d} ms: median {statistics.median(samples):7.2f} ms  "
-                  f"p90 {samples[int(len(samples) * 0.9) - 1]:7.2f} ms  max {samples[-1]:7.2f} ms  "
-                  f"(nice={os.nice(0)})")
-        EOF
-        echo "shell: $(ps -o pid=,nice=,pri=,stat= -p $$)"
-        echo "runner: $(ps -axo pid=,nice=,pri=,stat=,comm= | grep -E 'Runner\.(Listener|Worker)' | head -2 | tr '\n' ';')"
-        python3 "$RUNNER_TEMP/sleep_probe.py" plain
-        taskpolicy -d default -g default -t 0 -l 0 python3 "$RUNNER_TEMP/sleep_probe.py" "taskpolicy fg" || echo "taskpolicy fg failed"
-        sudo nice -n -20 python3 "$RUNNER_TEMP/sleep_probe.py" "sudo nice -20" || echo "sudo nice failed"
-        # Clear background scheduling on this shell; children inherit it.
-        taskpolicy -B -p $$ && python3 "$RUNNER_TEMP/sleep_probe.py" "shell -B" || echo "taskpolicy -B failed"
-        # Finally, disable kernel timer coalescing system-wide and measure again.
-        # This is left disabled for the rest of the job on purpose, so the test
-        # step below runs under the same conditions as this last measurement.
-        echo "kern.timer.coalescing_enabled before: $(sysctl -n kern.timer.coalescing_enabled)"
-        sudo sysctl -w kern.timer.coalescing_enabled=0 || echo "sysctl failed"
-        python3 "$RUNNER_TEMP/sleep_probe.py" "no coalescing"
+        probe='import time; s=sorted((lambda t0: (time.sleep(0.01), (time.perf_counter()-t0)*1000)[1])(time.perf_counter()) for _ in range(20)); print(f"10 ms sleep: median {s[10]:.2f} ms, max {s[-1]:.2f} ms")'
+        echo "kern.timer.coalescing_enabled=$(sysctl -n kern.timer.coalescing_enabled); $(python3 -c "$probe")"
+        sudo sysctl -w kern.timer.coalescing_enabled=0
+        echo "kern.timer.coalescing_enabled=$(sysctl -n kern.timer.coalescing_enabled); $(python3 -c "$probe")"
 
     # Analyze first (loading + analysis only) so module-resolution, BUILD-file
     # and dependency errors fail in their own step, separately from compile
