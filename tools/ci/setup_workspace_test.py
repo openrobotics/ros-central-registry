@@ -95,7 +95,7 @@ class TestRenderBazelrc(unittest.TestCase):
         content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
         self.assertIn("startup --host_jvm_args=-XX:MaxRAMPercentage=50.0", content)
         self.assertIn("build:ci --jobs=4", content)
-        self.assertIn("build:ci --discard_analysis_cache", content)
+        self.assertNotIn("build:ci --discard_analysis_cache", content)
 
     def test_portable_and_sanitizer_configs(self):
         content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")

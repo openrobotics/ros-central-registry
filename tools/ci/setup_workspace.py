@@ -444,9 +444,11 @@ common:linux --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin
 common:macos --action_env=PATH=/bin:/usr/bin:/usr/local/bin
 common:macos --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin
 
-# Fix memory pressure in CI workers, which leads to OOM errors.
+# Limit parallelism to fix memory pressure in CI workers, which leads to OOM
+# errors. (--discard_analysis_cache used to be set here too, but it forces
+# every bazel command in a job -- analyze, build, test -- to re-run the full
+# analysis; the JVM heap raised in the startup options above covers it.)
 build:ci --jobs=4
-build:ci --discard_analysis_cache
 
 ## TEST OPTIONS
 
