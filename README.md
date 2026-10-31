@@ -8,21 +8,22 @@ The <a href="https://bazel.ros.org">ROS Central Registry</a> provides <a href= "
 
 # Releases
 
-## lyrical.2026-06-08.rcr.2
+## lyrical.2026-10-05.rcr.0
 ![linting](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/linting.json)
 ![tooling](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/tooling.json)
 ![docs build](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/docs_build.json)
 
 | Platform | Examples | Distribution | FastDDS(s) | FastDDS(d) | CycloneDDS | Zenoh |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| ubuntu-26.04 | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_8.x_ubuntu-26.04_examples.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_9.x_ubuntu-26.04_examples.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_ubuntu-26.04_build.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_ubuntu-26.04_build.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_ubuntu-26.04_test_rmw_fastrtps_cpp.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_ubuntu-26.04_test_rmw_fastrtps_cpp.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_ubuntu-26.04_test_rmw_fastrtps_dynamic_cpp.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_ubuntu-26.04_test_rmw_fastrtps_dynamic_cpp.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_ubuntu-26.04_test_rmw_cyclonedds_cpp.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_ubuntu-26.04_test_rmw_cyclonedds_cpp.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_ubuntu-26.04_test_rmw_zenoh_cpp.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_ubuntu-26.04_test_rmw_zenoh_cpp.json) |
-| ubuntu-26.04-arm | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_8.x_ubuntu-26.04-arm_examples.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_9.x_ubuntu-26.04-arm_examples.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_ubuntu-26.04-arm_build.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_ubuntu-26.04-arm_build.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_ubuntu-26.04-arm_test_rmw_fastrtps_cpp.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_ubuntu-26.04-arm_test_rmw_fastrtps_cpp.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_ubuntu-26.04-arm_test_rmw_fastrtps_dynamic_cpp.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_ubuntu-26.04-arm_test_rmw_fastrtps_dynamic_cpp.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_ubuntu-26.04-arm_test_rmw_cyclonedds_cpp.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_ubuntu-26.04-arm_test_rmw_cyclonedds_cpp.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_ubuntu-26.04-arm_test_rmw_zenoh_cpp.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_ubuntu-26.04-arm_test_rmw_zenoh_cpp.json) |
-| macos-26-intel | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_8.x_macos-26-intel_examples.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_9.x_macos-26-intel_examples.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_macos-26-intel_build.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_macos-26-intel_build.json) | *disabled* | *disabled* | *disabled* | *disabled* |
-| macos-26 | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_8.x_macos-26_examples.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_9.x_macos-26_examples.json) | ![8.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_8.x_macos-26_build.json) ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-06-08.rcr.2_perception_9.x_macos-26_build.json) | *disabled* | *disabled* | *disabled* | *disabled* |
+| ubuntu-26.04 | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_9.x_ubuntu-26.04_examples.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_last_rc_ubuntu-26.04_examples.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_ubuntu-26.04_build.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_ubuntu-26.04_build.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_ubuntu-26.04_test_rmw_fastrtps_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_ubuntu-26.04_test_rmw_fastrtps_cpp.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_ubuntu-26.04_test_rmw_fastrtps_dynamic_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_ubuntu-26.04_test_rmw_fastrtps_dynamic_cpp.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_ubuntu-26.04_test_rmw_cyclonedds_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_ubuntu-26.04_test_rmw_cyclonedds_cpp.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_ubuntu-26.04_test_rmw_zenoh_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_ubuntu-26.04_test_rmw_zenoh_cpp.json) |
+| ubuntu-26.04-arm | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_9.x_ubuntu-26.04-arm_examples.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_last_rc_ubuntu-26.04-arm_examples.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_ubuntu-26.04-arm_build.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_ubuntu-26.04-arm_build.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_ubuntu-26.04-arm_test_rmw_fastrtps_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_ubuntu-26.04-arm_test_rmw_fastrtps_cpp.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_ubuntu-26.04-arm_test_rmw_fastrtps_dynamic_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_ubuntu-26.04-arm_test_rmw_fastrtps_dynamic_cpp.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_ubuntu-26.04-arm_test_rmw_cyclonedds_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_ubuntu-26.04-arm_test_rmw_cyclonedds_cpp.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_ubuntu-26.04-arm_test_rmw_zenoh_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_ubuntu-26.04-arm_test_rmw_zenoh_cpp.json) |
+| macos-26 | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_9.x_macos-26_examples.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_last_rc_macos-26_examples.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_macos-26_build.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_macos-26_build.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_macos-26_test_rmw_fastrtps_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_macos-26_test_rmw_fastrtps_cpp.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_macos-26_test_rmw_fastrtps_dynamic_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_macos-26_test_rmw_fastrtps_dynamic_cpp.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_macos-26_test_rmw_cyclonedds_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_macos-26_test_rmw_cyclonedds_cpp.json) | ![9.x](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_9.x_macos-26_test_rmw_zenoh_cpp.json) ![last_rc](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/asymingt/f796805a77e0f05cc837b18e60142773/raw/lyrical.2026-10-05.rcr.0_desktop_full_last_rc_macos-26_test_rmw_zenoh_cpp.json) |
 
 # Prerequisites
 
 The RCR builds **everything from source** using a hermetic LLVM/clang toolchain and a hermetic Python interpreter that Bazel downloads automatically. As a result you do **not** need a system C/C++ compiler or an existing ROS installation.
+
+The RCR requires **Bazel 9.x or newer**; Bazel 8.x and older are not supported. CI tests against the latest Bazel 9.x release and the latest Bazel release candidate (`last_rc`). Installing `bazelisk` as shown below takes care of this for you, since it downloads the latest Bazel release.
 
 ## Ubuntu 26.04 (amd64 or arm64)
 
@@ -57,7 +58,7 @@ brew install bazelisk git
 
 # Verify your setup
 
-Check that the commands below print versions.
+Check that the commands below print versions. `bazel --version` should report 9.x or newer.
 
 ```bash
 bazel --version
@@ -91,23 +92,23 @@ bazel query //...
 
 Please refer to [examples/README.md](examples/README.md) for more information.
 
-# Building and testing the full perception release
+# Building and testing the full desktop_full release
 
-To build and test an entire ROS variant (for example `perception`), generate a workspace
+To build and test an entire ROS variant (for example `desktop_full`), generate a workspace
 from the repository root and run Bazel inside it:
 
 ```bash
 # From the root of the repository, generate the workspace/ folder for a release.
-bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-06-08.rcr.2
+bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-10-05.rcr.0
 
 # Switch to the generated workspace.
 cd workspace
 
-# Build all packages in the perception variant.
-bazel build --config perception
+# Build all packages in the desktop_full variant.
+bazel build --config desktop_full
 
-# Test all packages in the perception variant.
-bazel test --config perception
+# Test all packages in the desktop_full variant.
+bazel test --config desktop_full
 ```
 
 The `setup_workspace` target resolves every package in the requested release, writes a
@@ -117,7 +118,7 @@ available variants are `core`, `base`, `desktop`, `desktop_full`, `perception` a
 whole distribution from source and can take a long time on a cold cache; subsequent builds
 reuse the local and remote caches.
 
-Right now we support everything up to perception. Beyond perception, the other variants (desktop, simulation and desktop_full) are incomplete. The biggest issue is that packages (rviz, gazebo, etc) depend on OpenGL, which requires headers to be supplied from the host, breaking hermeticity.
+Right now we support everything up to desktop_full, which includes the core, base, desktop, perception and simulation variants. Beyond desktop_full, many other packages in `rosdistro` have also been ported; use `--config all` to build or test every package in the release.
 
 # Usage instructions
 
@@ -130,7 +131,7 @@ common --registry=https://bazel.ros.org --registry=https://bcr.bazel.build
 When the following lines are added to the `MODULE.bazel` file, Bazel will load the `core` ROS variant, which contains a minimum set of ROS packages required to build any ROS project. The `std_msgs` and `rclcpp` packages are among these.
 
 ```bazel
-bazel_dep(name = "ros_core", version = "lyrical.2026-06-08.rcr.2")
+bazel_dep(name = "ros_core", version = "lyrical.2026-10-05.rcr.0")
 bazel_dep(name = "rclcpp", version = "0.0.0")    # resolves version 32.0.0-1.rcr.1 
 bazel_dep(name = "std_msgs", version = "0.0.0")  # resolves version 5.9.2-3.rcr.1 
 ```
@@ -223,16 +224,17 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
 
 HEADERS = glob(["include/**/*.hpp"])
 
-DEPENDENCIES = {"@foo//:foo": "@foo//:foo_library"}
+DEPENDENCIES = {
+    "@foo//:foo": "@foo//:foo_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",  # See notes below
+}
 
 cc_library(
     name = "bar_library",
     srcs = glob(["src/**/*.cpp"]),
     hdrs = glob(["src/**/*.hpp"]),
     includes = ["include"],
-    deps = DEPENDENCIES.values() + [
-      "@std_msgs//:cc"                  # See notes below
-    ],
+    deps = DEPENDENCIES.values(),
 )
 
 cc_shared_library(
@@ -255,7 +257,7 @@ cc_test(
         ":foo",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
-        "@test_msgs//:cc",              # See notes below
+        "@test_msgs//:cc",              # Linked statically, see notes below
     ],
 )
 
@@ -270,7 +272,7 @@ ament_package(
 
 Some important notes about the code above:
 
-1. The message packages have `:cc` targets that supply both compilation information (via a `CcInfo`) and shared library files (via `DefaultInfo`) so they can be just listed in the `deps` directly; you do not have to import special targets for the message language bindings.
+1. Message packages follow the same two-target convention as every other library: `:cc` (alias `:c`) is the `cc_library` half -- a `CcInfo` with the generated headers and static archives -- and `:cc_shared` (alias `:c_shared`) is the `cc_shared_library` half -- a `CcSharedLibraryInfo` with the generated shared libraries. List them as a pair in `DEPENDENCIES` to link the generated code dynamically. Listing only `:cc` (as the test above does with `test_msgs`) links the generated code statically into the consumer, which is fine for binaries and tests but should be avoided in a `cc_shared_library`, where it would duplicate the code into your library (`cc_shared_library` reports this as "linked statically by different cc_shared_libraries but not exported").
 2. The `collect_transitive_dynamic_deps` rule is needed because `dynamic_deps` does not work transitively. So, in order for `baz` to link correctly to `foo` through `bar`, we need to collect all of the shared libraries from `bar` and all of its `dynamic_deps`, and then pass them to `baz`. You only need to do this for `cc_test` or `cc_binary` rules.
 
 ## Message generation
@@ -283,36 +285,38 @@ One of our objectives is to provide the ability to compile small, portable C and
 
 ## Static compilation
 
-If you run `bazel run //:example_ros_publisher_cc --dynamic_mode=off --@rosdistro//:rmw=rmw_cyclonedds_cpp` in the examples folder you will get a single portable executable with all required symbols statically linked into the executable. These flags must always be used together, as both the typesupports and the middleware / dependencies must both be either statically or dynamically linked, but never mixed.
-
-For a simple rmw_zenoh_cpp publisher this will result in a 170M binary. With the following compiler optimizations, you can drop this to around 47M:
+In the `examples` folder, [`examples/.bazelrc`](examples/.bazelrc) defines a `portable` configuration (`--config portable`) that links all ROS dependencies, middleware (`rmw_cyclonedds_cpp` by default), and message typesupports statically into a single executable with size optimizations, dead-code elimination, ThinLTO, and symbol stripping enabled:
 
 ```
-$ bazel build //:example_ros_publisher_cc --dynamic_mode=off --@rosdistro//:rmw=rmw_zenoh_cpp -c opt \
-    --copt=-Os --copt=-fdata-sections  --copt=-ffunction-sections --copt=-fno-asynchronous-unwind-tables \
-        --linkopt=-Wl,--gc-sections --linkopt=-s  --strip=always
-$ du -hs bazel-bin/example_ros_publisher_cc
-47M     bazel-bin/example_ros_publisher_cc
+$ bazel build --config portable //:example_ros_publisher_cc
 ```
 
-For a simple rmw_fastrtps_cpp publisher this drops even further to 30M:
+You can also override the middleware while keeping the rest of the `portable` configuration:
 
 ```
-$ bazel build //:example_ros_publisher_cc --dynamic_mode=off --@rosdistro//:rmw=rmw_fastrtps_cpp -c opt \
-    --copt=-Os --copt=-fdata-sections  --copt=-ffunction-sections --copt=-fno-asynchronous-unwind-tables \
-        --linkopt=-Wl,--gc-sections --linkopt=-s  --strip=always
-$ du -hs bazel-bin/example_ros_publisher_cc
-30M     bazel-bin/example_ros_publisher_cc
+$ bazel build --config portable --@rosdistro//:rmw=rmw_fastrtps_cpp //:example_ros_publisher_cc
+$ bazel build --config portable --@rosdistro//:rmw=rmw_zenoh_cpp //:example_ros_publisher_cc
 ```
 
-For a simple rmw_cyclonedds_cpp publisher this drops even further to 8.8M:
+To verify what shared libraries the resulting binary still links against (typically only core OS system libraries), run `ldd` on Linux or `otool -L` on macOS:
 
 ```
-$ bazel build //:example_ros_publisher_cc --dynamic_mode=off --@rosdistro//:rmw=rmw_cyclonedds_cpp -c opt \
-    --copt=-Os --copt=-fdata-sections  --copt=-ffunction-sections --copt=-fno-asynchronous-unwind-tables \
-        --linkopt=-Wl,--gc-sections --linkopt=-s  --strip=always
-$ du -hs bazel-bin/example_ros_publisher_cc
-8.8M     bazel-bin/example_ros_publisher_cc
+# Linux
+$ ldd bazel-bin/example_ros_publisher_cc
+
+# macOS
+$ otool -L bazel-bin/example_ros_publisher_cc
+```
+
+> [!CAUTION]
+> Be careful before distributing statically linked binaries if your dependency graph includes LGPL or GPL licensed code (for example, Qt or certain third-party libraries). Static linking may trigger copyleft obligations that require providing object files, full source code, or relinking mechanisms to end users. Always audit the licenses of your transitive dependencies before distributing static executables.
+
+You can use `rules_license` to perform this audit for you, and write it to a `.json` file. For example:
+
+```
+bazel build --config portable //:example_ros_publisher_cc --config ci  \
+  --aspects=@rules_license//rules_gathering:gather_metadata.bzl%gather_metadata_info_and_write \
+  --output_groups=licenses
 ```
 
 # Remote caching

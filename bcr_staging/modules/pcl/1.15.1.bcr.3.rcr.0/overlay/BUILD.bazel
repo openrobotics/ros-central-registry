@@ -1,0 +1,763 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "int_flag")
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cuda//cuda:defs.bzl", "cuda_library", "requires_cuda")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    package_name = "pcl",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+    license_text = "LICENSE.txt",
+)
+
+exports_files(["LICENSE.txt"])
+
+config_setting(
+    name = "is_building_debug",
+    values = {"compilation_mode": "dbg"},
+)
+
+bool_flag(
+    name = "pcl_silence_malloc_warning",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "pcl_malloc_no_warns",
+    flag_values = {":pcl_silence_malloc_warning": "True"},
+)
+
+# Set via --@pcl//:pcl_index_signed=True on command line, bazelrc, or in a transition
+# https://github.com/PointCloudLibrary/pcl/blob/pcl-1.15.0/cmake/pcl_options.cmake#L110-L116
+bool_flag(
+    name = "pcl_index_signed",
+    build_setting_default = True,
+)
+
+config_setting(
+    name = "pcl_index_is_signed",
+    flag_values = {":pcl_index_signed": "True"},
+)
+
+# Set via --@pcl//:pcl_index_size=N on command line, bazelrc, or in a transition
+# Available options are: 8 16 32 64. A negative value indicates default size (32)
+# https://github.com/PointCloudLibrary/pcl/blob/pcl-1.15.0/cmake/pcl_options.cmake#L106-L108
+int_flag(
+    name = "pcl_index_size",
+    build_setting_default = -1,
+    make_variable = "PCL_INDEX_SIZE",
+)
+
+cmake_configure_file(
+    name = "pcl_config_header",
+    src = "pcl_config.h.in",
+    out = "pcl_config.h",
+    cmakelists = ["CMakeLists.txt"],
+    defines = [
+        "HAVE_PNG=1",
+        "HAVE_QHULL=1",
+        "HAVE_QVTK=1",
+        "HAVE_ZLIB=1",
+        "PCL_DEV_VERSION=1",
+        "PCL_HAS_NANOFLANN=1",
+        "PCL_INDEX_SIZE=$(PCL_INDEX_SIZE)",
+        "PCL_NORMAL_POINT_TYPES=(pcl::Normal)(pcl::PointNormal)(pcl::PointXYZRGBNormal)(pcl::PointXYZINormal)(pcl::PointXYZLNormal)(pcl::PointSurfel)",
+        "PCL_PREFER_BOOST_FILESYSTEM",
+        "PCL_VERSION_MAJOR=" + module_version().split(".")[0],
+        "PCL_VERSION_MINOR=" + module_version().split(".")[1],
+        "PCL_VERSION_PATCH=" + module_version().split(".")[2],
+        "PCL_VERSION_PRETTY=" + module_version(),
+        "PCL_VISUALIZATION_AVAILABLE=1",
+        "PCL_XYZ_POINT_TYPES=(pcl::PointXYZ)(pcl::PointXYZI)(pcl::PointXYZL)(pcl::PointXYZRGBA)(pcl::PointXYZRGB)(pcl::PointXYZRGBL)(pcl::PointXYZLAB)(pcl::PointXYZHSV)(pcl::InterestPoint)(pcl::PointNormal)(pcl::PointXYZRGBNormal)(pcl::PointXYZINormal)(pcl::PointXYZLNormal)(pcl::PointWithRange)(pcl::PointWithViewpoint)(pcl::PointWithScale)(pcl::PointSurfel)(pcl::PointDEM)",
+        "PROJECT_NAME=" + module_name(),
+        "VTK_RENDERING_BACKEND_OPENGL_VERSION=2",
+    ] + select({
+        "//:is_building_debug": ["CMAKE_BUILD_TYPE=Debug"],
+        "//conditions:default": ["CMAKE_BUILD_TYPE=Release"],
+    }) + select({
+        ":pcl_index_is_signed": ["PCL_INDEX_SIGNED_STR=true"],
+        "//conditions:default": ["PCL_INDEX_SIGNED_STR=false"],
+    }) + select({
+        ":pcl_malloc_no_warns": ["PCL_SILENCE_MALLOC_WARNING"],
+        "//conditions:default": [],
+    }) + select({
+        "@rules_cuda//cuda:is_enabled": ["HAVE_CUDA=1"],
+        "//conditions:default": [],
+    }),
+    toolchains = [":pcl_index_size"],
+    undefines = [
+        "HAVE_CJSON",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+# pcl::visualization needs VTK's OpenGL rendering stack, which the staged VTK
+# only provides on Linux (it is written for X11/GLX). Keep visualization, and
+# the components built on it, Linux-only so that the rest of PCL -- including
+# io and surface, which only use VTK's non-rendering modules -- stays usable
+# on macOS.
+_LINUX_ONLY = select({
+    "@platforms//os:linux": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
+cc_library(
+    name = "pcl_config",
+    hdrs = [":pcl_config.h"],
+    include_prefix = "pcl",
+)
+
+cc_library(
+    name = "2d",
+    srcs = ["2d/src/convolution_2d.cpp"] + glob(["2d/include/pcl/**/impl/*.hpp"]),
+    hdrs = glob(["2d/include/**/*.h"]),
+    includes = ["2d/include"],
+    deps = [
+        ":common",
+        ":filters",
+    ],
+)
+
+cc_library(
+    name = "common",
+    srcs = glob([
+        "common/src/fft/*.c",
+        "common/src/**/*.cpp",
+        "common/include/pcl/**/impl/*.hpp",
+    ]),
+    hdrs = glob(["common/include/**/*.h"]),
+    includes = ["common/include"],
+    deps = [
+        ":pcl_config",
+        "@boost.algorithm",
+        "@boost.assert",
+        "@boost.filesystem",
+        "@boost.fusion",
+        "@boost.mpl",
+        "@boost.predef",
+        "@boost.preprocessor",
+        "@boost.signals2",
+        "@eigen",
+    ],
+)
+
+cc_library(
+    name = "features",
+    srcs = glob([
+        "features/src/*.cpp",
+        "features/include/pcl/features/impl/*.hpp",
+    ]),
+    hdrs = glob(["features/include/pcl/features/*.h"]),
+    includes = ["features/include"],
+    deps = [
+        ":2d",
+        ":common",
+        ":filters",
+        ":kdtree",
+        ":octree",
+        ":search",
+        "@boost.graph",
+        "@boost.property_map",
+        "@eigen",
+    ],
+)
+
+cc_library(
+    name = "filters",
+    srcs = glob([
+        "filters/src/*.cpp",
+        "filters/include/pcl/filters/impl/*.hpp",
+    ]),
+    hdrs = glob(["filters/include/**/*.h"]),
+    includes = ["filters/include"],
+    deps = [
+        ":common",
+        ":kdtree",
+        ":octree",
+        ":pcl_config",
+        ":sample_consensus",
+        ":search",
+        "@boost.dynamic_bitset",
+        "@boost.fusion",
+        "@boost.mpl",
+        "@boost.optional",
+        "@boost.random",
+        "@boost.sort",
+        "@eigen",
+    ],
+)
+
+cc_library(
+    name = "geometry",
+    srcs = glob(["geometry/include/pcl/geometry/impl/*.hpp"]),
+    hdrs = glob(["geometry/include/pcl/geometry/*.h"]),
+    includes = ["geometry/include"],
+    deps = [
+        ":common",
+        "@boost.config",
+        "@boost.utility",
+        "@eigen",
+    ],
+)
+
+_CUDA_GCC_COPTS = [
+    "-Wno-conversion",
+    "-Wno-unused-parameter",
+    "-Wno-unused-variable",
+    "-Wno-unused-function",
+    "-Wno-unused-but-set-variable",
+    "-Wno-error=cpp",
+    "-Wno-error=maybe-uninitialized",
+]
+
+cuda_library(
+    name = "gpu_utils",
+    srcs = glob([
+        "gpu/utils/src/*.cu",
+        "gpu/utils/src/*.hpp",
+    ]),
+    hdrs = glob(["gpu/utils/include/pcl/gpu/utils/**/*.hpp"]),
+    host_copts = select({
+        "@rules_cc//cc/compiler:gcc": _CUDA_GCC_COPTS,
+        "//conditions:default": [],
+    }),
+    includes = ["gpu/utils/include"],
+    target_compatible_with = requires_cuda(),
+)
+
+cuda_library(
+    name = "gpu_containers",
+    srcs = glob([
+        "gpu/containers/include/pcl/gpu/containers/impl/*.hpp",
+        "gpu/containers/src/*.cpp",
+        "gpu/containers/src/*.cu",
+    ]),
+    hdrs = glob([
+        "gpu/containers/include/pcl/gpu/containers/*.h",
+    ]),
+    host_copts = select({
+        "@rules_cc//cc/compiler:gcc": _CUDA_GCC_COPTS,
+        "//conditions:default": [],
+    }),
+    includes = ["gpu/containers/include"],
+    target_compatible_with = requires_cuda(),
+    deps = [
+        ":common",
+        ":gpu_utils",
+    ],
+)
+
+cuda_library(
+    name = "gpu_octree",
+    srcs = glob([
+        "gpu/octree/src/**/*.cpp",
+        "gpu/octree/src/**/*.hpp",
+        "gpu/octree/src/cuda/*.cu",
+    ]),
+    hdrs = glob(["gpu/octree/include/pcl/gpu/octree/*.hpp"]),
+    host_copts = select({
+        "@rules_cc//cc/compiler:gcc": _CUDA_GCC_COPTS,
+        "//conditions:default": [],
+    }),
+    includes = [
+        "gpu/octree/include",
+        "gpu/octree/src",
+    ],
+    target_compatible_with = requires_cuda(),
+    deps = [":gpu_containers"],
+)
+
+cuda_library(
+    name = "gpu_features",
+    srcs = glob([
+        "gpu/features/src/**/*.hpp",
+        "gpu/features/src/*.cu",
+    ]),
+    hdrs = glob(["gpu/features/include/pcl/gpu/features/**/*.hpp"]),
+    host_copts = select({
+        "@rules_cc//cc/compiler:gcc": _CUDA_GCC_COPTS,
+        "//conditions:default": [],
+    }),
+    includes = ["gpu/features/include"],
+    target_compatible_with = requires_cuda(),
+    deps = [
+        ":gpu_containers",
+        ":gpu_octree",
+        ":gpu_utils",
+    ],
+)
+
+cc_library(
+    name = "gpu_segmentation",
+    srcs = glob(["gpu/segmentation/include/pcl/gpu/segmentation/impl/*.hpp"]) + [
+        "gpu/segmentation/src/extract_clusters.cpp",
+    ],
+    hdrs = glob([
+        "gpu/segmentation/include/pcl/gpu/segmentation/*.h",
+    ]),
+    copts = select({
+        "@rules_cc//cc/compiler:gcc": _CUDA_GCC_COPTS,
+        "//conditions:default": [],
+    }),
+    includes = ["gpu/segmentation/include"],
+    target_compatible_with = requires_cuda(),
+    deps = [
+        ":gpu_containers",
+        ":gpu_octree",
+        ":gpu_utils",
+    ],
+)
+
+cuda_library(
+    name = "gpu_surface",
+    srcs = [
+        "gpu/surface/src/convex_hull.cpp",
+        "gpu/surface/src/cuda/convex_hull.cu",
+        "gpu/surface/src/cuda/device.h",
+        "gpu/surface/src/internal.h",
+    ],
+    hdrs = ["gpu/surface/include/pcl/gpu/surface/convex_hull.h"],
+    host_copts = select({
+        "@rules_cc//cc/compiler:gcc": _CUDA_GCC_COPTS,
+        "//conditions:default": [],
+    }),
+    includes = [
+        "gpu/surface/include",
+        "gpu/surface/src",
+    ],
+    target_compatible_with = requires_cuda(),
+    deps = [
+        ":common",
+        ":geometry",
+        ":gpu_containers",
+        ":gpu_utils",
+    ],
+)
+
+cuda_library(
+    name = "gpu_tracking",
+    srcs = [
+        "gpu/tracking/src/cuda/device.hpp",
+        "gpu/tracking/src/cuda/particle_filter.cu",
+        "gpu/tracking/src/internal.h",
+    ],
+    hdrs = ["gpu/tracking/include/pcl/gpu/tracking/particle_filter.h"],
+    host_copts = select({
+        "@rules_cc//cc/compiler:gcc": _CUDA_GCC_COPTS,
+        "//conditions:default": [],
+    }),
+    includes = [
+        "gpu/tracking/include",
+        "gpu/tracking/src",
+    ],
+    target_compatible_with = requires_cuda(),
+    deps = [
+        ":filters",
+        ":gpu_containers",
+        ":gpu_octree",
+        ":gpu_utils",
+        ":kdtree",
+        ":octree",
+        ":search",
+        ":tracking",
+    ],
+)
+
+cc_library(
+    name = "io",
+    srcs = glob(
+        [
+            "io/src/**/*.cpp",
+            "io/include/pcl/*/impl/*.hpp",
+        ],
+        exclude = [
+            "io/src/davidsdk_grabber.cpp",
+            "io/src/depth_sense/*",
+            "io/src/depth_sense*",
+            "io/src/dinast_grabber.cpp",
+            "io/src/ensenso_grabber.cpp",
+            "io/src/oni_grabber.cpp",
+            "io/src/openni2/*",
+            "io/src/openni_camera/*",
+            "io/src/real_sense/*",
+            "io/src/real_sense*",
+        ],
+    ),
+    hdrs = glob(
+        ["io/include/**/*.h"],
+        exclude = [
+            "io/include/pcl/io/davidsdk_grabber.h",
+            "io/include/pcl/io/depth_sense/*",
+            "io/include/pcl/io/depth_sense*",
+            "io/include/pcl/io/dinast_grabber.h",
+            "io/include/pcl/io/ensenso_grabber.h",
+            "io/include/pcl/io/oni_grabber.h",
+            "io/include/pcl/io/openni2/*",
+            "io/include/pcl/io/openni_camera/*",
+            "io/include/pcl/io/real_sense/*",
+            "io/include/pcl/io/real_sense*",
+        ],
+    ),
+    includes = ["io/include"],
+    deps = [
+        ":common",
+        ":octree",
+        ":pcl_config",
+        "@boost.algorithm",
+        "@boost.array",
+        "@boost.asio",
+        "@boost.circular_buffer",
+        "@boost.core",
+        "@boost.filesystem",
+        "@boost.foreach",
+        "@boost.format",
+        "@boost.interprocess",
+        "@boost.iostreams",
+        "@boost.lexical_cast",
+        "@boost.math",
+        "@boost.mpl",
+        "@boost.multiprecision",
+        "@boost.numeric_conversion",
+        "@boost.predef",
+        "@boost.property_tree",
+        "@boost.signals2",
+        "@boost.smart_ptr",
+        "@boost.tokenizer",
+        "@boost.utility",
+        "@libpng",
+        "@vtk",
+        "@zlib",
+    ],
+)
+
+cc_library(
+    name = "kdtree",
+    srcs = ["kdtree/src/kdtree_flann.cpp"] + glob(["kdtree/include/pcl/kdtree/impl/*.hpp"]),
+    hdrs = glob(["kdtree/include/pcl/kdtree/*.h"]),
+    includes = ["kdtree/include"],
+    deps = [
+        ":common",
+        "@flann//:flann_cpp",
+    ],
+)
+
+cc_library(
+    name = "keypoints",
+    srcs = glob([
+        "keypoints/src/*.cpp",
+        "keypoints/include/pcl/keypoints/impl/*.hpp",
+    ]),
+    hdrs = glob(["keypoints/include/pcl/keypoints/*.h"]),
+    includes = ["keypoints/include"],
+    deps = [
+        ":common",
+        ":features",
+        ":filters",
+        ":octree",
+        ":pcl_config",
+        ":search",
+        "@eigen",
+    ],
+)
+
+cc_library(
+    name = "ml",
+    srcs = glob([
+        "ml/src/**/*.cpp",
+        "ml/include/pcl/ml/impl/**/*.hpp",
+    ]),
+    hdrs = glob(["ml/include/**/*.h"]),
+    includes = ["ml/include"],
+    deps = [":common"],
+)
+
+cc_library(
+    name = "octree",
+    srcs = ["octree/src/octree_inst.cpp"] + glob(["octree/include/pcl/octree/impl/*.hpp"]),
+    hdrs = glob(["octree/include/pcl/octree/*.h"]),
+    includes = ["octree/include"],
+    deps = [
+        ":common",
+        "@boost.graph",
+    ],
+)
+
+cc_library(
+    name = "outofcore",
+    srcs = glob([
+        "outofcore/src/*.cpp",
+        "outofcore/include/pcl/outofcore/impl/*.hpp",
+    ]),
+    hdrs = glob(["outofcore/include/pcl/outofcore/*.h"]),
+    includes = ["outofcore/include"],
+    target_compatible_with = _LINUX_ONLY,
+    deps = [
+        ":common",
+        ":filters",
+        ":io",
+        ":octree",
+        ":visualization",
+        "@boost.filesystem",
+        "@boost.foreach",
+        "@boost.uuid",
+        "@vtk",
+    ],
+)
+
+cc_library(
+    name = "people",
+    srcs = ["people/src/hog.cpp"] + glob(["people/include/pcl/people/impl/*.hpp"]),
+    hdrs = glob(["people/include/pcl/people/*.h"]),
+    includes = ["people/include"],
+    target_compatible_with = _LINUX_ONLY,
+    deps = [
+        ":common",
+        ":filters",
+        ":geometry",
+        ":io",
+        ":kdtree",
+        ":octree",
+        ":sample_consensus",
+        ":search",
+        ":segmentation",
+        ":visualization",
+        "@vtk",
+    ],
+)
+
+cc_library(
+    name = "recognition",
+    srcs = glob(
+        [
+            "recognition/src/**/*.cpp",
+            "recognition/include/pcl/recognition/impl/**/*.hpp",
+        ],
+        exclude = ["recognition/src/hv/hv_go.cpp"],
+    ),
+    hdrs = glob(
+        [
+            "recognition/include/**/*.h",
+            "recognition/include/**/*.hh",
+        ],
+        exclude = ["recognition/include/pcl/recognition/hv/hv_go.h"],
+    ),
+    includes = ["recognition/include"],
+    deps = [
+        ":common",
+        ":features",
+        ":filters",
+        ":io",
+        ":kdtree",
+        ":ml",
+        ":registration",
+        ":search",
+        "@boost.algorithm",
+        "@boost.filesystem",
+        "@boost.graph",
+        "@boost.random",
+        "@eigen",
+    ],
+)
+
+cc_library(
+    name = "registration",
+    srcs = glob(
+        [
+            "registration/src/**/*.cpp",
+            "registration/include/pcl/registration/impl/*.hpp",
+        ],
+        exclude = [
+            "registration/include/pcl/registration/impl/transformation_estimation_dq.hpp",
+            "registration/src/pairwise_graph_registration.cpp",
+            "registration/src/transformation_estimation_dq.cpp",
+        ],
+    ),
+    hdrs = glob(
+        ["registration/include/**/*.h"],
+        exclude = ["registration/include/pcl/registration/transformation_estimation_dq.h"],
+    ),
+    includes = ["registration/include"],
+    deps = [
+        ":common",
+        ":features",
+        ":filters",
+        ":kdtree",
+        ":sample_consensus",
+        ":search",
+        "@boost.core",
+        "@boost.graph",
+        "@boost.property_map",
+        "@boost.smart_ptr",
+        "@eigen",
+    ],
+)
+
+cc_library(
+    name = "sample_consensus",
+    srcs = glob([
+        "sample_consensus/src/**/*.cpp",
+        "sample_consensus/include/pcl/sample_consensus/impl/*.hpp",
+    ]),
+    hdrs = glob(["sample_consensus/include/**/*.h"]),
+    includes = ["sample_consensus/include"],
+    deps = [
+        ":common",
+        ":pcl_config",
+        ":search",
+        "@boost.math",
+        "@boost.multiprecision",
+        "@boost.random",
+        "@eigen",
+    ],
+)
+
+cc_library(
+    name = "search",
+    srcs = glob([
+        "search/src/**/*.cpp",
+        "search/include/pcl/search/impl/*.hpp",
+    ]),
+    hdrs = glob(["search/include/**/*.h"]),
+    includes = ["search/include"],
+    deps = [
+        ":common",
+        ":kdtree",
+        ":octree",
+        "@eigen",
+        "@flann//:flann_cpp",
+        "@nanoflann",
+    ],
+)
+
+cc_library(
+    name = "segmentation",
+    srcs = glob([
+        "segmentation/src/**/*.cpp",
+        "segmentation/include/pcl/segmentation/impl/*.hpp",
+    ]),
+    hdrs = glob(["segmentation/include/**/*.h"]),
+    includes = ["segmentation/include"],
+    deps = [
+        ":common",
+        ":features",
+        ":filters",
+        ":geometry",
+        ":ml",
+        ":octree",
+        ":sample_consensus",
+        ":search",
+        "@boost.bimap",
+        "@boost.concept_check",
+        "@boost.graph",
+        "@boost.multi_array",
+        "@boost.ptr_container",
+        "@boost.utility",
+        "@eigen",
+        "@flann//:flann_cpp",
+    ],
+)
+
+cc_library(
+    name = "surface",
+    srcs = glob(
+        [
+            "surface/src/**/*.c",
+            "surface/src/**/*.cpp",
+            "surface/include/**/*.hpp",
+        ],
+        exclude = [
+            "surface/src/3rdparty/opennurbs/*",
+            "surface/src/on_nurbs/*",
+        ],
+    ),
+    hdrs = glob(
+        ["surface/include/**/*.h"],
+        exclude = [
+            "surface/include/pcl/surface/3rdparty/opennurbs/*",
+            "surface/include/pcl/surface/on_nurbs/*",
+        ],
+    ),
+    includes = ["surface/include"],
+    deps = [
+        ":common",
+        ":kdtree",
+        ":octree",
+        ":pcl_config",
+        ":search",
+        "@boost.dynamic_bitset",
+        "@eigen",
+        "@qhull//:libqhull_r",
+        "@vtk",
+    ],
+)
+
+cc_library(
+    name = "tracking",
+    srcs = glob([
+        "tracking/src/**/*.cpp",
+        "tracking/include/pcl/tracking/impl/*.hpp",
+    ]),
+    hdrs = glob(["tracking/include/**/*.h"]),
+    includes = ["tracking/include"],
+    deps = [
+        ":common",
+        ":filters",
+        ":octree",
+        ":search",
+    ],
+)
+
+cc_library(
+    name = "visualization",
+    srcs = glob([
+        "visualization/include/pcl/visualization/**/impl/*.hpp",
+        "visualization/src/**/*.cpp",
+    ]),
+    hdrs = glob(
+        ["visualization/include/**/*.h"],
+        exclude = [
+            "visualization/include/pcl/visualization/vtk/vtkFixedXRenderWindowInteractor.h",
+        ],
+    ),
+    includes = ["visualization/include"],
+    target_compatible_with = _LINUX_ONLY,
+    deps = [
+        ":common",
+        ":filters",
+        ":geometry",
+        ":io",
+        ":kdtree",
+        ":octree",
+        ":pcl_config",
+        ":search",
+        "@boost.algorithm",
+        "@boost.filesystem",
+        "@boost.foreach",
+        "@boost.signals2",
+        "@boost.smart_ptr",
+        "@boost.thread",
+        "@boost.uuid",
+        "@eigen",
+        "@vtk",
+    ],
+)

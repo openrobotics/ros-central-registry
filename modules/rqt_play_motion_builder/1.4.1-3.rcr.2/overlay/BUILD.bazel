@@ -1,0 +1,134 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@qt//:qt.bzl", "qt_cc_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@play_motion2_msgs//:cc_shared": "@play_motion2_msgs//:cc",
+    "@play_motion_builder_msgs//:cc_shared": "@play_motion_builder_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@qt_gui_cpp//:qt_gui_cpp_shared": "@qt_gui_cpp//:qt_gui_cpp",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rqt_gui_cpp//:rqt_gui_cpp_shared": "@rqt_gui_cpp//:rqt_gui_cpp",
+}
+
+HEADERS = [
+    "include/rqt_play_motion_builder/properties_dialog.hpp",
+    "include/rqt_play_motion_builder/rqt_play_motion_builder.hpp",
+]
+
+# qt5_wrap_ui(resources/*.ui)
+[genrule(
+    name = "gen_ui_{0}_h".format(ui),
+    srcs = ["resources/{0}.ui".format(ui)],
+    outs = ["_gen/include/ui_{0}.h".format(ui)],
+    cmd = "$(execpath @qtbase//:uic) $< -o $@",
+    tools = ["@qtbase//:uic"],
+) for ui in [
+    "properties_dialog",
+    "rqt_play_motion_builder",
+]]
+
+# ament_auto_add_library(rqt_play_motion_builder_gui SHARED ...)
+qt_cc_library(
+    name = "rqt_play_motion_builder_gui_library",
+    srcs = [
+        "src/properties_dialog.cpp",
+        "src/rqt_play_motion_builder.cpp",
+    ],
+    hdrs = HEADERS + [
+        ":gen_ui_properties_dialog_h",
+        ":gen_ui_rqt_play_motion_builder_h",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    moc_hdrs = HEADERS,
+    deps = DEPENDENCIES.values() + [
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+    ],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "rqt_play_motion_builder_gui",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:widgets_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rqt_play_motion_builder_gui_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rqt_play_motion_builder_gui"],
+)
+
+### PACKAGING
+
+# setup.py/scripts are catkin leftovers that the ament_cmake build never
+# installs; only the C++ rqt plugin is.
+ament_index(
+    name = "ament_index",
+    libraries = [":rqt_play_motion_builder_gui"],
+    package_xml = "package.xml",
+    plugin_category = "rqt_gui",
+    plugins = ["plugin.xml"],
+)
+
+ament_package(
+    name = "ament_package",
+    headers = HEADERS,
+    libraries = [":rqt_play_motion_builder_gui"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_auto//:ament_package",
+        "@class_loader//:ament_package",
+        "@play_motion2_msgs//:ament_package",
+        "@play_motion_builder//:ament_package",
+        "@play_motion_builder_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rqt_gui//:ament_package",
+        "@rqt_gui_cpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@urdf//:ament_package",
+    ],
+)

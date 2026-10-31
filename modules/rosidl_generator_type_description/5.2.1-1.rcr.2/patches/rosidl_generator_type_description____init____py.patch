@@ -1,0 +1,33 @@
+--- a/rosidl_generator_type_description/__init__.py
++++ b/rosidl_generator_type_description/__init__.py
+@@ -98,13 +98,16 @@
+ 
+     # Lookup for directory containing dependency .json files
+     include_map = {
+-        package_name: output_dir
++        package_name: [output_dir]
+     }
+     for include_tuple in include_paths:
+         include_parts = include_tuple.split(':', 1)
+         assert len(include_parts) == 2
+         include_package_name, include_base_path = include_parts
+-        include_map[include_package_name] = Path(include_base_path)
++        base_path = Path(include_base_path)
++        pkg_dirs = include_map.setdefault(include_package_name, [])
++        if base_path not in pkg_dirs:
++            pkg_dirs.append(base_path)
+ 
+     # Define all local IndividualTypeDescriptions
+     individual_types = {}
+@@ -157,8 +160,9 @@
+         process_include = pending_includes.pop()
+         p_path = process_include.with_suffix('.json')
+         pkg = p_path.parts[0]
+-        pkg_dir = include_map[pkg]
+-        include_path = pkg_dir / p_path.relative_to(pkg)
++        pkg_dirs = include_map[pkg]
++        rel_p = p_path.relative_to(pkg)
++        include_path = next((d / rel_p for d in pkg_dirs if (d / rel_p).exists()), pkg_dirs[-1] / rel_p)
+         with include_path.open('r') as include_file:
+             include_json = json.load(include_file)
+ 

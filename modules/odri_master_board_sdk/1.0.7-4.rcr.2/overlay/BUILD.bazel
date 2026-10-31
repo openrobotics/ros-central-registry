@@ -1,0 +1,254 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_jrl_headers", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:boost.python_shared": "@rosdistro//cc:boost.python",
+}
+
+CC_DEPS = [
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+_HDRS = [
+    "cmake/_unittests/cpp/include/jrl_cmakemodule/lib.hh",
+    "include/master_board_sdk/ESPNOW_manager.h",
+    "include/master_board_sdk/ESPNOW_types.h",
+    "include/master_board_sdk/ETHERNET_manager.h",
+    "include/master_board_sdk/ETHERNET_types.h",
+    "include/master_board_sdk/Link_manager.h",
+    "include/master_board_sdk/Link_types.h",
+    "include/master_board_sdk/defines.h",
+    "include/master_board_sdk/master_board_interface.h",
+    "include/master_board_sdk/motor.h",
+    "include/master_board_sdk/motor_driver.h",
+    "include/master_board_sdk/protocol.h",
+    ":jrl_headers",
+]
+
+cc_library(
+    name = "master_board_sdk_library",
+    srcs = [
+        "src/ESPNOW_manager.cpp",
+        "src/ESPNOW_types.cpp",
+        "src/ETHERNET_types.cpp",
+        "src/Link_manager.cpp",
+        "src/master_board_interface.cpp",
+        "src/motor.cpp",
+        "src/motor_driver.cpp",
+    ],
+    hdrs = _HDRS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["FOUND_CATCH2_MAJOR_VERSION=3"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+cc_shared_library(
+    name = "master_board_sdk",
+    exports_filter = ["//:__subpackages__"],
+    deps = [":master_board_sdk_library"],
+)
+
+cc_library(
+    name = "odri_master_board_sdk_pywrap_library",
+    srcs = [
+        "srcpy/my_bindings_headr.cpp",
+        "srcpy/my_bindings_headr.h",
+    ],
+    hdrs = _HDRS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["FOUND_CATCH2_MAJOR_VERSION=3"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":master_board_sdk_library"],
+)
+
+cc_shared_library(
+    name = "odri_master_board_sdk_pywrap",
+    dynamic_deps = DEPENDENCIES.keys() + [":master_board_sdk"],
+    shared_lib_name = "libodri_master_board_sdk_pywrap.so",
+    deps = [":odri_master_board_sdk_pywrap_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":master_board_sdk"],
+)
+
+cc_binary(
+    name = "master_board_example",
+    srcs = ["example/example.cpp"] + _HDRS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["FOUND_CATCH2_MAJOR_VERSION=3"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [":master_board_sdk_library"],
+)
+
+cc_binary(
+    name = "master_board_example_imu_data_collection",
+    srcs = ["example/example_imu_data_collection.cpp"] + _HDRS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["FOUND_CATCH2_MAJOR_VERSION=3"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [":master_board_sdk_library"],
+)
+
+cc_binary(
+    name = "master_board_example_pd",
+    srcs = ["example/example_pd.cpp"] + _HDRS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["FOUND_CATCH2_MAJOR_VERSION=3"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [":master_board_sdk_library"],
+)
+
+ros_jrl_headers(
+    name = "jrl_headers",
+    outs = [
+        "_gen/include/odri/master/board/sdk/config.hh",
+        "_gen/include/odri/master/board/sdk/deprecated.hh",
+        "_gen/include/odri/master/board/sdk/warning.hh",
+    ],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "cmake/cxx-standard.cmake",
+    ],
+    prefix = "lib/cmake/odri_master_board_sdk",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_1",
+    files = [
+        "cmake/doxygen/doxygen.css",
+    ],
+    prefix = "share/doc/odri_master_board_sdk/doxygen-html",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_2",
+    files = [
+        "cmake/doxygen/tabs.css",
+    ],
+    prefix = "share/doc/odri_master_board_sdk/doxygen-html",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+        ":ament_files_2",
+    ],
+    libraries = [
+        ":master_board_sdk",
+    ],
+    package_xml = "package.xml",
+)
+
+cc_test(
+    name = "test_protocol",
+    srcs = ["tests/test_protocol.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["FOUND_CATCH2_MAJOR_VERSION=3"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":master_board_sdk_library",
+        "@rosdistro//cc:catch2",
+        "@rosdistro//cc:catch2_main",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        ":jrl_headers",
+        "include/master_board_sdk/ESPNOW_manager.h",
+        "include/master_board_sdk/ESPNOW_types.h",
+        "include/master_board_sdk/ETHERNET_manager.h",
+        "include/master_board_sdk/ETHERNET_types.h",
+        "include/master_board_sdk/Link_manager.h",
+        "include/master_board_sdk/Link_types.h",
+        "include/master_board_sdk/defines.h",
+        "include/master_board_sdk/master_board_interface.h",
+        "include/master_board_sdk/motor.h",
+        "include/master_board_sdk/motor_driver.h",
+        "include/master_board_sdk/protocol.h",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":master_board_sdk",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        ":master_board_example",
+        ":master_board_example_imu_data_collection",
+        ":master_board_example_pd",
+    ],
+    python = [":odri_master_board_sdk_pywrap"],
+    deps = [":ament_index"],
+)

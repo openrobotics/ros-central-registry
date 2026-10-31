@@ -1,0 +1,154 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+cmake_configure_file(
+    name = "config_hpp",
+    src = "include/ecl/time_lite/config.hpp.in",
+    out = "include/ecl/time_lite/config.hpp",
+    defines = [
+        "ECL_PRIVATE_HAS_CLOCK_GETTIME=1",
+        "ECL_PRIVATE_HAS_CLOCK_NANOSLEEP=1",
+        "ECL_HAS_CLOCK_MONOTONIC=1",
+        "ECL_HAS_CPUTIME=1",
+    ] + select({
+        "@platforms//os:macos": ["ECL_HAS_MACH_TIMERS=1"],
+        "//conditions:default": ["ECL_HAS_RT_TIMERS=1"],
+    }),
+    undefines = [
+        "ECL_HAS_POSIX_TIMERS",
+        "ECL_HAS_WIN_TIMERS",
+    ] + select({
+        "@platforms//os:macos": ["ECL_HAS_RT_TIMERS"],
+        "//conditions:default": ["ECL_HAS_MACH_TIMERS"],
+    }),
+)
+
+DEPENDENCIES = {
+    "@ecl_errors//:ecl_errors": "@ecl_errors//:ecl_errors_library",
+}
+
+CC_DEPS = [
+    "@ecl_config//:ecl_config",
+    "@ecl_config//:ecl_config_library",
+]
+
+cc_library(
+    name = "ecl_time_lite_library",
+    srcs = [
+        "src/lib/cpu_time.cpp",
+        "src/lib/date.cpp",
+        "src/lib/functions_mac.cpp",
+        "src/lib/functions_pos.cpp",
+        "src/lib/functions_rt.cpp",
+        "src/lib/functions_win.cpp",
+    ],
+    hdrs = [
+        "include/ecl/time_lite.hpp",
+        "include/ecl/time_lite/cpu_time.hpp",
+        "include/ecl/time_lite/date.hpp",
+        "include/ecl/time_lite/errors.hpp",
+        "include/ecl/time_lite/functions.hpp",
+        "include/ecl/time_lite/functions_mac.hpp",
+        "include/ecl/time_lite/functions_pos.hpp",
+        "include/ecl/time_lite/functions_rt.hpp",
+        "include/ecl/time_lite/functions_win.hpp",
+        "include/ecl/time_lite/macros.hpp",
+        "include/ecl/time_lite/types.hpp",
+        "include/ecl/time_lite/types_pos.hpp",
+        "include/ecl/time_lite/types_win.hpp",
+    ] + [":config_hpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ecl_time_lite",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":ecl_time_lite_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":ecl_time_lite",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@ecl_build//:ament_package",
+        "@ecl_config//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_license//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    colcon_hooks = False,
+    headers = [
+        ":config_hpp",
+    ] + [
+        "include/ecl/time_lite.hpp",
+        "include/ecl/time_lite/cpu_time.hpp",
+        "include/ecl/time_lite/date.hpp",
+        "include/ecl/time_lite/errors.hpp",
+        "include/ecl/time_lite/functions.hpp",
+        "include/ecl/time_lite/functions_mac.hpp",
+        "include/ecl/time_lite/functions_pos.hpp",
+        "include/ecl/time_lite/functions_rt.hpp",
+        "include/ecl/time_lite/functions_win.hpp",
+        "include/ecl/time_lite/macros.hpp",
+        "include/ecl/time_lite/types.hpp",
+        "include/ecl/time_lite/types_pos.hpp",
+        "include/ecl/time_lite/types_win.hpp",
+    ],
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":ecl_time_lite",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@ecl_build//:ament_package",
+        "@ecl_config//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_license//:ament_package",
+    ],
+)

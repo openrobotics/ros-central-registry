@@ -1,0 +1,145 @@
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:ffmpeg_avcodec_shared": "@rosdistro//cc:ffmpeg_avcodec",
+    "@rosdistro//cc:ffmpeg_avformat_shared": "@rosdistro//cc:ffmpeg_avformat",
+    "@rosdistro//cc:ffmpeg_avutil_shared": "@rosdistro//cc:ffmpeg_avutil",
+    "@rosdistro//cc:ffmpeg_swresample_shared": "@rosdistro//cc:ffmpeg_swresample",
+    "@rosdistro//cc:ffmpeg_swscale_shared": "@rosdistro//cc:ffmpeg_swscale",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "broll_library",
+    srcs = [
+        "src/frame_decoder.cpp",
+        "src/msg_conversions.cpp",
+        "src/video_reader.cpp",
+    ],
+    hdrs = [
+        "include/broll/frame_decoder.hpp",
+        "include/broll/msg_conversions.hpp",
+        "include/broll/video_reader.hpp",
+        "src/logging.hpp",
+    ] + [
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/broll",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "broll",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":broll_library"],
+)
+
+cc_library(
+    name = "decode_node_component_library",
+    srcs = ["src/decode_node.cpp"],
+    hdrs = [
+        "include/broll/frame_decoder.hpp",
+        "include/broll/msg_conversions.hpp",
+        "include/broll/video_reader.hpp",
+        "src/logging.hpp",
+    ] + [
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/broll",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":broll_library"],
+)
+
+cc_shared_library(
+    name = "decode_node_component",
+    dynamic_deps = DEPENDENCIES.keys() + [":broll"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":decode_node_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "decode_node",
+    component = ":decode_node_component",
+    node_name = "decode_node",
+    plugin = "broll::DecodeNode",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":decode_node_record"],
+    lib_data = [":decode_node"],
+    libraries = [
+        ":broll",
+        ":decode_node_component",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcutils//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = ["sensor_msgs"],
+    cmake_export_name = "export_broll",
+    headers = [
+        "include/broll/frame_decoder.hpp",
+        "include/broll/msg_conversions.hpp",
+        "include/broll/video_reader.hpp",
+    ],
+    libraries = [
+        ":broll",
+        ":decode_node_component",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcutils//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

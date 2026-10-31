@@ -1,0 +1,159 @@
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:boringssl": "@rosdistro//cc:boringssl_crypto_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_msgs//:cc_shared": "@tf2_msgs//:cc",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.algorithm",
+    "@rosdistro//cc:boost.format",
+    "@rosdistro//cc:boost.smart_ptr",
+    "@rosdistro//cc:boringssl_ssl_library",
+]
+
+cc_library(
+    name = "warehouse_ros_library",
+    srcs = [
+        "src/database_loader.cpp",
+        "src/transform_collection.cpp",
+    ],
+    hdrs = [
+        "include/warehouse_ros/database_connection.h",
+        "include/warehouse_ros/database_loader.h",
+        "include/warehouse_ros/exceptions.h",
+        "include/warehouse_ros/impl/database_connection_impl.hpp",
+        "include/warehouse_ros/impl/message_collection_impl.hpp",
+        "include/warehouse_ros/impl/query_results_impl.hpp",
+        "include/warehouse_ros/message_collection.h",
+        "include/warehouse_ros/message_with_metadata.h",
+        "include/warehouse_ros/metadata.h",
+        "include/warehouse_ros/query_results.h",
+        "include/warehouse_ros/transform_collection.h",
+    ],
+    includes = [
+        "include",
+        "include/warehouse_ros",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "warehouse_ros",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":warehouse_ros_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":warehouse_ros"],
+)
+
+cc_binary(
+    name = "warehouse_test_dbloader",
+    srcs = ["src/test_dbloader.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/warehouse_ros",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":warehouse_ros_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [":warehouse_test_dbloader"],
+    libraries = [":warehouse_ros"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_copyright//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "std_msgs",
+        "geometry_msgs",
+        "pluginlib",
+        "tf2",
+        "tf2_ros",
+        "tf2_geometry_msgs",
+        "Boost",
+        "OpenSSL",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_warehouse_ros",
+    headers = [
+        "include/warehouse_ros/database_connection.h",
+        "include/warehouse_ros/database_loader.h",
+        "include/warehouse_ros/exceptions.h",
+        "include/warehouse_ros/impl/database_connection_impl.hpp",
+        "include/warehouse_ros/impl/message_collection_impl.hpp",
+        "include/warehouse_ros/impl/query_results_impl.hpp",
+        "include/warehouse_ros/message_collection.h",
+        "include/warehouse_ros/message_with_metadata.h",
+        "include/warehouse_ros/metadata.h",
+        "include/warehouse_ros/query_results.h",
+        "include/warehouse_ros/transform_collection.h",
+    ],
+    include_prefix = "",
+    libraries = [":warehouse_ros"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_copyright//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)

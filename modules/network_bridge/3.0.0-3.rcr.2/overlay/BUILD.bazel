@@ -1,0 +1,155 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+HEADERS = [
+    "include/network_bridge/network_bridge.hpp",
+    "include/network_bridge/subscription_manager.hpp",
+    "include/network_bridge/subscription_manager_tf.hpp",
+    "include/network_bridge/thrift_stream.hpp",
+    "include/network_bridge/thrift_stream_queue.hpp",
+    "include/network_interfaces/network_interface_base.hpp",
+    "include/network_interfaces/tcp_interface.hpp",
+    "include/network_interfaces/udp_interface.hpp",
+]
+
+DEPENDENCIES = {
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@tf2_msgs//:cc_shared": "@tf2_msgs//:cc",
+}
+
+cc_library(
+    name = "network_bridge_headers",
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:boost.array",
+        "@rosdistro//cc:boost.asio",
+        "@rosdistro//cc:boost.bind",
+    ],
+)
+
+[(
+    cc_library(
+        name = "{}_interface_library".format(proto),
+        srcs = ["src/network_interfaces/{}_interface.cpp".format(proto)],
+        local_defines = ros_local_defines(),
+        deps = DEPENDENCIES.values() + [":network_bridge_headers"],
+    ),
+    cc_shared_library(
+        name = "{}_interface".format(proto),
+        dynamic_deps = DEPENDENCIES.keys(),
+        exports_filter = ["//:__subpackages__"],
+        deps = [":{}_interface_library".format(proto)],
+    ),
+) for proto in [
+    "tcp",
+    "udp",
+]]
+
+BINARY_DEPENDENCIES = DEPENDENCIES | {
+    "@rosdistro//cc:zstd": "@rosdistro//cc:zstd_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = BINARY_DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "network_bridge",
+    srcs = [
+        "src/network_bridge.cpp",
+        "src/subscription_manager.cpp",
+        "src/subscription_manager_tf.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = BINARY_DEPENDENCIES.values() + [
+        ":network_bridge_headers",
+    ],
+)
+
+DATA = [
+    "config/Tcp1.yaml",
+    "config/Tcp2.yaml",
+    "config/Udp1.yaml",
+    "config/Udp2.yaml",
+] + ["//launch:launch_files"]
+
+ament_index(
+    name = "ament_index",
+    data = DATA,
+    libraries = [
+        ":tcp_interface",
+        ":udp_interface",
+    ],
+    package_xml = "package.xml",
+    plugins = ["network_interface_plugins.xml"],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    executables = [
+        ":network_bridge",
+    ],
+    libraries = [
+        ":tcp_interface",
+        ":udp_interface",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosdistro//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)

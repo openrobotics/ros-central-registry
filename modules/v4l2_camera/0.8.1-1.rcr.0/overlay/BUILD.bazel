@@ -1,0 +1,160 @@
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@camera_info_manager//:camera_info_manager": "@camera_info_manager//:camera_info_manager_library",
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "v4l2_camera_library",
+    srcs = [
+        "src/parameters.cpp",
+        "src/v4l2_camera.cpp",
+        "src/v4l2_camera_device.cpp",
+    ],
+    hdrs = [
+        "include/v4l2_camera/control.hpp",
+        "include/v4l2_camera/fourcc.hpp",
+        "include/v4l2_camera/image_format.hpp",
+        "include/v4l2_camera/parameters.hpp",
+        "include/v4l2_camera/pixel_format.hpp",
+        "include/v4l2_camera/v4l2_camera.hpp",
+        "include/v4l2_camera/v4l2_camera_device.hpp",
+        "include/v4l2_camera/visibility_control.h",
+    ],
+    includes = [
+        "include",
+        "include/v4l2_camera",
+    ],
+    local_defines = ros_local_defines() + ["V4L2_CAMERA_BUILDING_LIBRARY"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "v4l2_camera",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":v4l2_camera_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "v4l2_camera_components",
+    component = ":v4l2_camera",
+    plugins = ["v4l2_camera::V4L2Camera"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":v4l2_camera"],
+)
+
+cc_binary(
+    name = "v4l2_camera_compose_test",
+    srcs = ["src/v4l2_camera_compose_test.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/v4l2_camera",
+    ],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":v4l2_camera_library"],
+)
+
+cc_binary(
+    name = "v4l2_camera_node",
+    srcs = ["src/v4l2_camera_node.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/v4l2_camera",
+    ],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":v4l2_camera_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":v4l2_camera_components"],
+    lib_data = [
+        ":v4l2_camera_compose_test",
+        ":v4l2_camera_node",
+    ],
+    libraries = [":v4l2_camera"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@camera_info_manager//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = ["camera_info_manager"],
+    cmake_export_name = "export_v4l2_camera",
+    headers = [
+        "include/v4l2_camera/control.hpp",
+        "include/v4l2_camera/fourcc.hpp",
+        "include/v4l2_camera/image_format.hpp",
+        "include/v4l2_camera/parameters.hpp",
+        "include/v4l2_camera/pixel_format.hpp",
+        "include/v4l2_camera/v4l2_camera.hpp",
+        "include/v4l2_camera/v4l2_camera_device.hpp",
+        "include/v4l2_camera/visibility_control.h",
+    ],
+    include_prefix = "",
+    libraries = [":v4l2_camera"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@camera_info_manager//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

@@ -1,0 +1,144 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    "@can_msgs//:cc_shared": "@can_msgs//:cc",
+    "@dataspeed_can_msgs//:cc_shared": "@dataspeed_can_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "dataspeed_can_tools_library",
+    srcs = [
+        "src/CanExtractor.cpp",
+        "src/DbcIterator.cpp",
+        "src/DbcMessage.cpp",
+        "src/DbcSignal.cpp",
+    ],
+    hdrs = [
+        "src/CanExtractor.h",
+        "src/DbcIterator.hpp",
+        "src/DbcMessage.hpp",
+        "src/DbcSignal.hpp",
+    ],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "dataspeed_can_tools",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":dataspeed_can_tools_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":dataspeed_can_tools"],
+)
+
+cc_binary(
+    name = "dbc_bag",
+    srcs = ["src/dbc_bag.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":dataspeed_can_tools_library"],
+)
+
+cc_binary(
+    name = "dbc_node",
+    srcs = ["src/dbc_node.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["tests"],
+    local_defines = ros_local_defines() + [
+        "_FILE_OFFSET_BITS=64",
+        "rosbag2_storage_recv_time_stamp=recv_timestamp",
+        "rosbag2_storage_send_time_stamp=send_timestamp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":dataspeed_can_tools_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = ["//tests:Test.dbc"],
+    lib_data = [
+        ":dbc_bag",
+        ":dbc_node",
+        ":dataspeed_can_tools",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@can_msgs//:ament_package",
+        "@dataspeed_can_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@can_msgs//:ament_package",
+        "@dataspeed_can_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

@@ -1,0 +1,82 @@
+--- a/test/test_ament_index_python.py
++++ b/test/test_ament_index_python.py
+@@ -13,6 +13,8 @@
+ # limitations under the License.
+ 
+ import os
++import pytest
++
+ from pathlib import Path, PurePath
+ 
+ from ament_index_python import get_package_prefix
+@@ -31,12 +33,23 @@
+ from ament_index_python.cli import resource_name_completer
+ from ament_index_python.cli import resource_type_completer
+ 
+-import pytest
++from python.runfiles import Runfiles
++
++
++def get_base_path():
++    try:
++        runfiles = Runfiles.Create()
++        path = runfiles.Rlocation(source_repo="ament_index_python", path="test")
++        if path.is_dir():
++            return Path(path)
++    except Exception:
++        pass
++    return Path(__file__).parent
+ 
+ 
+ def set_ament_prefix_path(subfolders):
++    base_path = get_base_path()
+     paths = []
+-    base_path = Path(__file__).parent
+     for subfolder in subfolders:
+         path = base_path / subfolder
+         if path.is_dir():
+@@ -45,10 +58,13 @@
+     os.environ['AMENT_PREFIX_PATH'] = ament_prefix_path
+ 
+ 
++# Bazel sets AMENT_PREFIX_PATH automatically when one is not specified.
++# Therefore, these tests may not be run in an environment where the variable
++# is unset. So, we have updated the tests accordingly.
+ def test_empty_search_paths():
+     set_ament_prefix_path([])
+-    with pytest.raises(EnvironmentError):
+-        get_search_paths()
++    search_paths = get_search_paths()
++    assert len(search_paths) == 1, 'Expected one search path'
+ 
+ 
+ def test_search_paths():
+@@ -261,9 +277,13 @@
+ 
+ 
+ def test_get_resource_types():
++
++    # Bazel sets AMENT_PREFIX_PATH automatically when one is not specified.
++    # Therefore, these tests may not be run in an environment where the variable
++    # is unset. So, we have updated the tests accordingly.
+     set_ament_prefix_path([])
+-    with pytest.raises(EnvironmentError):
+-        get_resource_types()
++    resources = get_resource_types()
++    assert len(resources) == 0, 'Expected zero resource types'
+ 
+     set_ament_prefix_path(['prefix1', 'prefix2'])
+     resources = get_resource_types()
+@@ -291,9 +311,9 @@
+ 
+ def test_main_tool(capsys):
+     set_ament_prefix_path(['prefix1', 'prefix2'])
+-    base_path = Path(__file__).parent
+-
+-    main()
++    base_path = get_base_path()
++
++    main(argv=[])
+     captured = capsys.readouterr()
+     expected_result = (
+         'packages\n'

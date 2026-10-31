@@ -1,0 +1,525 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+cc_library(
+    name = "_test_root_headers",
+    hdrs = [
+        "bindings/include/roboplan_bindings/core.hpp",
+        "bindings/include/roboplan_bindings/filters.hpp",
+        "include/roboplan/core/collision_context.hpp",
+        "include/roboplan/core/geometry_wrappers.hpp",
+        "include/roboplan/core/math_utils.hpp",
+        "include/roboplan/core/path_utils.hpp",
+        "include/roboplan/core/pose_utils.hpp",
+        "include/roboplan/core/scene.hpp",
+        "include/roboplan/core/scene_utils.hpp",
+        "include/roboplan/core/types.hpp",
+        "include/roboplan/filters/se3_low_pass_filter.hpp",
+        "include/roboplan_bindings/expected.hpp",
+        "include/tinyxml2/tinyxml2.h",
+        "include/tl/expected.hpp",
+    ] + [
+    ],
+    includes = [],
+    deps = ["@rosdistro//cc:nanobind"],
+)
+
+DEPENDENCIES = {
+    "@pinocchio//:pinocchio_collision": "@pinocchio//:pinocchio_collision_library",
+    "@pinocchio//:pinocchio_default": "@pinocchio//:pinocchio_default_library",
+    "@pinocchio//:pinocchio_parsers": "@pinocchio//:pinocchio_parsers_library",
+    "@roboplan_example_models//:roboplan_example_models": "@roboplan_example_models//:roboplan_example_models_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:tl_expected",
+]
+
+PY_EXT_DEPS = [
+    "@rosdistro//cc:nanobind",
+    "@rosdistro//cc:nanobind_eigen",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "roboplan_library",
+    srcs = [
+        "src/core/collision_context.cpp",
+        "src/core/path_utils.cpp",
+        "src/core/pose_utils.cpp",
+        "src/core/scene.cpp",
+        "src/core/scene_utils.cpp",
+        "src/core/types.cpp",
+    ],
+    hdrs = [
+        "include/roboplan/core/collision_context.hpp",
+        "include/roboplan/core/geometry_wrappers.hpp",
+        "include/roboplan/core/math_utils.hpp",
+        "include/roboplan/core/path_utils.hpp",
+        "include/roboplan/core/pose_utils.hpp",
+        "include/roboplan/core/scene.hpp",
+        "include/roboplan/core/scene_utils.hpp",
+        "include/roboplan/core/types.hpp",
+        "include/roboplan/filters/se3_low_pass_filter.hpp",
+        "include/roboplan_bindings/expected.hpp",
+        "include/tinyxml2/tinyxml2.h",
+        "include/tl/expected.hpp",
+    ] + [
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/roboplan",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "roboplan",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":roboplan_library"],
+)
+
+cc_library(
+    name = "_core_ext_library",
+    srcs = [
+        "bindings/src/core.cpp",
+        "bindings/src/core_ext.cpp",
+    ],
+    hdrs = [
+        "bindings/include/roboplan_bindings/core.hpp",
+        "bindings/include/roboplan_bindings/filters.hpp",
+        "include/roboplan/core/collision_context.hpp",
+        "include/roboplan/core/geometry_wrappers.hpp",
+        "include/roboplan/core/math_utils.hpp",
+        "include/roboplan/core/path_utils.hpp",
+        "include/roboplan/core/pose_utils.hpp",
+        "include/roboplan/core/scene.hpp",
+        "include/roboplan/core/scene_utils.hpp",
+        "include/roboplan/core/types.hpp",
+        "include/roboplan/filters/se3_low_pass_filter.hpp",
+        "include/roboplan_bindings/expected.hpp",
+        "include/tinyxml2/tinyxml2.h",
+        "include/tl/expected.hpp",
+    ] + [
+    ],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        'ROBOPLAN_VERSION=\\"0.6.1\\"',
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + PY_EXT_DEPS + [":roboplan_library"],
+)
+
+cc_shared_library(
+    name = "_core_ext",
+    dynamic_deps = DEPENDENCIES.keys() + [":roboplan"],
+    exports_filter = [
+        "//:__subpackages__",
+    ],
+    shared_lib_name = "roboplan/core/_core_ext.so",
+    deps = [":_core_ext_library"],
+)
+
+cc_library(
+    name = "roboplan_filters_library",
+    srcs = ["src/filters/se3_low_pass_filter.cpp"],
+    hdrs = [
+        "include/roboplan/core/collision_context.hpp",
+        "include/roboplan/core/geometry_wrappers.hpp",
+        "include/roboplan/core/math_utils.hpp",
+        "include/roboplan/core/path_utils.hpp",
+        "include/roboplan/core/pose_utils.hpp",
+        "include/roboplan/core/scene.hpp",
+        "include/roboplan/core/scene_utils.hpp",
+        "include/roboplan/core/types.hpp",
+        "include/roboplan/filters/se3_low_pass_filter.hpp",
+        "include/roboplan_bindings/expected.hpp",
+        "include/tinyxml2/tinyxml2.h",
+        "include/tl/expected.hpp",
+    ] + [
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/roboplan",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "roboplan_filters",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":roboplan_filters_library"],
+)
+
+cc_library(
+    name = "_filters_ext_library",
+    srcs = [
+        "bindings/src/filters.cpp",
+        "bindings/src/filters_ext.cpp",
+    ],
+    hdrs = [
+        "bindings/include/roboplan_bindings/core.hpp",
+        "bindings/include/roboplan_bindings/filters.hpp",
+        "include/roboplan/core/collision_context.hpp",
+        "include/roboplan/core/geometry_wrappers.hpp",
+        "include/roboplan/core/math_utils.hpp",
+        "include/roboplan/core/path_utils.hpp",
+        "include/roboplan/core/pose_utils.hpp",
+        "include/roboplan/core/scene.hpp",
+        "include/roboplan/core/scene_utils.hpp",
+        "include/roboplan/core/types.hpp",
+        "include/roboplan/filters/se3_low_pass_filter.hpp",
+        "include/roboplan_bindings/expected.hpp",
+        "include/tinyxml2/tinyxml2.h",
+        "include/tl/expected.hpp",
+    ] + [
+    ],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        'ROBOPLAN_VERSION=\\"0.6.1\\"',
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + PY_EXT_DEPS + [":roboplan_filters_library"],
+)
+
+cc_shared_library(
+    name = "_filters_ext",
+    dynamic_deps = DEPENDENCIES.keys() + [":roboplan_filters"],
+    exports_filter = [
+        "//:__subpackages__",
+    ],
+    shared_lib_name = "roboplan/filters/_filters_ext.so",
+    deps = [":_filters_ext_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":roboplan",
+        ":roboplan_filters",
+    ],
+)
+
+py_library(
+    name = "roboplan_py",
+    srcs = [
+        "bindings/python/roboplan/core/__init__.py",
+        "bindings/python/roboplan/filters/__init__.py",
+        "bindings/python/roboplan/interpolation.py",
+        "bindings/python/roboplan/visualization.py",
+    ],
+    imports = ["bindings/python"],
+    deps = [
+        "@pinocchio//:pinocchio_py",
+        "@roboplan_example_models//:roboplan",
+        requirement("numpy"),
+    ],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = ["include/roboplan/core/collision_context.hpp"],
+    prefix = "lib/cmake/roboplan/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_1",
+    files = ["include/roboplan/core/geometry_wrappers.hpp"],
+    prefix = "lib/cmake/roboplan/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_2",
+    files = ["include/roboplan/core/math_utils.hpp"],
+    prefix = "lib/cmake/roboplan/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_3",
+    files = ["include/roboplan/core/path_utils.hpp"],
+    prefix = "lib/cmake/roboplan/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_4",
+    files = ["include/roboplan/core/pose_utils.hpp"],
+    prefix = "lib/cmake/roboplan/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_5",
+    files = ["include/roboplan/core/scene.hpp"],
+    prefix = "lib/cmake/roboplan/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_6",
+    files = ["include/roboplan/core/scene_utils.hpp"],
+    prefix = "lib/cmake/roboplan/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_7",
+    files = ["include/roboplan/core/types.hpp"],
+    prefix = "lib/cmake/roboplan/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_8",
+    files = ["include/roboplan/filters/se3_low_pass_filter.hpp"],
+    prefix = "lib/cmake/roboplan/filters",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+        ":ament_files_2",
+        ":ament_files_3",
+        ":ament_files_4",
+        ":ament_files_5",
+        ":ament_files_6",
+        ":ament_files_7",
+        ":ament_files_8",
+    ],
+    libraries = [
+        ":roboplan",
+        ":roboplan_filters",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@pinocchio//:ament_package",
+        "@roboplan_example_models//:ament_package",
+        "@tinyxml2_vendor//:ament_package",
+        "@yaml_cpp_vendor//:ament_package",
+    ],
+)
+
+py_pytest(
+    name = "test_import",
+    srcs = ["bindings/test/test_import.py"],
+    data = [
+        ":_core_ext",
+        ":_filters_ext",
+        ":ament_index",
+    ],
+    # xfail: Python module 'roboplan.core._core_ext' is not available in the Bazel build
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":roboplan_py",
+        "@pinocchio//:pinocchio_py",
+        "@roboplan_example_models//:roboplan",
+        requirement("packaging"),
+    ],
+)
+
+py_pytest(
+    name = "test_scene",
+    srcs = ["bindings/test/test_scene.py"],
+    data = [
+        ":_core_ext",
+        ":_filters_ext",
+        ":ament_index",
+    ],
+    # xfail: Python module 'pinocchio.pinocchio_pywrap_default' is not available in the Bazel build
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":roboplan_py",
+        "@pinocchio//:pinocchio_py",
+        "@roboplan_example_models//:roboplan",
+    ],
+)
+
+py_pytest(
+    name = "test_filters",
+    srcs = ["bindings/test/test_filters.py"],
+    data = [
+        ":_core_ext",
+        ":_filters_ext",
+        ":ament_index",
+    ],
+    # xfail: Python module 'roboplan.filters._filters_ext' is not available in the Bazel build
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":roboplan_py",
+        "@pinocchio//:pinocchio_py",
+        "@roboplan_example_models//:roboplan",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        "include/roboplan/core/collision_context.hpp",
+        "include/roboplan/core/geometry_wrappers.hpp",
+        "include/roboplan/core/math_utils.hpp",
+        "include/roboplan/core/path_utils.hpp",
+        "include/roboplan/core/pose_utils.hpp",
+        "include/roboplan/core/scene.hpp",
+        "include/roboplan/core/scene_utils.hpp",
+        "include/roboplan/core/types.hpp",
+        "include/roboplan/filters/se3_low_pass_filter.hpp",
+        "include/roboplan_bindings/expected.hpp",
+        "include/tinyxml2/LICENSE.txt",
+        "include/tinyxml2/README.md",
+        "include/tinyxml2/tinyxml2.cpp",
+        "include/tinyxml2/tinyxml2.h",
+        "include/tl/COPYING",
+        "include/tl/expected.hpp",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":roboplan",
+        ":roboplan_filters",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":roboplan_py",
+        ":_core_ext",
+        ":_filters_ext",
+        "bindings/python/roboplan/core/_core_ext.pyi",
+        "bindings/python/roboplan/core/py.typed",
+        "bindings/python/roboplan/filters/_filters_ext.pyi",
+        "bindings/python/roboplan/filters/py.typed",
+    ],
+    python_env_hook = False,
+    python_strip_prefix = "bindings/python",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@pinocchio//:ament_package",
+        "@roboplan_example_models//:ament_package",
+        "@tinyxml2_vendor//:ament_package",
+        "@yaml_cpp_vendor//:ament_package",
+    ],
+)

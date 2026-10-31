@@ -1,0 +1,191 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary")
+load(":mavlink_generate.bzl", "mavlink_generate")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+# configure_file(config.h.in config.h): PROJECT_VERSION comes from package.xml.
+expand_template(
+    name = "config_h",
+    out = "_gen/include/mavlink/config.h",
+    substitutions = {
+        "${PROJECT_VERSION}": "2026.9.9",
+    },
+    template = "config.h.in",
+)
+
+# pymavlink/tools/mavgen.py with the generator modules and the fixed headers
+# it copies into every output (generator/{C,CPP11}/include_v*).
+py_binary(
+    name = "mavgen",
+    srcs = [
+        "pymavlink/__init__.py",
+        "pymavlink/generator/__init__.py",
+        "pymavlink/generator/mavcrc.py",
+        "pymavlink/generator/mavgen.py",
+        "pymavlink/generator/mavgen_c.py",
+        "pymavlink/generator/mavgen_cpp11.py",
+        "pymavlink/generator/mavparse.py",
+        "pymavlink/generator/mavtemplate.py",
+        "pymavlink/tools/mavgen.py",
+    ],
+    data = [
+        "pymavlink/generator/C/include_v1.0/checksum.h",
+        "pymavlink/generator/C/include_v1.0/mavlink_conversions.h",
+        "pymavlink/generator/C/include_v1.0/mavlink_helpers.h",
+        "pymavlink/generator/C/include_v1.0/mavlink_types.h",
+        "pymavlink/generator/C/include_v1.0/protocol.h",
+        "pymavlink/generator/C/include_v2.0/checksum.h",
+        "pymavlink/generator/C/include_v2.0/mavlink_conversions.h",
+        "pymavlink/generator/C/include_v2.0/mavlink_get_info.h",
+        "pymavlink/generator/C/include_v2.0/mavlink_helpers.h",
+        "pymavlink/generator/C/include_v2.0/mavlink_sha256.h",
+        "pymavlink/generator/C/include_v2.0/mavlink_types.h",
+        "pymavlink/generator/C/include_v2.0/protocol.h",
+        "pymavlink/generator/CPP11/include_v2.0/message.hpp",
+        "pymavlink/generator/CPP11/include_v2.0/msgmap.hpp",
+        "pymavlink/generator/mavschema.xsd",
+    ],
+    imports = ["."],
+    main = "pymavlink/tools/mavgen.py",
+    # mavgen validates the XML against mavschema.xsd when lxml is available.
+    deps = [requirement("lxml")],
+)
+
+MESSAGE_DEFINITIONS = [
+    "message_definitions/v1.0/ASLUAV.xml",
+    "message_definitions/v1.0/AVSSUAS.xml",
+    "message_definitions/v1.0/all.xml",
+    "message_definitions/v1.0/ardupilotmega.xml",
+    "message_definitions/v1.0/common.xml",
+    "message_definitions/v1.0/csAirLink.xml",
+    "message_definitions/v1.0/cubepilot.xml",
+    "message_definitions/v1.0/development.xml",
+    "message_definitions/v1.0/icarous.xml",
+    "message_definitions/v1.0/loweheiser.xml",
+    "message_definitions/v1.0/marsh.xml",
+    "message_definitions/v1.0/minimal.xml",
+    "message_definitions/v1.0/paparazzi.xml",
+    "message_definitions/v1.0/python_array_test.xml",
+    "message_definitions/v1.0/standard.xml",
+    "message_definitions/v1.0/stemstudios.xml",
+    "message_definitions/v1.0/storm32.xml",
+    "message_definitions/v1.0/test.xml",
+    "message_definitions/v1.0/uAvionix.xml",
+]
+
+# V10DEFINITIONS: every definition except minimal, test and python_array_test
+# (those are still generated when another dialect includes them).
+DIALECTS = [
+    "ASLUAV",
+    "AVSSUAS",
+    "all",
+    "ardupilotmega",
+    "common",
+    "csAirLink",
+    "cubepilot",
+    "development",
+    "icarous",
+    "loweheiser",
+    "marsh",
+    "paparazzi",
+    "standard",
+    "stemstudios",
+    "storm32",
+    "uAvionix",
+]
+
+mavlink_generate(
+    name = "mavlink_v1_0",
+    definitions = MESSAGE_DEFINITIONS,
+    dialects = DIALECTS,
+    lang = "C",
+    out_dir = "_gen/include/mavlink/v1.0",
+    wire_protocol = "1.0",
+)
+
+mavlink_generate(
+    name = "mavlink_v2_0",
+    definitions = MESSAGE_DEFINITIONS,
+    dialects = DIALECTS,
+    lang = "C++11",
+    out_dir = "_gen/include/mavlink/v2.0",
+    wire_protocol = "2.0",
+)
+
+# configure_file("COPYING" "COPYING.txt" COPYONLY) -> share/mavlink/COPYING.txt
+copy_file(
+    name = "copying_txt",
+    src = "COPYING",
+    out = "_gen/share/mavlink/COPYING.txt",
+)
+
+# Header-only library for in-workspace consumers (#include <mavlink/...>).
+cc_library(
+    name = "mavlink",
+    hdrs = [
+        ":config_h",
+        ":mavlink_v1_0",
+        ":mavlink_v2_0",
+    ],
+    includes = ["_gen/include"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [":copying_txt"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ros_environment//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        ":config_h",
+        ":mavlink_v1_0",
+        ":mavlink_v2_0",
+    ],
+    include_prefix = "",
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ros_environment//:ament_package",
+    ],
+)

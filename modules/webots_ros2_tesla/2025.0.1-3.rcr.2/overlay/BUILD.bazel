@@ -1,0 +1,133 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+py_library(
+    name = "webots_ros2_tesla",
+    srcs = [
+        "webots_ros2_tesla/__init__.py",
+        "webots_ros2_tesla/lane_follower.py",
+        "webots_ros2_tesla/tesla_driver.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@ackermann_msgs//:py",
+        "@builtin_interfaces//:py",
+        "@rclpy",
+        "@webots_ros2_driver",
+        requirement("numpy"),
+        requirement("opencv-python"),
+    ],
+)
+
+py_binary(
+    name = "lane_follower",
+    srcs = ["webots_ros2_tesla/lane_follower.py"],
+    main = "webots_ros2_tesla/lane_follower.py",
+    deps = [":webots_ros2_tesla"],
+)
+
+[
+    py_pytest(
+        name = "test_{0}".format(linter),
+        srcs = ["test/test_{0}.py".format(linter)],
+        data = [
+            "CHANGELOG.rst",
+            "README.md",
+            "launch/robot_launch.py",
+            "package.xml",
+            "resource/tesla_webots.urdf",
+            "resource/webots_ros2_tesla",
+            "setup.cfg",
+            "setup.py",
+            "test/test_copyright.py",
+            "webots_ros2_tesla/__init__.py",
+            "webots_ros2_tesla/lane_follower.py",
+            "webots_ros2_tesla/tesla_driver.py",
+            "worlds/.tesla_world.wbproj",
+            "worlds/tesla_world.wbt",
+        ],
+        deps = ["@ament_{0}".format(linter)],
+    )
+    for linter in [
+        "copyright",
+    ]
+]
+
+### PACKAGING
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/robot_launch.py",
+        "resource/tesla_webots.urdf",
+        "worlds/.tesla_world.wbproj",
+        "worlds/tesla_world.wbt",
+    ],
+    executables = [":lane_follower"],
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    console_scripts = {
+        "lane_follower": "webots_ros2_tesla.lane_follower:main",
+    },
+    package_xml = "package.xml",
+    python = [":webots_ros2_tesla"],
+    setup_cfg = "setup.cfg",
+    deps = [
+        ":ament_index",
+        "@ackermann_msgs//:ament_package",
+        "@ament_copyright//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@rclpy//:ament_package",
+        "@rosdistro//:ament_package",
+        "@webots_ros2_driver//:ament_package",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_robot_launch_py",
+    src = "launch/robot_launch.py",
+    data = [
+        ":ament_index",
+        "@webots_ros2_driver//:ament_index",
+    ],
+    deps = [
+        ":lane_follower",
+        ":webots_ros2_tesla",
+        "@webots_ros2_driver",
+        "@webots_ros2_driver//:driver",
+        "@webots_ros2_driver//:ros2_supervisor.py",
+    ],
+)

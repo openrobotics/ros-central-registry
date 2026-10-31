@@ -1,0 +1,249 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+cmake_configure_file(
+    name = "config_hpp",
+    src = "src/lttngpy/config.hpp.in",
+    out = "src/lttngpy/config.hpp",
+    defines = select({
+        "@rosdistro//:tracing_enabled_linux": [
+            "LTTNG_CTL_VERSION=2.14.0",
+            "LTTNG_CTL_VERSION_MAJOR=2",
+            "LTTNG_CTL_VERSION_MINOR=14",
+            "LTTNG_CTL_VERSION_PATCH=0",
+        ],
+        "//conditions:default": [
+            "LTTNGPY_DISABLED=1",
+            "LTTNG_CTL_VERSION=",
+            "LTTNG_CTL_VERSION_MAJOR=0",
+            "LTTNG_CTL_VERSION_MINOR=0",
+            "LTTNG_CTL_VERSION_PATCH=0",
+        ],
+    }),
+)
+
+cc_library(
+    name = "_lttngpy_pybind11_library",
+    srcs = [
+        "src/lttngpy/_lttngpy_pybind11.cpp",
+        "src/lttngpy/status.cpp",
+    ] + select({
+        "@rosdistro//:tracing_enabled_linux": [
+            "src/lttngpy/channel.cpp",
+            "src/lttngpy/context_app.cpp",
+            "src/lttngpy/context_lttng.cpp",
+            "src/lttngpy/context_perf.cpp",
+            "src/lttngpy/event.cpp",
+            "src/lttngpy/lttng.cpp",
+            "src/lttngpy/session.cpp",
+            "src/lttngpy/snapshot.cpp",
+        ],
+        "//conditions:default": [],
+    }),
+    hdrs = [
+        "src/lttngpy/channel.hpp",
+        "src/lttngpy/context_app.hpp",
+        "src/lttngpy/context_lttng.hpp",
+        "src/lttngpy/context_perf.hpp",
+        "src/lttngpy/event.hpp",
+        "src/lttngpy/lttng.hpp",
+        "src/lttngpy/session.hpp",
+        "src/lttngpy/snapshot.hpp",
+        "src/lttngpy/status.hpp",
+        "src/lttngpy/utils.hpp",
+    ] + [":config_hpp"],
+    includes = [
+        "_gen/src",
+        "src",
+    ],
+    deps = [
+        "@rosdistro//cc:pybind11",
+        "@rules_python//python/cc:current_py_cc_headers",
+    ] + select({
+        "@rosdistro//:tracing_enabled_linux": [
+            "@rosdistro//cc:lttng_ctl",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_shared_library(
+    name = "_lttngpy_pybind11",
+    exports_filter = ["//:__subpackages__"],
+    shared_lib_name = "lttngpy/_lttngpy_pybind11.so",
+    deps = [":_lttngpy_pybind11_library"],
+)
+
+py_library(
+    name = "lttngpy",
+    srcs = [
+        "lttngpy/__init__.py",
+        "lttngpy/impl.py",
+    ],
+    data = [
+        ":_lttngpy_pybind11",
+        ":ament_index",
+    ],
+    imports = ["."],
+    deps = [
+        "@rpyutils",
+    ],
+)
+
+cc_test(
+    name = "test_context_app",
+    srcs = [
+        "src/lttngpy/context_app.cpp",
+        "src/lttngpy/context_app.hpp",
+        "src/lttngpy/utils.hpp",
+        "test/test_context_app.cpp",
+        ":config_hpp",
+    ],
+    includes = [
+        "_gen/src",
+        "src",
+    ],
+    target_compatible_with = select({
+        "@rosdistro//:tracing_enabled_linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "@rosdistro//cc:gtest_main",
+        "@rosdistro//cc:lttng_ctl",
+    ],
+)
+
+cc_test(
+    name = "test_context_lttng",
+    srcs = [
+        "src/lttngpy/context_lttng.cpp",
+        "src/lttngpy/context_lttng.hpp",
+        "src/lttngpy/utils.hpp",
+        "test/test_context_lttng.cpp",
+        ":config_hpp",
+    ],
+    includes = [
+        "_gen/src",
+        "src",
+    ],
+    target_compatible_with = select({
+        "@rosdistro//:tracing_enabled_linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "@rosdistro//cc:gtest_main",
+        "@rosdistro//cc:lttng_ctl",
+    ],
+)
+
+cc_test(
+    name = "test_context_perf",
+    srcs = [
+        "src/lttngpy/context_perf.cpp",
+        "src/lttngpy/context_perf.hpp",
+        "src/lttngpy/utils.hpp",
+        "test/test_context_perf.cpp",
+        ":config_hpp",
+    ],
+    includes = [
+        "_gen/src",
+        "src",
+    ],
+    target_compatible_with = select({
+        "@rosdistro//:tracing_enabled_linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "@rosdistro//cc:gtest_main",
+        "@rosdistro//cc:lttng_ctl",
+    ],
+)
+
+py_pytest(
+    name = "test_constants",
+    srcs = ["test/test_constants.py"],
+    data = [":ament_index"],
+    target_compatible_with = select({
+        "@rosdistro//:tracing_enabled_linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [":lttngpy"],
+)
+
+py_pytest(
+    name = "test_session",
+    srcs = ["test/test_session.py"],
+    data = [":ament_index"],
+    target_compatible_with = select({
+        "@rosdistro//:tracing_enabled_linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [":lttngpy"],
+)
+
+ament_index(
+    name = "ament_index",
+    executables = select({
+        "@rosdistro//:tracing_enabled_linux": [
+            "@rosdistro//cc:lttng_sessiond_bins",
+        ],
+        "//conditions:default": [],
+    }),
+    libraries = select({
+        "@rosdistro//:tracing_enabled_linux": [
+            "@rosdistro//cc:lttng_ctl_shared",
+        ],
+        "//conditions:default": [],
+    }),
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    package_xml = "package.xml",
+    python = [
+        ":lttngpy",
+        ":_lttngpy_pybind11",
+    ],
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rpyutils//:ament_package",
+    ],
+)

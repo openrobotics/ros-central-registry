@@ -1,0 +1,209 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:GPL-3.0-only"],
+)
+
+DEPENDENCIES = {
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@std_srvs//:cc_shared": "@std_srvs//:cc",
+    "@wiimote_msgs//:cc_shared": "@wiimote_msgs//:cc",
+}
+
+WIIMOTE_DEPENDENCIES = {
+    "@rosdistro//cc:bluez": "@rosdistro//cc:bluez_library",
+    "@rosdistro//cc:cwiid": "@rosdistro//cc:cwiid_library",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "teleop_wiimote_library",
+    srcs = ["src/teleop_wiimote.cpp"],
+    hdrs = [
+        "include/wiimote/teleop_wiimote.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/wiimote",
+    ],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "teleop_wiimote",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":teleop_wiimote_library"],
+)
+
+cc_library(
+    name = "wiimote_lib_library",
+    srcs = [
+        "src/stat_vector_3d.cpp",
+        "src/wiimote_controller.cpp",
+    ],
+    hdrs = [
+        "include/wiimote/stat_vector_3d.hpp",
+        "include/wiimote/teleop_wiimote.hpp",
+        "include/wiimote/wiimote_controller.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/wiimote",
+    ],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + WIIMOTE_DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "wiimote_lib",
+    dynamic_deps = DEPENDENCIES.keys() + WIIMOTE_DEPENDENCIES.keys(),
+    deps = [":wiimote_lib_library"],
+)
+
+rclcpp_components_register_node(
+    name = "teleop_wiimote_node",
+    component = ":teleop_wiimote",
+    data = [
+        ":ament_index",
+    ],
+    node_name = "teleop_wiimote_node",
+    plugin = "TeleopWiimote",
+)
+
+rclcpp_components_register_node(
+    name = "wiimote_node",
+    component = ":wiimote_lib",
+    data = [
+        ":ament_index",
+    ],
+    node_name = "wiimote_node",
+    plugin = "WiimoteNode",
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":teleop_wiimote_node_record",
+        ":wiimote_node_record",
+    ],
+    data = [
+        "config/teleop_wiimote_params.yaml",
+        "config/wiimote_params.yaml",
+        "//launch:launch_files",
+    ],
+    lib_data = [
+        "nodes/feedback_tester.py",
+    ],
+    libraries = [
+        ":teleop_wiimote",
+        ":wiimote_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@wiimote_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake = ["wiimote-extras.cmake"],
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "sensor_msgs",
+        "std_msgs",
+        "std_srvs",
+        "wiimote",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_wiimote",
+    cmake_extras = ["wiimote-extras.cmake"],
+    cmake_strip_prefix = "",
+    executables = [
+        ":teleop_wiimote_node",
+        ":wiimote_node",
+    ],
+    headers = [
+        "include/wiimote/stat_vector_3d.hpp",
+        "include/wiimote/teleop_wiimote.hpp",
+        "include/wiimote/wiimote_controller.hpp",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":teleop_wiimote",
+        ":wiimote_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@wiimote_msgs//:ament_package",
+    ],
+)

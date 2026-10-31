@@ -1,0 +1,60 @@
+--- a/launch/tb3_simulation_launch.py
++++ b/launch/tb3_simulation_launch.py
+@@ -22,7 +22,7 @@
+ from launch.actions import (DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription,
+                             OpaqueFunction, RegisterEventHandler)
+ from launch.conditions import IfCondition
+-from launch.event_handlers import OnShutdown
++from launch.event_handlers import OnProcessExit, OnShutdown
+ from launch.launch_description_sources import PythonLaunchDescriptionSource
+ from launch.substitutions import LaunchConfiguration, PythonExpression
+ from launch_ros.actions import Node
+@@ -219,15 +219,19 @@
+     world_sdf = tempfile.mktemp(prefix='nav2_', suffix='.sdf')
+     world_sdf_xacro = ExecuteProcess(
+         cmd=['xacro', '-o', world_sdf, ['headless:=', headless], world])
+-    gazebo_server = ExecuteProcess(
+-        cmd=['gz', 'sim', '-r', '-s', world_sdf],
+-        output='screen',
+-        condition=IfCondition(use_simulator)
++    gazebo_server = IncludeLaunchDescription(
++        PythonLaunchDescriptionSource(
++            os.path.join(get_package_share_directory('ros_gz_sim'),
++                         'launch',
++                         'gz_sim.launch.py')
++        ),
++        condition=IfCondition(use_simulator),
++        launch_arguments={'gz_args': ['-r -s ', world_sdf]}.items(),
+     )
+ 
+     remove_temp_sdf_file = RegisterEventHandler(event_handler=OnShutdown(
+         on_shutdown=[
+-            OpaqueFunction(function=lambda _: os.remove(world_sdf))
++            OpaqueFunction(function=lambda _: os.remove(world_sdf) if os.path.exists(world_sdf) else None)
+         ]))
+ 
+     gazebo_client = IncludeLaunchDescription(
+@@ -239,6 +243,13 @@
+         condition=IfCondition(PythonExpression(
+             [use_simulator, ' and not ', headless])),
+         launch_arguments={'gz_args': ['-v4 -g ']}.items(),
++    )
++
++    start_gazebo_after_xacro = RegisterEventHandler(
++        event_handler=OnProcessExit(
++            target_action=world_sdf_xacro,
++            on_exit=[gazebo_server, gazebo_client],
++        )
+     )
+ 
+     gz_robot = IncludeLaunchDescription(
+@@ -282,8 +293,7 @@
+     ld.add_action(world_sdf_xacro)
+     ld.add_action(remove_temp_sdf_file)
+     ld.add_action(gz_robot)
+-    ld.add_action(gazebo_server)
+-    ld.add_action(gazebo_client)
++    ld.add_action(start_gazebo_after_xacro)
+ 
+     # Add the actions to launch all of the navigation nodes
+     ld.add_action(start_robot_state_publisher_cmd)

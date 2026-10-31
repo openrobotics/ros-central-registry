@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@aspect_rules_py//py:defs.bzl", "py_binary")
 load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
-load("@rosidl_core_generators//:defs.bzl", "c_ros_library", "cc_proto_ros_library", "cc_ros_library", "py_ros_library")
+load("@rosidl_core_generators//:defs.bzl", "core_generators")
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary")
 
 package(
     default_applicable_licenses = [":license"],
@@ -30,22 +30,19 @@ license(
     ],
 )
 
-config_setting(
-    name = "dynamic_mode_off",
-    values = {
-        "dynamic_mode": "off",
-    },
+## Messages
+
+core_generators(
+    deps = [
+        "//msg:ExampleMessage",
+    ],
 )
 
-config_setting(
-    name = "rmw_dynamic",
-    flag_values = {"@rosdistro//:rmw": "dynamic"},
-)
-
-# C examples - the more traditional pipeline
+## Tests
 
 C_DEPENDENCIES = {
     "@rclc//:rclc": "@rclc//:rclc_library",
+    ":cc_shared": ":cc",
 }
 
 collect_transitive_dynamic_deps(
@@ -53,41 +50,23 @@ collect_transitive_dynamic_deps(
     dynamic_deps = C_DEPENDENCIES.keys(),
 )
 
-c_ros_library(
-    name = "example_ros_c_msgs",
-    deps = ["//msg:ExampleMessage"],
-)
-
 cc_binary(
     name = "example_ros_publisher_c",
     srcs = ["src/example_ros_publisher.c"],
-    dynamic_deps = select({
-        ":dynamic_mode_off": [],
-        ":rmw_dynamic": [":transitive_dynamic_deps_c"],
-        "//conditions:default": [],
-    }),
-    deps = C_DEPENDENCIES.values() + [
-        ":example_ros_c_msgs",
-    ],
+    dynamic_deps = [":transitive_dynamic_deps_c"],
+    deps = C_DEPENDENCIES.values(),
 )
 
 cc_binary(
     name = "example_ros_subscriber_c",
     srcs = ["src/example_ros_subscriber.c"],
-    dynamic_deps = select({
-        ":dynamic_mode_off": [],
-        ":rmw_dynamic": [":transitive_dynamic_deps_c"],
-        "//conditions:default": [],
-    }),
-    deps = C_DEPENDENCIES.values() + [
-        ":example_ros_c_msgs",
-    ],
+    dynamic_deps = [":transitive_dynamic_deps_c"],
+    deps = C_DEPENDENCIES.values(),
 )
-
-# C++ examples
 
 CPP_DEPENDENCIES = {
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    ":c_shared": ":c",
 }
 
 collect_transitive_dynamic_deps(
@@ -95,45 +74,18 @@ collect_transitive_dynamic_deps(
     dynamic_deps = CPP_DEPENDENCIES.keys(),
 )
 
-cc_ros_library(
-    name = "example_ros_cc_msgs",
-    deps = ["//msg:ExampleMessage"],
-)
-
 cc_binary(
     name = "example_ros_publisher_cc",
     srcs = ["src/example_ros_publisher.cc"],
-    dynamic_deps = select({
-        ":dynamic_mode_off": [],
-        ":rmw_dynamic": [":transitive_dynamic_deps_cc"],
-        "//conditions:default": [],
-    }),
-    deps = CPP_DEPENDENCIES.values() + [
-        ":example_ros_cc_msgs",
-    ],
+    dynamic_deps = [":transitive_dynamic_deps_cc"],
+    deps = CPP_DEPENDENCIES.values(),
 )
 
 cc_binary(
     name = "example_ros_subscriber_cc",
     srcs = ["src/example_ros_subscriber.cc"],
-    dynamic_deps = select({
-        ":dynamic_mode_off": [],
-        ":rmw_dynamic": [":transitive_dynamic_deps_cc"],
-        "//conditions:default": [],
-    }),
-    deps = CPP_DEPENDENCIES.values() + [
-        ":example_ros_cc_msgs",
-    ],
-)
-
-# Python examples - please note  you must use the py_library, py_binary,
-# py_test etc. rules from rules_aspect_py and not rules_python. This is
-# because we use namespaced packages and a sitecustomize to route imports
-# to the correct package, which is not supported by rules_python.
-
-py_ros_library(
-    name = "example_ros_py_msgs",
-    deps = ["//msg:ExampleMessage"],
+    dynamic_deps = [":transitive_dynamic_deps_cc"],
+    deps = CPP_DEPENDENCIES.values(),
 )
 
 py_binary(
@@ -141,7 +93,7 @@ py_binary(
     srcs = ["src/example_ros_publisher.py"],
     main = "src/example_ros_publisher.py",
     deps = [
-        ":example_ros_py_msgs",
+        ":py",
         "@rclpy",
     ],
 )
@@ -151,23 +103,14 @@ py_binary(
     srcs = ["src/example_ros_subscriber.py"],
     main = "src/example_ros_subscriber.py",
     deps = [
-        ":example_ros_py_msgs",
+        ":py",
         "@rclpy",
     ],
 )
 
-# Protobuf pipeline example - the "cc_proto_ros_library" is a special
-# rule that provides a ProtoInfo, CcInfo and DefaultInfo. The ProtoInfo
-# allows you to list the target in the deps of other proto rules (eg.
-# py_proto_library) to use ROS messages in a protocol buffer context.
-# The CcInfo provides ROS and Protobuf C++ bindings, and a typeadapter
-# that enables you to send protocol buffer messages directly through
-# ROS; under the hood it takes care of conversion for you. The last
-# DefaultInfo provider are the typesupport shared objects that need to
-# be present in the runfiles in order for ROS typesupport.
-
 PROTO_DEPENDENCIES = {
     "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    ":proto_shared": ":proto",
 }
 
 collect_transitive_dynamic_deps(
@@ -175,33 +118,16 @@ collect_transitive_dynamic_deps(
     dynamic_deps = PROTO_DEPENDENCIES.keys(),
 )
 
-cc_proto_ros_library(
-    name = "example_cc_proto",
-    deps = ["//msg:ExampleMessage"],
-)
-
 cc_binary(
     name = "example_proto_publisher_cc",
     srcs = ["src/example_proto_publisher.cc"],
-    dynamic_deps = select({
-        ":dynamic_mode_off": [],
-        ":rmw_dynamic": [":transitive_dynamic_deps_proto"],
-        "//conditions:default": [],
-    }),
-    deps = PROTO_DEPENDENCIES.values() + [
-        ":example_cc_proto",
-    ],
+    dynamic_deps = [":transitive_dynamic_deps_proto"],
+    deps = PROTO_DEPENDENCIES.values(),
 )
 
 cc_binary(
     name = "example_proto_subscriber_cc",
     srcs = ["src/example_proto_subscriber.cc"],
-    dynamic_deps = select({
-        ":dynamic_mode_off": [],
-        ":rmw_dynamic": [":transitive_dynamic_deps_proto"],
-        "//conditions:default": [],
-    }),
-    deps = PROTO_DEPENDENCIES.values() + [
-        ":example_cc_proto",
-    ],
+    dynamic_deps = [":transitive_dynamic_deps_proto"],
+    deps = PROTO_DEPENDENCIES.values(),
 )

@@ -1,0 +1,252 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@camera_calibration_parsers//:camera_calibration_parsers": "@camera_calibration_parsers//:camera_calibration_parsers_library",
+    "@camera_info_manager//:camera_info_manager": "@camera_info_manager//:camera_info_manager_library",
+    "@class_loader//:class_loader": "@class_loader//:class_loader_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:gstreamer": "@rosdistro//cc:gstreamer_library",
+}
+
+CC_DEPS = [
+    "@class_loader//:class_loader_headers",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@sensor_msgs//:cc",
+]
+
+cc_library(
+    name = "gscam_library",
+    srcs = [
+        "src/gscam.cpp",
+    ],
+    hdrs = [
+        "include/gscam/gscam.hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "gscam",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":gscam_library"],
+    deps = [":gscam_library"],
+)
+
+rclcpp_components_register_node(
+    name = "gscam_node",
+    component = ":gscam",
+    data = [":ament_index"],
+    node_name = "gscam_node",
+    plugin = "gscam::GSCam",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":gscam"],
+    visibility = ["//visibility:private"],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":gscam_node_record"],
+    data = [
+        "examples/component_pipeline_launch.py",
+        "examples/decklink.launch.xml",
+        "examples/minoru.launch.xml",
+        "examples/osx.launch.xml",
+        "examples/uncalibrated_parameters.ini",
+        "examples/v4l.launch.xml",
+        "examples/v4ljpeg.launch.xml",
+        "examples/videofile.launch.xml",
+    ],
+    libraries = [":gscam"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@camera_calibration_parsers//:ament_package",
+        "@camera_info_manager//:ament_package",
+        "@class_loader//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "smoke_test",
+    srcs = [
+        "test/smoke_test.cpp",
+        "test/utils.hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    env = {
+        "GSCAM_CONFIG": "videotestsrc pattern=snow ! capsfilter caps=video/x-raw,width=800,height=600 ! videoconvert",
+    },
+    includes = [
+        "include",
+        "test",
+    ],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":gscam_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = ["class_loader"],
+    cmake_export_include_directories = True,
+    cmake_export_name = "export_gscam",
+    executables = [":gscam_node"],
+    headers = [
+        "include/gscam/gscam.hpp",
+    ],
+    include_prefix = "include",
+    libraries = [":gscam"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@camera_calibration_parsers//:ament_package",
+        "@camera_info_manager//:ament_package",
+        "@class_loader//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+launch_ros_binary(
+    name = "examples_component_pipeline_launch_py",
+    src = "examples/component_pipeline_launch.py",
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":gscam_node",
+        "@image_proc//:debayer_node",
+        "@image_proc//:rectify_node",
+        "@rclcpp_components//:component_container",
+    ],
+)
+
+launch_ros_binary(
+    name = "examples_decklink_launch_xml",
+    src = "examples/decklink.launch.xml",
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":gscam_node",
+        "@tf2_ros//:static_transform_publisher",
+    ],
+)
+
+launch_ros_binary(
+    name = "examples_minoru_launch_xml",
+    src = "examples/minoru.launch.xml",
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":gscam_node",
+        "@tf2_ros//:static_transform_publisher",
+    ],
+)
+
+launch_ros_binary(
+    name = "examples_osx_launch_xml",
+    src = "examples/osx.launch.xml",
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":gscam_node",
+        "@tf2_ros//:static_transform_publisher",
+    ],
+)
+
+launch_ros_binary(
+    name = "examples_v4l_launch_xml",
+    src = "examples/v4l.launch.xml",
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":gscam_node",
+        "@tf2_ros//:static_transform_publisher",
+    ],
+)
+
+launch_ros_binary(
+    name = "examples_v4ljpeg_launch_xml",
+    src = "examples/v4ljpeg.launch.xml",
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":gscam_node",
+    ],
+)
+
+launch_ros_binary(
+    name = "examples_videofile_launch_xml",
+    src = "examples/videofile.launch.xml",
+    data = [
+        ":ament_index",
+    ],
+    deps = [
+        ":gscam_node",
+        "@tf2_ros//:static_transform_publisher",
+    ],
+)

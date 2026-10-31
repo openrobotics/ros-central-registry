@@ -1,0 +1,955 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Port of pangolin's CMake build (CMakeLists.txt + components/*/CMakeLists.txt)
+# for Linux with desktop OpenGL through libepoxy (upstream's `_LINUX_` branch).
+# Every component becomes a `<component>_library` cc_library plus a
+# `<component>` cc_shared_library, with the same component-to-component and
+# third-party link edges as upstream's target_link_libraries().
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+)
+
+COPTS = [
+    "-Wno-parentheses",
+    "-Wno-null-pointer-arithmetic",
+    "-Wno-null-pointer-subtraction",
+    "-Wno-missing-template-arg-list-after-template-kw",
+]
+
+HDR_PATTERNS = [
+    "**/*.h",
+    "**/*.hpp",
+    "**/*.inl",
+]
+
+# Mirrors cmake/PangolinFactory.cmake: PangolinRegisterFactory(<interface> ...)
+# calls collect factory names per interface (here: the drivers enabled in this
+# build), and create_factory_registry_file_now() renders one
+# RegisterFactories<interface>.h per interface.
+PANGO_FACTORIES = {
+    "VideoInterface": [
+        "TestVideo",
+        "ImagesVideo",
+        "SplitVideo",
+        "TruncateVideo",
+        "PangoVideo",
+        "DebayerVideo",
+        "ShiftVideo",
+        "TransformVideo",
+        "UnpackVideo",
+        "PackVideo",
+        "JoinVideo",
+        "MergeVideo",
+        "JsonVideo",
+        "MjpegVideo",
+        "ThreadVideo",
+        "FirewireVideo",
+        "DeinterlaceVideo",
+        "V4lVideo",
+        # Listed twice upstream: components/pango_video/CMakeLists.txt registers
+        # FfmpegVideo on its own, then again together with FfmpegVideoConvert.
+        "FfmpegVideo",
+        "FfmpegVideo",
+        "FfmpegVideoConvert",
+        "UvcVideo",
+    ],
+    "VideoOutputInterface": [
+        "ImagesVideoOutput",
+        "PangoVideoOutput",
+        "FfmpegVideoOutput",
+    ],
+    "WindowInterface": [
+        "X11Window",
+        "HeadlessWindow",
+    ],
+}
+
+[genrule(
+    name = "register_factories_" + interface,
+    outs = ["_gen/include/pangolin/factory/RegisterFactories%s.h" % interface],
+    cmd = "printf '%s\\n' " + " ".join(["'%s'" % line for line in (
+        [
+            "// CMake generated file. Do Not Edit.",
+            "",
+            "#pragma once",
+            "",
+            "namespace pangolin {",
+            "",
+            "  // Forward declarations",
+        ] + [
+            "#ifdef __linux__\n  bool Register%sFactory();\n#endif" % f if f == "V4lVideo" else "  bool Register%sFactory();" % f
+            for f in factories
+        ] + [
+            "",
+            "",
+            "  inline bool RegisterFactories%s() {" % interface,
+            "    bool success = true;",
+        ] + [
+            "#ifdef __linux__\n    success &= Register%sFactory();\n#endif" % f if f == "V4lVideo" else "    success &= Register%sFactory();" % f
+            for f in factories
+        ] + [
+            "    return success;",
+            "  }",
+            "",
+            "",
+            "} // pangolin",
+        ]
+    )]) + " > $@",
+) for interface, factories in PANGO_FACTORIES.items()]
+
+# cmake/EmbedBinaryFiles.cmake: embed_binary_files_rule(fonts.cpp src/fonts/*.ttf)
+genrule(
+    name = "embed_fonts",
+    srcs = glob(["components/pango_opengl/src/fonts/*.ttf"]),
+    outs = ["_gen/src/fonts.cpp"],
+    cmd = " ".join([
+        "for f in $(SRCS); do",
+        "n=$$(basename \"$$f\" | tr '. ' '__');",
+        "printf 'extern const unsigned char %s[] = {' \"$$n\";",
+        "od -An -v -tx1 \"$$f\" | sed -e 's/\\([0-9a-f][0-9a-f]\\)/0x\\1,/g' | tr -d ' \\n';",
+        "printf '};\\nextern const unsigned %s_size = sizeof(%s);\\n' \"$$n\" \"$$n\";",
+        "done > $@",
+    ]),
+)
+
+# cmake/EmbedShaderFiles.cmake: embed_shader_files_rule(shaders.cpp shaders/*.glsl*)
+# Keys are the shader paths relative to the source root, with a leading '/'
+# (upstream strips ${PROJECT_SOURCE_DIR}).
+genrule(
+    name = "embed_shaders",
+    srcs = glob(["components/pango_opengl/shaders/*.glsl*"]),
+    outs = ["_gen/src/shaders.cpp"],
+    cmd = " ".join([
+        "{",
+        "printf '#include <unordered_map>\\n#include <string>\\n\\nnamespace pangolin {\\n';",
+        "printf 'const std::unordered_map<std::string,const char*>& GetBuiltinShaders() {\\n';",
+        "printf '\\tstatic const std::unordered_map<std::string,const char*> builtin_shaders = {\\n';",
+        "for f in $(SRCS); do",
+        "printf '{ \"/components/%s\",\\n R\"SHADER_SOURCE(\\n' \"$${f#*/components/}\";",
+        "cat \"$$f\";",
+        "printf ')SHADER_SOURCE\" },\\n';",
+        "done;",
+        "printf '\\t};\\n\\treturn builtin_shaders;\\n}\\n}\\n';",
+        "} > $@",
+    ]),
+)
+
+cc_library(
+    name = "pango_factory_headers",
+    hdrs = [":register_factories_" + interface for interface in PANGO_FACTORIES],
+    includes = ["_gen/include"],
+)
+
+# components/pango_core
+
+cc_library(
+    name = "pango_core_library",
+    srcs = [
+        "components/pango_core/src/avx_math.cpp",
+        "components/pango_core/src/factory/factory_help.cpp",
+        "components/pango_core/src/factory/factory_registry.cpp",
+        "components/pango_core/src/file_extension.cpp",
+        "components/pango_core/src/file_utils.cpp",
+        "components/pango_core/src/param_set.cpp",
+        "components/pango_core/src/posix/condition_variable.cpp",
+        "components/pango_core/src/posix/semaphore.cpp",
+        "components/pango_core/src/posix/shared_memory_buffer.cpp",
+        "components/pango_core/src/sigstate.cpp",
+        "components/pango_core/src/threadedfilebuf.cpp",
+        "components/pango_core/src/uri.cpp",
+    ],
+    hdrs = glob(
+        [("components/pango_core/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    defines = select({
+        "@platforms//os:macos": ["_OSX_"],
+        "//conditions:default": ["_LINUX_"],
+    }),
+    includes = ["components/pango_core/include"],
+    linkopts = ["-lpthread"] + select({
+        "@platforms//os:linux": ["-lrt"],
+        "//conditions:default": [],
+    }),
+    local_defines = ros_local_defines(),
+)
+
+cc_shared_library(
+    name = "pango_core",
+    deps = [":pango_core_library"],
+)
+
+# components/pango_image
+
+cc_library(
+    name = "pango_image_library",
+    srcs = [
+        "components/pango_image/src/image_io.cpp",
+        "components/pango_image/src/image_io_bmp.cpp",
+        "components/pango_image/src/image_io_exr.cpp",
+        "components/pango_image/src/image_io_jpg.cpp",
+        "components/pango_image/src/image_io_libraw.cpp",
+        "components/pango_image/src/image_io_lz4.cpp",
+        "components/pango_image/src/image_io_packed12bit.cpp",
+        "components/pango_image/src/image_io_pango.cpp",
+        "components/pango_image/src/image_io_png.cpp",
+        "components/pango_image/src/image_io_ppm.cpp",
+        "components/pango_image/src/image_io_raw.cpp",
+        "components/pango_image/src/image_io_tga.cpp",
+        "components/pango_image/src/image_io_tiff.cpp",
+        "components/pango_image/src/image_io_zstd.cpp",
+        "components/pango_image/src/pixel_format.cpp",
+    ],
+    hdrs = glob(
+        [("components/pango_image/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS + [
+        "-Wno-deprecated-register",
+        "-Wno-deprecated",
+    ],
+    defines = ["HAVE_EIGEN"],
+    includes = ["components/pango_image/include"],
+    local_defines = ros_local_defines() + [
+        "HAVE_JPEG",
+        "HAVE_LIBTIFF",
+        "HAVE_LZ4",
+        "HAVE_OPENEXR",
+        "HAVE_PNG",
+        "HAVE_ZSTD",
+    ],
+    deps = [
+        ":pango_core_library",
+        "@rosdistro//cc:eigen",
+        "@rosdistro//cc:libjpeg_library",
+        "@rosdistro//cc:libpng_library",
+        "@rosdistro//cc:libtiff_library",
+        "@rosdistro//cc:lz4_library",
+        "@rosdistro//cc:openexr_library",
+        "@rosdistro//cc:zlib_library",
+        "@rosdistro//cc:zstd_library",
+    ],
+)
+
+cc_shared_library(
+    name = "pango_image",
+    dynamic_deps = [
+        ":pango_core",
+        "@rosdistro//cc:libjpeg",
+        "@rosdistro//cc:libpng",
+        "@rosdistro//cc:libtiff",
+        "@rosdistro//cc:lz4",
+        "@rosdistro//cc:openexr",
+        "@rosdistro//cc:zlib",
+        "@rosdistro//cc:zstd",
+    ],
+    deps = [":pango_image_library"],
+)
+
+# components/pango_opengl
+#
+# Desktop GL through libepoxy (upstream's `_LINUX_` branch). The GLES-only
+# compat/gl2engine.cpp is only built for EMSCRIPTEN upstream, so it's left out.
+
+cc_library(
+    name = "pango_opengl_library",
+    srcs = [
+        "components/pango_opengl/src/glchar.cpp",
+        "components/pango_opengl/src/gldraw.cpp",
+        "components/pango_opengl/src/glfont.cpp",
+        "components/pango_opengl/src/glpangoglu.cpp",
+        "components/pango_opengl/src/gltext.cpp",
+        "components/pango_opengl/src/gltexturecache.cpp",
+        "components/pango_opengl/src/opengl_render_state.cpp",
+        "components/pango_opengl/src/stb_truetype.h",
+        "components/pango_opengl/src/viewport.cpp",
+        ":embed_fonts",
+        ":embed_shaders",
+    ],
+    hdrs = glob(
+        [("components/pango_opengl/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    defines = [
+        "HAVE_EIGEN",
+        "HAVE_EPOXY",
+    ],
+    includes = ["components/pango_opengl/include"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":pango_core_library",
+        ":pango_image_library",
+        "@rosdistro//cc:eigen",
+        "@rosdistro//cc:epoxy_library",
+        "@rosdistro//cc:opengl_headers",
+    ],
+)
+
+cc_shared_library(
+    name = "pango_opengl",
+    dynamic_deps = [
+        ":pango_core",
+        ":pango_image",
+        "@rosdistro//cc:epoxy",
+    ],
+    deps = [":pango_opengl_library"],
+)
+
+# components/pango_vars
+
+cc_library(
+    name = "pango_vars_library",
+    srcs = [
+        "components/pango_vars/src/vars.cpp",
+        "components/pango_vars/src/varstate.cpp",
+    ],
+    hdrs = glob(
+        [("components/pango_vars/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    includes = ["components/pango_vars/include"],
+    local_defines = ros_local_defines(),
+    deps = [":pango_core_library"],
+)
+
+cc_shared_library(
+    name = "pango_vars",
+    dynamic_deps = [":pango_core"],
+    deps = [":pango_vars_library"],
+)
+
+# components/pango_windowing
+#
+# X11 + EGL (through epoxy) windows and EGL headless offscreen rendering.
+# Wayland isn't available hermetically, so (as upstream does when
+# wayland-client isn't found) the default window URI is "x11".
+
+cc_library(
+    name = "pango_windowing_library",
+    srcs = [
+        "components/pango_windowing/src/display_headless.cpp",
+        "components/pango_windowing/src/display_x11.cpp",
+        "components/pango_windowing/src/window.cpp",
+    ],
+    hdrs = glob(
+        [("components/pango_windowing/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    defines = ["PANGO_DEFAULT_WIN_URI=\\\"x11\\\""],
+    includes = ["components/pango_windowing/include"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":pango_core_library",
+        ":pango_factory_headers",
+        ":pango_opengl_library",
+        # Also provides the Xlib headers (@libepoxy depends on @libx11); libX11
+        # itself is linked and exported once by @qtbase//:x11_shared.
+        "@rosdistro//cc:epoxy_library",
+    ],
+)
+
+cc_shared_library(
+    name = "pango_windowing",
+    dynamic_deps = [
+        ":pango_core",
+        ":pango_image",
+        ":pango_opengl",
+        "@qtbase//:x11_shared",
+        "@rosdistro//cc:epoxy",
+    ],
+    deps = [":pango_windowing_library"],
+)
+
+# components/pango_display
+
+cc_library(
+    name = "pango_display_library",
+    srcs = [
+        "components/pango_display/src/ConsoleView.cpp",
+        "components/pango_display/src/default_font.cpp",
+        "components/pango_display/src/display.cpp",
+        "components/pango_display/src/handler.cpp",
+        "components/pango_display/src/handler_glbuffer.cpp",
+        "components/pango_display/src/handler_image.cpp",
+        "components/pango_display/src/image_view.cpp",
+        "components/pango_display/src/pangolin_gl.cpp",
+        "components/pango_display/src/pangolin_gl.h",
+        "components/pango_display/src/process.cpp",
+        "components/pango_display/src/view.cpp",
+        "components/pango_display/src/widgets.cpp",
+    ],
+    hdrs = glob(
+        [("components/pango_display/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    includes = ["components/pango_display/include"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":pango_core_library",
+        ":pango_opengl_library",
+        ":pango_vars_library",
+        ":pango_windowing_library",
+    ],
+)
+
+cc_shared_library(
+    name = "pango_display",
+    dynamic_deps = [
+        ":pango_core",
+        ":pango_image",
+        ":pango_opengl",
+        ":pango_vars",
+        ":pango_windowing",
+        "@qtbase//:x11_shared",
+        "@rosdistro//cc:epoxy",
+    ],
+    deps = [":pango_display_library"],
+)
+
+# components/tinyobj
+
+cc_library(
+    name = "tinyobj_library",
+    srcs = ["components/tinyobj/src/tinyobj.cpp"],
+    hdrs = glob(
+        [("components/tinyobj/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    includes = ["components/tinyobj/include"],
+)
+
+cc_shared_library(
+    name = "tinyobj",
+    deps = [":tinyobj_library"],
+)
+
+# components/pango_geometry
+
+cc_library(
+    name = "pango_geometry_library",
+    srcs = [
+        "components/pango_geometry/src/geometry.cpp",
+        "components/pango_geometry/src/geometry_obj.cpp",
+        "components/pango_geometry/src/geometry_ply.cpp",
+    ],
+    hdrs = glob(
+        [("components/pango_geometry/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    defines = ["HAVE_EIGEN"],
+    includes = ["components/pango_geometry/include"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":pango_core_library",
+        ":pango_image_library",
+        ":tinyobj_library",
+        "@rosdistro//cc:eigen",
+    ],
+)
+
+cc_shared_library(
+    name = "pango_geometry",
+    dynamic_deps = [
+        ":pango_core",
+        ":pango_image",
+        ":tinyobj",
+    ],
+    deps = [":pango_geometry_library"],
+)
+
+# components/pango_glgeometry
+
+cc_library(
+    name = "pango_glgeometry_library",
+    srcs = ["components/pango_glgeometry/src/glgeometry.cpp"],
+    hdrs = glob(
+        [("components/pango_glgeometry/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    includes = ["components/pango_glgeometry/include"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":pango_geometry_library",
+        ":pango_opengl_library",
+    ],
+)
+
+cc_shared_library(
+    name = "pango_glgeometry",
+    dynamic_deps = [
+        ":pango_core",
+        ":pango_geometry",
+        ":pango_image",
+        ":pango_opengl",
+        ":tinyobj",
+        "@rosdistro//cc:epoxy",
+    ],
+    deps = [":pango_glgeometry_library"],
+)
+
+# components/pango_packetstream
+
+cc_library(
+    name = "pango_packetstream_library",
+    srcs = [
+        "components/pango_packetstream/src/packet.cpp",
+        "components/pango_packetstream/src/packetstream.cpp",
+        "components/pango_packetstream/src/packetstream_reader.cpp",
+        "components/pango_packetstream/src/packetstream_writer.cpp",
+        "components/pango_packetstream/src/playback_session.cpp",
+    ],
+    hdrs = glob(
+        [("components/pango_packetstream/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    includes = ["components/pango_packetstream/include"],
+    local_defines = ros_local_defines() + [
+        "PANGOLIN_VERSION_STRING=\\\"0.9.6\\\"",
+    ],
+    deps = [":pango_core_library"],
+)
+
+cc_shared_library(
+    name = "pango_packetstream",
+    dynamic_deps = [":pango_core"],
+    deps = [":pango_packetstream_library"],
+)
+
+# components/pango_plot
+
+cc_library(
+    name = "pango_plot_library",
+    srcs = [
+        "components/pango_plot/src/datalog.cpp",
+        "components/pango_plot/src/loaders/csv_table_loader.cpp",
+        "components/pango_plot/src/plotter.cpp",
+    ],
+    hdrs = glob(
+        [("components/pango_plot/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    includes = ["components/pango_plot/include"],
+    local_defines = ros_local_defines(),
+    deps = [":pango_display_library"],
+)
+
+cc_shared_library(
+    name = "pango_plot",
+    dynamic_deps = [
+        ":pango_core",
+        ":pango_display",
+        ":pango_image",
+        ":pango_opengl",
+        ":pango_vars",
+        ":pango_windowing",
+        "@qtbase//:x11_shared",
+        "@rosdistro//cc:epoxy",
+    ],
+    deps = [":pango_plot_library"],
+)
+
+# components/pango_video
+#
+# Drivers enabled for the dependencies available hermetically: shared memory
+# (UNIX), libdc1394 (firewire + deinterlace), V4L, ffmpeg (avcodec, avformat,
+# avutil, swscale, avdevice -- cmake/FindFFMPEG.cmake) and libuvc. RealSense,
+# OpenNI, DepthSense, TeliCam, Pleora and MediaFoundation SDKs aren't
+# available, matching an upstream build where their find_package() fails.
+
+cc_library(
+    name = "pango_video_library",
+    srcs = [
+        "components/pango_video/src/drivers/debayer.cpp",
+        "components/pango_video/src/drivers/deinterlace.cpp",
+        "components/pango_video/src/drivers/ffmpeg.cpp",
+        "components/pango_video/src/drivers/ffmpeg_convert.cpp",
+        "components/pango_video/src/drivers/ffmpeg_output.cpp",
+        "components/pango_video/src/drivers/firewire.cpp",
+        "components/pango_video/src/drivers/images.cpp",
+        "components/pango_video/src/drivers/images_out.cpp",
+        "components/pango_video/src/drivers/join.cpp",
+        "components/pango_video/src/drivers/json.cpp",
+        "components/pango_video/src/drivers/merge.cpp",
+        "components/pango_video/src/drivers/mjpeg.cpp",
+        "components/pango_video/src/drivers/pack.cpp",
+        "components/pango_video/src/drivers/pango.cpp",
+        "components/pango_video/src/drivers/pango_video_output.cpp",
+        "components/pango_video/src/drivers/shared_memory.cpp",
+        "components/pango_video/src/drivers/shift.cpp",
+        "components/pango_video/src/drivers/split.cpp",
+        "components/pango_video/src/drivers/test.cpp",
+        "components/pango_video/src/drivers/thread.cpp",
+        "components/pango_video/src/drivers/transform.cpp",
+        "components/pango_video/src/drivers/truncate.cpp",
+        "components/pango_video/src/drivers/unpack.cpp",
+        "components/pango_video/src/drivers/uvc.cpp",
+        "components/pango_video/src/stream_encoder_factory.cpp",
+        "components/pango_video/src/video.cpp",
+        "components/pango_video/src/video_help.cpp",
+        "components/pango_video/src/video_input.cpp",
+        "components/pango_video/src/video_output.cpp",
+    ] + select({
+        "@platforms//os:linux": [
+            "components/pango_video/src/drivers/v4l.cpp",
+        ],
+        "//conditions:default": [],
+    }),
+    hdrs = glob(
+        [("components/pango_video/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS + ["-Wno-deprecated-declarations"],
+    includes = ["components/pango_video/include"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":pango_core_library",
+        ":pango_factory_headers",
+        ":pango_image_library",
+        ":pango_packetstream_library",
+        "@rosdistro//cc:ffmpeg_library",
+        "@rosdistro//cc:libdc1394_library",
+        "@rosdistro//cc:libuvc_library",
+    ],
+)
+
+cc_shared_library(
+    name = "pango_video",
+    dynamic_deps = [
+        ":pango_core",
+        ":pango_image",
+        ":pango_packetstream",
+        "@rosdistro//cc:ffmpeg",
+        "@rosdistro//cc:libdc1394",
+        "@rosdistro//cc:libuvc",
+    ],
+    deps = [":pango_video_library"],
+)
+
+# components/pango_python
+
+PYPANGOLIN_BINDINGS = [
+    "components/pango_python/src/pypangolin/attach.cpp",
+    "components/pango_python/src/pypangolin/colour.cpp",
+    "components/pango_python/src/pypangolin/datalog.cpp",
+    "components/pango_python/src/pypangolin/display.cpp",
+    "components/pango_python/src/pypangolin/gl.cpp",
+    "components/pango_python/src/pypangolin/gl_draw.cpp",
+    "components/pango_python/src/pypangolin/gltext.cpp",
+    "components/pango_python/src/pypangolin/glfont.cpp",
+    "components/pango_python/src/pypangolin/glsl.cpp",
+    "components/pango_python/src/pypangolin/glvbo.cpp",
+    "components/pango_python/src/pypangolin/handler.cpp",
+    "components/pango_python/src/pypangolin/image.cpp",
+    "components/pango_python/src/pypangolin/image_view.cpp",
+    "components/pango_python/src/pypangolin/opengl_render_state.cpp",
+    "components/pango_python/src/pypangolin/params.cpp",
+    "components/pango_python/src/pypangolin/pixel_format.cpp",
+    "components/pango_python/src/pypangolin/plotter.cpp",
+    "components/pango_python/src/pypangolin/pypangoio.cpp",
+    "components/pango_python/src/pypangolin/var.cpp",
+    "components/pango_python/src/pypangolin/video.cpp",
+    "components/pango_python/src/pypangolin/view.cpp",
+    "components/pango_python/src/pypangolin/viewport.cpp",
+    "components/pango_python/src/pypangolin/widget.cpp",
+    "components/pango_python/src/pypangolin/window.cpp",
+] + glob([
+    "components/pango_python/src/pypangolin/*.h",
+    "components/pango_python/src/pypangolin/*.hpp",
+])
+
+PANGO_PYTHON_DEPS = [
+    ":pango_core_library",
+    ":pango_display_library",
+    ":pango_plot_library",
+    ":pango_vars_library",
+    ":pango_video_library",
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_libs",
+]
+
+PANGO_PYTHON_DYNAMIC_DEPS = [
+    ":pango_core",
+    ":pango_display",
+    ":pango_image",
+    ":pango_opengl",
+    ":pango_packetstream",
+    ":pango_plot",
+    ":pango_vars",
+    ":pango_video",
+    ":pango_windowing",
+    "@qtbase//:x11_shared",
+    "@rosdistro//cc:epoxy",
+    "@rosdistro//cc:ffmpeg",
+    "@rosdistro//cc:libdc1394",
+    "@rosdistro//cc:libuvc",
+]
+
+cc_library(
+    name = "pango_python_library",
+    srcs = [
+        "components/pango_python/src/pyinterpreter.cpp",
+        "components/pango_python/src/pypangolin_embed.cpp",
+    ] + PYPANGOLIN_BINDINGS,
+    hdrs = glob(
+        [("components/pango_python/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS + [
+        "-Wno-error=uninitialized",
+        "-fvisibility=hidden",
+    ],
+    defines = ["HAVE_PYTHON"],
+    includes = ["components/pango_python/include"],
+    local_defines = ros_local_defines(),
+    deps = PANGO_PYTHON_DEPS,
+)
+
+cc_shared_library(
+    name = "pango_python",
+    dynamic_deps = PANGO_PYTHON_DYNAMIC_DEPS,
+    deps = [":pango_python_library"],
+)
+
+# pybind11_add_module(pypangolin src/pypangolin_module.cpp ${SRC_BINDINGS}):
+# the standalone Python extension module, built but not installed upstream.
+cc_library(
+    name = "pypangolin_library",
+    srcs = ["components/pango_python/src/pypangolin_module.cpp"] + PYPANGOLIN_BINDINGS,
+    copts = COPTS + [
+        "-Wno-error=uninitialized",
+        "-fvisibility=hidden",
+    ],
+    local_defines = ros_local_defines(),
+    deps = PANGO_PYTHON_DEPS,
+)
+
+cc_shared_library(
+    name = "pypangolin",
+    dynamic_deps = PANGO_PYTHON_DYNAMIC_DEPS,
+    shared_lib_name = "pypangolin.so",
+    deps = [":pypangolin_library"],
+)
+
+# components/pango_scene
+
+cc_library(
+    name = "pango_scene_library",
+    srcs = ["components/pango_scene/src/renderable.cpp"],
+    hdrs = glob(
+        [("components/pango_scene/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    includes = ["components/pango_scene/include"],
+    local_defines = ros_local_defines(),
+    deps = [":pango_opengl_library"],
+)
+
+cc_shared_library(
+    name = "pango_scene",
+    dynamic_deps = [
+        ":pango_core",
+        ":pango_image",
+        ":pango_opengl",
+        "@rosdistro//cc:epoxy",
+    ],
+    deps = [":pango_scene_library"],
+)
+
+# components/pango_tools
+
+cc_library(
+    name = "pango_tools_library",
+    srcs = ["components/pango_tools/src/video_viewer.cpp"],
+    hdrs = glob(
+        [("components/pango_tools/include/" + p) for p in HDR_PATTERNS],
+        allow_empty = True,
+    ),
+    copts = COPTS,
+    includes = ["components/pango_tools/include"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":pango_display_library",
+        ":pango_video_library",
+    ],
+)
+
+cc_shared_library(
+    name = "pango_tools",
+    dynamic_deps = [
+        ":pango_core",
+        ":pango_display",
+        ":pango_image",
+        ":pango_opengl",
+        ":pango_packetstream",
+        ":pango_vars",
+        ":pango_video",
+        ":pango_windowing",
+        "@qtbase//:x11_shared",
+        "@rosdistro//cc:epoxy",
+        "@rosdistro//cc:ffmpeg",
+        "@rosdistro//cc:libdc1394",
+        "@rosdistro//cc:libuvc",
+    ],
+    deps = [":pango_tools_library"],
+)
+
+# tools/: linked against ${Pangolin_LIBRARIES}, i.e. every component.
+
+PANGO_LIBRARIES = [
+    ":pango_core",
+    ":pango_display",
+    ":pango_geometry",
+    ":pango_glgeometry",
+    ":pango_image",
+    ":pango_opengl",
+    ":pango_packetstream",
+    ":pango_plot",
+    ":pango_python",
+    ":pango_scene",
+    ":pango_tools",
+    ":pango_vars",
+    ":pango_video",
+    ":pango_windowing",
+    ":tinyobj",
+]
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = PANGO_LIBRARIES,
+)
+
+[cc_binary(
+    name = name,
+    srcs = srcs,
+    copts = COPTS,
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [(lib + "_library") for lib in PANGO_LIBRARIES],
+) for name, srcs in {
+    "ModelViewer": glob([
+        "tools/ModelViewer/*.cpp",
+        "tools/ModelViewer/*.h",
+    ]),
+    "Plotter": ["tools/Plotter/main.cpp"],
+    "VideoConvert": ["tools/VideoConvert/main.cpp"],
+    "VideoJsonPrint": ["tools/VideoJson/main-print.cpp"],
+    "VideoJsonTransform": ["tools/VideoJson/main-transform.cpp"],
+    "VideoViewer": ["tools/VideoViewer/main.cpp"],
+}.items()]
+
+# BUILD_TESTS: components/*/tests, linked against Catch2::Catch2WithMain.
+[cc_test(
+    name = name,
+    srcs = [src],
+    copts = COPTS,
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        lib + "_library",
+        "@rosdistro//cc:catch2_main",
+    ],
+) for name, src, lib in [
+    ("test_uris", "components/pango_core/tests/tests_uri.cpp", ":pango_core"),
+    ("test_vars", "components/pango_vars/tests/test_all.cpp", ":pango_vars"),
+    ("test_video_uris", "components/pango_video/tests/tests_video_uri.cpp", ":pango_video"),
+    ("test_video_loading", "components/pango_video/tests/tests_video_loading.cpp", ":pango_video"),
+]]
+
+PANGO_SONAMES = {
+    lib[1:]: [
+        "lib%s.so.0" % lib[1:],
+        "lib%s.so.0.9.6" % lib[1:],
+    ]
+    for lib in PANGO_LIBRARIES
+}
+
+ament_index(
+    name = "ament_index",
+    libraries = PANGO_LIBRARIES,
+    package_xml = "package.xml",
+    sonames = PANGO_SONAMES,
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        "components/pango_core/include/NaturalSort/LICENSE.md",
+        "components/pango_core/include/NaturalSort/README.md",
+        ":register_factories_VideoInterface",
+        ":register_factories_VideoOutputInterface",
+        ":register_factories_WindowInterface",
+        "components/pango_core/include/pangolin/utils/xml/license.txt",
+        "components/pango_core/include/sigslot/LICENCE",
+        "components/pango_core/include/sigslot/README.md",
+    ],
+    headers_strip_prefixes = [
+        "_gen/include",
+        "components/pango_core/include",
+        "components/pango_display/include",
+        "components/pango_geometry/include",
+        "components/pango_glgeometry/include",
+        "components/pango_image/include",
+        "components/pango_opengl/include",
+        "components/pango_packetstream/include",
+        "components/pango_plot/include",
+        "components/pango_python/include",
+        "components/pango_scene/include",
+        "components/pango_tools/include",
+        "components/pango_vars/include",
+        "components/pango_video/include",
+        "components/pango_windowing/include",
+        "components/tinyobj/include",
+    ],
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = PANGO_LIBRARIES,
+    package_xml = "package.xml",
+    programs = [
+        ":Plotter",
+        ":VideoConvert",
+        ":VideoJsonPrint",
+        ":VideoJsonTransform",
+        ":VideoViewer",
+    ],
+    sonames = PANGO_SONAMES,
+    deps = [":ament_index"],
+)

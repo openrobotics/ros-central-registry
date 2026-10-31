@@ -1,0 +1,3743 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@qt//:qt.bzl", "qt_cc_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@gtsam//:cephes-gtsam": "@gtsam//:cephes-gtsam_library",
+    "@gtsam//:gtsam": "@gtsam//:gtsam_library",
+    "@gtsam//:metis-gtsam": "@gtsam//:metis-gtsam_library",
+    "@libg2o//:g2o_core": "@libg2o//:g2o_core_library",
+    "@libg2o//:g2o_csparse_extension": "@libg2o//:g2o_csparse_extension_library",
+    "@libg2o//:g2o_solver_cholmod": "@libg2o//:g2o_solver_cholmod_library",
+    "@libg2o//:g2o_solver_csparse": "@libg2o//:g2o_solver_csparse_library",
+    "@libg2o//:g2o_solver_eigen": "@libg2o//:g2o_solver_eigen_library",
+    "@libg2o//:g2o_solver_pcg": "@libg2o//:g2o_solver_pcg_library",
+    "@libg2o//:g2o_stuff": "@libg2o//:g2o_stuff_library",
+    "@libg2o//:g2o_types_sba": "@libg2o//:g2o_types_sba_library",
+    "@libg2o//:g2o_types_slam2d": "@libg2o//:g2o_types_slam2d_library",
+    "@libg2o//:g2o_types_slam3d": "@libg2o//:g2o_types_slam3d_library",
+    "@rosdistro//cc:boost.asio_shared": "@rosdistro//cc:boost.asio",
+    "@rosdistro//cc:boost.chrono_shared": "@rosdistro//cc:boost.chrono",
+    "@rosdistro//cc:boost.container_shared": "@rosdistro//cc:boost.container",
+    "@rosdistro//cc:boost.filesystem_shared": "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.iostreams_shared": "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.serialization_shared": "@rosdistro//cc:boost.serialization",
+    "@rosdistro//cc:boost.thread_shared": "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:boost.timer_shared": "@rosdistro//cc:boost.timer",
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:octomap_shared": "@rosdistro//cc:octomap_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:pcl": "@rosdistro//cc:pcl_library",
+    "@rosdistro//cc:protobuf": "@rosdistro//cc:protobuf_library",
+    "@rosdistro//cc:sqlite3": "@rosdistro//cc:sqlite3_library",
+    "@rosdistro//cc:vtk": "@rosdistro//cc:vtk_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+}
+
+GUI_DEPENDENCIES = {
+    "@qtbase//:core_shared": "@qtbase//:core",
+    "@qtbase//:gui_shared": "@qtbase//:gui",
+    "@qtbase//:opengl_shared": "@qtbase//:opengl",
+    "@qtbase//:printsupport_shared": "@qtbase//:printsupport",
+    "@qtbase//:widgets_shared": "@qtbase//:widgets",
+    "@qtsvg//:svg_shared": "@qtsvg//:svg",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:opengl_headers",
+    "@rosdistro//cc:nanoflann",
+    ":_gen_textual_hdrs",
+    "@gtsam//:_gen_textual_hdrs",
+    "@rosdistro//cc:boost.algorithm",
+    "@rosdistro//cc:boost.crc",
+    "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.math",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:boost.smart_ptr",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+    "@rosdistro//cc:spdlog",
+]
+
+# corelib/src/CMakeLists.txt RESOURCES, embedded as C strings by res_tool.
+CORE_RESOURCES = [
+    "corelib/src/resources/backward_compatibility/DatabaseSchema_0_22_0.sql",
+    "corelib/src/resources/backward_compatibility/DatabaseSchema_0_20_0.sql",
+    "corelib/src/resources/backward_compatibility/DatabaseSchema_0_18_3.sql",
+    "corelib/src/resources/backward_compatibility/DatabaseSchema_0_18_0.sql",
+    "corelib/src/resources/backward_compatibility/DatabaseSchema_0_17_0.sql",
+    "corelib/src/resources/backward_compatibility/DatabaseSchema_0_16_2.sql",
+    "corelib/src/resources/backward_compatibility/DatabaseSchema_0_16_1.sql",
+    "corelib/src/resources/backward_compatibility/DatabaseSchema_0_16_0.sql",
+]
+
+CORE_RESOURCE_HEADERS = ["_gen/include/DatabaseSchema_sql.h"] + [
+    "_gen/include/" + f.split("/")[-1].replace(".", "_") + ".h"
+    for f in CORE_RESOURCES
+]
+
+# guilib/src/CMakeLists.txt RESOURCES.
+GUI_RESOURCES = [
+    "data/presets/camera_tof_icp.ini",
+    "data/presets/lidar3d_icp.ini",
+]
+
+GUI_RESOURCE_HEADERS = [
+    "_gen/gui/include/" + f.split("/")[-1].replace(".", "_") + ".h"
+    for f in GUI_RESOURCES
+]
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [],
+)
+
+cc_library(
+    name = "rtabmap_utilite_library",
+    srcs = glob(["utilite/src/*.cpp"]),
+    hdrs = glob(["utilite/include/rtabmap/utilite/**/*.h"]) + [":utilite_export_h"],
+    includes = [
+        "_gen/include",
+        "utilite/include",
+    ],
+    linkopts = ["-lpthread"],
+    local_defines = ros_local_defines(),
+)
+
+cc_shared_library(
+    name = "rtabmap_utilite",
+    exports_filter = [":rtabmap_utilite_library"],
+    deps = [":rtabmap_utilite_library"],
+)
+
+cc_library(
+    name = "rtabmap_core_library",
+    srcs = [
+        "corelib/src/BayesFilter.cpp",
+        "corelib/src/Camera.cpp",
+        "corelib/src/CameraModel.cpp",
+        "corelib/src/Compression.cpp",
+        "corelib/src/DBDriver.cpp",
+        "corelib/src/DBDriverSqlite3.cpp",
+        "corelib/src/DBReader.cpp",
+        "corelib/src/EpipolarGeometry.cpp",
+        "corelib/src/Features2d.cpp",
+        "corelib/src/FlannIndex.cpp",
+        "corelib/src/GainCompensator.cpp",
+        "corelib/src/GeodeticCoords.cpp",
+        "corelib/src/GlobalDescriptorExtractor.cpp",
+        "corelib/src/GlobalMap.cpp",
+        "corelib/src/Graph.cpp",
+        "corelib/src/IMU.cpp",
+        "corelib/src/IMUFilter.cpp",
+        "corelib/src/IMUThread.cpp",
+        "corelib/src/LaserScan.cpp",
+        "corelib/src/Link.cpp",
+        "corelib/src/LocalGrid.cpp",
+        "corelib/src/LocalGridMaker.cpp",
+        "corelib/src/MarkerDetector.cpp",
+        "corelib/src/Memory.cpp",
+        "corelib/src/Odometry.cpp",
+        "corelib/src/OdometryInfo.cpp",
+        "corelib/src/OdometryThread.cpp",
+        "corelib/src/Optimizer.cpp",
+        "corelib/src/Parameters.cpp",
+        "corelib/src/Recovery.cpp",
+        "corelib/src/Registration.cpp",
+        "corelib/src/RegistrationIcp.cpp",
+        "corelib/src/RegistrationVis.cpp",
+        "corelib/src/Rtabmap.cpp",
+        "corelib/src/RtabmapThread.cpp",
+        "corelib/src/SensorCapture.cpp",
+        "corelib/src/SensorCaptureThread.cpp",
+        "corelib/src/SensorData.cpp",
+        "corelib/src/Signature.cpp",
+        "corelib/src/Statistics.cpp",
+        "corelib/src/Stereo.cpp",
+        "corelib/src/StereoCameraModel.cpp",
+        "corelib/src/StereoDense.cpp",
+        "corelib/src/Transform.cpp",
+        "corelib/src/VWDictionary.cpp",
+        "corelib/src/VisualWord.cpp",
+        "corelib/src/bayes/DensePrediction.cpp",
+        "corelib/src/bayes/PredictionModel.cpp",
+        "corelib/src/bayes/SparsePrediction.cpp",
+        "corelib/src/camera/CameraDepthAI.cpp",
+        "corelib/src/camera/CameraFreenect.cpp",
+        "corelib/src/camera/CameraFreenect2.cpp",
+        "corelib/src/camera/CameraImages.cpp",
+        "corelib/src/camera/CameraK4A.cpp",
+        "corelib/src/camera/CameraK4W2.cpp",
+        "corelib/src/camera/CameraMyntEye.cpp",
+        "corelib/src/camera/CameraOpenNI2.cpp",
+        "corelib/src/camera/CameraOpenNICV.cpp",
+        "corelib/src/camera/CameraOpenni.cpp",
+        "corelib/src/camera/CameraOrbbecSDK.cpp",
+        "corelib/src/camera/CameraRGBDImages.cpp",
+        "corelib/src/camera/CameraRealSense.cpp",
+        "corelib/src/camera/CameraRealSense2.cpp",
+        "corelib/src/camera/CameraSeerSense.cpp",
+        "corelib/src/camera/CameraStereoDC1394.cpp",
+        "corelib/src/camera/CameraStereoFlyCapture2.cpp",
+        "corelib/src/camera/CameraStereoImages.cpp",
+        "corelib/src/camera/CameraStereoTara.cpp",
+        "corelib/src/camera/CameraStereoVideo.cpp",
+        "corelib/src/camera/CameraStereoZed.cpp",
+        "corelib/src/camera/CameraStereoZedOC.cpp",
+        "corelib/src/camera/CameraVideo.cpp",
+        "corelib/src/clams/discrete_depth_distortion_model.cpp",
+        "corelib/src/clams/discrete_depth_distortion_model_helpers.cpp",
+        "corelib/src/clams/frame_projector.cpp",
+        "corelib/src/clams/slam_calibrator.cpp",
+        "corelib/src/global_map/CloudMap.cpp",
+        "corelib/src/global_map/OccupancyGrid.cpp",
+        "corelib/src/global_map/OctoMap.cpp",
+        "corelib/src/imufilter/ComplementaryFilter.cpp",
+        "corelib/src/imufilter/MadgwickFilter.cpp",
+        "corelib/src/lidar/LidarVLP16.cpp",
+        "corelib/src/nanoflann/NanoFlannIndex.cpp",
+        "corelib/src/odometry/OdometryCuVSLAM.cpp",
+        "corelib/src/odometry/OdometryDVO.cpp",
+        "corelib/src/odometry/OdometryF2F.cpp",
+        "corelib/src/odometry/OdometryF2M.cpp",
+        "corelib/src/odometry/OdometryFLOAM.cpp",
+        "corelib/src/odometry/OdometryFovis.cpp",
+        "corelib/src/odometry/OdometryLIOSAM.cpp",
+        "corelib/src/odometry/OdometryLOAM.cpp",
+        "corelib/src/odometry/OdometryMSCKF.cpp",
+        "corelib/src/odometry/OdometryMono.cpp",
+        "corelib/src/odometry/OdometryORBSLAM2.cpp",
+        "corelib/src/odometry/OdometryORBSLAM3.cpp",
+        "corelib/src/odometry/OdometryOkvis.cpp",
+        "corelib/src/odometry/OdometryOpen3D.cpp",
+        "corelib/src/odometry/OdometryOpenVINS.cpp",
+        "corelib/src/odometry/OdometryVINSFusion.cpp",
+        "corelib/src/odometry/OdometryViso2.cpp",
+        "corelib/src/opencv/ORBextractor.cc",
+        "corelib/src/opencv/five-point.cpp",
+        "corelib/src/opencv/solvepnp.cpp",
+        "corelib/src/optimizer/OptimizerCVSBA.cpp",
+        "corelib/src/optimizer/OptimizerCeres.cpp",
+        "corelib/src/optimizer/OptimizerG2O.cpp",
+        "corelib/src/optimizer/OptimizerGTSAM.cpp",
+        "corelib/src/optimizer/OptimizerTORO.cpp",
+        "corelib/src/optimizer/toro3d/posegraph2.cpp",
+        "corelib/src/optimizer/toro3d/posegraph3.cpp",
+        "corelib/src/optimizer/toro3d/treeoptimizer2.cpp",
+        "corelib/src/optimizer/toro3d/treeoptimizer3.cpp",
+        "corelib/src/optimizer/toro3d/treeoptimizer3_iteration.cpp",
+        "corelib/src/optimizer/vertigo/g2o/edge_se2Switchable.cpp",
+        "corelib/src/optimizer/vertigo/g2o/edge_se3Switchable.cpp",
+        "corelib/src/optimizer/vertigo/g2o/edge_switchPrior.cpp",
+        "corelib/src/optimizer/vertigo/g2o/types_g2o_robust.cpp",
+        "corelib/src/optimizer/vertigo/g2o/vertex_switchLinear.cpp",
+        "corelib/src/rtflann/ext/lz4.c",
+        "corelib/src/rtflann/ext/lz4hc.c",
+        "corelib/src/rvl_codec.cpp",
+        "corelib/src/stereo/StereoBM.cpp",
+        "corelib/src/stereo/StereoSGBM.cpp",
+        "corelib/src/util2d.cpp",
+        "corelib/src/util3d.cpp",
+        "corelib/src/util3d_correspondences.cpp",
+        "corelib/src/util3d_features.cpp",
+        "corelib/src/util3d_filtering.cpp",
+        "corelib/src/util3d_mapping.cpp",
+        "corelib/src/util3d_motion_estimation.cpp",
+        "corelib/src/util3d_registration.cpp",
+        "corelib/src/util3d_surface.cpp",
+        "corelib/src/util3d_transforms.cpp",
+    ],
+    hdrs = glob([
+        "corelib/include/rtabmap/core/**/*.h",
+        "corelib/include/rtabmap/core/**/*.hpp",
+        # corelib/src is a public (build-interface) include dir upstream; the
+        # in-package tests include private headers from it.
+        "corelib/src/**/*.h",
+        "corelib/src/**/*.hpp",
+        "corelib/src/**/*.hxx",
+    ]) + [
+        ":Version_h",
+        ":rtabmap_core_export_h",
+        ":rtflann_config_h",
+    ] + CORE_RESOURCE_HEADERS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "corelib/include",
+        "corelib/src",
+    ],
+    local_defines = ros_local_defines(),
+    # lz4hc.c #includes "lz4.c" (with LZ4_COMMONDEFS_ONLY).
+    textual_hdrs = ["corelib/src/rtflann/ext/lz4.c"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":rtabmap_utilite_library"],
+)
+
+cc_shared_library(
+    name = "rtabmap_core",
+    dynamic_deps = DEPENDENCIES.keys() + [":rtabmap_utilite"],
+    exports_filter = [":rtabmap_core_library"],
+    deps = [":rtabmap_core_library"],
+)
+
+qt_cc_library(
+    name = "rtabmap_gui_library",
+    srcs = [
+        "guilib/src/3rdParty/QMultiComboBox.cpp",
+        "guilib/src/AboutDialog.cpp",
+        "guilib/src/CalibrationDialog.cpp",
+        "guilib/src/CameraViewer.cpp",
+        "guilib/src/CloudViewer.cpp",
+        "guilib/src/CloudViewerCellPicker.cpp",
+        "guilib/src/CloudViewerInteractorStyle.cpp",
+        "guilib/src/ConsoleWidget.cpp",
+        "guilib/src/CreateSimpleCalibrationDialog.cpp",
+        "guilib/src/DataRecorder.cpp",
+        "guilib/src/DatabaseViewer.cpp",
+        "guilib/src/DepthCalibrationDialog.cpp",
+        "guilib/src/EditConstraintDialog.cpp",
+        "guilib/src/EditDepthArea.cpp",
+        "guilib/src/EditMapArea.cpp",
+        "guilib/src/ExportBundlerDialog.cpp",
+        "guilib/src/ExportCloudsDialog.cpp",
+        "guilib/src/ExportDialog.cpp",
+        "guilib/src/GraphViewer.cpp",
+        "guilib/src/ImageView.cpp",
+        "guilib/src/KeypointItem.cpp",
+        "guilib/src/LinkRefiningDialog.cpp",
+        "guilib/src/LoopClosureViewer.cpp",
+        "guilib/src/MainWindow.cpp",
+        "guilib/src/MapVisibilityWidget.cpp",
+        "guilib/src/MultiSessionLocSubView.cpp",
+        "guilib/src/MultiSessionLocWidget.cpp",
+        "guilib/src/OdometryViewer.cpp",
+        "guilib/src/ParametersToolBox.cpp",
+        "guilib/src/PdfPlot.cpp",
+        "guilib/src/PostProcessingDialog.cpp",
+        "guilib/src/PreferencesDialog.cpp",
+        "guilib/src/ProgressDialog.cpp",
+        "guilib/src/StatsToolBox.cpp",
+        "guilib/src/opencv/vtkImageMatSource.cpp",
+        "guilib/src/utilite/UPlot.cpp",
+    ] + glob([
+        "guilib/src/**/*.h",
+    ]) + [
+        ":gen_qrc_GuiLib_cpp",
+    ] + GUI_RESOURCE_HEADERS + [
+        ":gen_ui_DatabaseViewer_h",
+        ":gen_ui_aboutDialog_h",
+        ":gen_ui_calibrationDialog_h",
+        ":gen_ui_consoleWidget_h",
+        ":gen_ui_createSimpleCalibrationDialog_h",
+        ":gen_ui_depthCalibrationDialog_h",
+        ":gen_ui_editConstraintDialog_h",
+        ":gen_ui_exportBundlerDialog_h",
+        ":gen_ui_exportCloudsDialog_h",
+        ":gen_ui_exportDialog_h",
+        ":gen_ui_linkRefiningDialog_h",
+        ":gen_ui_loopClosureViewer_h",
+        ":gen_ui_mainWindow_h",
+        ":gen_ui_multiSessionLocSubView_h",
+        ":gen_ui_postProcessingDialog_h",
+        ":gen_ui_preferencesDialog_h",
+    ],
+    hdrs = glob([
+        "guilib/include/rtabmap/gui/*.h",
+        "guilib/include/rtabmap/utilite/*.h",
+    ]) + [":rtabmap_gui_export_h"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/gui/include",
+        "_gen/include",
+        "guilib/include",
+        "guilib/src",
+    ],
+    local_defines = ros_local_defines() + [
+        "VTK_GLOBAL_WARNING_DISPLAY_OFF",
+    ],
+    moc_hdrs = [
+        "guilib/include/rtabmap/gui/MainWindow.h",
+        "guilib/include/rtabmap/gui/PreferencesDialog.h",
+        "guilib/include/rtabmap/gui/DatabaseViewer.h",
+        "guilib/include/rtabmap/gui/AboutDialog.h",
+        "guilib/include/rtabmap/gui/ConsoleWidget.h",
+        "guilib/include/rtabmap/gui/ImageView.h",
+        "guilib/include/rtabmap/gui/PdfPlot.h",
+        "guilib/include/rtabmap/gui/StatsToolBox.h",
+        "guilib/include/rtabmap/gui/ProgressDialog.h",
+        "guilib/include/rtabmap/gui/CloudViewer.h",
+        "guilib/include/rtabmap/gui/OdometryViewer.h",
+        "guilib/include/rtabmap/gui/LoopClosureViewer.h",
+        "guilib/include/rtabmap/gui/DataRecorder.h",
+        "guilib/include/rtabmap/gui/CameraViewer.h",
+        "guilib/include/rtabmap/gui/CalibrationDialog.h",
+        "guilib/include/rtabmap/gui/ExportDialog.h",
+        "guilib/include/rtabmap/gui/PostProcessingDialog.h",
+        "guilib/include/rtabmap/gui/ExportCloudsDialog.h",
+        "guilib/include/rtabmap/gui/ExportBundlerDialog.h",
+        "guilib/include/rtabmap/gui/MapVisibilityWidget.h",
+        "guilib/include/rtabmap/gui/GraphViewer.h",
+        "guilib/include/rtabmap/gui/CreateSimpleCalibrationDialog.h",
+        "guilib/include/rtabmap/gui/ParametersToolBox.h",
+        "guilib/include/rtabmap/gui/DepthCalibrationDialog.h",
+        "guilib/include/rtabmap/gui/EditConstraintDialog.h",
+        "guilib/include/rtabmap/gui/TexturingState.h",
+        "guilib/include/rtabmap/gui/RecoveryState.h",
+        "guilib/include/rtabmap/gui/EditDepthArea.h",
+        "guilib/include/rtabmap/gui/EditMapArea.h",
+        "guilib/include/rtabmap/gui/MultiSessionLocWidget.h",
+        "guilib/include/rtabmap/gui/MultiSessionLocSubView.h",
+        "guilib/include/rtabmap/gui/LinkRefiningDialog.h",
+        "guilib/include/rtabmap/utilite/UPlot.h",
+        "guilib/include/rtabmap/utilite/UImageView.h",
+        "guilib/src/3rdParty/QMultiComboBox.h",
+    ],
+    deps = DEPENDENCIES.values() + GUI_DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_shared_library(
+    name = "rtabmap_gui",
+    dynamic_deps = DEPENDENCIES.keys() + GUI_DEPENDENCIES.keys() + [
+        ":rtabmap_core",
+        ":rtabmap_utilite",
+    ],
+    exports_filter = [":rtabmap_gui_library"],
+    deps = [":rtabmap_gui_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + GUI_DEPENDENCIES.keys() + [
+        ":rtabmap_core",
+        ":rtabmap_gui",
+        ":rtabmap_utilite",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "core_transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":rtabmap_core",
+        ":rtabmap_utilite",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap",
+    srcs = [
+        "app/src/main.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + GUI_DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_gui_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-calibration",
+    srcs = [
+        "tools/Calibration/main.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + GUI_DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_gui_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-camera",
+    srcs = [
+        "tools/Camera/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-cidsims_dataset",
+    srcs = [
+        "tools/CidSimsDataset/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-cleanupLocalGrids",
+    srcs = [
+        "tools/CleanupLocalGrids/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-console",
+    srcs = [
+        "tools/ConsoleApp/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-dataRecorder",
+    srcs = [
+        "tools/DataRecorder/main.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + GUI_DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_gui_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-databaseViewer",
+    srcs = [
+        "tools/DatabaseViewer/main.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + GUI_DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_gui_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-detectMoreLoopClosures",
+    srcs = [
+        "tools/DetectMoreLoopClosures/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-euroc_dataset",
+    srcs = [
+        "tools/EurocDataset/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-export",
+    srcs = [
+        "tools/Export/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-extractObject",
+    srcs = [
+        "tools/ExtractObject/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-globalBundleAdjustment",
+    srcs = [
+        "tools/GlobalBundleAdjustment/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-info",
+    srcs = [
+        "tools/Info/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-kitti_dataset",
+    srcs = [
+        "tools/KittiDataset/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-lidar_viewer",
+    srcs = [
+        "tools/LidarViewer/main.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + GUI_DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_gui_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-odometryViewer",
+    srcs = [
+        "tools/OdometryViewer/main.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + GUI_DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_gui_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-recovery",
+    srcs = [
+        "tools/Recovery/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-reduceGraph",
+    srcs = [
+        "tools/ReduceGraph/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-report",
+    srcs = [
+        "tools/Report/main.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + GUI_DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_gui_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-reprocess",
+    srcs = [
+        "tools/Reprocess/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-res_tool-0.3.0",
+    srcs = [
+        "utilite/resource_generator/main.cpp",
+    ],
+    local_defines = ["UTILITE_VERSION=\\\"0.3.0\\\""],
+    deps = [":rtabmap_utilite_library"],
+)
+
+cc_binary(
+    name = "rtabmap-rgbd_camera",
+    srcs = [
+        "tools/CameraRGBD/main.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + GUI_DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_gui_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+cc_binary(
+    name = "rtabmap-rgbd_dataset",
+    srcs = [
+        "tools/RgbdDataset/main.cpp",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_utilite_library",
+    ],
+)
+
+expand_template(
+    name = "Version_h",
+    out = "_gen/include/rtabmap/core/Version.h",
+    substitutions = {
+        "@ALICE_VISION@": "//",
+        "@APRILTAG@": "//",
+        "@APRILTAG_ARUCO@": "//",
+        "@CCCORELIB@": "//",
+        "@CERES@": "//",
+        "@CPUTSDF@": "//",
+        "@CUDASIFT@": "//",
+        "@CUVSLAM@": "//",
+        "@CVSBA@": "//",
+        "@DC1394@": "//",
+        "@DEPTHAI@": "//",
+        "@DVO@": "//",
+        "@FASTCV@": "//",
+        "@FLOAM@": "//",
+        "@FLYCAPTURE2@": "//",
+        "@FOVIS@": "//",
+        "@FREENECT2@": "//",
+        "@FREENECT@": "//",
+        "@G2O@": "",
+        "@G2O_CPP11@": "1",
+        "@G2O_CPP_CONF@": "",
+        "@G2O_WITH_SBA_UTILS_CONF@": "",
+        "@GRIDMAP@": "//",
+        "@GTSAM@": "",
+        "@K4A@": "//",
+        "@K4W2@": "//",
+        "@LIBLAS@": "//",
+        "@LIOSAM@": "//",
+        "@LOAM@": "//",
+        "@MADGWICK@": "",
+        "@MRPT@": "//",
+        "@MSCKF_VIO@": "//",
+        "@MYNTEYE@": "//",
+        "@NONFREE@": "//",
+        "@OCTOMAP@": "",
+        "@OKVIS@": "//",
+        "@OPEN3D@": "//",
+        "@OPENCHISEL@": "//",
+        "@OPENGV@": "//",
+        "@OPENNI2@": "//",
+        "@OPENNI@": "//",
+        "@OPENVINS@": "//",
+        "@ORBBEC_SDK@": "//",
+        "@ORB_OCTREE@": "",
+        "@ORB_SLAM@": "//",
+        "@ORB_SLAM_VERSION@": "",
+        "@PDAL@": "//",
+        "@POINTMATCHER@": "//",
+        "@PROJECT_VERSION@": "0.23.13",
+        "@PROJECT_VERSION_MAJOR@": "0",
+        "@PROJECT_VERSION_MINOR@": "23",
+        "@PROJECT_VERSION_PATCH@": "13",
+        "@PYTHON@": "//",
+        "@REALSENSE2@": "//",
+        "@REALSENSE@": "//",
+        "@REALSENSESLAM@": "//",
+        "@TORCH@": "//",
+        "@TORO@": "",
+        "@VERTIGO@": "",
+        "@VINSFUSION@": "//",
+        "@VISO2@": "//",
+        "@XVSDK@": "//",
+        "@ZED@": "//",
+        "@ZEDOC@": "//",
+    },
+    template = "Version.h.in",
+)
+
+# corelib/src/rtflann/config.h.in (FLANN_KDTREE_MEM_OPT defaults to OFF on
+# non-mobile builds).
+expand_template(
+    name = "rtflann_config_h",
+    out = "_gen/include/rtflann/config.h",
+    substitutions = {
+        "#cmakedefine FLANN_KDTREE_MEM_OPT": "/* #undef FLANN_KDTREE_MEM_OPT */",
+    },
+    template = "corelib/src/rtflann/config.h.in",
+)
+
+expand_template(
+    name = "DatabaseSchema_sql",
+    out = "_gen/resources/DatabaseSchema.sql",
+    substitutions = {
+        "@PROJECT_VERSION@": "0.23.13",
+    },
+    template = "corelib/src/resources/DatabaseSchema.sql.in",
+)
+
+genrule(
+    name = "gen_core_resources",
+    srcs = [":DatabaseSchema_sql"] + CORE_RESOURCES,
+    outs = CORE_RESOURCE_HEADERS,
+    cmd = "$(execpath :rtabmap-res_tool-0.3.0) -n rtabmap -p $(RULEDIR)/_gen/include $(SRCS) > /dev/null",
+    tools = [":rtabmap-res_tool-0.3.0"],
+)
+
+genrule(
+    name = "gen_gui_resources",
+    srcs = GUI_RESOURCES,
+    outs = GUI_RESOURCE_HEADERS,
+    cmd = "$(execpath :rtabmap-res_tool-0.3.0) -n rtabmap -p $(RULEDIR)/_gen/gui/include $(SRCS) > /dev/null",
+    tools = [":rtabmap-res_tool-0.3.0"],
+)
+
+# Equivalents of CMake's generate_export_header() output for each library.
+# rtabmap_core/rtabmap_gui use DEPRECATED_MACRO_NAME RTABMAP_DEPRECATED, and
+# rtabmap_utilite uses BASE_NAME utilite (-> UTILITE_EXPORT).
+[
+    write_file(
+        name = name + "_export_h",
+        out = "_gen/include/rtabmap/{}/{}_export.h".format(subdir, name),
+        content = [
+            "#ifndef {}_EXPORT_H".format(name.upper()),
+            "#define {}_EXPORT_H".format(name.upper()),
+            "",
+            "#ifdef {}_STATIC_DEFINE".format(name.upper()),
+            "#  define {}_EXPORT".format(name.upper()),
+            "#  define {}_NO_EXPORT".format(name.upper()),
+            "#else",
+            "#  ifndef {}_EXPORT".format(name.upper()),
+            "#    define {}_EXPORT __attribute__((visibility(\"default\")))".format(name.upper()),
+            "#  endif",
+            "#  ifndef {}_NO_EXPORT".format(name.upper()),
+            "#    define {}_NO_EXPORT __attribute__((visibility(\"hidden\")))".format(name.upper()),
+            "#  endif",
+            "#endif",
+            "",
+            "#ifndef {}".format(deprecated),
+            "#  define {} __attribute__ ((__deprecated__))".format(deprecated),
+            "#endif",
+            "",
+            "#ifndef {}_DEPRECATED_EXPORT".format(name.upper()),
+            "#  define {}_DEPRECATED_EXPORT {}_EXPORT {}".format(
+                name.upper(),
+                name.upper(),
+                deprecated,
+            ),
+            "#endif",
+            "",
+            "#ifndef {}_DEPRECATED_NO_EXPORT".format(name.upper()),
+            "#  define {}_DEPRECATED_NO_EXPORT {}_NO_EXPORT {}".format(
+                name.upper(),
+                name.upper(),
+                deprecated,
+            ),
+            "#endif",
+            "",
+            "#endif /* {}_EXPORT_H */".format(name.upper()),
+            "",
+        ],
+    )
+    for name, subdir, deprecated in [
+        ("rtabmap_core", "core", "RTABMAP_DEPRECATED"),
+        ("rtabmap_gui", "gui", "RTABMAP_DEPRECATED"),
+        ("utilite", "utilite", "UTILITE_DEPRECATED"),
+    ]
+]
+
+genrule(
+    name = "gen_ui_DatabaseViewer_h",
+    srcs = ["guilib/src/ui/DatabaseViewer.ui"],
+    outs = ["_gen/include/ui_DatabaseViewer.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/DatabaseViewer.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_aboutDialog_h",
+    srcs = ["guilib/src/ui/aboutDialog.ui"],
+    outs = ["_gen/include/ui_aboutDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/aboutDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_calibrationDialog_h",
+    srcs = ["guilib/src/ui/calibrationDialog.ui"],
+    outs = ["_gen/include/ui_calibrationDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/calibrationDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_consoleWidget_h",
+    srcs = ["guilib/src/ui/consoleWidget.ui"],
+    outs = ["_gen/include/ui_consoleWidget.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/consoleWidget.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_createSimpleCalibrationDialog_h",
+    srcs = ["guilib/src/ui/createSimpleCalibrationDialog.ui"],
+    outs = ["_gen/include/ui_createSimpleCalibrationDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/createSimpleCalibrationDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_depthCalibrationDialog_h",
+    srcs = ["guilib/src/ui/depthCalibrationDialog.ui"],
+    outs = ["_gen/include/ui_depthCalibrationDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/depthCalibrationDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_editConstraintDialog_h",
+    srcs = ["guilib/src/ui/editConstraintDialog.ui"],
+    outs = ["_gen/include/ui_editConstraintDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/editConstraintDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_exportBundlerDialog_h",
+    srcs = ["guilib/src/ui/exportBundlerDialog.ui"],
+    outs = ["_gen/include/ui_exportBundlerDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/exportBundlerDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_exportCloudsDialog_h",
+    srcs = ["guilib/src/ui/exportCloudsDialog.ui"],
+    outs = ["_gen/include/ui_exportCloudsDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/exportCloudsDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_exportDialog_h",
+    srcs = ["guilib/src/ui/exportDialog.ui"],
+    outs = ["_gen/include/ui_exportDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/exportDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_linkRefiningDialog_h",
+    srcs = ["guilib/src/ui/linkRefiningDialog.ui"],
+    outs = ["_gen/include/ui_linkRefiningDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/linkRefiningDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_loopClosureViewer_h",
+    srcs = ["guilib/src/ui/loopClosureViewer.ui"],
+    outs = ["_gen/include/ui_loopClosureViewer.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/loopClosureViewer.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_mainWindow_h",
+    srcs = ["guilib/src/ui/mainWindow.ui"],
+    outs = ["_gen/include/ui_mainWindow.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/mainWindow.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_multiSessionLocSubView_h",
+    srcs = ["guilib/src/ui/multiSessionLocSubView.ui"],
+    outs = ["_gen/include/ui_multiSessionLocSubView.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/multiSessionLocSubView.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_postProcessingDialog_h",
+    srcs = ["guilib/src/ui/postProcessingDialog.ui"],
+    outs = ["_gen/include/ui_postProcessingDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/postProcessingDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_preferencesDialog_h",
+    srcs = ["guilib/src/ui/preferencesDialog.ui"],
+    outs = ["_gen/include/ui_preferencesDialog.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location guilib/src/ui/preferencesDialog.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_qrc_GuiLib_cpp",
+    srcs = [
+        "guilib/src/GuiLib.qrc",
+        "guilib/src/images/IntRoLab.png",
+        "guilib/src/images/IntRoLabSmall.png",
+        "guilib/src/images/Pause.ico",
+        "guilib/src/images/PauseLoopRejected.ico",
+        "guilib/src/images/PauseNormal.png",
+        "guilib/src/images/PauseNormalRed.png",
+        "guilib/src/images/PauseOnLocalLoop.ico",
+        "guilib/src/images/PauseOnLoop.ico",
+        "guilib/src/images/Play1Normal.png",
+        "guilib/src/images/Plot16.png",
+        "guilib/src/images/Plot48.png",
+        "guilib/src/images/RTAB-Map.ico",
+        "guilib/src/images/RTAB-Map.png",
+        "guilib/src/images/Stop1NormalYellow.png",
+        "guilib/src/images/astra.png",
+        "guilib/src/images/astra2.png",
+        "guilib/src/images/bumblebee2.png",
+        "guilib/src/images/crosshatch_metal_grille_9280154_150.JPG",
+        "guilib/src/images/d415.png",
+        "guilib/src/images/d435.png",
+        "guilib/src/images/document-new.png",
+        "guilib/src/images/document-open.png",
+        "guilib/src/images/document-properties.png",
+        "guilib/src/images/document-save.png",
+        "guilib/src/images/k4a.png",
+        "guilib/src/images/kinect_xbox_360.png",
+        "guilib/src/images/kinect_xbox_one.png",
+        "guilib/src/images/l515.png",
+        "guilib/src/images/mag_glass.png",
+        "guilib/src/images/metal_7280826_512.jpg",
+        "guilib/src/images/mynteyes.png",
+        "guilib/src/images/oakd.png",
+        "guilib/src/images/oakd_lite.png",
+        "guilib/src/images/oakdpro.png",
+        "guilib/src/images/r200.png",
+        "guilib/src/images/seer_sense_DS80.png",
+        "guilib/src/images/sense.png",
+        "guilib/src/images/sr300.png",
+        "guilib/src/images/system-log-out.png",
+        "guilib/src/images/t265.png",
+        "guilib/src/images/tara.png",
+        "guilib/src/images/view-refresh.png",
+        "guilib/src/images/webcam.png",
+        "guilib/src/images/xtion_pro_live.png",
+        "guilib/src/images/zed.png",
+        "guilib/src/images/zr300.png",
+        "guilib/src/qss/default.qss",
+    ],
+    outs = ["_gen/qrc_GuiLib.cpp"],
+    cmd = "$(execpath @qtbase//:rcc) --name GuiLib --output $@ $(location guilib/src/GuiLib.qrc)",
+    tools = ["@qtbase//:rcc"],
+)
+
+register_ament_files(
+    name = "ament_files_38",
+    files = [
+        "corelib/include/rtabmap/core/BayesFilter.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_39",
+    files = [
+        "corelib/include/rtabmap/core/Camera.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_40",
+    files = [
+        "corelib/include/rtabmap/core/CameraEvent.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_41",
+    files = [
+        "corelib/include/rtabmap/core/CameraInfo.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_42",
+    files = [
+        "corelib/include/rtabmap/core/CameraModel.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_43",
+    files = [
+        "corelib/include/rtabmap/core/CameraRGB.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_44",
+    files = [
+        "corelib/include/rtabmap/core/CameraRGBD.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_45",
+    files = [
+        "corelib/include/rtabmap/core/CameraStereo.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_46",
+    files = [
+        "corelib/include/rtabmap/core/CameraThread.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_47",
+    files = [
+        "corelib/include/rtabmap/core/Compression.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_48",
+    files = [
+        "corelib/include/rtabmap/core/DBDriver.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_49",
+    files = [
+        "corelib/include/rtabmap/core/DBDriverSqlite3.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_50",
+    files = [
+        "corelib/include/rtabmap/core/DBReader.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_51",
+    files = [
+        "corelib/include/rtabmap/core/EnvSensor.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_52",
+    files = [
+        "corelib/include/rtabmap/core/EpipolarGeometry.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_53",
+    files = [
+        "corelib/include/rtabmap/core/Features2d.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_54",
+    files = [
+        "corelib/include/rtabmap/core/FlannIndex.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_55",
+    files = [
+        "corelib/include/rtabmap/core/GPS.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_56",
+    files = [
+        "corelib/include/rtabmap/core/GainCompensator.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_57",
+    files = [
+        "corelib/include/rtabmap/core/GeodeticCoords.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_58",
+    files = [
+        "corelib/include/rtabmap/core/GlobalDescriptor.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_59",
+    files = [
+        "corelib/include/rtabmap/core/GlobalDescriptorExtractor.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_60",
+    files = [
+        "corelib/include/rtabmap/core/GlobalMap.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_61",
+    files = [
+        "corelib/include/rtabmap/core/Graph.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_62",
+    files = [
+        "corelib/include/rtabmap/core/IMU.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_63",
+    files = [
+        "corelib/include/rtabmap/core/IMUFilter.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_64",
+    files = [
+        "corelib/include/rtabmap/core/IMUThread.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_65",
+    files = [
+        "corelib/include/rtabmap/core/Image.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_66",
+    files = [
+        "corelib/include/rtabmap/core/LASWriter.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_67",
+    files = [
+        "corelib/include/rtabmap/core/Landmark.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_68",
+    files = [
+        "corelib/include/rtabmap/core/LaserScan.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_69",
+    files = [
+        "corelib/include/rtabmap/core/Lidar.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_70",
+    files = [
+        "corelib/include/rtabmap/core/Link.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_71",
+    files = [
+        "corelib/include/rtabmap/core/LocalGrid.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_72",
+    files = [
+        "corelib/include/rtabmap/core/LocalGridMaker.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_73",
+    files = [
+        "corelib/include/rtabmap/core/MarkerDetector.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_74",
+    files = [
+        "corelib/include/rtabmap/core/Memory.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_75",
+    files = [
+        "corelib/include/rtabmap/core/OccupancyGrid.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_76",
+    files = [
+        "corelib/include/rtabmap/core/OctoMap.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_77",
+    files = [
+        "corelib/include/rtabmap/core/Odometry.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_78",
+    files = [
+        "corelib/include/rtabmap/core/OdometryEvent.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_79",
+    files = [
+        "corelib/include/rtabmap/core/OdometryInfo.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_80",
+    files = [
+        "corelib/include/rtabmap/core/OdometryThread.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_81",
+    files = [
+        "corelib/include/rtabmap/core/Optimizer.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_82",
+    files = [
+        "corelib/include/rtabmap/core/PDALWriter.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_83",
+    files = [
+        "corelib/include/rtabmap/core/ParamEvent.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_84",
+    files = [
+        "corelib/include/rtabmap/core/Parameters.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_85",
+    files = [
+        "corelib/include/rtabmap/core/ParticleFilter.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_86",
+    files = [
+        "corelib/include/rtabmap/core/ProgressState.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_87",
+    files = [
+        "corelib/include/rtabmap/core/PythonInterface.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_88",
+    files = [
+        "corelib/include/rtabmap/core/Recovery.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_89",
+    files = [
+        "corelib/include/rtabmap/core/Registration.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_90",
+    files = [
+        "corelib/include/rtabmap/core/RegistrationIcp.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_91",
+    files = [
+        "corelib/include/rtabmap/core/RegistrationInfo.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_92",
+    files = [
+        "corelib/include/rtabmap/core/RegistrationVis.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_93",
+    files = [
+        "corelib/include/rtabmap/core/Rtabmap.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_94",
+    files = [
+        "corelib/include/rtabmap/core/RtabmapEvent.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_95",
+    files = [
+        "corelib/include/rtabmap/core/RtabmapThread.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_96",
+    files = [
+        "corelib/include/rtabmap/core/SensorCapture.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_97",
+    files = [
+        "corelib/include/rtabmap/core/SensorCaptureInfo.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_98",
+    files = [
+        "corelib/include/rtabmap/core/SensorCaptureThread.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_99",
+    files = [
+        "corelib/include/rtabmap/core/SensorData.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_100",
+    files = [
+        "corelib/include/rtabmap/core/SensorEvent.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_101",
+    files = [
+        "corelib/include/rtabmap/core/Signature.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_102",
+    files = [
+        "corelib/include/rtabmap/core/Statistics.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_103",
+    files = [
+        "corelib/include/rtabmap/core/Stereo.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_104",
+    files = [
+        "corelib/include/rtabmap/core/StereoCameraModel.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_105",
+    files = [
+        "corelib/include/rtabmap/core/StereoDense.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_106",
+    files = [
+        "corelib/include/rtabmap/core/Transform.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_107",
+    files = [
+        "corelib/include/rtabmap/core/UserDataEvent.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_108",
+    files = [
+        "corelib/include/rtabmap/core/VWDictionary.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_109",
+    files = [
+        ":Version_h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_110",
+    files = [
+        "corelib/include/rtabmap/core/VisualWord.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_111",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraDepthAI.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_112",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraFreenect.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_113",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraFreenect2.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_114",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraImages.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_115",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraK4A.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_116",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraK4W2.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_117",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraMyntEye.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_118",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraOpenNI2.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_119",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraOpenNICV.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_120",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraOpenni.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_121",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraOrbbecSDK.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_122",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraRGBDImages.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_123",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraRealSense.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_124",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraRealSense2.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_125",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraSeerSense.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_126",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraStereoDC1394.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_127",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraStereoFlyCapture2.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_128",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraStereoImages.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_129",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraStereoTara.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_130",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraStereoVideo.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_131",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraStereoZed.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_132",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraStereoZedOC.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_133",
+    files = [
+        "corelib/include/rtabmap/core/camera/CameraVideo.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/camera",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_134",
+    files = [
+        "corelib/include/rtabmap/core/clams/discrete_depth_distortion_model.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/clams",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_135",
+    files = [
+        "corelib/include/rtabmap/core/clams/frame_projector.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/clams",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_136",
+    files = [
+        "corelib/include/rtabmap/core/clams/slam_calibrator.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/clams",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_137",
+    files = [
+        "corelib/include/rtabmap/core/global_map/CloudMap.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/global_map",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_138",
+    files = [
+        "corelib/include/rtabmap/core/global_map/GridMap.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/global_map",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_139",
+    files = [
+        "corelib/include/rtabmap/core/global_map/OccupancyGrid.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/global_map",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_140",
+    files = [
+        "corelib/include/rtabmap/core/global_map/OctoMap.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/global_map",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_141",
+    files = [
+        "corelib/include/rtabmap/core/impl/LocalMapMaker.hpp",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/impl",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_142",
+    files = [
+        "corelib/include/rtabmap/core/impl/util3d.hpp",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/impl",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_143",
+    files = [
+        "corelib/include/rtabmap/core/impl/util3d_mapping.hpp",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/impl",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_144",
+    files = [
+        "corelib/include/rtabmap/core/impl/util3d_surface.hpp",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/impl",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_145",
+    files = [
+        "corelib/include/rtabmap/core/lidar/LidarVLP16.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/lidar",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_146",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryCuVSLAM.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_147",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryDVO.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_148",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryF2F.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_149",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryF2M.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_150",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryFLOAM.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_151",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryFovis.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_152",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryLIOSAM.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_153",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryLOAM.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_154",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryMSCKF.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_155",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryMono.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_156",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryORBSLAM2.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_157",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryORBSLAM3.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_158",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryOkvis.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_159",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryOpen3D.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_160",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryOpenVINS.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_161",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryVINS.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_162",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryVINSFusion.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_163",
+    files = [
+        "corelib/include/rtabmap/core/odometry/OdometryViso2.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/odometry",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_164",
+    files = [
+        "corelib/include/rtabmap/core/optimizer/OptimizerCVSBA.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/optimizer",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_165",
+    files = [
+        "corelib/include/rtabmap/core/optimizer/OptimizerCeres.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/optimizer",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_166",
+    files = [
+        "corelib/include/rtabmap/core/optimizer/OptimizerG2O.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/optimizer",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_167",
+    files = [
+        "corelib/include/rtabmap/core/optimizer/OptimizerGTSAM.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/optimizer",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_168",
+    files = [
+        "corelib/include/rtabmap/core/optimizer/OptimizerTORO.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/optimizer",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_169",
+    files = [
+        ":rtabmap_core_export_h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_170",
+    files = [
+        "corelib/include/rtabmap/core/rvl_codec.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_171",
+    files = [
+        "corelib/include/rtabmap/core/stereo/StereoBM.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/stereo",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_172",
+    files = [
+        "corelib/include/rtabmap/core/stereo/StereoSGBM.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/stereo",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_173",
+    files = [
+        "corelib/include/rtabmap/core/stereo/stereoRectifyFisheye.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core/stereo",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_174",
+    files = [
+        "corelib/include/rtabmap/core/util2d.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_175",
+    files = [
+        "corelib/include/rtabmap/core/util3d.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_176",
+    files = [
+        "corelib/include/rtabmap/core/util3d_correspondences.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_177",
+    files = [
+        "corelib/include/rtabmap/core/util3d_features.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_178",
+    files = [
+        "corelib/include/rtabmap/core/util3d_filtering.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_179",
+    files = [
+        "corelib/include/rtabmap/core/util3d_mapping.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_180",
+    files = [
+        "corelib/include/rtabmap/core/util3d_motion_estimation.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_181",
+    files = [
+        "corelib/include/rtabmap/core/util3d_registration.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_182",
+    files = [
+        "corelib/include/rtabmap/core/util3d_surface.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_183",
+    files = [
+        "corelib/include/rtabmap/core/util3d_transforms.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/core",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_184",
+    files = [
+        "guilib/include/rtabmap/gui/AboutDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_185",
+    files = [
+        "guilib/include/rtabmap/gui/CalibrationDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_186",
+    files = [
+        "guilib/include/rtabmap/gui/CameraViewer.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_187",
+    files = [
+        "guilib/include/rtabmap/gui/CloudViewer.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_188",
+    files = [
+        "guilib/include/rtabmap/gui/CloudViewerCellPicker.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_189",
+    files = [
+        "guilib/include/rtabmap/gui/CloudViewerInteractorStyle.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_190",
+    files = [
+        "guilib/include/rtabmap/gui/ConsoleWidget.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_191",
+    files = [
+        "guilib/include/rtabmap/gui/CreateSimpleCalibrationDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_192",
+    files = [
+        "guilib/include/rtabmap/gui/DataRecorder.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_193",
+    files = [
+        "guilib/include/rtabmap/gui/DatabaseViewer.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_194",
+    files = [
+        "guilib/include/rtabmap/gui/DepthCalibrationDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_195",
+    files = [
+        "guilib/include/rtabmap/gui/EditConstraintDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_196",
+    files = [
+        "guilib/include/rtabmap/gui/EditDepthArea.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_197",
+    files = [
+        "guilib/include/rtabmap/gui/EditMapArea.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_198",
+    files = [
+        "guilib/include/rtabmap/gui/ExportBundlerDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_199",
+    files = [
+        "guilib/include/rtabmap/gui/ExportCloudsDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_200",
+    files = [
+        "guilib/include/rtabmap/gui/ExportDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_201",
+    files = [
+        "guilib/include/rtabmap/gui/GraphViewer.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_202",
+    files = [
+        "guilib/include/rtabmap/gui/ImageView.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_203",
+    files = [
+        "guilib/include/rtabmap/gui/KeypointItem.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_204",
+    files = [
+        "guilib/include/rtabmap/gui/LinkRefiningDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_205",
+    files = [
+        "guilib/include/rtabmap/gui/LoopClosureViewer.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_206",
+    files = [
+        "guilib/include/rtabmap/gui/MainWindow.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_207",
+    files = [
+        "guilib/include/rtabmap/gui/MapVisibilityWidget.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_208",
+    files = [
+        "guilib/include/rtabmap/gui/MultiSessionLocSubView.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_209",
+    files = [
+        "guilib/include/rtabmap/gui/MultiSessionLocWidget.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_210",
+    files = [
+        "guilib/include/rtabmap/gui/OdometryViewer.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_211",
+    files = [
+        "guilib/include/rtabmap/gui/ParametersToolBox.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_212",
+    files = [
+        "guilib/include/rtabmap/gui/PdfPlot.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_213",
+    files = [
+        "guilib/include/rtabmap/gui/PointCloudColorHandlerIntensityField.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_214",
+    files = [
+        "guilib/include/rtabmap/gui/PointCloudColorHandlerMinMaxGenericField.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_215",
+    files = [
+        "guilib/include/rtabmap/gui/PostProcessingDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_216",
+    files = [
+        "guilib/include/rtabmap/gui/PreferencesDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_217",
+    files = [
+        "guilib/include/rtabmap/gui/ProgressDialog.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_218",
+    files = [
+        "guilib/include/rtabmap/gui/RecoveryState.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_219",
+    files = [
+        "guilib/include/rtabmap/gui/StatsToolBox.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_220",
+    files = [
+        "guilib/include/rtabmap/gui/TexturingState.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_221",
+    files = [
+        ":rtabmap_gui_export_h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/gui",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_222",
+    files = [
+        "utilite/include/rtabmap/utilite/Posix/UThreadC.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite/Posix",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_223",
+    files = [
+        "utilite/include/rtabmap/utilite/UConversion.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_224",
+    files = [
+        "guilib/include/rtabmap/utilite/UCv2Qt.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_225",
+    files = [
+        "utilite/include/rtabmap/utilite/UDestroyer.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_226",
+    files = [
+        "utilite/include/rtabmap/utilite/UDirectory.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_227",
+    files = [
+        "utilite/include/rtabmap/utilite/UEvent.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_228",
+    files = [
+        "utilite/include/rtabmap/utilite/UEventsHandler.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_229",
+    files = [
+        "utilite/include/rtabmap/utilite/UEventsManager.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_230",
+    files = [
+        "utilite/include/rtabmap/utilite/UEventsSender.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_231",
+    files = [
+        "utilite/include/rtabmap/utilite/UException.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_232",
+    files = [
+        "utilite/include/rtabmap/utilite/UFile.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_233",
+    files = [
+        "guilib/include/rtabmap/utilite/UImageView.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_234",
+    files = [
+        "utilite/include/rtabmap/utilite/ULogger.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_235",
+    files = [
+        "utilite/include/rtabmap/utilite/UMath.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_236",
+    files = [
+        "utilite/include/rtabmap/utilite/UMutex.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_237",
+    files = [
+        "utilite/include/rtabmap/utilite/UObjDeletionThread.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_238",
+    files = [
+        "guilib/include/rtabmap/utilite/UPlot.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_239",
+    files = [
+        "utilite/include/rtabmap/utilite/UProcessInfo.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_240",
+    files = [
+        "utilite/include/rtabmap/utilite/USemaphore.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_241",
+    files = [
+        "utilite/include/rtabmap/utilite/UStl.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_242",
+    files = [
+        "utilite/include/rtabmap/utilite/UThread.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_243",
+    files = [
+        "utilite/include/rtabmap/utilite/UThreadC.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_244",
+    files = [
+        "utilite/include/rtabmap/utilite/UThreadNode.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_245",
+    files = [
+        "utilite/include/rtabmap/utilite/UTimer.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_246",
+    files = [
+        "utilite/include/rtabmap/utilite/UVariant.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_247",
+    files = [
+        "utilite/include/rtabmap/utilite/UtiLite.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_248",
+    files = [
+        "utilite/include/rtabmap/utilite/Win32/UThreadC.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite/Win32",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_249",
+    files = [
+        "utilite/include/rtabmap/utilite/Win32/UWin32.h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite/Win32",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_250",
+    files = [
+        ":utilite_export_h",
+    ],
+    prefix = "include/rtabmap-0.23/rtabmap/utilite",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":rtabmap_utilite",
+        ":rtabmap_core",
+        ":rtabmap_gui",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "rtabmap_core": [
+            "librtabmap_core.so.0.23",
+            "librtabmap_core.so.0.23.13",
+        ],
+        "rtabmap_gui": [
+            "librtabmap_gui.so.0.23",
+            "librtabmap_gui.so.0.23.13",
+        ],
+        "rtabmap_utilite": [
+            "librtabmap_utilite.so.0.23",
+            "librtabmap_utilite.so.0.23.13",
+        ],
+    },
+    deps = [
+        "@cv_bridge//:ament_package",
+        "@gtsam//:ament_package",
+        "@libg2o//:ament_package",
+        "@qt_gui_cpp//:ament_package",
+    ],
+)
+
+# Private test helpers shared by corelib/test/*.cpp (TestUtils.h,
+# FlannIndexBackends.h); corelib/test is on the include path upstream.
+cc_library(
+    name = "rtabmap_test_hdrs",
+    testonly = True,
+    hdrs = glob(["corelib/test/*.h"]),
+    includes = ["corelib/test"],
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_bayesfilter_perf",
+    srcs = [
+        "corelib/test/perf_bayesfilter.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + [
+        "RTABMAP_TEST_DATA_ROOT=\\\"data\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_corelib_3",
+    srcs = [
+        "corelib/test/test_bayesfilter.cpp",
+        "corelib/test/test_cameraimages.cpp",
+        "corelib/test/test_cameramodel.cpp",
+        "corelib/test/test_compression.cpp",
+        "corelib/test/test_dbdriver.cpp",
+        "corelib/test/test_dbdriversqlite3.cpp",
+        "corelib/test/test_features2d.cpp",
+        "corelib/test/test_flann_index.cpp",
+        "corelib/test/test_geodeticcoords.cpp",
+        "corelib/test/test_globalmap.cpp",
+        "corelib/test/test_gps.cpp",
+        "corelib/test/test_graph.cpp",
+        "corelib/test/test_imu.cpp",
+        "corelib/test/test_imufilter.cpp",
+        "corelib/test/test_imuthread.cpp",
+        "corelib/test/test_landmark.cpp",
+        "corelib/test/test_link.cpp",
+        "corelib/test/test_localgrid.cpp",
+        "corelib/test/test_localgridmaker.cpp",
+        "corelib/test/test_markerdetector.cpp",
+        "corelib/test/test_memory.cpp",
+        "corelib/test/test_odometry.cpp",
+        "corelib/test/test_optimizer.cpp",
+        "corelib/test/test_optimizer_gtsam.cpp",
+        "corelib/test/test_registration.cpp",
+        "corelib/test/test_registrationicp.cpp",
+        "corelib/test/test_registrationvis.cpp",
+        "corelib/test/test_rtabmap.cpp",
+        "corelib/test/test_sensorcapture.cpp",
+        "corelib/test/test_sensorcaptureinfo.cpp",
+        "corelib/test/test_sensorcapturethread.cpp",
+        "corelib/test/test_sensordata.cpp",
+        "corelib/test/test_sensorevent.cpp",
+        "corelib/test/test_signature.cpp",
+        "corelib/test/test_statistics.cpp",
+        "corelib/test/test_stereo.cpp",
+        "corelib/test/test_stereo_dense.cpp",
+        "corelib/test/test_stereocameramodel.cpp",
+        "corelib/test/test_transform.cpp",
+        "corelib/test/test_util2d.cpp",
+        "corelib/test/test_util3d.cpp",
+        "corelib/test/test_util3d_correspondences.cpp",
+        "corelib/test/test_util3d_features.cpp",
+        "corelib/test/test_util3d_filtering.cpp",
+        "corelib/test/test_util3d_mapping.cpp",
+        "corelib/test/test_util3d_motion_estimation.cpp",
+        "corelib/test/test_util3d_registration.cpp",
+        "corelib/test/test_util3d_surface.cpp",
+        "corelib/test/test_util3d_transforms.cpp",
+        "corelib/test/test_visualword.cpp",
+        "corelib/test/test_vwdictionary.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + [
+        "RTABMAP_TEST_DATA_ROOT=\\\"data\\\"",
+    ],
+    # xfail: times out under Bazel
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_flann_index_perf",
+    srcs = [
+        "corelib/test/perf_flann_index.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + [
+        "RTABMAP_TEST_DATA_ROOT=\\\"data\\\"",
+    ],
+    # xfail: times out under Bazel
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_graph_perf",
+    srcs = [
+        "corelib/test/perf_graph.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + [
+        "RTABMAP_TEST_DATA_ROOT=\\\"data\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_rtabmap_integration",
+    srcs = [
+        "corelib/test/test_rtabmap_integration.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + [
+        "RTABMAP_TEST_DATA_ROOT=\\\"data\\\"",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_core_library",
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_uconversion",
+    srcs = [
+        "utilite/test/test_uconversion.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_udirectory",
+    srcs = [
+        "utilite/test/test_udirectory.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_uevents",
+    srcs = [
+        "utilite/test/test_uevents.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_ufile",
+    srcs = [
+        "utilite/test/test_ufile.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_ulogger",
+    srcs = [
+        "utilite/test/test_ulogger.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_umath",
+    srcs = [
+        "utilite/test/test_umath.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_umutex",
+    srcs = [
+        "utilite/test/test_umutex.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_uprocessinfo",
+    srcs = [
+        "utilite/test/test_uprocessinfo.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_usemaphore",
+    srcs = [
+        "utilite/test/test_usemaphore.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_ustl",
+    srcs = [
+        "utilite/test/test_ustl.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_uthread",
+    srcs = [
+        "utilite/test/test_uthread.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_utimer",
+    srcs = [
+        "utilite/test/test_utimer.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_uvariant",
+    srcs = [
+        "utilite/test/test_uvariant.cpp",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":core_transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":rtabmap_test_hdrs",
+        ":rtabmap_utilite_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        ":ament_files_38",
+        ":ament_files_39",
+        ":ament_files_40",
+        ":ament_files_41",
+        ":ament_files_42",
+        ":ament_files_43",
+        ":ament_files_44",
+        ":ament_files_45",
+        ":ament_files_46",
+        ":ament_files_47",
+        ":ament_files_48",
+        ":ament_files_49",
+        ":ament_files_50",
+        ":ament_files_51",
+        ":ament_files_52",
+        ":ament_files_53",
+        ":ament_files_54",
+        ":ament_files_55",
+        ":ament_files_56",
+        ":ament_files_57",
+        ":ament_files_58",
+        ":ament_files_59",
+        ":ament_files_60",
+        ":ament_files_61",
+        ":ament_files_62",
+        ":ament_files_63",
+        ":ament_files_64",
+        ":ament_files_65",
+        ":ament_files_66",
+        ":ament_files_67",
+        ":ament_files_68",
+        ":ament_files_69",
+        ":ament_files_70",
+        ":ament_files_71",
+        ":ament_files_72",
+        ":ament_files_73",
+        ":ament_files_74",
+        ":ament_files_75",
+        ":ament_files_76",
+        ":ament_files_77",
+        ":ament_files_78",
+        ":ament_files_79",
+        ":ament_files_80",
+        ":ament_files_81",
+        ":ament_files_82",
+        ":ament_files_83",
+        ":ament_files_84",
+        ":ament_files_85",
+        ":ament_files_86",
+        ":ament_files_87",
+        ":ament_files_88",
+        ":ament_files_89",
+        ":ament_files_90",
+        ":ament_files_91",
+        ":ament_files_92",
+        ":ament_files_93",
+        ":ament_files_94",
+        ":ament_files_95",
+        ":ament_files_96",
+        ":ament_files_97",
+        ":ament_files_98",
+        ":ament_files_99",
+        ":ament_files_100",
+        ":ament_files_101",
+        ":ament_files_102",
+        ":ament_files_103",
+        ":ament_files_104",
+        ":ament_files_105",
+        ":ament_files_106",
+        ":ament_files_107",
+        ":ament_files_108",
+        ":ament_files_109",
+        ":ament_files_110",
+        ":ament_files_111",
+        ":ament_files_112",
+        ":ament_files_113",
+        ":ament_files_114",
+        ":ament_files_115",
+        ":ament_files_116",
+        ":ament_files_117",
+        ":ament_files_118",
+        ":ament_files_119",
+        ":ament_files_120",
+        ":ament_files_121",
+        ":ament_files_122",
+        ":ament_files_123",
+        ":ament_files_124",
+        ":ament_files_125",
+        ":ament_files_126",
+        ":ament_files_127",
+        ":ament_files_128",
+        ":ament_files_129",
+        ":ament_files_130",
+        ":ament_files_131",
+        ":ament_files_132",
+        ":ament_files_133",
+        ":ament_files_134",
+        ":ament_files_135",
+        ":ament_files_136",
+        ":ament_files_137",
+        ":ament_files_138",
+        ":ament_files_139",
+        ":ament_files_140",
+        ":ament_files_141",
+        ":ament_files_142",
+        ":ament_files_143",
+        ":ament_files_144",
+        ":ament_files_145",
+        ":ament_files_146",
+        ":ament_files_147",
+        ":ament_files_148",
+        ":ament_files_149",
+        ":ament_files_150",
+        ":ament_files_151",
+        ":ament_files_152",
+        ":ament_files_153",
+        ":ament_files_154",
+        ":ament_files_155",
+        ":ament_files_156",
+        ":ament_files_157",
+        ":ament_files_158",
+        ":ament_files_159",
+        ":ament_files_160",
+        ":ament_files_161",
+        ":ament_files_162",
+        ":ament_files_163",
+        ":ament_files_164",
+        ":ament_files_165",
+        ":ament_files_166",
+        ":ament_files_167",
+        ":ament_files_168",
+        ":ament_files_169",
+        ":ament_files_170",
+        ":ament_files_171",
+        ":ament_files_172",
+        ":ament_files_173",
+        ":ament_files_174",
+        ":ament_files_175",
+        ":ament_files_176",
+        ":ament_files_177",
+        ":ament_files_178",
+        ":ament_files_179",
+        ":ament_files_180",
+        ":ament_files_181",
+        ":ament_files_182",
+        ":ament_files_183",
+        ":ament_files_184",
+        ":ament_files_185",
+        ":ament_files_186",
+        ":ament_files_187",
+        ":ament_files_188",
+        ":ament_files_189",
+        ":ament_files_190",
+        ":ament_files_191",
+        ":ament_files_192",
+        ":ament_files_193",
+        ":ament_files_194",
+        ":ament_files_195",
+        ":ament_files_196",
+        ":ament_files_197",
+        ":ament_files_198",
+        ":ament_files_199",
+        ":ament_files_200",
+        ":ament_files_201",
+        ":ament_files_202",
+        ":ament_files_203",
+        ":ament_files_204",
+        ":ament_files_205",
+        ":ament_files_206",
+        ":ament_files_207",
+        ":ament_files_208",
+        ":ament_files_209",
+        ":ament_files_210",
+        ":ament_files_211",
+        ":ament_files_212",
+        ":ament_files_213",
+        ":ament_files_214",
+        ":ament_files_215",
+        ":ament_files_216",
+        ":ament_files_217",
+        ":ament_files_218",
+        ":ament_files_219",
+        ":ament_files_220",
+        ":ament_files_221",
+        ":ament_files_222",
+        ":ament_files_223",
+        ":ament_files_224",
+        ":ament_files_225",
+        ":ament_files_226",
+        ":ament_files_227",
+        ":ament_files_228",
+        ":ament_files_229",
+        ":ament_files_230",
+        ":ament_files_231",
+        ":ament_files_232",
+        ":ament_files_233",
+        ":ament_files_234",
+        ":ament_files_235",
+        ":ament_files_236",
+        ":ament_files_237",
+        ":ament_files_238",
+        ":ament_files_239",
+        ":ament_files_240",
+        ":ament_files_241",
+        ":ament_files_242",
+        ":ament_files_243",
+        ":ament_files_244",
+        ":ament_files_245",
+        ":ament_files_246",
+        ":ament_files_247",
+        ":ament_files_248",
+        ":ament_files_249",
+        ":ament_files_250",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":rtabmap_utilite",
+        ":rtabmap_core",
+        ":rtabmap_gui",
+    ],
+    package_xml = "package.xml",
+    pkgconfig_hook = False,
+    programs = [
+        ":rtabmap",
+        ":rtabmap-calibration",
+        ":rtabmap-camera",
+        ":rtabmap-cidsims_dataset",
+        ":rtabmap-cleanupLocalGrids",
+        ":rtabmap-console",
+        ":rtabmap-dataRecorder",
+        ":rtabmap-databaseViewer",
+        ":rtabmap-detectMoreLoopClosures",
+        ":rtabmap-euroc_dataset",
+        ":rtabmap-export",
+        ":rtabmap-extractObject",
+        ":rtabmap-globalBundleAdjustment",
+        ":rtabmap-info",
+        ":rtabmap-kitti_dataset",
+        ":rtabmap-lidar_viewer",
+        ":rtabmap-odometryViewer",
+        ":rtabmap-recovery",
+        ":rtabmap-reduceGraph",
+        ":rtabmap-report",
+        ":rtabmap-reprocess",
+        ":rtabmap-res_tool-0.3.0",
+        ":rtabmap-rgbd_camera",
+        ":rtabmap-rgbd_dataset",
+    ],
+    deps = [":ament_index"] + [
+        "@cv_bridge//:ament_package",
+        "@gtsam//:ament_package",
+        "@libg2o//:ament_package",
+        "@qt_gui_cpp//:ament_package",
+    ],
+)

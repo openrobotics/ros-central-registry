@@ -1,0 +1,229 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+cc_library(
+    name = "_test_root_headers",
+    hdrs = [
+        "bindings/include/modules/toppra.hpp",
+        "include/roboplan_toppra/linear_blend_path.hpp",
+        "include/roboplan_toppra/toppra.hpp",
+    ] + [
+    ],
+    includes = [],
+    deps = ["@rosdistro//cc:nanobind"],
+)
+
+DEPENDENCIES = {
+    "@roboplan//:roboplan": "@roboplan//:roboplan_library",
+    "@roboplan_example_models//:roboplan_example_models": "@roboplan_example_models//:roboplan_example_models_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@toppra//:toppra": "@toppra//:toppra_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:tl_expected",
+]
+
+PY_EXT_DEPS = [
+    "@rosdistro//cc:nanobind",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "roboplan_toppra_library",
+    srcs = [
+        "src/linear_blend_path.cpp",
+        "src/toppra.cpp",
+    ],
+    hdrs = [
+        "include/roboplan_toppra/linear_blend_path.hpp",
+        "include/roboplan_toppra/toppra.hpp",
+    ] + [
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/roboplan_toppra",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "roboplan_toppra",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":roboplan_toppra_library"],
+)
+
+cc_library(
+    name = "_toppra_ext_library",
+    srcs = [
+        "bindings/src/toppra.cpp",
+        "bindings/src/toppra_ext.cpp",
+    ],
+    hdrs = [
+        "bindings/include/modules/toppra.hpp",
+        "include/roboplan_toppra/linear_blend_path.hpp",
+        "include/roboplan_toppra/toppra.hpp",
+    ] + [
+    ],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan_toppra",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        'ROBOPLAN_VERSION=\\"0.6.1\\"',
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + PY_EXT_DEPS + [":roboplan_toppra_library"],
+)
+
+cc_shared_library(
+    name = "_toppra_ext",
+    dynamic_deps = DEPENDENCIES.keys() + [":roboplan_toppra"],
+    exports_filter = [
+        "//:__subpackages__",
+    ],
+    shared_lib_name = "roboplan/toppra/_toppra_ext.so",
+    deps = [":_toppra_ext_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":roboplan_toppra",
+    ],
+)
+
+py_library(
+    name = "roboplan",
+    srcs = ["bindings/python/roboplan/toppra/__init__.py"],
+    imports = ["bindings/python"],
+    deps = [
+        "@roboplan//:roboplan_py",
+        "@roboplan_example_models//:roboplan",
+    ],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = ["include/roboplan_toppra/linear_blend_path.hpp"],
+    prefix = "lib/cmake/roboplan_toppra",
+    strip_prefix = "*",
+)
+
+register_ament_files(
+    name = "ament_files_1",
+    files = ["include/roboplan_toppra/toppra.hpp"],
+    prefix = "lib/cmake/roboplan_toppra",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+        ":ament_files_1",
+    ],
+    libraries = [":roboplan_toppra"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_example_models//:ament_package",
+        "@toppra//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        "include/roboplan_toppra/linear_blend_path.hpp",
+        "include/roboplan_toppra/toppra.hpp",
+    ],
+    include_prefix = "",
+    libraries = [":roboplan_toppra"],
+    package_xml = "package.xml",
+    python = [
+        ":roboplan",
+        ":_toppra_ext",
+        "bindings/python/roboplan/toppra/_toppra_ext.pyi",
+        "bindings/python/roboplan/toppra/py.typed",
+    ],
+    python_env_hook = False,
+    python_strip_prefix = "bindings/python",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_example_models//:ament_package",
+        "@toppra//:ament_package",
+    ],
+)

@@ -1,0 +1,142 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+HEADERS = ["include/cuda_buffer_backend/cuda_buffer_backend.hpp"]
+
+DEPENDENCIES = {
+    "@cuda_buffer//:cuda_buffer": "@cuda_buffer//:cuda_buffer_library",
+    "@cuda_buffer_backend_msgs//:cc_shared": "@cuda_buffer_backend_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rosidl_buffer_backend//:rosidl_buffer_backend": "@rosidl_buffer_backend//:rosidl_buffer_backend_library",
+    "@rosidl_buffer_backend_registry//:rosidl_buffer_backend_registry": "@rosidl_buffer_backend_registry//:rosidl_buffer_backend_registry_library",
+    "@rosidl_runtime_cpp//:rosidl_runtime_cpp": "@rosidl_runtime_cpp//:rosidl_runtime_cpp_library",
+    "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp": "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_library",
+}
+
+# CUDA::cudart + CUDA::cuda_driver: only compatible on Linux under
+# --config=cuda (see @cuda_buffer), so this package is skipped otherwise.
+CUDA_DEPENDENCIES = [
+    "@rosdistro//cc:cuda_driver",
+    "@rosdistro//cc:cuda_runtime",
+]
+
+cc_library(
+    name = "cuda_buffer_backend_library",
+    srcs = ["src/cuda_buffer_backend_plugin.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CUDA_DEPENDENCIES,
+    # Only referenced through pluginlib's class_loader registration.
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "cuda_buffer_backend",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [":cuda_buffer_backend_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":cuda_buffer_backend"],
+)
+
+# pluginlib_export_plugin_description_file(rosidl_buffer_backend
+# cuda_buffer_plugin.xml), plus the test components the launch tests load.
+ament_index(
+    name = "ament_index",
+    components = ["//test:component_nodes"],
+    libraries = [":cuda_buffer_backend"],
+    package_xml = "package.xml",
+    plugin_category = "rosidl_buffer_backend",
+    plugins = ["cuda_buffer_plugin.xml"],
+    deps = [
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@cuda_buffer//:ament_package",
+        "@cuda_buffer_backend_msgs//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosidl_buffer_backend//:ament_package",
+        "@rosidl_buffer_backend_registry//:ament_package",
+        "@rosidl_runtime_cpp//:ament_package",
+        "@rosidl_typesupport_cpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "cuda_buffer",
+        "cuda_buffer_backend_msgs",
+        "pluginlib",
+        "rcutils",
+        "rosidl_buffer_backend",
+        "rosidl_buffer_backend_registry",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_cpp",
+    ],
+    headers = HEADERS,
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@cuda_buffer//:ament_package",
+        "@cuda_buffer_backend_msgs//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcutils//:ament_package",
+        "@rosidl_buffer_backend//:ament_package",
+        "@rosidl_buffer_backend_registry//:ament_package",
+        "@rosidl_runtime_cpp//:ament_package",
+        "@rosidl_typesupport_cpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

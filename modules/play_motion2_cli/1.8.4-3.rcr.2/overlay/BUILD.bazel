@@ -1,0 +1,174 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+SRCS = [
+    "play_motion2_cli/__init__.py",
+    "play_motion2_cli/api/__init__.py",
+    "play_motion2_cli/command/__init__.py",
+    "play_motion2_cli/command/play_motion.py",
+    "play_motion2_cli/verb/__init__.py",
+    "play_motion2_cli/verb/info.py",
+    "play_motion2_cli/verb/list.py",
+    "play_motion2_cli/verb/run.py",
+]
+
+ament_index(
+    name = "ament_index",
+    package_xml = "package.xml",
+)
+
+write_file(
+    name = "pkg_info",
+    out = "play_motion2_cli-1.8.4.egg-info/PKG-INFO",
+    content = [
+        "Metadata-Version: 2.1",
+        "Name: play_motion2_cli",
+        "Version: 1.8.4",
+    ],
+)
+
+# setup.py entry_points
+write_file(
+    name = "entry_points_txt",
+    out = "play_motion2_cli-1.8.4.egg-info/entry_points.txt",
+    content = [
+        "[ros2cli.command]",
+        "play_motion = play_motion2_cli.command.play_motion:PlayMotionCommand",
+        "",
+        "[ros2cli.extension_point]",
+        "play_motion2_cli.verb = play_motion2_cli.verb:VerbExtension",
+        "",
+        "[play_motion2_cli.verb]",
+        "info = play_motion2_cli.verb.info:InfoVerb",
+        "list = play_motion2_cli.verb.list:ListVerb",
+        "run = play_motion2_cli.verb.run:RunVerb",
+    ],
+)
+
+py_library(
+    name = "play_motion2_cli",
+    srcs = SRCS,
+    data = [
+        ":ament_index",
+        ":entry_points_txt",
+        ":pkg_info",
+    ],
+    imports = ["."],
+    deps = [
+        "@play_motion2//:play_motion2_py",
+        "@play_motion2_msgs//:py",
+        "@rclpy",
+        "@ros2cli",
+    ],
+)
+
+# test/test_cli.py drives the `ros2 play_motion` CLI (and `ros2 daemon`), which
+# needs the ros2 command-line entry point that is not packaged here.
+py_pytest(
+    name = "test_cli",
+    srcs = ["test/test_cli.py"],
+    args = [
+        "-p",
+        "launch_testing.pytest.hooks",
+        "-p",
+        "launch_testing_ros_pytest_entrypoint",
+        "--",
+    ],
+    data = ["test/fixtures/play_motion_server.py"],
+    imports = ["test"],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":play_motion2_cli",
+        "@launch_ros",
+        "@launch_testing",
+        "@launch_testing_ros",
+    ],
+)
+
+[
+    py_pytest(
+        name = "test_{0}".format(linter),
+        srcs = ["test/test_{0}.py".format(linter)],
+        data = [
+            "CHANGELOG.rst",
+            "README.md",
+            "package.xml",
+            "play_motion2_cli/__init__.py",
+            "play_motion2_cli/api/__init__.py",
+            "play_motion2_cli/command/__init__.py",
+            "play_motion2_cli/command/play_motion.py",
+            "play_motion2_cli/verb/__init__.py",
+            "play_motion2_cli/verb/info.py",
+            "play_motion2_cli/verb/list.py",
+            "play_motion2_cli/verb/run.py",
+            "resource/play_motion2_cli",
+            "setup.py",
+            "test/fixtures/play_motion_server.py",
+            "test/test_cli.py",
+            "test/test_copyright.py",
+            "test/test_flake8.py",
+            "test/test_pep257.py",
+            "test/test_xmllint.py",
+        ],
+        deps = ["@ament_{0}".format(linter)],
+    )
+    for linter in [
+        "copyright",
+        "flake8",
+        "pep257",
+        "xmllint",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    package_xml = "package.xml",
+    python = [":play_motion2_cli"],
+    deps = [
+        ":ament_index",
+        "@ament_copyright//:ament_package",
+        "@ament_flake8//:ament_package",
+        "@ament_pep257//:ament_package",
+        "@ament_xmllint//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@play_motion2//:ament_package",
+        "@rclpy//:ament_package",
+        "@ros2cli//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

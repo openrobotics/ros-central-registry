@@ -1,0 +1,145 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+TUTORIAL_TESTS = {
+    "test_tutorial_content_filtering_publisher_content_filtering_subscriber": (
+        "../demo_nodes_cpp+/content_filtering_publisher@publish_ms=100;../demo_nodes_cpp+/content_filtering_subscriber",
+        "../demo_nodes_cpp+/test/content_filtering_publisher;../demo_nodes_cpp+/test/content_filtering_subscriber",
+        [
+            "//:content_filtering_publisher",
+            "//:content_filtering_subscriber",
+        ],
+    ),
+    "test_tutorial_list_parameters_async": (
+        "../demo_nodes_cpp+/list_parameters_async",
+        "../demo_nodes_cpp+/test/list_parameters_async",
+        ["//:list_parameters_async"],
+    ),
+    "test_tutorial_list_parameters": (
+        "../demo_nodes_cpp+/list_parameters",
+        "../demo_nodes_cpp+/test/list_parameters",
+        ["//:list_parameters"],
+    ),
+    "test_tutorial_parameter_events_async": (
+        "../demo_nodes_cpp+/parameter_events_async",
+        "../demo_nodes_cpp+/test/parameter_events_async",
+        ["//:parameter_events_async"],
+    ),
+    "test_tutorial_parameter_events": (
+        "../demo_nodes_cpp+/parameter_events",
+        "../demo_nodes_cpp+/test/parameter_events",
+        ["//:parameter_events"],
+    ),
+    "test_tutorial_set_and_get_parameters_async": (
+        "../demo_nodes_cpp+/set_and_get_parameters_async",
+        "../demo_nodes_cpp+/test/set_and_get_parameters_async",
+        ["//:set_and_get_parameters_async"],
+    ),
+    "test_tutorial_set_and_get_parameters": (
+        "../demo_nodes_cpp+/set_and_get_parameters",
+        "../demo_nodes_cpp+/test/set_and_get_parameters",
+        ["//:set_and_get_parameters"],
+    ),
+    "test_tutorial_matched_event_detect": (
+        "../demo_nodes_cpp+/matched_event_detect",
+        "../demo_nodes_cpp+/test/matched_event_detect",
+        ["//:matched_event_detect"],
+    ),
+    "test_tutorial_use_logger_service": (
+        "../demo_nodes_cpp+/use_logger_service",
+        "../demo_nodes_cpp+/test/use_logger_service",
+        ["//:use_logger_service"],
+    ),
+    "test_tutorial_talker_listener": (
+        "../demo_nodes_cpp+/talker;../demo_nodes_cpp+/listener",
+        "../demo_nodes_cpp+/test/talker;../demo_nodes_cpp+/test/listener",
+        [
+            "//:talker",
+            "//:listener",
+        ],
+    ),
+    "test_tutorial_add_two_ints_server_add_two_ints_client": (
+        "../demo_nodes_cpp+/add_two_ints_server@one_shot=True;../demo_nodes_cpp+/add_two_ints_client",
+        "../demo_nodes_cpp+/test/add_two_ints_server;../demo_nodes_cpp+/test/add_two_ints_client",
+        [
+            "//:add_two_ints_server",
+            "//:add_two_ints_client",
+        ],
+    ),
+    "test_tutorial_add_two_ints_server_add_two_ints_client_async": (
+        "../demo_nodes_cpp+/add_two_ints_server@one_shot=True;../demo_nodes_cpp+/add_two_ints_client_async",
+        "../demo_nodes_cpp+/test/add_two_ints_server;../demo_nodes_cpp+/test/add_two_ints_client_async",
+        [
+            "//:add_two_ints_server",
+            "//:add_two_ints_client_async",
+        ],
+    ),
+}
+
+[cmake_configure_file(
+    name = "{0}_py".format(test_name),
+    src = "test_executables_tutorial.py.in",
+    out = "{0}.py".format(test_name),
+    defines = [
+        "DEMO_NODES_CPP_EXECUTABLE={0}".format(exe_str),
+        "DEMO_NODES_CPP_EXPECTED_OUTPUT={0}".format(expected_str),
+        "rmw_implementation=rmw_fastrtps_cpp",
+    ],
+) for test_name, (exe_str, expected_str, _) in TUTORIAL_TESTS.items()]
+
+EXPECTED_OUTPUT_FILES = [
+    "add_two_ints_client.txt",
+    "add_two_ints_client_async.txt",
+    "add_two_ints_server.txt",
+    "content_filtering_publisher.txt",
+    "content_filtering_subscriber.txt",
+    "content_filtering_subscriber-rmw_connextdds.txt",
+    "content_filtering_subscriber-rmw_fastrtps_cpp.txt",
+    "list_parameters.txt",
+    "list_parameters_async.txt",
+    "listener.regex",
+    "matched_event_detect.txt",
+    "parameter_events.txt",
+    "parameter_events_async.txt",
+    "set_and_get_parameters.txt",
+    "set_and_get_parameters_async.txt",
+    "talker.txt",
+    "use_logger_service.txt",
+]
+
+[launch_ros_test(
+    name = test_name,
+    src = "{0}_py".format(test_name),
+    # Only this test's expected-output files (incl. per-RMW variants).
+    data = ["//:ament_index"] + [
+        f
+        for f in EXPECTED_OUTPUT_FILES
+        if f.rsplit(".", 1)[0].split("-rmw_")[0] in [
+            p.rsplit("/", 1)[-1]
+            for p in expected_str.split(";")
+        ]
+    ],
+    deps = executables + [
+        "//:rmw_test_fixture_implementation",
+        "@rules_python//python/runfiles",
+    ],
+) for test_name, (_, expected_str, executables) in TUTORIAL_TESTS.items()]

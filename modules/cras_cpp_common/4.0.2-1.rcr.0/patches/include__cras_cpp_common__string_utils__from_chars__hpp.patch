@@ -1,0 +1,55 @@
+--- a/include/cras_cpp_common/string_utils/from_chars.hpp
++++ b/include/cras_cpp_common/string_utils/from_chars.hpp
+@@ -10,6 +10,8 @@
+  */
+ 
+ #include <charconv>
++#include <cerrno>
++#include <cstdlib>
+ #include <string>
+ 
+ namespace cras {
+@@ -29,7 +31,21 @@
+ inline ::std::from_chars_result from_chars(
+     const ::std::string& string, float& value,
+     const ::std::chars_format fmt = ::std::chars_format::general) noexcept {
++#if defined(__APPLE__)
++  (void)fmt;
++  if (string.empty() || string[0] == ' ' || string[0] == '+') {
++    return {string.data(), ::std::errc::invalid_argument};
++  }
++  char* endptr = nullptr;
++  errno = 0;
++  const float parsed = ::std::strtof(string.c_str(), &endptr);
++  if (endptr == string.c_str()) return {string.data(), ::std::errc::invalid_argument};
++  if (errno == ERANGE) return {string.data() + (endptr - string.c_str()), ::std::errc::result_out_of_range};
++  value = parsed;
++  return {string.data() + (endptr - string.c_str()), ::std::errc()};
++#else
+   return ::std::from_chars(string.data(), string.data() + string.size(), value, fmt);
++#endif
+ }
+ 
+ /**
+@@ -46,7 +62,21 @@
+  */
+ inline ::std::from_chars_result from_chars(
+     const ::std::string& string, double& value, const ::std::chars_format fmt = ::std::chars_format::general) noexcept {
++#if defined(__APPLE__)
++  (void)fmt;
++  if (string.empty() || string[0] == ' ' || string[0] == '+') {
++    return {string.data(), ::std::errc::invalid_argument};
++  }
++  char* endptr = nullptr;
++  errno = 0;
++  const double parsed = ::std::strtod(string.c_str(), &endptr);
++  if (endptr == string.c_str()) return {string.data(), ::std::errc::invalid_argument};
++  if (errno == ERANGE) return {string.data() + (endptr - string.c_str()), ::std::errc::result_out_of_range};
++  value = parsed;
++  return {string.data() + (endptr - string.c_str()), ::std::errc()};
++#else
+   return ::std::from_chars(string.data(), string.data() + string.size(), value, fmt);
++#endif
+ }
+ 
+ }  // namespace cras

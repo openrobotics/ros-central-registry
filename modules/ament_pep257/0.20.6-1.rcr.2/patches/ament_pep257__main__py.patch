@@ -1,0 +1,54 @@
+--- a/ament_pep257/main.py
++++ b/ament_pep257/main.py
+@@ -57,6 +57,16 @@
+         conventions.update(pydocstyle.conventions.keys())
+     conventions.add('ament')
+ 
++    default_path = os.curdir
++    target = os.environ.get('TEST_TARGET') or os.environ.get('BAZEL_TARGET')
++    if 'TEST_SRCDIR' in os.environ and target:
++        repo_name = target.split('//')[0].lstrip('@')
++        if not repo_name:
++            repo_name = os.environ.get('TEST_WORKSPACE', '_main')
++        default_path = os.path.relpath(
++            os.path.join(os.environ['TEST_SRCDIR'], repo_name)
++        )
++
+     parser = argparse.ArgumentParser(
+         description='Check docstrings against the style conventions in PEP 257.',
+         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+@@ -95,7 +105,7 @@
+     parser.add_argument(
+         'paths',
+         nargs='*',
+-        default=[os.curdir],
++        default=[default_path],
+         help='The files or directories to check. For directories, files ending '
+              "in '.py' will be considered.")
+     parser.add_argument(
+@@ -134,7 +144,15 @@
+             'The pydocstyle package is not installed. '
+             'Please install pydocstyle to use ament_pep257.')
+ 
+-    excludes = [os.path.abspath(e) for e in args.excludes]
++    args.paths = [
++        default_path if p == os.curdir else (
++            os.path.join(default_path, p)
++            if not os.path.exists(p) and os.path.exists(os.path.join(default_path, p))
++            else p
++        )
++        for p in args.paths
++    ]
++    excludes = [os.path.abspath(os.path.join(default_path, e)) for e in args.excludes]
+     report = generate_pep257_report(args.paths, excludes, args.ignore, args.select,
+                                     args.convention, args.add_ignore, args.add_select)
+     error_count = sum(len(r[1]) for r in report)
+@@ -200,7 +218,7 @@
+     files_dict = {}
+     # Unpack 3 values for pydocstyle <= 6.1.1 and 4 values for pydocstyle >= 6.2.0
+     for filename, checked_codes, ignore_decorators, *_ in files_to_check:
+-        if _filename_in_excludes(filename, excludes):
++        if filename.endswith('_stage2_bootstrap.py') or _filename_in_excludes(filename, excludes):
+             continue
+         files_dict[filename] = {
+             'select': checked_codes,

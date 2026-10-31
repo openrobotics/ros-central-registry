@@ -1,0 +1,266 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@qt//:qt.bzl", "qt_cc_library", "qt_ui_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@interactive_markers//:interactive_markers": "@interactive_markers//:interactive_markers_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
+    "@rosdistro//cc:OgreOverlay": "@rosdistro//cc:OgreOverlay_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:curl": "@rosdistro//cc:curl_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_default_plugins//:rviz_default_plugins": "@rviz_default_plugins//:rviz_default_plugins_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@visualization_msgs//:cc_shared": "@visualization_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@angles//:angles",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.assign",
+    "@rosdistro//cc:eigen",
+]
+
+genrule(
+    name = "euler_ui_rename",
+    srcs = ["src/common/euler.ui"],
+    outs = ["euler.ui"],
+    cmd = "cp $(location :src/common/euler.ui) $(location :euler.ui)",
+)
+
+qt_ui_library(
+    name = "euler_ui",
+    src = "euler.ui",
+    deps = ["@qtbase//:widgets"],
+)
+
+genrule(
+    name = "frames_ui_rename",
+    srcs = ["src/common/frames.ui"],
+    outs = ["frames.ui"],
+    cmd = "cp $(location :src/common/frames.ui) $(location :frames.ui)",
+)
+
+qt_ui_library(
+    name = "frames_ui",
+    src = "frames.ui",
+    deps = ["@qtbase//:widgets"],
+)
+
+genrule(
+    name = "transform_ui_rename",
+    srcs = ["src/common/transform.ui"],
+    outs = ["transform.ui"],
+    cmd = "cp $(location :src/common/transform.ui) $(location :transform.ui)",
+)
+
+qt_ui_library(
+    name = "transform_ui",
+    src = "transform.ui",
+    deps = ["@qtbase//:widgets"],
+)
+
+qt_cc_library(
+    name = "agni_tf_tools_library",
+    srcs = [
+        "src/common/EulerWidget.cpp",
+        "src/common/FramesWidget.cpp",
+        "src/common/TransformBroadcaster.cpp",
+        "src/common/TransformWidget.cpp",
+        "src/plugin/TransformPublisherDisplay.cpp",
+        "src/plugin/euler_property.cpp",
+        "src/plugin/plugin_init.cpp",
+        "src/plugin/rotation_property.cpp",
+    ],
+    hdrs = [
+        "src/common/EulerWidget.h",
+        "src/common/FramesWidget.h",
+        "src/common/TransformBroadcaster.h",
+        "src/common/TransformWidget.h",
+        "src/plugin/TransformPublisherDisplay.h",
+        "src/plugin/euler_property.h",
+        "src/plugin/rotation_property.h",
+    ],
+    includes = [
+        ".",
+        "src",
+        "src/common",
+        "src/plugin",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":euler_ui",
+        ":frames_ui",
+        ":transform_ui",
+        "@qtbase//:widgets",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "link_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        "@qtbase//:widgets_shared",
+    ],
+)
+
+cc_shared_library(
+    name = "agni_tf_tools",
+    dynamic_deps = [
+        ":link_dynamic_deps",
+        "@geometry_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@visualization_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":agni_tf_tools_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":agni_tf_tools"],
+)
+
+cc_binary(
+    name = "static_transform_publisher",
+    srcs = ["src/static_transform_broadcaster_program.cpp"] + [
+        "src/common/EulerWidget.h",
+        "src/common/FramesWidget.h",
+        "src/common/TransformBroadcaster.h",
+        "src/common/TransformWidget.h",
+        "src/plugin/TransformPublisherDisplay.h",
+        "src/plugin/euler_property.h",
+        "src/plugin/rotation_property.h",
+    ],
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@qtbase//:widgets_shared",
+    ],
+    includes = [
+        "src",
+        "src/common",
+        "src/plugin",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        "@rosdistro//cc:boost.program_options",
+    ],
+)
+
+cc_binary(
+    name = "static_transform_publisher_gui",
+    srcs = ["src/static_transform_publisher_gui.cpp"],
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@qtbase//:widgets_shared",
+    ],
+    includes = [
+        "src",
+        "src/common",
+        "src/plugin",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":agni_tf_tools_library",
+        "@qtbase//:widgets",
+        "@rosdistro//cc:boost.program_options",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":static_transform_publisher",
+        ":static_transform_publisher_gui",
+    ],
+    libraries = [
+        ":agni_tf_tools",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugin_description.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@angles//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        "src/plugin/euler_property.h",
+        "src/plugin/rotation_property.h",
+    ],
+    headers_strip_prefix = "src/plugin",
+    libraries = [
+        ":agni_tf_tools",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@angles//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@interactive_markers//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

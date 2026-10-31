@@ -1,0 +1,297 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+PROTO_NAMES = [
+    "dynamics",
+    "frame",
+    "imu",
+    "pose",
+    "pose_stamped",
+    "quaternion",
+    "time",
+    "trajectory",
+    "vector3d",
+]
+
+PROTO_SRCS = ["roboception/msgs/{}.pb.cc".format(n) for n in PROTO_NAMES]
+
+PROTO_HDRS = ["roboception/msgs/{}.pb.h".format(n) for n in PROTO_NAMES]
+
+genrule(
+    name = "proto_gen",
+    srcs = ["rc_dynamics_api/rc_dynamics_msgs/roboception/msgs/{}.proto".format(n) for n in PROTO_NAMES],
+    outs = PROTO_SRCS + PROTO_HDRS,
+    cmd = """
+        PROTO_ROOT=$$(dirname $$(dirname $$(dirname $(location rc_dynamics_api/rc_dynamics_msgs/roboception/msgs/dynamics.proto))))
+        $(execpath @protobuf//:protoc) --cpp_out=$(RULEDIR) --proto_path="$$PROTO_ROOT" $(SRCS)
+    """,
+    tools = ["@protobuf//:protoc"],
+)
+
+cc_library(
+    name = "protolib",
+    srcs = PROTO_SRCS,
+    hdrs = PROTO_HDRS,
+    includes = ["."],
+    deps = ["@rosdistro//cc:protobuf_library"],
+)
+
+cc_library(
+    name = "cpr_library",
+    srcs = [
+        "rc_dynamics_api/opt/cpr/cpr/auth.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/cookies.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/cprtypes.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/digest.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/error.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/multipart.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/parameters.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/payload.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/proxies.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/session.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/ssl_options.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/timeout.cpp",
+        "rc_dynamics_api/opt/cpr/cpr/util.cpp",
+    ],
+    hdrs = [
+        "rc_dynamics_api/opt/cpr/include/cpr/api.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/auth.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/body.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/connect_timeout.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/cookies.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/cpr.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/cprtypes.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/curlholder.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/defines.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/digest.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/error.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/low_speed.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/max_redirects.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/multipart.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/parameters.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/payload.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/proxies.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/response.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/session.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/ssl_options.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/status_codes.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/timeout.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/user_agent.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/util.h",
+        "rc_dynamics_api/opt/cpr/include/cpr/verbose.h",
+    ],
+    includes = ["rc_dynamics_api/opt/cpr/include"],
+    deps = ["@rosdistro//cc:curl_library"],
+)
+
+VERSION_DEFINES = [
+    "PROJECT_NAME=rc_dynamics_api",
+    "RC_PROJECT_VERSION=0.0.0",
+    "RC_PROJECT_VERSION_INT=0",
+    "PACKAGE_VERSION_MAJOR=0",
+    "PACKAGE_VERSION_MINOR=0",
+    "PACKAGE_VERSION_PATCH=0",
+    "RC_PACKAGE_VERSION=0.0.0+6+ga705b77",
+]
+
+cmake_configure_file(
+    name = "project_version_h",
+    src = "cmake/project_version.h.in",
+    out = "rc_dynamics_api/project_version.h",
+    defines = VERSION_DEFINES + ["PROJECT_NAME_UPPER=RC_DYNAMICS_API"],
+)
+
+cmake_configure_file(
+    name = "project_version_cc",
+    src = "cmake/project_version.cc.in",
+    out = "rc_dynamics_api/project_version.cc",
+    defines = VERSION_DEFINES,
+)
+
+API_HDRS = [
+    "rc_dynamics_api/data_receiver.h",
+    "rc_dynamics_api/msg_utils.h",
+    "rc_dynamics_api/net_utils.h",
+    ":project_version_h",
+    "rc_dynamics_api/remote_interface.h",
+    "rc_dynamics_api/socket_exception.h",
+    "rc_dynamics_api/trajectory_time.h",
+    "rc_dynamics_api/unexpected_receive_timeout.h",
+]
+
+cc_library(
+    name = "rc_dynamics_api_library",
+    srcs = [
+        "rc_dynamics_api/json.hpp",
+        "rc_dynamics_api/net_utils.cc",
+        "rc_dynamics_api/remote_interface.cc",
+        "rc_dynamics_api/socket_exception.cc",
+        "rc_dynamics_api/trajectory_time.cc",
+        "rc_dynamics_api/unexpected_receive_timeout.cc",
+        ":project_version_cc",
+    ],
+    hdrs = API_HDRS + PROTO_HDRS,
+    includes = [
+        ".",
+        "rc_dynamics_api",
+    ],
+    deps = [
+        ":cpr_library",
+        ":protolib",
+        "@rosdistro//cc:curl_library",
+        "@rosdistro//cc:protobuf_library",
+    ],
+)
+
+cc_shared_library(
+    name = "rc_dynamics_api",
+    dynamic_deps = [
+        "@rosdistro//cc:curl",
+        "@rosdistro//cc:protobuf",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    user_link_flags = select({
+        "@platforms//os:linux": ["-Wl,-soname,librc_dynamics_api.so.0.0"],
+        "//conditions:default": [],
+    }),
+    deps = [":rc_dynamics_api_library"],
+)
+
+cc_binary(
+    name = "rcdynamics_stream",
+    srcs = [
+        "tools/csv_printing.h",
+        "tools/rcdynamics_stream.cc",
+    ],
+    deps = [":rc_dynamics_api_library"],
+)
+
+cc_binary(
+    name = "simple_receiver",
+    srcs = ["examples/simple_receiver.cc"],
+    deps = [":rc_dynamics_api_library"],
+)
+
+cc_binary(
+    name = "test_slam",
+    srcs = ["examples/test_slam.cc"],
+    deps = [":rc_dynamics_api_library"],
+)
+
+genrule(
+    name = "gen_so_versioned",
+    srcs = [":rc_dynamics_api"],
+    outs = ["lib_versioned/librc_dynamics_api.so.0.0"],
+    cmd = "cp $(location :rc_dynamics_api) $@",
+)
+
+genrule(
+    name = "gen_cmake_files",
+    outs = [
+        "cmake_out/RC_DYNAMICS_APIConfig.cmake",
+        "cmake_out/RC_DYNAMICS_APIConfigVersion.cmake",
+        "cmake_out/RC_DYNAMICS_APITargets.cmake",
+        "cmake_out/RC_DYNAMICS_APITargets-release.cmake",
+    ],
+    cmd = """
+        mkdir -p $(RULEDIR)/cmake_out
+        cat <<'EOF' > $(RULEDIR)/cmake_out/RC_DYNAMICS_APIConfig.cmake
+get_filename_component(PROJECT_CMAKE_DIR "$${CMAKE_CURRENT_LIST_FILE}" PATH)
+set(RC_DYNAMICS_API_INCLUDE_DIRS "$${PROJECT_CMAKE_DIR}/../../include")
+set(RC_DYNAMICS_API_STATIC_LIBRARIES )
+set(RC_DYNAMICS_API_LIBRARIES rc_dynamics_api)
+include("$${PROJECT_CMAKE_DIR}/RC_DYNAMICS_APITargets.cmake" OPTIONAL)
+find_package(Protobuf REQUIRED)
+list(APPEND RC_DYNAMICS_API_INCLUDE_DIRS $${PROTOBUF_INCLUDE_DIRS})
+list(APPEND RC_DYNAMICS_API_LIBRARIES $${PROTOBUF_LIBRARIES})
+EOF
+        cat <<'EOF' > $(RULEDIR)/cmake_out/RC_DYNAMICS_APIConfigVersion.cmake
+set(PACKAGE_VERSION "0.0.0")
+if("$${PACKAGE_VERSION}" VERSION_LESS "$${PACKAGE_FIND_VERSION}")
+  set(PACKAGE_VERSION_COMPATIBLE FALSE)
+else()
+  set(PACKAGE_VERSION_COMPATIBLE TRUE)
+  if ("$${PACKAGE_VERSION}" VERSION_EQUAL "$${PACKAGE_FIND_VERSION}")
+    set(PACKAGE_VERSION_EXACT TRUE)
+  endif()
+endif()
+EOF
+        cat <<'EOF' > $(RULEDIR)/cmake_out/RC_DYNAMICS_APITargets.cmake
+get_filename_component(_IMPORT_PREFIX "$${CMAKE_CURRENT_LIST_FILE}" PATH)
+get_filename_component(_IMPORT_PREFIX "$${_IMPORT_PREFIX}" PATH)
+get_filename_component(_IMPORT_PREFIX "$${_IMPORT_PREFIX}" PATH)
+if(_IMPORT_PREFIX STREQUAL "/")
+  set(_IMPORT_PREFIX "")
+endif()
+if(NOT TARGET rc_dynamics_api)
+  add_library(rc_dynamics_api SHARED IMPORTED)
+  include("$${CMAKE_CURRENT_LIST_DIR}/RC_DYNAMICS_APITargets-release.cmake")
+endif()
+set(_IMPORT_PREFIX)
+EOF
+        cat <<'EOF' > $(RULEDIR)/cmake_out/RC_DYNAMICS_APITargets-release.cmake
+set_property(TARGET rc_dynamics_api APPEND PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_target_properties(rc_dynamics_api PROPERTIES
+  IMPORTED_LOCATION_RELEASE "$${_IMPORT_PREFIX}/lib/librc_dynamics_api.so.0.0"
+  IMPORTED_SONAME_RELEASE "librc_dynamics_api.so.0.0"
+)
+EOF
+    """,
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [
+        ":gen_cmake_files",
+    ],
+    libraries = [
+        ":rc_dynamics_api",
+        ":gen_so_versioned",
+    ],
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    headers = API_HDRS + PROTO_HDRS,
+    include_prefix = "",
+    libraries = [
+        ":rc_dynamics_api",
+        ":gen_so_versioned",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        ":rcdynamics_stream",
+    ],
+    deps = [
+        ":ament_index",
+        "@rosdistro//:ament_package",
+    ],
+)

@@ -1,0 +1,351 @@
+# Copyright 2025 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_resource")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### AMENT INDEX
+
+register_ament_resource(
+    name = "res_rmw_typesupport",
+    category = "rmw_typesupport",
+    content = "rosidl_typesupport_introspection_c;rosidl_typesupport_introspection_cpp\n",
+)
+
+register_ament_resource(
+    name = "res_rmw_typesupport_c",
+    category = "rmw_typesupport_c",
+    content = "rosidl_typesupport_introspection_c\n",
+)
+
+register_ament_resource(
+    name = "res_rmw_typesupport_cpp",
+    category = "rmw_typesupport_cpp",
+    content = "rosidl_typesupport_introspection_cpp\n",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/DEFAULT_RMW_ZENOH_ROUTER_CONFIG.json5",
+        "config/DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":res_rmw_typesupport",
+        ":res_rmw_typesupport_c",
+        ":res_rmw_typesupport_cpp",
+    ],
+)
+
+### LIBRARIES
+
+genrule(
+    name = "default_zenoh_config",
+    srcs = [
+        "config/DEFAULT_RMW_ZENOH_ROUTER_CONFIG.json5",
+        "config/DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5",
+    ],
+    outs = ["src/detail/default_zenoh_config.hpp"],
+    cmd = "\n".join([
+        "cat << 'EOF' > $@",
+        "#ifndef DETAIL__DEFAULT_ZENOH_CONFIG_HPP_",
+        "#define DETAIL__DEFAULT_ZENOH_CONFIG_HPP_",
+        "namespace rmw_zenoh_cpp {",
+        "inline constexpr const char * kDefaultRouterConfig = R\"zenoh(",
+        "EOF",
+        "sed '/^[[:space:]]*\\/\\//d' $(location config/DEFAULT_RMW_ZENOH_ROUTER_CONFIG.json5) >> $@",
+        "cat << 'EOF' >> $@",
+        ")zenoh\";",
+        "inline constexpr const char * kDefaultSessionConfig = R\"zenoh(",
+        "EOF",
+        "sed '/^[[:space:]]*\\/\\//d' $(location config/DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5) >> $@",
+        "cat << 'EOF' >> $@",
+        ")zenoh\";",
+        "}  // namespace rmw_zenoh_cpp",
+        "#endif  // DETAIL__DEFAULT_ZENOH_CONFIG_HPP_",
+        "EOF",
+    ]),
+)
+
+HEADERS = ["include/rmw_zenoh_cpp/rmw_zenoh.hpp"]
+
+DEPENDENCIES = {
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:fastcdr": "@rosdistro//cc:fastcdr_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:zenoh-cpp": "@rosdistro//cc:zenoh-cpp_library",
+    "@rosidl_buffer_backend_registry//:rosidl_buffer_backend_registry": "@rosidl_buffer_backend_registry//:rosidl_buffer_backend_registry_library",
+    "@rosidl_typesupport_fastrtps_c//:rosidl_typesupport_fastrtps_c": "@rosidl_typesupport_fastrtps_c//:rosidl_typesupport_fastrtps_c_library",
+    "@rosidl_typesupport_fastrtps_cpp//:rosidl_typesupport_fastrtps_cpp": "@rosidl_typesupport_fastrtps_cpp//:rosidl_typesupport_fastrtps_cpp_library",
+    "@tracetools//:tracetools": "@tracetools//:tracetools_library",
+}
+
+cc_library(
+    name = "rmw_zenoh_cpp_library",
+    srcs = [
+        "src/detail/attachment_helpers.cpp",
+        "src/detail/attachment_helpers.hpp",
+        "src/detail/buffer_backend_context.hpp",
+        "src/detail/buffer_backend_loader.cpp",
+        "src/detail/buffer_backend_loader.hpp",
+        "src/detail/buffer_endpoint_helpers.hpp",
+        "src/detail/cdr.cpp",
+        "src/detail/cdr.hpp",
+        "src/detail/default_zenoh_config.hpp",
+        "src/detail/endpoint_info.hpp",
+        "src/detail/event.cpp",
+        "src/detail/event.hpp",
+        "src/detail/graph_cache.cpp",
+        "src/detail/graph_cache.hpp",
+        "src/detail/guard_condition.cpp",
+        "src/detail/guard_condition.hpp",
+        "src/detail/identifier.cpp",
+        "src/detail/identifier.hpp",
+        "src/detail/liveliness_utils.cpp",
+        "src/detail/liveliness_utils.hpp",
+        "src/detail/logging.cpp",
+        "src/detail/logging.hpp",
+        "src/detail/logging_macros.hpp",
+        "src/detail/message_type_support.cpp",
+        "src/detail/message_type_support.hpp",
+        "src/detail/qos.cpp",
+        "src/detail/qos.hpp",
+        "src/detail/rmw_client_data.cpp",
+        "src/detail/rmw_client_data.hpp",
+        "src/detail/rmw_context_impl_s.cpp",
+        "src/detail/rmw_context_impl_s.hpp",
+        "src/detail/rmw_node_data.cpp",
+        "src/detail/rmw_node_data.hpp",
+        "src/detail/rmw_publisher_data.cpp",
+        "src/detail/rmw_publisher_data.hpp",
+        "src/detail/rmw_service_data.cpp",
+        "src/detail/rmw_service_data.hpp",
+        "src/detail/rmw_subscription_data.cpp",
+        "src/detail/rmw_subscription_data.hpp",
+        "src/detail/rmw_wait_set_data.hpp",
+        "src/detail/serialization_format.hpp",
+        "src/detail/service_type_support.cpp",
+        "src/detail/service_type_support.hpp",
+        "src/detail/simplified_xxhash3.cpp",
+        "src/detail/simplified_xxhash3.hpp",
+        "src/detail/type_support.cpp",
+        "src/detail/type_support.hpp",
+        "src/detail/type_support_common.cpp",
+        "src/detail/type_support_common.hpp",
+        "src/detail/zenoh_config.cpp",
+        "src/detail/zenoh_config.hpp",
+        "src/detail/zenoh_utils.cpp",
+        "src/detail/zenoh_utils.hpp",
+        "src/rmw_event.cpp",
+        "src/rmw_get_network_flow_endpoints.cpp",
+        "src/rmw_get_node_info_and_types.cpp",
+        "src/rmw_get_service_endpoint_info.cpp",
+        "src/rmw_get_service_names_and_types.cpp",
+        "src/rmw_get_topic_endpoint_info.cpp",
+        "src/rmw_get_topic_names_and_types.cpp",
+        "src/rmw_init.cpp",
+        "src/rmw_init_options.cpp",
+        "src/rmw_qos.cpp",
+        "src/rmw_zenoh.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = [
+        "include",
+        "src",
+        "src/detail",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        # Header-only.
+        "@rosdistro//cc:nlohmann_json",
+    ],
+)
+
+cc_shared_library(
+    name = "rmw_zenoh_cpp",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rmw_zenoh_cpp_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [":rmw_zenoh_cpp"],
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "rmw_zenoh_cpp_test_fixture_library",
+    srcs = [
+        "src/detail/attachment_helpers.hpp",
+        "src/detail/buffer_backend_context.hpp",
+        "src/detail/buffer_backend_loader.hpp",
+        "src/detail/buffer_endpoint_helpers.hpp",
+        "src/detail/cdr.hpp",
+        "src/detail/default_zenoh_config.hpp",
+        "src/detail/endpoint_info.hpp",
+        "src/detail/event.hpp",
+        "src/detail/graph_cache.hpp",
+        "src/detail/guard_condition.hpp",
+        "src/detail/identifier.hpp",
+        "src/detail/liveliness_utils.hpp",
+        "src/detail/logging.hpp",
+        "src/detail/logging_macros.hpp",
+        "src/detail/message_type_support.hpp",
+        "src/detail/qos.hpp",
+        "src/detail/rmw_client_data.hpp",
+        "src/detail/rmw_context_impl_s.hpp",
+        "src/detail/rmw_node_data.hpp",
+        "src/detail/rmw_publisher_data.hpp",
+        "src/detail/rmw_service_data.hpp",
+        "src/detail/rmw_subscription_data.hpp",
+        "src/detail/rmw_wait_set_data.hpp",
+        "src/detail/serialization_format.hpp",
+        "src/detail/service_type_support.hpp",
+        "src/detail/simplified_xxhash3.hpp",
+        "src/detail/type_support.hpp",
+        "src/detail/type_support_common.hpp",
+        "src/detail/zenoh_config.hpp",
+        "src/detail/zenoh_utils.hpp",
+    ] + [
+        "src/detail/logging.cpp",
+        "src/detail/zenoh_config.cpp",
+        "src/rmw_test_fixture.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = [
+        "include",
+        "src",
+        "src/detail",
+    ],
+    local_defines = ros_local_defines() + ["RMW_TEST_FIXTURE_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + [
+        "@rmw_test_fixture//:rmw_test_fixture_library",
+        "@rosdistro//cc:nlohmann_json",
+    ],
+)
+
+cc_shared_library(
+    name = "rmw_zenoh_cpp_test_fixture",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rmw_zenoh_cpp_test_fixture_library"],
+)
+
+### BINARIES
+
+cc_binary(
+    name = "rmw_zenohd",
+    srcs = [
+        "src/detail/attachment_helpers.hpp",
+        "src/detail/buffer_backend_context.hpp",
+        "src/detail/buffer_backend_loader.hpp",
+        "src/detail/buffer_endpoint_helpers.hpp",
+        "src/detail/cdr.hpp",
+        "src/detail/default_zenoh_config.hpp",
+        "src/detail/endpoint_info.hpp",
+        "src/detail/event.hpp",
+        "src/detail/graph_cache.hpp",
+        "src/detail/guard_condition.hpp",
+        "src/detail/identifier.hpp",
+        "src/detail/liveliness_utils.hpp",
+        "src/detail/logging.hpp",
+        "src/detail/logging_macros.hpp",
+        "src/detail/message_type_support.hpp",
+        "src/detail/qos.hpp",
+        "src/detail/rmw_client_data.hpp",
+        "src/detail/rmw_context_impl_s.hpp",
+        "src/detail/rmw_node_data.hpp",
+        "src/detail/rmw_publisher_data.hpp",
+        "src/detail/rmw_service_data.hpp",
+        "src/detail/rmw_subscription_data.hpp",
+        "src/detail/rmw_wait_set_data.hpp",
+        "src/detail/serialization_format.hpp",
+        "src/detail/service_type_support.hpp",
+        "src/detail/simplified_xxhash3.hpp",
+        "src/detail/type_support.hpp",
+        "src/detail/type_support_common.hpp",
+        "src/detail/zenoh_config.hpp",
+        "src/detail/zenoh_utils.hpp",
+    ] + [
+        "src/detail/liveliness_utils.cpp",
+        "src/detail/logging.cpp",
+        "src/detail/qos.cpp",
+        "src/detail/simplified_xxhash3.cpp",
+        "src/detail/zenoh_config.cpp",
+        "src/zenohd/main.cpp",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+# ament_index_register_resource() registrations, as ament_cmake installs them.
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_rmw_zenoh_cpp",
+    data = [
+        "config/DEFAULT_RMW_ZENOH_ROUTER_CONFIG.json5",
+        "config/DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5",
+    ],
+    executables = [":rmw_zenohd"],
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [
+        ":rmw_zenoh_cpp",
+        ":rmw_zenoh_cpp_test_fixture",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rmw_test_fixture//:ament_package",
+        "@rosdistro//:ament_package",
+        "@rosidl_buffer_backend_registry//:ament_package",
+        "@rosidl_typesupport_fastrtps_c//:ament_package",
+        "@rosidl_typesupport_fastrtps_cpp//:ament_package",
+        "@tracetools//:ament_package",
+        "@zenoh_cpp_vendor//:ament_package",
+    ],
+)

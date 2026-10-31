@@ -1,0 +1,89 @@
+diff --git a/src/bin/lttng-sessiond/consumer.hpp b/src/bin/lttng-sessiond/consumer.hpp
+--- a/src/bin/lttng-sessiond/consumer.hpp
++++ b/src/bin/lttng-sessiond/consumer.hpp
+@@ -28,7 +28,7 @@
+  * Use a static_assert so we remember to remove it when we upgrade to a newer
+  * C++.
+  */
+-static_assert(__cplusplus == 201103L, "");
++static_assert(__cplusplus >= 201103L, "");
+ template <typename NumericalType>
+ constexpr NumericalType max_constexpr(NumericalType l, NumericalType r)
+ {
+diff --git a/src/bin/lttng-sessiond/sessiond-config.cpp b/src/bin/lttng-sessiond/sessiond-config.cpp
+--- a/src/bin/lttng-sessiond/sessiond-config.cpp
++++ b/src/bin/lttng-sessiond/sessiond-config.cpp
+@@ -402,6 +402,20 @@
+ 	config_string_set_static(&config->consumerd64_lib_dir, INSTALL_LIB_PATH);
+ #else
+ #error "Unknown bitness"
++#endif
++#if (CAA_BITS_PER_LONG == 64)
++	{
++		char self_exe[PATH_MAX];
++		const ssize_t exe_len = readlink("/proc/self/exe", self_exe, sizeof(self_exe) - 1);
++		if (exe_len > 0) {
++			self_exe[exe_len] = '\0';
++			char *last_slash = strrchr(self_exe, '/');
++			if (last_slash && asprintf(&str, "%.*s/%s", (int) (last_slash - self_exe), self_exe, DEFAULT_CONSUMERD_FILE) >= 0) {
++				config_string_set(&config->consumerd64_bin_path, str);
++				str = nullptr;
++			}
++		}
++	}
+ #endif
+ 	ret = 0;
+ 	return ret;
+diff --git a/src/common/config/session-config.cpp b/src/common/config/session-config.cpp
+--- a/src/common/config/session-config.cpp
++++ b/src/common/config/session-config.cpp
+@@ -3748,6 +3748,9 @@
+ 
+ 	ret = init_session_config_validation_ctx(&validation_ctx);
+ 	if (ret) {
++		if (autoload && !path) {
++			ret = 0;
++		}
+ 		goto end;
+ 	}
+ 
+diff --git a/src/common/urcu.hpp b/src/common/urcu.hpp
+--- a/src/common/urcu.hpp
++++ b/src/common/urcu.hpp
+@@ -111,7 +111,7 @@
+ class lfht_iteration_adapter {
+ public:
+ 	/* Nested iterator class defines the iterator for lfht_iteration_adapter. */
+-	class iterator : public std::iterator<std::input_iterator_tag, std::uint64_t> {
++	class iterator : public std::iterator<std::input_iterator_tag, ContainedType *> {
+ 		/* Allow lfht_iteration_adapter to access private members of iterator. */
+ 		friend lfht_iteration_adapter;
+ 
+@@ -298,7 +298,7 @@
+ class list_iteration_adapter {
+ public:
+ 	/* Nested iterator class defines the iterator for list_iteration_adapter. */
+-	class iterator : public std::iterator<std::input_iterator_tag, std::uint64_t> {
++	class iterator : public std::iterator<std::input_iterator_tag, ContainedType *> {
+ 		/* Allow list_iteration_adapter to access private members of iterator. */
+ 		friend list_iteration_adapter;
+ 
+diff --git a/src/vendor/fmt/base.h b/src/vendor/fmt/base.h
+--- a/src/vendor/fmt/base.h
++++ b/src/vendor/fmt/base.h
+@@ -111,6 +111,7 @@
+ #endif
+ 
+ // Detect consteval, C++20 constexpr extensions and std::is_constant_evaluated.
++#ifndef FMT_USE_CONSTEVAL
+ #if !defined(__cpp_lib_is_constant_evaluated)
+ #  define FMT_USE_CONSTEVAL 0
+ #elif FMT_CPLUSPLUS < 201709L
+@@ -129,6 +130,7 @@
+ #  define FMT_USE_CONSTEVAL 1
+ #else
+ #  define FMT_USE_CONSTEVAL 0
++#endif
+ #endif
+ #if FMT_USE_CONSTEVAL
+ #  define FMT_CONSTEVAL consteval

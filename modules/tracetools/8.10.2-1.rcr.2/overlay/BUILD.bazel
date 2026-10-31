@@ -1,0 +1,241 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@ament_cmake_gen_version_h//:defs.bzl", "generate_ros_version_defines")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+cmake_configure_file(
+    name = "version_h",
+    src = "@ament_cmake_gen_version_h//cmake:version.h.in",
+    out = "include/tracetools/version.h",
+    defines = generate_ros_version_defines(),
+)
+
+cmake_configure_file(
+    name = "config_h",
+    src = "include/tracetools/config.h.in",
+    out = "include/tracetools/config.h",
+    defines = select({
+        "@rosdistro//:tracing_enabled_linux": [],
+        "//conditions:default": [
+            "TRACETOOLS_DISABLED=1",
+            "TRACETOOLS_TRACEPOINTS_EXCLUDED=1",
+        ],
+    }),
+    undefines = select({
+        "@rosdistro//:tracing_enabled_linux": [
+            "TRACETOOLS_DISABLED",
+            "TRACETOOLS_TRACEPOINTS_EXCLUDED",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+HEADERS = [
+    ":config_h",
+    ":version_h",
+] + [
+    "include/tracetools/status.h",
+    "include/tracetools/tracetools.h",
+    "include/tracetools/utils.hpp",
+    "include/tracetools/visibility_control.h",
+]
+
+cc_library(
+    name = "tracetools_provider_library",
+    srcs = select({
+        "@rosdistro//:tracing_enabled_linux": ["src/tp.c"],
+        "//conditions:default": ["src/tracetools.c"],
+    }),
+    hdrs = HEADERS + ["include/tracetools/tp_call.h"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = select({
+        "@rosdistro//:tracing_enabled_linux": ["@rosdistro//cc:lttng_ust"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_shared_library(
+    name = "tracetools_provider",
+    dynamic_deps = select({
+        "@rosdistro//:tracing_enabled_linux": ["@rosdistro//cc:lttng_ust_shared"],
+        "//conditions:default": [],
+    }),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":tracetools_provider_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "provider_runtime_bundle",
+    dynamic_deps = select({
+        "@rosdistro//:tracing_enabled_linux": [":tracetools_provider"],
+        "//conditions:default": [],
+    }),
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":provider_runtime_bundle"],
+    package_xml = "package.xml",
+)
+
+cc_library(
+    name = "tracetools_library",
+    srcs = [
+        "src/tracetools.c",
+        "src/utils.cpp",
+    ] + select({
+        "@rosdistro//:tracing_enabled_linux": ["src/tp_define.c"],
+        "//conditions:default": [],
+    }),
+    hdrs = HEADERS + select({
+        "@rosdistro//:tracing_enabled_linux": ["include/tracetools/tp_call.h"],
+        "//conditions:default": [],
+    }),
+    data = select({
+        "@rosdistro//:tracing_enabled_linux": [":ament_index"],
+        "//conditions:default": [],
+    }),
+    includes = ["include"],
+    linkopts = select({
+        "@rosdistro//:tracing_enabled_linux": [
+            "-rdynamic",
+            "-ldl",
+        ],
+        "//conditions:default": [],
+    }),
+    local_defines = ros_local_defines() + select({
+        "@rosdistro//:tracing_enabled_linux": [
+            'TRACETOOLS_PROVIDER_SONAME=\\"libtracetools_provider.so\\"',
+        ],
+        "//conditions:default": [],
+    }),
+    deps = select({
+        "@rosdistro//:tracing_enabled_linux": ["@rosdistro//cc:lttng_ust"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_shared_library(
+    name = "tracetools",
+    dynamic_deps = select({
+        "@rosdistro//:tracing_enabled_linux": ["@rosdistro//cc:lttng_ust_shared"],
+        "//conditions:default": [],
+    }),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":tracetools_library"],
+)
+
+cc_library(
+    name = "tracetools_status_library",
+    srcs = ["src/status.c"],
+    deps = [":tracetools_library"],
+)
+
+cc_shared_library(
+    name = "tracetools_status",
+    dynamic_deps = [":tracetools"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":tracetools_status_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        ":tracetools",
+        ":tracetools_status",
+    ],
+)
+
+cc_binary(
+    name = "status",
+    srcs = ["src/status_tool.c"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = [":tracetools_status_library"],
+)
+
+write_file(
+    name = "test_status_tool_sh",
+    out = "test_status_tool.sh",
+    content = select({
+        "@rosdistro//:tracing_enabled_linux": [
+            "#!/usr/bin/env bash",
+            "# Tracing is enabled; status should exit 0.",
+            '"$1"',
+        ],
+        "//conditions:default": [
+            "#!/usr/bin/env bash",
+            "# TRACETOOLS_TRACEPOINTS_EXCLUDED is enabled, so status is expected to exit non-zero (WILL_FAIL TRUE in CMake).",
+            '! "$1"',
+        ],
+    }),
+    is_executable = True,
+)
+
+sh_test(
+    name = "test_status_tool",
+    timeout = "short",
+    srcs = [":test_status_tool_sh"],
+    args = ["$(location :status)"],
+    data = [":status"],
+)
+
+write_file(
+    name = "link_flags_extras",
+    out = "cmake/ament_cmake_export_link_flags-extras.cmake",
+    content = ['list(APPEND tracetools_LINK_FLAGS "-rdynamic")'],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake = [":link_flags_extras"],
+    cmake_export_name = "tracetools_export",
+    executables = [":status"],
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [
+        ":tracetools",
+        ":tracetools_provider",
+        ":tracetools_status",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros_core//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

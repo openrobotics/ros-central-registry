@@ -1,0 +1,30 @@
+--- a/test/communication.cpp
++++ b/test/communication.cpp
+@@ -61,6 +61,15 @@
+ {
+   waitFor( []() { return false; }, timeout );
+ }
++
++// The publish loops below pace themselves with sleep_for(10ms). macOS timers
++// are coalesced and such a sleep routinely takes 13-15 ms, so the achieved
++// rate is ~70-80 Hz rather than ~100 Hz; scale the expectations accordingly.
++#if defined(__APPLE__)
++constexpr double kExpectedRateScale = 0.65;
++#else
++constexpr double kExpectedRateScale = 1.0;
++#endif
+ 
+ TEST( Communication, publisher )
+ {
+@@ -377,7 +386,10 @@
+   }
+ 
+   ASSERT_TRUE( waitFor(
+-      [&]() { return subscriber->frequency() > 90.0f && subscriber->bandwidth() > 350.0f; }, 3s ) )
++      [&]() {
++        return subscriber->frequency() > 90.0f * kExpectedRateScale &&
++               subscriber->bandwidth() > 350.0f * kExpectedRateScale;
++      }, 3s ) )
+       << "Telemetry did not rise as expected. Frequency: " << subscriber->frequency()
+       << ", bandwidth: " << subscriber->bandwidth();
+ 

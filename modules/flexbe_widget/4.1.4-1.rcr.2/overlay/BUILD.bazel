@@ -1,0 +1,115 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+py_library(
+    name = "flexbe_widget",
+    srcs = [
+        "flexbe_widget/__init__.py",
+        "flexbe_widget/behavior_action_server.py",
+        "flexbe_widget/behavior_launcher.py",
+        "flexbe_widget/evaluate_logs.py",
+        "flexbe_widget/flexbe_status_listener.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@flexbe_core",
+        "@flexbe_msgs//:py",
+        "@rclpy",
+        "@std_msgs//:py",
+        requirement("pyyaml"),
+    ],
+)
+
+# Upstream installs the Python scripts in bin/ to lib/flexbe_widget/; make
+# them runnable with the hermetic interpreter so launch files (and ros2 run)
+# can start them.
+_PY_SCRIPTS = [
+    "be_action_server",
+    "be_launcher",
+    "evaluate_logs",
+    "flexbe_status_listener",
+]
+
+[
+    (
+        genrule(
+            name = "_gen_{0}".format(script),
+            srcs = ["bin/{0}".format(script)],
+            outs = ["_bin/{0}.py".format(script)],
+            cmd = "cp $< $@",
+        ),
+        py_binary(
+            name = "lib/{0}".format(script),
+            srcs = [":_gen_{0}".format(script)],
+            main = "_bin/{0}.py".format(script),
+            deps = [":flexbe_widget"],
+        ),
+        alias(
+            name = script,
+            actual = ":lib/{0}".format(script),
+        ),
+    )
+    for script in _PY_SCRIPTS
+]
+
+ament_index(
+    name = "ament_index",
+    data = ["//launch:launch_files"],
+    executables = [
+        "bin/be_action_server",
+        "bin/be_launcher",
+        "bin/create_repo",
+        "bin/evaluate_logs",
+        "bin/flexbe_status_listener",
+    ],
+    lib_data = [":lib/{0}".format(script) for script in _PY_SCRIPTS] + ["bin/create_repo"],
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    package_xml = "package.xml",
+    python = [":flexbe_widget"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_copyright//:ament_package",
+        "@ament_flake8//:ament_package",
+        "@ament_pep257//:ament_package",
+        "@flexbe_core//:ament_package",
+        "@flexbe_mirror//:ament_package",
+        "@flexbe_msgs//:ament_package",
+        "@flexbe_onboard//:ament_package",
+        "@launch_ros//:ament_package",
+        "@rclpy//:ament_package",
+        "@rosdistro//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

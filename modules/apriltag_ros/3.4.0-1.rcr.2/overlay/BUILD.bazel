@@ -1,0 +1,172 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+# Version-gated compile definitions from CMakeLists.txt; every gate is
+# satisfied by the cv_bridge/image_transport/tf2_ros versions in this release.
+LOCAL_DEFINES = ros_local_defines() + [
+    "cv_bridge_HPP",
+    "image_transport_NODE_INTERFACE",
+    "image_transport_QoS",
+    "tf2_ros_NODE_INTERFACE",
+]
+
+DEPENDENCIES = {
+    "@apriltag//:apriltag": "@apriltag//:apriltag_library",
+    "@apriltag_msgs//:cc_shared": "@apriltag_msgs//:cc",
+    "@cv_bridge//:cv_bridge": "@cv_bridge//:cv_bridge_library",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+# add_library(tags STATIC src/tag_functions.cpp)
+cc_library(
+    name = "tags",
+    srcs = ["src/tag_functions.cpp"],
+    hdrs = ["src/tag_functions.hpp"],
+    includes = ["src"],
+    local_defines = LOCAL_DEFINES,
+    deps = ["@apriltag//:apriltag_library"],
+)
+
+# add_library(conversion STATIC src/conversion.cpp)
+cc_library(
+    name = "conversion",
+    srcs = ["src/conversion.cpp"],
+    local_defines = LOCAL_DEFINES,
+    deps = [
+        "@apriltag//:apriltag_library",
+        "@geometry_msgs//:cc",
+        "@rosdistro//cc:eigen",
+        "@rosdistro//cc:opencv_library",
+        "@tf2//:tf2_library",
+    ],
+)
+
+# add_library(pose_estimation STATIC src/pose_estimation.cpp)
+cc_library(
+    name = "pose_estimation",
+    srcs = ["src/pose_estimation.cpp"],
+    hdrs = ["src/pose_estimation.hpp"],
+    includes = ["src"],
+    local_defines = LOCAL_DEFINES,
+    deps = [
+        ":conversion",
+        "@apriltag//:apriltag_library",
+        "@geometry_msgs//:cc",
+        "@rosdistro//cc:eigen",
+        "@rosdistro//cc:opencv_library",
+        "@tf2//:tf2_library",
+    ],
+)
+
+# add_library(AprilTagNode SHARED src/AprilTagNode.cpp)
+cc_library(
+    name = "AprilTagNode_library",
+    srcs = ["src/AprilTagNode.cpp"],
+    local_defines = LOCAL_DEFINES,
+    deps = DEPENDENCIES.values() + [
+        ":pose_estimation",
+        ":tags",
+    ],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "AprilTagNode",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":AprilTagNode_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":AprilTagNode"],
+)
+
+# rclcpp_components_register_node(AprilTagNode PLUGIN "AprilTagNode"
+#                                 EXECUTABLE "apriltag_node")
+rclcpp_components_register_node(
+    name = "apriltag_node",
+    component = ":AprilTagNode",
+    data = [":ament_index"],
+    node_name = "apriltag_node",
+    plugin = "AprilTagNode",
+)
+
+### PACKAGING
+
+ament_index(
+    name = "ament_index",
+    components = [":apriltag_node_record"],
+    data = [
+        "cfg/tags_36h11.yaml",
+        "launch/camera_36h11.launch.yml",
+    ],
+    libraries = [":AprilTagNode"],
+    package_xml = "package.xml",
+)
+
+# launch/camera_36h11.launch.yml is not wrapped as a launch target: it drives a
+# real camera through camera_ros (libcamera hardware).
+
+ament_package(
+    name = "ament_package",
+    components = [":apriltag_node_record"],
+    executables = [":apriltag_node"],
+    libraries = [":AprilTagNode"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_cppcheck//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@apriltag//:ament_package",
+        "@apriltag_msgs//:ament_package",
+        "@camera_ros//:ament_package",
+        "@cv_bridge//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@image_proc//:ament_package",
+        "@image_transport//:ament_package",
+        "@image_transport_plugins//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)

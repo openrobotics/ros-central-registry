@@ -1,0 +1,192 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@qt//:qt.bzl", "qt_cc_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+DEPENDENCIES = {
+}
+
+CC_DEPS = [
+    "@qtbase//:core",
+    "@qtbase//:gui",
+    "@qtbase//:widgets",
+    "@qtsvg//:svg",
+]
+
+qt_cc_library(
+    name = "_bin_moc_library",
+    srcs = [":gen_qrc_resources_cpp"],
+    hdrs = [
+        "src/bridge_client.hpp",
+        "src/main_window.hpp",
+        "src/processor_chain_widget.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-Isrc",
+    ],
+    includes = [
+        "_gen/include",
+        "src",
+    ],
+    moc_hdrs = [
+        "src/bridge_client.hpp",
+        "src/main_window.hpp",
+        "src/processor_chain_widget.hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "ros2_unbag_gui",
+    srcs = [
+        "src/bridge_client.cpp",
+        "src/main.cpp",
+        "src/main_window.cpp",
+        "src/processor_chain_widget.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtsvg//:svg_shared",
+        "@qtbase//:widgets_shared",
+    ],
+    includes = [
+        "_gen/include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":_bin_moc_library"],
+)
+
+py_library(
+    name = "ros2_unbag",
+    srcs = [
+        "ros2_unbag/__init__.py",
+        "ros2_unbag/backend.py",
+        "ros2_unbag/bridge.py",
+        "ros2_unbag/core/__init__.py",
+        "ros2_unbag/core/bag_reader.py",
+        "ros2_unbag/core/bag_writer.py",
+        "ros2_unbag/core/exporter.py",
+        "ros2_unbag/core/processors/__init__.py",
+        "ros2_unbag/core/processors/base.py",
+        "ros2_unbag/core/processors/image.py",
+        "ros2_unbag/core/processors/pointcloud.py",
+        "ros2_unbag/core/routines/__init__.py",
+        "ros2_unbag/core/routines/base.py",
+        "ros2_unbag/core/routines/default.py",
+        "ros2_unbag/core/routines/image.py",
+        "ros2_unbag/core/routines/pointcloud.py",
+        "ros2_unbag/core/routines/video.py",
+        "ros2_unbag/core/utils/__init__.py",
+        "ros2_unbag/core/utils/bag_utils.py",
+        "ros2_unbag/core/utils/file_utils.py",
+        "ros2_unbag/core/utils/image_utils.py",
+        "ros2_unbag/core/utils/pointcloud_utils.py",
+        "ros2_unbag/core/utils/video_utils.py",
+        "ros2_unbag/export.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2cli",
+        "@rosbag2_py",
+        "@rosidl_runtime_py",
+        "@sensor_msgs//:py",
+        "@tf2_msgs//:py",
+        requirement("opencv-python"),
+    ],
+)
+
+genrule(
+    name = "gen_qrc_resources_cpp",
+    srcs = [
+        "qt_resources/resources.qrc",
+        "qt_resources/assets/badge.svg",
+        "qt_resources/assets/loading.gif",
+        "qt_resources/assets/title.png",
+        "qt_resources/gui.qss",
+    ],
+    outs = ["_gen/qrc_resources.cpp"],
+    cmd = "$(execpath @qtbase//:rcc) --name resources --output $@ $(location qt_resources/resources.qrc)",
+    tools = ["@qtbase//:rcc"],
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [":ros2_unbag_gui"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclpy//:ament_package",
+        "@ros2cli//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosidl_runtime_py//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    package_xml = "package.xml",
+    python = [":ros2_unbag"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@rclpy//:ament_package",
+        "@ros2cli//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosidl_runtime_py//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+    ],
+)

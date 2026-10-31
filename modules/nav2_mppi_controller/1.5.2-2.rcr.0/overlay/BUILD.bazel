@@ -1,0 +1,447 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:ament_resource.bzl", "register_ament_resource")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+DEPENDENCIES = {
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@builtin_interfaces//:cc_shared": "@builtin_interfaces//:cc",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@nav2_costmap_2d//:layers": "@nav2_costmap_2d//:layers_library",
+    "@nav2_costmap_2d//:nav2_costmap_2d_client": "@nav2_costmap_2d//:nav2_costmap_2d_client_library",
+    "@nav2_costmap_2d//:nav2_costmap_2d_core": "@nav2_costmap_2d//:nav2_costmap_2d_core_library",
+    "@nav2_msgs//:cc_shared": "@nav2_msgs//:cc",
+    "@nav2_util//:nav2_util_core": "@nav2_util//:nav2_util_core_library",
+    "@nav_msgs//:cc_shared": "@nav_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@visualization_msgs//:cc_shared": "@visualization_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@angles//:angles",
+    "@nav2_core//:nav2_core_library",
+    "@nav2_ros_common//:nav2_ros_common",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "mppi_controller_library",
+    srcs = [
+        "src/controller.cpp",
+        "src/critic_manager.cpp",
+        "src/noise_generator.cpp",
+        "src/optimizer.cpp",
+        "src/parameters_handler.cpp",
+        "src/trajectory_visualizer.cpp",
+    ],
+    hdrs = [
+        "include/nav2_mppi_controller/controller.hpp",
+        "include/nav2_mppi_controller/critic_data.hpp",
+        "include/nav2_mppi_controller/critic_function.hpp",
+        "include/nav2_mppi_controller/critic_manager.hpp",
+        "include/nav2_mppi_controller/critics/constraint_critic.hpp",
+        "include/nav2_mppi_controller/critics/cost_critic.hpp",
+        "include/nav2_mppi_controller/critics/goal_angle_critic.hpp",
+        "include/nav2_mppi_controller/critics/goal_critic.hpp",
+        "include/nav2_mppi_controller/critics/obstacles_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_align_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_angle_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_follow_critic.hpp",
+        "include/nav2_mppi_controller/critics/prefer_forward_critic.hpp",
+        "include/nav2_mppi_controller/critics/twirling_critic.hpp",
+        "include/nav2_mppi_controller/critics/velocity_deadband_critic.hpp",
+        "include/nav2_mppi_controller/models/constraints.hpp",
+        "include/nav2_mppi_controller/models/control_sequence.hpp",
+        "include/nav2_mppi_controller/models/optimizer_settings.hpp",
+        "include/nav2_mppi_controller/models/path.hpp",
+        "include/nav2_mppi_controller/models/state.hpp",
+        "include/nav2_mppi_controller/models/trajectories.hpp",
+        "include/nav2_mppi_controller/motion_models.hpp",
+        "include/nav2_mppi_controller/optimal_trajectory_validator.hpp",
+        "include/nav2_mppi_controller/optimizer.hpp",
+        "include/nav2_mppi_controller/tools/noise_generator.hpp",
+        "include/nav2_mppi_controller/tools/parameters_handler.hpp",
+        "include/nav2_mppi_controller/tools/trajectory_visualizer.hpp",
+        "include/nav2_mppi_controller/tools/utils.hpp",
+    ],
+    includes = [
+        "include",
+        "include/nav2_mppi_controller",
+        "test",
+        "test/utils",
+    ],
+    local_defines = ros_local_defines() + [
+        'BTCPP_LIBRARY_VERSION=\\"4.10.0\\"',
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mppi_controller",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mppi_controller_library"],
+)
+
+cc_library(
+    name = "mppi_critics_library",
+    srcs = [
+        "src/critics/constraint_critic.cpp",
+        "src/critics/cost_critic.cpp",
+        "src/critics/goal_angle_critic.cpp",
+        "src/critics/goal_critic.cpp",
+        "src/critics/obstacles_critic.cpp",
+        "src/critics/path_align_critic.cpp",
+        "src/critics/path_angle_critic.cpp",
+        "src/critics/path_follow_critic.cpp",
+        "src/critics/prefer_forward_critic.cpp",
+        "src/critics/twirling_critic.cpp",
+        "src/critics/velocity_deadband_critic.cpp",
+    ],
+    hdrs = [
+        "include/nav2_mppi_controller/controller.hpp",
+        "include/nav2_mppi_controller/critic_data.hpp",
+        "include/nav2_mppi_controller/critic_function.hpp",
+        "include/nav2_mppi_controller/critic_manager.hpp",
+        "include/nav2_mppi_controller/critics/constraint_critic.hpp",
+        "include/nav2_mppi_controller/critics/cost_critic.hpp",
+        "include/nav2_mppi_controller/critics/goal_angle_critic.hpp",
+        "include/nav2_mppi_controller/critics/goal_critic.hpp",
+        "include/nav2_mppi_controller/critics/obstacles_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_align_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_angle_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_follow_critic.hpp",
+        "include/nav2_mppi_controller/critics/prefer_forward_critic.hpp",
+        "include/nav2_mppi_controller/critics/twirling_critic.hpp",
+        "include/nav2_mppi_controller/critics/velocity_deadband_critic.hpp",
+        "include/nav2_mppi_controller/models/constraints.hpp",
+        "include/nav2_mppi_controller/models/control_sequence.hpp",
+        "include/nav2_mppi_controller/models/optimizer_settings.hpp",
+        "include/nav2_mppi_controller/models/path.hpp",
+        "include/nav2_mppi_controller/models/state.hpp",
+        "include/nav2_mppi_controller/models/trajectories.hpp",
+        "include/nav2_mppi_controller/motion_models.hpp",
+        "include/nav2_mppi_controller/optimal_trajectory_validator.hpp",
+        "include/nav2_mppi_controller/optimizer.hpp",
+        "include/nav2_mppi_controller/tools/noise_generator.hpp",
+        "include/nav2_mppi_controller/tools/parameters_handler.hpp",
+        "include/nav2_mppi_controller/tools/trajectory_visualizer.hpp",
+        "include/nav2_mppi_controller/tools/utils.hpp",
+    ],
+    includes = [
+        "include",
+        "include/nav2_mppi_controller",
+        "test",
+        "test/utils",
+    ],
+    local_defines = ros_local_defines() + [
+        'BTCPP_LIBRARY_VERSION=\\"4.10.0\\"',
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mppi_critics",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mppi_critics_library"],
+)
+
+cc_library(
+    name = "mppi_motion_models_library",
+    srcs = ["src/motion_models.cpp"],
+    hdrs = [
+        "include/nav2_mppi_controller/controller.hpp",
+        "include/nav2_mppi_controller/critic_data.hpp",
+        "include/nav2_mppi_controller/critic_function.hpp",
+        "include/nav2_mppi_controller/critic_manager.hpp",
+        "include/nav2_mppi_controller/critics/constraint_critic.hpp",
+        "include/nav2_mppi_controller/critics/cost_critic.hpp",
+        "include/nav2_mppi_controller/critics/goal_angle_critic.hpp",
+        "include/nav2_mppi_controller/critics/goal_critic.hpp",
+        "include/nav2_mppi_controller/critics/obstacles_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_align_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_angle_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_follow_critic.hpp",
+        "include/nav2_mppi_controller/critics/prefer_forward_critic.hpp",
+        "include/nav2_mppi_controller/critics/twirling_critic.hpp",
+        "include/nav2_mppi_controller/critics/velocity_deadband_critic.hpp",
+        "include/nav2_mppi_controller/models/constraints.hpp",
+        "include/nav2_mppi_controller/models/control_sequence.hpp",
+        "include/nav2_mppi_controller/models/optimizer_settings.hpp",
+        "include/nav2_mppi_controller/models/path.hpp",
+        "include/nav2_mppi_controller/models/state.hpp",
+        "include/nav2_mppi_controller/models/trajectories.hpp",
+        "include/nav2_mppi_controller/motion_models.hpp",
+        "include/nav2_mppi_controller/optimal_trajectory_validator.hpp",
+        "include/nav2_mppi_controller/optimizer.hpp",
+        "include/nav2_mppi_controller/tools/noise_generator.hpp",
+        "include/nav2_mppi_controller/tools/parameters_handler.hpp",
+        "include/nav2_mppi_controller/tools/trajectory_visualizer.hpp",
+        "include/nav2_mppi_controller/tools/utils.hpp",
+    ],
+    includes = [
+        "include",
+        "include/nav2_mppi_controller",
+        "test",
+        "test/utils",
+    ],
+    local_defines = ros_local_defines() + [
+        'BTCPP_LIBRARY_VERSION=\\"4.10.0\\"',
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mppi_controller_library"],
+)
+
+cc_shared_library(
+    name = "mppi_motion_models",
+    dynamic_deps = DEPENDENCIES.keys() + [":mppi_controller"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mppi_motion_models_library"],
+)
+
+cc_library(
+    name = "mppi_trajectory_validators_library",
+    srcs = ["src/trajectory_validators/optimal_trajectory_validator.cpp"],
+    hdrs = [
+        "include/nav2_mppi_controller/controller.hpp",
+        "include/nav2_mppi_controller/critic_data.hpp",
+        "include/nav2_mppi_controller/critic_function.hpp",
+        "include/nav2_mppi_controller/critic_manager.hpp",
+        "include/nav2_mppi_controller/critics/constraint_critic.hpp",
+        "include/nav2_mppi_controller/critics/cost_critic.hpp",
+        "include/nav2_mppi_controller/critics/goal_angle_critic.hpp",
+        "include/nav2_mppi_controller/critics/goal_critic.hpp",
+        "include/nav2_mppi_controller/critics/obstacles_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_align_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_angle_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_follow_critic.hpp",
+        "include/nav2_mppi_controller/critics/prefer_forward_critic.hpp",
+        "include/nav2_mppi_controller/critics/twirling_critic.hpp",
+        "include/nav2_mppi_controller/critics/velocity_deadband_critic.hpp",
+        "include/nav2_mppi_controller/models/constraints.hpp",
+        "include/nav2_mppi_controller/models/control_sequence.hpp",
+        "include/nav2_mppi_controller/models/optimizer_settings.hpp",
+        "include/nav2_mppi_controller/models/path.hpp",
+        "include/nav2_mppi_controller/models/state.hpp",
+        "include/nav2_mppi_controller/models/trajectories.hpp",
+        "include/nav2_mppi_controller/motion_models.hpp",
+        "include/nav2_mppi_controller/optimal_trajectory_validator.hpp",
+        "include/nav2_mppi_controller/optimizer.hpp",
+        "include/nav2_mppi_controller/tools/noise_generator.hpp",
+        "include/nav2_mppi_controller/tools/parameters_handler.hpp",
+        "include/nav2_mppi_controller/tools/trajectory_visualizer.hpp",
+        "include/nav2_mppi_controller/tools/utils.hpp",
+    ],
+    includes = [
+        "include",
+        "include/nav2_mppi_controller",
+        "test",
+        "test/utils",
+    ],
+    local_defines = ros_local_defines() + [
+        'BTCPP_LIBRARY_VERSION=\\"4.10.0\\"',
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mppi_trajectory_validators",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mppi_trajectory_validators_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":mppi_controller",
+        ":mppi_critics",
+        ":mppi_motion_models",
+        ":mppi_trajectory_validators",
+    ],
+)
+
+register_ament_resource(
+    name = "res_nav2_mppi_controller__pluginlib__plugin",
+    category = "nav2_mppi_controller__pluginlib__plugin",
+    content = "share/nav2_mppi_controller/critics.xml\nshare/nav2_mppi_controller/trajectory_validators.xml\nshare/nav2_mppi_controller/motion_models.xml\n",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "critics.xml",
+        "motion_models.xml",
+        "trajectory_validators.xml",
+    ],
+    libraries = [
+        ":mppi_controller",
+        ":mppi_critics",
+        ":mppi_motion_models",
+        ":mppi_trajectory_validators",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "nav2_core",
+    plugins = ["mppic.xml"],
+    deps = [
+        ":res_nav2_mppi_controller__pluginlib__plugin",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@backward_ros//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_core//:ament_package",
+        "@nav2_costmap_2d//:ament_package",
+        "@nav2_msgs//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+cc_library(
+    name = "critics_test_utils_hdr",
+    includes = ["test"],
+    textual_hdrs = ["//test:utils_test.cpp"],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "Eigen3",
+        "angles",
+        "geometry_msgs",
+        "nav2_core",
+        "nav2_costmap_2d",
+        "nav2_ros_common",
+        "nav_msgs",
+        "pluginlib",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "std_msgs",
+        "tf2",
+        "tf2_geometry_msgs",
+        "tf2_ros",
+        "visualization_msgs",
+    ],
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        "include/nav2_mppi_controller/controller.hpp",
+        "include/nav2_mppi_controller/critic_data.hpp",
+        "include/nav2_mppi_controller/critic_function.hpp",
+        "include/nav2_mppi_controller/critic_manager.hpp",
+        "include/nav2_mppi_controller/critics/constraint_critic.hpp",
+        "include/nav2_mppi_controller/critics/cost_critic.hpp",
+        "include/nav2_mppi_controller/critics/goal_angle_critic.hpp",
+        "include/nav2_mppi_controller/critics/goal_critic.hpp",
+        "include/nav2_mppi_controller/critics/obstacles_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_align_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_angle_critic.hpp",
+        "include/nav2_mppi_controller/critics/path_follow_critic.hpp",
+        "include/nav2_mppi_controller/critics/prefer_forward_critic.hpp",
+        "include/nav2_mppi_controller/critics/twirling_critic.hpp",
+        "include/nav2_mppi_controller/critics/velocity_deadband_critic.hpp",
+        "include/nav2_mppi_controller/models/constraints.hpp",
+        "include/nav2_mppi_controller/models/control_sequence.hpp",
+        "include/nav2_mppi_controller/models/optimizer_settings.hpp",
+        "include/nav2_mppi_controller/models/path.hpp",
+        "include/nav2_mppi_controller/models/state.hpp",
+        "include/nav2_mppi_controller/models/trajectories.hpp",
+        "include/nav2_mppi_controller/motion_models.hpp",
+        "include/nav2_mppi_controller/optimal_trajectory_validator.hpp",
+        "include/nav2_mppi_controller/optimizer.hpp",
+        "include/nav2_mppi_controller/tools/noise_generator.hpp",
+        "include/nav2_mppi_controller/tools/parameters_handler.hpp",
+        "include/nav2_mppi_controller/tools/trajectory_visualizer.hpp",
+        "include/nav2_mppi_controller/tools/utils.hpp",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":mppi_controller",
+        ":mppi_critics",
+        ":mppi_motion_models",
+        ":mppi_trajectory_validators",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        ":res_nav2_mppi_controller__pluginlib__plugin",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@backward_ros//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@nav2_common//:ament_package",
+        "@nav2_core//:ament_package",
+        "@nav2_costmap_2d//:ament_package",
+        "@nav2_msgs//:ament_package",
+        "@nav2_ros_common//:ament_package",
+        "@nav2_util//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

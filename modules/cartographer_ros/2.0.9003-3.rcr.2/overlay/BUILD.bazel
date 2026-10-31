@@ -1,0 +1,398 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+DEPENDENCIES = {
+    "@builtin_interfaces//:cc_shared": "@builtin_interfaces//:cc",
+    "@cartographer//:cartographer": "@cartographer//:cartographer_library",
+    "@cartographer_ros_msgs//:cc_shared": "@cartographer_ros_msgs//:cc",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@nav_msgs//:cc_shared": "@nav_msgs//:cc",
+    "@pcl_conversions//:pcl_conversions": "@pcl_conversions//:pcl_conversions_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosbag2_storage//:rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+    "@rosdistro//cc:cairo": "@rosdistro//cc:cairo_library",
+    "@rosdistro//cc:glog": "@rosdistro//cc:glog_library",
+    "@rosdistro//cc:lua": "@rosdistro//cc:lua_library",
+    "@rosdistro//cc:protobuf": "@rosdistro//cc:protobuf_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_msgs//:cc_shared": "@tf2_msgs//:cc",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+    "@visualization_msgs//:cc_shared": "@visualization_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:absl_memory",
+    "@rosdistro//cc:absl_optional",
+    "@rosdistro//cc:absl_strings",
+    "@rosdistro//cc:absl_synchronization",
+    "@rosdistro//cc:eigen",
+]
+
+HDRS = [
+    "include/cartographer_ros/assets_writer.h",
+    "include/cartographer_ros/map_builder_bridge.h",
+    "include/cartographer_ros/metrics/family_factory.h",
+    "include/cartographer_ros/metrics/internal/counter.h",
+    "include/cartographer_ros/metrics/internal/family.h",
+    "include/cartographer_ros/metrics/internal/gauge.h",
+    "include/cartographer_ros/metrics/internal/histogram.h",
+    "include/cartographer_ros/msg_conversion.h",
+    "include/cartographer_ros/node.h",
+    "include/cartographer_ros/node_constants.h",
+    "include/cartographer_ros/node_options.h",
+    "include/cartographer_ros/offline_node.h",
+    "include/cartographer_ros/playable_bag.h",
+    "include/cartographer_ros/ros_log_sink.h",
+    "include/cartographer_ros/ros_map.h",
+    "include/cartographer_ros/ros_map_writing_points_processor.h",
+    "include/cartographer_ros/sensor_bridge.h",
+    "include/cartographer_ros/submap.h",
+    "include/cartographer_ros/tf_bridge.h",
+    "include/cartographer_ros/time_conversion.h",
+    "include/cartographer_ros/trajectory_options.h",
+    "include/cartographer_ros/urdf_reader.h",
+]
+
+cc_library(
+    name = "cartographer_ros_library",
+    srcs = [
+        "src/assets_writer.cpp",
+        "src/map_builder_bridge.cpp",
+        "src/metrics/family_factory.cpp",
+        "src/metrics/internal/family.cpp",
+        "src/metrics/internal/histogram.cpp",
+        "src/msg_conversion.cpp",
+        "src/node.cpp",
+        "src/node_constants.cpp",
+        "src/node_options.cpp",
+        "src/offline_node.cpp",
+        "src/playable_bag.cpp",
+        "src/ros_log_sink.cpp",
+        "src/ros_map.cpp",
+        "src/ros_map_writing_points_processor.cpp",
+        "src/sensor_bridge.cpp",
+        "src/submap.cpp",
+        "src/tf_bridge.cpp",
+        "src/time_conversion.cpp",
+        "src/trajectory_options.cpp",
+        "src/urdf_reader.cpp",
+    ],
+    hdrs = HDRS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+# Upstream builds cartographer_ros as a static library (plain add_library), so
+# each executable only links the objects it references. A shared library would
+# put offline_node.cpp's DEFINE_bool(collect_metrics) into every process next
+# to node_main.cpp's, and gflags aborts on the duplicate definition.
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+EXECUTABLES = {
+    "cartographer_assets_writer": "src/assets_writer_main.cpp",
+    "cartographer_node": "src/node_main.cpp",
+    "cartographer_occupancy_grid_node": "src/occupancy_grid_node_main.cpp",
+    "cartographer_offline_node": "src/offline_node_main.cpp",
+    "cartographer_pbstream_map_publisher": "src/pbstream_map_publisher_main.cpp",
+    "cartographer_pbstream_to_ros_map": "src/pbstream_to_ros_map_main.cpp",
+    "cartographer_rosbag_validate": "src/rosbag_validate_main.cpp",
+}
+
+[
+    cc_binary(
+        name = name,
+        srcs = [src],
+        data = [":ament_index"],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        local_defines = ros_local_defines(),
+        deps = DEPENDENCIES.values() + CC_DEPS + [":cartographer_ros_library"],
+    )
+    for name, src in EXECUTABLES.items()
+]
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "configuration_files/assets_writer_backpack_2d.lua",
+        "configuration_files/assets_writer_backpack_2d_ci.lua",
+        "configuration_files/assets_writer_backpack_3d.lua",
+        "configuration_files/assets_writer_ros_map.lua",
+        "configuration_files/backpack_2d.lua",
+        "configuration_files/backpack_2d_localization.lua",
+        "configuration_files/backpack_2d_localization_evaluation.lua",
+        "configuration_files/backpack_2d_server.lua",
+        "configuration_files/backpack_3d.lua",
+        "configuration_files/backpack_3d_localization.lua",
+        "configuration_files/demo_2d.rviz",
+        "configuration_files/demo_3d.rviz",
+        "configuration_files/mir-100-mapping.lua",
+        "configuration_files/pr2.lua",
+        "configuration_files/revo_lds.lua",
+        "configuration_files/taurob_tracker.lua",
+        "configuration_files/transform.lua",
+        "configuration_files/visualize_pbstream.lua",
+        "launch/assets_writer_backpack_2d.launch.py",
+        "launch/assets_writer_backpack_3d.launch.py",
+        "launch/assets_writer_ros_map.launch.py",
+        "launch/backpack_2d.launch.py",
+        "launch/backpack_3d.launch.py",
+        "launch/demo_backpack_2d.launch.py",
+        "launch/demo_backpack_2d_localization.launch.py",
+        "launch/demo_backpack_3d.launch.py",
+        "launch/demo_backpack_3d_localization.launch.py",
+        "launch/demo_revo_lds.launch.py",
+        "launch/demo_taurob_tracker.launch.py",
+        "launch/offline_backpack_2d.launch.py",
+        "launch/offline_backpack_3d.launch.py",
+        "launch/offline_mir_100_rviz.launch.py",
+        "launch/offline_node.launch.py",
+        "launch/taurob_tracker.launch.py",
+        "launch/visualize_pbstream.launch.py",
+        "urdf/backpack_2d.urdf",
+        "urdf/backpack_3d.urdf",
+        "urdf/mir-100.urdf",
+    ],
+    package_xml = "package.xml",
+    deps = ["@cartographer//:ament_index"],
+)
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    executables = EXECUTABLES.keys(),
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@cartographer//:ament_package",
+        "@cartographer_ros_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@launch//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pcl_conversions//:ament_package",
+        "@rclcpp//:ament_package",
+        "@robot_state_publisher//:ament_package",
+        "@ros_environment//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@urdf//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+# The demo_* launch files also run `ros2 bag play` on a user-supplied
+# bag_filename, so they need an external dataset (and the ros2 CLI) to run.
+
+launch_ros_binary(
+    name = "launch_assets_writer_backpack_2d_launch_py",
+    src = "launch/assets_writer_backpack_2d.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_assets_writer",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_assets_writer_backpack_3d_launch_py",
+    src = "launch/assets_writer_backpack_3d.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_assets_writer",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_assets_writer_ros_map_launch_py",
+    src = "launch/assets_writer_ros_map.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_assets_writer",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_backpack_2d_launch_py",
+    src = "launch/backpack_2d.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_node",
+        ":cartographer_occupancy_grid_node",
+        "@robot_state_publisher",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_backpack_3d_launch_py",
+    src = "launch/backpack_3d.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_node",
+        ":cartographer_occupancy_grid_node",
+        "@robot_state_publisher",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_demo_backpack_2d_launch_py",
+    src = "launch/demo_backpack_2d.launch.py",
+    deps = [
+        ":launch_backpack_2d_launch_py",
+        "@rviz2",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_demo_backpack_2d_localization_launch_py",
+    src = "launch/demo_backpack_2d_localization.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_node",
+        ":cartographer_occupancy_grid_node",
+        "@robot_state_publisher",
+        "@rviz2",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_demo_backpack_3d_launch_py",
+    src = "launch/demo_backpack_3d.launch.py",
+    deps = [
+        ":launch_backpack_3d_launch_py",
+        "@rviz2",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_demo_backpack_3d_localization_launch_py",
+    src = "launch/demo_backpack_3d_localization.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_node",
+        ":cartographer_occupancy_grid_node",
+        "@robot_state_publisher",
+        "@rviz2",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_demo_revo_lds_launch_py",
+    src = "launch/demo_revo_lds.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_node",
+        ":cartographer_occupancy_grid_node",
+        "@robot_state_publisher",
+        "@rviz2",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_demo_taurob_tracker_launch_py",
+    src = "launch/demo_taurob_tracker.launch.py",
+    deps = [
+        ":launch_taurob_tracker_launch_py",
+        "@rviz2",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_offline_backpack_2d_launch_py",
+    src = "launch/offline_backpack_2d.launch.py",
+    deps = [
+        ":launch_offline_node_launch_py",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_offline_backpack_3d_launch_py",
+    src = "launch/offline_backpack_3d.launch.py",
+    deps = [
+        ":launch_offline_node_launch_py",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_offline_mir_100_rviz_launch_py",
+    src = "launch/offline_mir_100_rviz.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_offline_node",
+        "@rviz2",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_offline_node_launch_py",
+    src = "launch/offline_node.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_occupancy_grid_node",
+        ":cartographer_offline_node",
+        "@rviz2",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_taurob_tracker_launch_py",
+    src = "launch/taurob_tracker.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_node",
+        ":cartographer_occupancy_grid_node",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_visualize_pbstream_launch_py",
+    src = "launch/visualize_pbstream.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":cartographer_node",
+        "@rviz2",
+    ],
+)

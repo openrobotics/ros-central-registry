@@ -1,0 +1,228 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@qt//:qt.bzl", "qt_cc_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+cc_library(
+    name = "_test_root_headers",
+    hdrs = [
+        "src/aerialmap_display.hpp",
+        "src/field.hpp",
+        "src/tile.hpp",
+        "src/tile_client.hpp",
+        "src/tile_object.hpp",
+    ],
+    includes = [],
+    deps = ["@rosdistro//cc:proj_library"],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
+    "@rosdistro//cc:OgreOverlay": "@rosdistro//cc:OgreOverlay_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:curl": "@rosdistro//cc:curl_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:proj": "@rosdistro//cc:proj_library",
+    "@rosdistro//cc:sqlite3": "@rosdistro//cc:sqlite3_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@rviz_common//:rviz_common": "@rviz_common//:rviz_common_library",
+    "@rviz_default_plugins//:rviz_default_plugins": "@rviz_default_plugins//:rviz_default_plugins_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+}
+
+CC_DEPS = [
+    ":_gen_textual_hdrs",
+    "@angles//:angles",
+    "@qtbase//:core",
+    "@qtbase//:gui",
+    "@qtbase//:network",
+    "@qtbase//:widgets",
+    "@qtsvg//:svg",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "_gen_textual_hdrs",
+    includes = ["_gen/include"],
+    textual_hdrs = [
+    ],
+)
+
+qt_cc_library(
+    name = "rviz_satellite_library",
+    srcs = [
+        "src/aerialmap_display.cpp",
+        "src/field.cpp",
+        "src/tile.cpp",
+        "src/tile_client.cpp",
+        "src/tile_object.cpp",
+    ],
+    hdrs = [
+        "src/aerialmap_display.hpp",
+        "src/tile_client.hpp",
+    ] + [
+        "src/field.hpp",
+        "src/tile.hpp",
+        "src/tile_object.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+        "-include",
+        "future",
+        "-include",
+        "QImage",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "src",
+    ],
+    local_defines = ros_local_defines() + [
+        "PLUGINLIB__DISABLE_BOOST_FUNCTIONS",
+        'RVIZ_SATELLITE_VERSION=\\"\\"',
+        "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = [
+        "src/aerialmap_display.hpp",
+        "src/tile_client.hpp",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+collect_transitive_dynamic_deps(
+    name = "link_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtsvg//:svg_shared",
+        "@qtbase//:widgets_shared",
+        "@qtbase//:network_shared",
+    ],
+)
+
+cc_shared_library(
+    name = "rviz_satellite",
+    dynamic_deps = [
+        ":link_dynamic_deps",
+        "@sensor_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rviz_satellite_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":rviz_satellite"],
+)
+
+# install(PROGRAMS demo/publish_demo_data DESTINATION lib/rviz_satellite)
+copy_file(
+    name = "publish_demo_data_py",
+    src = "demo/publish_demo_data",
+    out = "_gen/publish_demo_data.py",
+)
+
+py_binary(
+    name = "publish_demo_data",
+    srcs = [":publish_demo_data_py"],
+    data = [":ament_index"],
+    main = "_gen/publish_demo_data.py",
+    deps = [
+        "@rclpy",
+        "@sensor_msgs//:py",
+        requirement("numpy"),
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "demo/demo.launch.xml",
+        "demo/demo.rviz",
+        "icons/classes/AerialMap.svg",
+    ],
+    data_strip_prefixes = ["demo->launch"],
+    libraries = [":rviz_satellite"],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["plugin_description.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@angles//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "pluginlib",
+        "rclcpp",
+        "rviz_common",
+        "rviz_default_plugins",
+        "sensor_msgs",
+    ],
+    cmake_export_include_directories = False,
+    executables = [":publish_demo_data"],
+    libraries = [":rviz_satellite"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@angles//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rviz_common//:ament_package",
+        "@rviz_default_plugins//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+launch_ros_binary(
+    name = "demo_demo_launch_xml",
+    src = "demo/demo.launch.xml",
+    deps = [
+        ":publish_demo_data",
+        "@rviz2",
+        "@tf2_ros//:static_transform_publisher",
+    ],
+)

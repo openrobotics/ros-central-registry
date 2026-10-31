@@ -1,0 +1,392 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@qt//:qt.bzl", "qt_cc_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+cc_library(
+    name = "_test_root_headers",
+    hdrs = [
+        "include/multires_image/QGLMap.hpp",
+        "include/multires_image/multires_image_plugin.hpp",
+        "include/multires_image/multires_view.hpp",
+        "include/multires_image/multires_view_node.hpp",
+        "include/multires_image/tile.hpp",
+        "include/multires_image/tile_cache.hpp",
+        "include/multires_image/tile_set.hpp",
+        "include/multires_image/tile_set_layer.hpp",
+        "include/multires_image/tile_view.hpp",
+    ],
+    includes = [],
+)
+
+DEPENDENCIES = {
+    "@gps_msgs//:cc_shared": "@gps_msgs//:cc",
+    "@mapviz//:mapviz_core": "@mapviz//:mapviz_core_library",
+    "@mapviz_interfaces//:cc_shared": "@mapviz_interfaces//:cc",
+    "@marti_common_msgs//:cc_shared": "@marti_common_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:curl": "@rosdistro//cc:curl_library",
+    "@rosdistro//cc:geographiclib": "@rosdistro//cc:geographiclib_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:proj": "@rosdistro//cc:proj_library",
+    "@rosdistro//cc:sqlite3": "@rosdistro//cc:sqlite3_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@swri_math_util//:swri_math_util": "@swri_math_util//:swri_math_util_library",
+    "@swri_transform_util//:swri_transform_util": "@swri_transform_util//:swri_transform_util_library",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+}
+
+CC_DEPS = [
+    "@qtbase//:core",
+    "@qtbase//:gui",
+    "@qtbase//:opengl",
+    "@qtbase//:openglwidgets",
+    "@qtbase//:widgets",
+    "@qtsvg//:svg",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+genrule(
+    name = "uic_QGLMap",
+    srcs = ["src/QGLMap.ui"],
+    outs = ["ui_QGLMap.h"],
+    cmd = "$(execpath @qtbase//:uic) $< -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "uic_multires_config",
+    srcs = ["src/multires_config.ui"],
+    outs = ["ui_multires_config.h"],
+    cmd = "$(execpath @qtbase//:uic) $< -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+qt_cc_library(
+    name = "multires_image_library",
+    srcs = [
+        "src/tile.cpp",
+        "src/tile_cache.cpp",
+        "src/tile_set.cpp",
+        "src/tile_set_layer.cpp",
+    ],
+    hdrs = ["include/multires_image/tile_cache.hpp"] + [
+        "include/multires_image/QGLMap.hpp",
+        "include/multires_image/multires_image_plugin.hpp",
+        "include/multires_image/multires_view.hpp",
+        "include/multires_image/multires_view_node.hpp",
+        "include/multires_image/tile.hpp",
+        "include/multires_image/tile_set.hpp",
+        "include/multires_image/tile_set_layer.hpp",
+        "include/multires_image/tile_view.hpp",
+        ":ui_QGLMap.h",
+        ":ui_multires_config.h",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/multires_image",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+        "WFlags=WindowFlags",
+    ],
+    moc_hdrs = ["include/multires_image/tile_cache.hpp"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "multires_image",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtsvg//:svg_shared",
+        "@qtbase//:widgets_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:openglwidgets_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":multires_image_library"],
+)
+
+qt_cc_library(
+    name = "multires_widget_library",
+    srcs = [
+        "src/QGLMap.cpp",
+        "src/tile_view.cpp",
+    ],
+    hdrs = ["include/multires_image/QGLMap.hpp"] + [
+        "include/multires_image/multires_image_plugin.hpp",
+        "include/multires_image/multires_view.hpp",
+        "include/multires_image/multires_view_node.hpp",
+        "include/multires_image/tile.hpp",
+        "include/multires_image/tile_cache.hpp",
+        "include/multires_image/tile_set.hpp",
+        "include/multires_image/tile_set_layer.hpp",
+        "include/multires_image/tile_view.hpp",
+        ":ui_QGLMap.h",
+        ":ui_multires_config.h",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/multires_image",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+        "WFlags=WindowFlags",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = ["include/multires_image/QGLMap.hpp"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":multires_image_library"],
+)
+
+cc_shared_library(
+    name = "multires_widget",
+    dynamic_deps = DEPENDENCIES.keys() + [":multires_image"] + [
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtsvg//:svg_shared",
+        "@qtbase//:widgets_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:openglwidgets_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":multires_widget_library"],
+)
+
+qt_cc_library(
+    name = "multires_image_plugin_library",
+    srcs = [
+        "src/multires_image_plugin.cpp",
+        "src/multires_view.cpp",
+    ],
+    hdrs = ["include/multires_image/multires_image_plugin.hpp"] + [
+        "include/multires_image/QGLMap.hpp",
+        "include/multires_image/multires_view.hpp",
+        "include/multires_image/multires_view_node.hpp",
+        "include/multires_image/tile.hpp",
+        "include/multires_image/tile_cache.hpp",
+        "include/multires_image/tile_set.hpp",
+        "include/multires_image/tile_set_layer.hpp",
+        "include/multires_image/tile_view.hpp",
+        ":ui_QGLMap.h",
+        ":ui_multires_config.h",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/multires_image",
+    ],
+    local_defines = ros_local_defines() + [
+        "USE_NEW_TF2_ROS_CTORS=0",
+        "USE_NEW_TF2_TOMSG=1",
+        "WFlags=WindowFlags",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    moc_hdrs = ["include/multires_image/multires_image_plugin.hpp"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":multires_image_library",
+        ":multires_widget_library",
+    ],
+)
+
+cc_shared_library(
+    name = "multires_image_plugin",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":multires_image",
+        ":multires_widget",
+    ] + [
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtsvg//:svg_shared",
+        "@qtbase//:widgets_shared",
+        "@qtbase//:opengl_shared",
+        "@qtbase//:openglwidgets_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":multires_image_plugin_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":multires_image",
+        ":multires_widget",
+        ":multires_image_plugin",
+    ],
+)
+
+qt_cc_library(
+    name = "multires_view_node_library",
+    srcs = ["src/nodes/multires_view_node.cpp"],
+    hdrs = ["include/multires_image/multires_view_node.hpp"],
+    local_defines = ros_local_defines() + ["WFlags=WindowFlags"],
+    moc_hdrs = ["include/multires_image/multires_view_node.hpp"],
+    deps = [":multires_widget_library"],
+)
+
+cc_binary(
+    name = "multires_view_node",
+    data = [":ament_index"],
+    dynamic_deps = [
+        ":multires_widget",
+        ":transitive_dynamic_deps",
+    ],
+    deps = [":multires_view_node_library"],
+)
+
+# install(PROGRAMS nodes/mapviz_tile_loader DESTINATION lib/multires_image)
+copy_file(
+    name = "mapviz_tile_loader_py",
+    src = "nodes/mapviz_tile_loader",
+    out = "_gen/mapviz_tile_loader.py",
+)
+
+py_binary(
+    name = "mapviz_tile_loader",
+    srcs = [":mapviz_tile_loader_py"],
+    data = [":ament_index"],
+    main = "_gen/mapviz_tile_loader.py",
+    deps = [
+        "@geometry_msgs//:py",
+        "@gps_msgs//:py",
+        "@mapviz_interfaces//:py",
+        "@marti_common_msgs//:py",
+        "@rclpy",
+        requirement("pyproj"),
+        requirement("pyyaml"),
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "launch/mapviz_tile_loader.launch.py",
+        "launch/multires.launch.xml",
+    ],
+    libraries = [
+        ":multires_image",
+        ":multires_image_plugin",
+        ":multires_widget",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "mapviz",
+    plugins = ["mapviz_plugins.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@mapviz//:ament_package",
+        "@mapviz_interfaces//:ament_package",
+        "@marti_common_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@swri_transform_util//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    colcon_hooks = False,
+    executables = [
+        ":mapviz_tile_loader",
+        ":multires_view_node",
+    ],
+    install_package_xml = False,
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@mapviz//:ament_package",
+        "@mapviz_interfaces//:ament_package",
+        "@marti_common_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@swri_math_util//:ament_package",
+        "@swri_transform_util//:ament_package",
+        "@tf2//:ament_package",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_mapviz_tile_loader_launch_py",
+    src = "launch/mapviz_tile_loader.launch.py",
+    data = [
+        "@swri_transform_util//:ament_index",
+    ],
+    deps = [
+        ":mapviz_tile_loader",
+        "@mapviz",
+    ],
+)
+
+# Blocked on data: upstream points image_path at $(find-pkg-share test_data),
+# a package that does not exist in rosdistro.
+launch_ros_binary(
+    name = "launch_multires_launch_xml",
+    src = "launch/multires.launch.xml",
+    deps = [":multires_view_node"],
+)

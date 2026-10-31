@@ -1,0 +1,76 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {
+    "@action_msgs//:cc_shared": "@action_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@ros2_medkit_fault_reporter//:fault_reporter_lib": "@ros2_medkit_fault_reporter//:fault_reporter_lib_library",
+    "@ros2_medkit_msgs//:cc_shared": "@ros2_medkit_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+exports_files([
+    "test_action_status_bridge.cpp",
+    "test_integration.test.py",
+])
+
+cc_test(
+    name = "test_action_status_bridge",
+    srcs = ["test_action_status_bridge.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = ["//:ament_index"] + ["test_integration.test.py"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    includes = ["."],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        "//:action_status_bridge_lib_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_test(
+    name = "test_integration",
+    src = "test_integration.test.py",
+    data = [
+        "//:ament_index",
+        "@ros2_medkit_fault_manager//:ament_index",
+    ],
+    # Flaky under parallel test load (passes when run alone), so run it exclusively.
+    tags = ["exclusive"],
+    deps = [
+        "//:action_status_bridge_node",
+        "@action_msgs//:py",
+        "@ament_index_python",
+        "@rclpy",
+        "@ros2_medkit_fault_manager//:fault_manager_node",
+        "@ros2_medkit_msgs//:py",
+        "@unique_identifier_msgs//:py",
+    ],
+)

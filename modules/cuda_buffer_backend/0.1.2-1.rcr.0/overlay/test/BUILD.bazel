@@ -1,0 +1,133 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+# ament_add_gtest(test_cuda_buffer_backend). It only constructs and queries
+# the backend, but (like upstream, via CUDA::cuda_driver) libcuda_buffer.so
+# links the CUDA driver API, so the test binary can't even load without the
+# host's NVIDIA driver (libcuda.so.1). Run it explicitly on a GPU host with
+#   bazel test --config=cuda @cuda_buffer_backend//test:test_cuda_buffer_backend
+cc_test(
+    name = "test_cuda_buffer_backend",
+    srcs = ["test_cuda_buffer_backend.cpp"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    tags = [
+        "manual",
+        "requires-gpu",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        "//:cuda_buffer_backend_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# The rclcpp_components test components that the launch tests below load into
+# a component container. They allocate and exchange GPU memory.
+COMPONENT_DEPENDENCIES = {
+    "@cuda_buffer//:cuda_buffer": "@cuda_buffer//:cuda_buffer_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+}
+
+collect_transitive_dynamic_deps(
+    name = "component_dynamic_deps",
+    dynamic_deps = COMPONENT_DEPENDENCIES.keys(),
+)
+
+[
+    (
+        cc_library(
+            name = "cuda_image_{}_component_library".format(role),
+            srcs = ["src/cuda_image_{}_node.cpp".format(role)],
+            local_defines = ros_local_defines(),
+            target_compatible_with = ["@platforms//os:linux"],
+            deps = COMPONENT_DEPENDENCIES.values() + ["@rosdistro//cc:cuda_runtime"],
+            alwayslink = True,
+        ),
+        cc_shared_library(
+            name = "cuda_image_{}_component".format(role),
+            dynamic_deps = [":component_dynamic_deps"],
+            exports_filter = [":cuda_image_{}_component_library".format(role)],
+            target_compatible_with = ["@platforms//os:linux"],
+            deps = [":cuda_image_{}_component_library".format(role)],
+        ),
+        # rclcpp_components_register_nodes(): no standalone executable.
+        rclcpp_components_register_node(
+            name = "cuda_image_{}".format(role),
+            component = ":cuda_image_{}_component".format(role),
+            plugin = plugin,
+        ),
+    )
+    for role, plugin in {
+        "gpu_relay": "CudaImageGpuRelay",
+        "publisher": "CudaImagePublisher",
+        "subscriber": "CudaImageSubscriber",
+    }.items()
+]
+
+filegroup(
+    name = "component_nodes",
+    srcs = [
+        ":cuda_image_gpu_relay_record",
+        ":cuda_image_publisher_record",
+        ":cuda_image_subscriber_record",
+    ],
+)
+
+# add_launch_test(): every one of these moves images through GPU memory, so
+# they need a GPU and driver. Run explicitly on a GPU host with
+#   bazel test --config=cuda @cuda_buffer_backend//test:<name>
+[
+    launch_ros_test(
+        name = "test_cuda_image_{}_fastrtps_launch_py".format(kind),
+        src = "test_cuda_image_{}_fastrtps_launch.py".format(kind),
+        data = [
+            "//:ament_index",
+        ],
+        tags = [
+            "manual",
+            "requires-gpu",
+        ],
+        target_compatible_with = ["@platforms//os:linux"],
+        deps = [
+            "@rclcpp_components//:component_container",
+            "@rclpy",
+            "@sensor_msgs//:py",
+            "@std_msgs//:py",
+        ],
+    )
+    for kind in [
+        "cpu_fallback",
+        "gpu_pipeline",
+        "inter_pubsub",
+        "intra_pubsub",
+        "mixed_no_duplicate",
+        "mixed_pubsub",
+        "multi_pub",
+        "multiprocess",
+    ]
+]

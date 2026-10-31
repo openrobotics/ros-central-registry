@@ -1,0 +1,345 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+HEADERS = [
+    "include/laser_filters/angular_bounds_filter.h",
+    "include/laser_filters/angular_bounds_filter_in_place.h",
+    "include/laser_filters/array_filter.h",
+    "include/laser_filters/binning_filter.h",
+    "include/laser_filters/box_filter.h",
+    "include/laser_filters/footprint_filter.h",
+    "include/laser_filters/intensity_filter.h",
+    "include/laser_filters/interpolation_filter.h",
+    "include/laser_filters/median_filter.h",
+    "include/laser_filters/median_spatial_filter.h",
+    "include/laser_filters/polygon_filter.h",
+    "include/laser_filters/range_filter.h",
+    "include/laser_filters/scan_blob_filter.h",
+    "include/laser_filters/scan_mask_filter.h",
+    "include/laser_filters/scan_shadow_detector.h",
+    "include/laser_filters/scan_shadows_filter.h",
+    "include/laser_filters/sector_filter.h",
+    "include/laser_filters/speckle_filter.h",
+]
+
+DEPENDENCIES = {
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@laser_geometry//:laser_geometry": "@laser_geometry//:laser_geometry_library",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_kdl//:tf2_kdl": "@tf2_kdl//:tf2_kdl_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+}
+
+cc_library(
+    name = "laser_scan_filters_library",
+    srcs = ["src/laser_scan_filters.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@angles",
+        "@filters",
+    ],
+)
+
+cc_shared_library(
+    name = "laser_scan_filters",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":laser_scan_filters_library"],
+)
+
+cc_library(
+    name = "laser_filter_chains_library",
+    srcs = [
+        "src/scan_to_cloud_filter_chain.cpp",
+        "src/scan_to_cloud_filter_chain.hpp",
+        "src/scan_to_scan_filter_chain.cpp",
+        "src/scan_to_scan_filter_chain.hpp",
+    ],
+    hdrs = HEADERS,
+    includes = [
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@angles",
+        "@filters",
+    ],
+)
+
+cc_shared_library(
+    name = "laser_filter_chains",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":laser_filter_chains_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        ":laser_filter_chains",
+        ":laser_scan_filters",
+        "@sensor_msgs//:cc_shared",
+    ],
+)
+
+rclcpp_components_register_node(
+    name = "scan_to_cloud_filter_chain",
+    component = ":laser_filter_chains",
+    executor = "SingleThreadedExecutor",
+    node_name = "scan_to_cloud_filter_chain",
+    plugin = "ScanToCloudFilterChain",
+)
+
+rclcpp_components_register_node(
+    name = "scan_to_scan_filter_chain",
+    component = ":laser_filter_chains",
+    executor = "SingleThreadedExecutor",
+    node_name = "scan_to_scan_filter_chain",
+    plugin = "ScanToScanFilterChain",
+)
+
+cc_binary(
+    name = "generic_laser_filter_node",
+    srcs = ["src/generic_laser_filter_node.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":laser_filter_chains_library",
+        ":laser_scan_filters_library",
+        "@angles",
+        "@filters//:filter_chain",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":scan_to_cloud_filter_chain_record",
+        ":scan_to_scan_filter_chain_record",
+    ],
+    data = [
+        "examples/angular_filter_example.launch.py",
+        "examples/angular_filter_example.yaml",
+        "examples/bin_filter_example.launch.py",
+        "examples/bin_filter_example.yaml",
+        "examples/box_filter_example.launch.py",
+        "examples/box_filter_example.yaml",
+        "examples/footprint_filter_example.launch.py",
+        "examples/footprint_filter_example.yaml",
+        "examples/intensity_filter_example.launch.py",
+        "examples/intensity_filter_example.yaml",
+        "examples/mask_filter_example.launch.py",
+        "examples/mask_filter_example.yaml",
+        "examples/median_filter_example.launch.py",
+        "examples/median_filter_example.yaml",
+        "examples/median_spatial_filter.launch.py",
+        "examples/median_spatial_filter.launch.xml",
+        "examples/median_spatial_filter_example.yaml",
+        "examples/multiple_filters_example.launch.py",
+        "examples/multiple_filters_example.yaml",
+        "examples/pass_through_example.launch.py",
+        "examples/pass_through_example.yaml",
+        "examples/polygon_filter_example.launch.py",
+        "examples/polygon_filter_example.yaml",
+        "examples/range_filter_example.launch.py",
+        "examples/range_filter_example.yaml",
+        "examples/scan_blob_filter_example.launch.py",
+        "examples/scan_blob_filter_example.yaml",
+        "examples/sector_filter_example.launch.py",
+        "examples/sector_filter_example.yaml",
+        "examples/shadow_filter_example.launch.py",
+        "examples/shadow_filter_example.yaml",
+        "examples/speckle_filter_example.launch",
+        "examples/speckle_filter_example.yaml",
+    ] + ["//test:_root_test_files_0"],
+    export_name = "laser_filters",
+    lib_data = [
+        ":generic_laser_filter_node",
+        ":scan_to_cloud_filter_chain",
+        ":scan_to_scan_filter_chain",
+    ],
+    libraries = [
+        ":laser_scan_filters",
+        ":laser_filter_chains",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "filters",
+    plugins = ["laser_filters_plugins.xml"],
+    deps = ["@filters//:ament_index"],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_targets = False,
+    executables = [
+        ":generic_laser_filter_node",
+        ":scan_to_cloud_filter_chain",
+        ":scan_to_scan_filter_chain",
+    ],
+    headers = HEADERS,
+    libraries = [
+        ":laser_scan_filters",
+        ":laser_filter_chains",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@angles//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@filters//:ament_package",
+        "@laser_geometry//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@message_filters//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_kdl//:ament_package",
+        "@tf2_ros//:ament_package",
+    ],
+)
+
+launch_ros_binary(
+    name = "examples_angular_filter_example_launch_py",
+    src = "examples/angular_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_bin_filter_example_launch_py",
+    src = "examples/bin_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_box_filter_example_launch_py",
+    src = "examples/box_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_footprint_filter_example_launch_py",
+    src = "examples/footprint_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_intensity_filter_example_launch_py",
+    src = "examples/intensity_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_mask_filter_example_launch_py",
+    src = "examples/mask_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_median_filter_example_launch_py",
+    src = "examples/median_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_median_spatial_filter_launch_py",
+    src = "examples/median_spatial_filter.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_median_spatial_filter_launch_xml",
+    src = "examples/median_spatial_filter.launch.xml",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_multiple_filters_example_launch_py",
+    src = "examples/multiple_filters_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_pass_through_example_launch_py",
+    src = "examples/pass_through_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_polygon_filter_example_launch_py",
+    src = "examples/polygon_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_range_filter_example_launch_py",
+    src = "examples/range_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_scan_blob_filter_example_launch_py",
+    src = "examples/scan_blob_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_sector_filter_example_launch_py",
+    src = "examples/sector_filter_example.launch.py",
+    data = [":ament_index"],
+)
+
+launch_ros_binary(
+    name = "examples_shadow_filter_example_launch_py",
+    src = "examples/shadow_filter_example.launch.py",
+    data = [":ament_index"],
+)

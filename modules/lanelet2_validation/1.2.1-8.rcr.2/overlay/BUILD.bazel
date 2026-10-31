@@ -1,0 +1,144 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    "@lanelet2_core//:lanelet2_core": "@lanelet2_core//:lanelet2_core_library",
+    "@lanelet2_io//:lanelet2_io": "@lanelet2_io//:lanelet2_io_library",
+    "@lanelet2_projection//:lanelet2_projection": "@lanelet2_projection//:lanelet2_projection_library",
+    "@lanelet2_routing//:lanelet2_routing": "@lanelet2_routing//:lanelet2_routing_library",
+    "@lanelet2_traffic_rules//:lanelet2_traffic_rules": "@lanelet2_traffic_rules//:lanelet2_traffic_rules_library",
+    "@rosdistro//cc:boost.program_options_shared": "@rosdistro//cc:boost.program_options_library",
+}
+
+CC_DEPS = [
+]
+
+HEADERS = [
+    "include/lanelet2_validation/BasicValidator.h",
+    "include/lanelet2_validation/Cli.h",
+    "include/lanelet2_validation/Issue.h",
+    "include/lanelet2_validation/Validation.h",
+    "include/lanelet2_validation/ValidatorFactory.h",
+    "include/lanelet2_validation/validators/mapping/BoolTags.h",
+    "include/lanelet2_validation/validators/mapping/CurvatureTooBig.h",
+    "include/lanelet2_validation/validators/mapping/DuplicatedPoints.h",
+    "include/lanelet2_validation/validators/mapping/MandatoryTags.h",
+    "include/lanelet2_validation/validators/mapping/PointsTooClose.h",
+    "include/lanelet2_validation/validators/mapping/UnknownTagValue.h",
+    "include/lanelet2_validation/validators/mapping/UnknownTags.h",
+    "include/lanelet2_validation/validators/routing/RoutingGraphIsValid.h",
+]
+
+cc_library(
+    name = "lanelet2_validation_library",
+    srcs = [
+        "src/BasicValidator.cpp",
+        "src/Cli.cpp",
+        "src/Validation.cpp",
+        "src/ValidatorFactory.cpp",
+        "src/validators/CheckTags.cpp",
+        "src/validators/CurvatureTooBig.cpp",
+        "src/validators/DuplicatedPoints.cpp",
+        "src/validators/PointsTooClose.cpp",
+        "src/validators/RoutingGraphIsValid.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "lanelet2_validation",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":lanelet2_validation_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":lanelet2_validation"],
+)
+
+cc_binary(
+    name = "lanelet2_validate",
+    srcs = ["tools/lanelet2_validate/main.cpp"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":lanelet2_validation_library"],
+)
+
+# mrt_add_tests(test): one gtest per test/*.cpp.
+cc_test(
+    name = "lanelet2_validation-gtest-lanelet2_validation",
+    srcs = [
+        "test/lanelet2_validation.cpp",
+    ],
+    data = [
+        "@lanelet2_maps//:ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["test"],
+    deps = [
+        ":lanelet2_validation_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
+ament_index(
+    name = "ament_index",
+    libraries = [":lanelet2_validation"],
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    build_type = "cmake",
+    cmake_export_targets = False,
+    executables = [
+        ":lanelet2_validate",
+    ],
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [":lanelet2_validation"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_core//:ament_package",
+        "@lanelet2_core//:ament_package",
+        "@lanelet2_io//:ament_package",
+        "@lanelet2_maps//:ament_package",
+        "@lanelet2_projection//:ament_package",
+        "@lanelet2_routing//:ament_package",
+        "@lanelet2_traffic_rules//:ament_package",
+        "@mrt_cmake_modules//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

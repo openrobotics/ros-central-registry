@@ -1,0 +1,285 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosidl_default_generators//:defs.bzl", "default_generators", "rosidl_ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    ":cc_shared": ":cc",
+    "@builtin_interfaces//:cc_shared": "@builtin_interfaces//:cc",
+    "@camera_info_manager//:camera_info_manager": "@camera_info_manager//:camera_info_manager_library",
+    "@image_transport//:image_transport": "@image_transport//:image_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:openni2": "@rosdistro//cc:openni2_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "openni2_wrapper_library",
+    srcs = [
+        "src/openni2_convert.cpp",
+        "src/openni2_device.cpp",
+        "src/openni2_device_info.cpp",
+        "src/openni2_device_manager.cpp",
+        "src/openni2_exception.cpp",
+        "src/openni2_frame_listener.cpp",
+        "src/openni2_timer_filter.cpp",
+        "src/openni2_video_mode.cpp",
+    ],
+    hdrs = [
+        "include/openni2_camera/openni2_convert.h",
+        "include/openni2_camera/openni2_device.h",
+        "include/openni2_camera/openni2_device_info.h",
+        "include/openni2_camera/openni2_device_manager.h",
+        "include/openni2_camera/openni2_driver.h",
+        "include/openni2_camera/openni2_exception.h",
+        "include/openni2_camera/openni2_frame_listener.h",
+        "include/openni2_camera/openni2_timer_filter.h",
+        "include/openni2_camera/openni2_video_mode.h",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/openni2_camera",
+        "_gen/include/openni2_camera/openni2_camera",
+        "include",
+        "include/openni2_camera",
+    ],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+collect_transitive_dynamic_deps(
+    name = "wrapper_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_shared_library(
+    name = "openni2_wrapper",
+    dynamic_deps = [
+        ":cc_shared",
+        ":wrapper_dynamic_deps",
+        "@builtin_interfaces//:cc_shared",
+        "@sensor_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":openni2_wrapper_library"],
+)
+
+cc_library(
+    name = "openni2_camera_lib_library",
+    srcs = ["src/openni2_driver.cpp"],
+    hdrs = [
+        "include/openni2_camera/openni2_convert.h",
+        "include/openni2_camera/openni2_device.h",
+        "include/openni2_camera/openni2_device_info.h",
+        "include/openni2_camera/openni2_device_manager.h",
+        "include/openni2_camera/openni2_driver.h",
+        "include/openni2_camera/openni2_exception.h",
+        "include/openni2_camera/openni2_frame_listener.h",
+        "include/openni2_camera/openni2_timer_filter.h",
+        "include/openni2_camera/openni2_video_mode.h",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/openni2_camera",
+        "_gen/include/openni2_camera/openni2_camera",
+        "include",
+        "include/openni2_camera",
+    ],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":openni2_wrapper_library",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":openni2_wrapper"],
+)
+
+cc_shared_library(
+    name = "openni2_camera_lib",
+    dynamic_deps = [
+        ":cc_shared",
+        ":transitive_dynamic_deps",
+        "@builtin_interfaces//:cc_shared",
+        "@sensor_msgs//:cc_shared",
+    ],
+    deps = [":openni2_camera_lib_library"],
+)
+
+rclcpp_components_register_node(
+    name = "openni2_camera_driver",
+    component = ":openni2_camera_lib",
+    data = [
+        ":ament_index_extra",
+    ],
+    node_name = "openni2_camera_driver",
+    plugin = "openni2_wrapper::OpenNI2Driver",
+)
+
+cc_binary(
+    name = "list_devices",
+    srcs = ["src/list_devices.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/openni2_camera",
+        "_gen/include/openni2_camera/openni2_camera",
+        "include",
+        "include/openni2_camera",
+    ],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":openni2_wrapper_library",
+    ],
+)
+
+cc_binary(
+    name = "usb_reset",
+    srcs = ["src/usb_reset.c"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/openni2_camera",
+        "_gen/include/openni2_camera/openni2_camera",
+        "include",
+        "include/openni2_camera",
+    ],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+default_generators(
+    package_xml = "package.xml",
+    deps = ["//srv:GetSerial"],
+)
+
+ament_index(
+    name = "ament_index_extra",
+    components = [":openni2_camera_driver_record"],
+    data = ["//launch:launch_files"],
+    export_name = "openni2_camera",
+    lib_data = [
+        ":list_devices",
+        ":usb_reset",
+    ],
+    libraries = [
+        ":openni2_wrapper",
+        ":openni2_camera_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@camera_info_manager//:ament_package",
+        "@depth_image_proc//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+rosidl_ament_package(
+    cmake_export_dependencies_list = [
+        "builtin_interfaces",
+        "camera_info_manager",
+        "fastcdr",
+        "image_transport",
+        "rclcpp",
+        "rcutils",
+        "rmw",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_cpp",
+        "rosidl_typesupport_fastrtps_c",
+        "rosidl_typesupport_fastrtps_cpp",
+        "rosidl_typesupport_interface",
+        "sensor_msgs",
+        "service_msgs",
+    ],
+    executables = [
+        ":openni2_camera_driver",
+    ],
+    headers = [
+        "include/openni2_camera/openni2_convert.h",
+        "include/openni2_camera/openni2_device.h",
+        "include/openni2_camera/openni2_device_info.h",
+        "include/openni2_camera/openni2_device_manager.h",
+        "include/openni2_camera/openni2_driver.h",
+        "include/openni2_camera/openni2_exception.h",
+        "include/openni2_camera/openni2_frame_listener.h",
+        "include/openni2_camera/openni2_timer_filter.h",
+        "include/openni2_camera/openni2_video_mode.h",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":openni2_wrapper",
+        ":openni2_camera_lib",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index_extra"] + [
+        "@ament_cmake//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@camera_info_manager//:ament_package",
+        "@depth_image_proc//:ament_package",
+        "@image_transport//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

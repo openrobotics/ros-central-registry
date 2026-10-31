@@ -18,25 +18,21 @@ module(
 
 # BCR deps
 
-bazel_dep(name = "aspect_rules_py", version = "1.11.7")
-bazel_dep(name = "llvm", version = "0.8.11")
+bazel_dep(name = "llvm", version = "0.8.25.rcr.0")
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "protobuf", version = "35.1")
-bazel_dep(name = "rules_cc", version = "0.2.22")
+bazel_dep(name = "protobuf", version = "36.2")
+bazel_dep(name = "rules_cc", version = "0.2.26.rcr.0")
+bazel_dep(name = "rules_cuda", version = "0.3.0.rcr.0")
 bazel_dep(name = "rules_go", version = "0.60.0")
 bazel_dep(name = "rules_license", version = "1.0.0")
-bazel_dep(name = "rules_python", version = "2.2.0")
-bazel_dep(name = "rules_qt", version = "0.0.7")
-bazel_dep(name = "rules_rs", version = "0.0.111")
-bazel_dep(name = "rules_rust", version = "0.71.3")
+bazel_dep(name = "rules_python", version = "2.4.1")
+bazel_dep(name = "rules_rs", version = "0.1.0")
 bazel_dep(name = "rules_shell", version = "0.8.0")
 
 ## RCR deps
 
-# Load the 'perception' variant for lyrical/2026-06-08. The second patch
-# release (.rcr.2) fixes an upstream rules_rs bug and adds support for
-# multiple Python versions.
-bazel_dep(name = "perception", version = "lyrical.2026-06-08.rcr.2")
+# Load the latest release of perception.
+bazel_dep(name = "perception", version = "lyrical.2026-10-05.rcr.0")
 
 # Make the following packages visible to this project. We use the dummy package
 # version "0.0.0" to satisfy Bazel's need for a version, but be guaranteed that
@@ -76,8 +72,8 @@ bazel_dep(name = "std_msgs", version = "0.0.0")
 # These are not part of the "perception" variant, so we need to bring them
 # in with an explicit version to support the ROSCon 2026 presentation,
 # and include rclc-based examples for publication and subscription.
-bazel_dep(name = "turtlesim", version = "1.10.9-1.rcr.2")
-bazel_dep(name = "rclc", version = "6.3.0-3.rcr.1")
+bazel_dep(name = "turtlesim", version = "1.10.9-1.rcr.3")
+bazel_dep(name = "rclc", version = "6.3.0-3.rcr.2")
 
 ## BOOTSTRAP
 
@@ -86,6 +82,11 @@ register_toolchains("@llvm//toolchain:all")
 
 # Extend the hermetic macOS SDK sysroot (@llvm//extensions:osx.bzl) with the
 # frameworks our dependencies needed on OSX.
+# WebKit and JavaScriptCore (QtWebView's macOS plugin) are symlinks into
+# System/Cryptexes/OS in the macOS 26 SDK; the staged llvm module's
+# osx_cryptex_frameworks.patch (bcr_staging/modules/llvm/*/patches/)
+# extracts the link targets too, so they resolve (the darwin sandbox rejects
+# dangling links whenever macOS is the execution platform).
 osx = use_extension("@llvm//extensions:osx.bzl", "osx")
 osx.frameworks(
     names = [
@@ -96,15 +97,19 @@ osx.frameworks(
         "AppKit",
         "ApplicationServices",
         "AudioToolbox",
+        "AudioUnit",
         "CFNetwork",
+        "Carbon",
         "CloudKit",
         "Cocoa",
         "ColorSync",
         "CoreAudio",
         "CoreAudioTypes",
+        "CoreBluetooth",
         "CoreData",
         "CoreFoundation",
         "CoreGraphics",
+        "CoreHaptics",
         "CoreImage",
         "CoreLocation",
         "CoreMIDI",
@@ -114,37 +119,108 @@ osx.frameworks(
         "CoreVideo",
         "DiskArbitration",
         "FontServices",
+        "ForceFeedback",
         "Foundation",
+        "GameController",
+        "IOBluetooth",
         "IOKit",
         "IOSurface",
+        "JavaScriptCore",
         "ImageIO",
         "Kernel",
         "MediaToolbox",
         "Metal",
+        "MetalKit",
+        "ModelIO",
+        "Network",
         "OSLog",
         "OpenGL",
+        "PCSC",
         "PrintCore",
         "QuartzCore",
         "Security",
         "Symbols",
         "SystemConfiguration",
         "UniformTypeIdentifiers",
+        "VideoToolbox",
+        "WebKit",
         "_LocationEssentials",
     ],
 )
 
-# Python / pip
+# QtPrintSupport on macOS (qcocoaprintdevice.mm) uses the CUPS PPD API and
+# links -lcups; libcups.tbd is not in the default minimal sysroot.
+osx.libraries(names = ["libcups"])
+
+# Python configuration
+
+PYTHON_VERSIONS = [
+    "3.11",
+    "3.12",
+    "3.13",
+    "3.14",
+]
+
+DEFAULT_PYTHON_VERSION = "3.12"
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
-python.toolchain(
-    is_default = True,
-    python_version = "3.12",
+
+[
+    python.toolchain(
+        is_default = v == DEFAULT_PYTHON_VERSION,
+        python_version = v,
+    )
+    for v in PYTHON_VERSIONS
+]
+
+uv = use_extension("@rules_python//python/uv:uv.bzl", "uv")
+uv.configure(version = "0.9.7")
+
+# C++ configuration
+
+llvm = use_extension("@llvm//extensions:llvm.bzl", "llvm")
+
+# Pin the LLVM release used for libc++/compiler-rt sources (see
+# tools/ci/setup_workspace.py:LLVM_VERSION for why this is held back).
+llvm.version(llvm_version = "21.1.8")
+
+# Backends built into the from-source `@llvm-project` overlay (libclang for
+# qttools' lupdate/qdoc). The prebuilt cross-compiler always has every
+# backend, so this does not limit which `--platforms` we can target.
+llvm.configure(
+    targets = [
+        "AArch64",
+        "X86",
+    ],
 )
+use_repo(llvm, "llvm-project")
 
-pip_ros = use_extension("@rosdistro//python:defs.bzl", "pip_ros")
-use_repo(pip_ros, "pip_ros")
+# Hermetic CUDA toolkit (see tools/ci/setup_workspace.py:CUDA_REDIST_VERSION).
+# Unused unless a build passes --config=cuda.
+cuda = use_extension("@rules_cuda//cuda:extensions.bzl", "toolchain")
+cuda.redist_json(
+    name = "rules_cuda_redist_json",
+    components = [
+        "cccl",
+        "cublas",
+        "cudart",
+        "cufft",
+        "cupti",
+        "curand",
+        "cusolver",
+        "cusparse",
+        "nvcc",
+        "nvjitlink",
+        "nvml",
+        "nvrtc",
+        "nvtx",
+    ],
+    version = "12.8.1",
+)
+cuda.toolkit(name = "cuda")
+use_repo(cuda, "cuda")
 
-# Rust / crates
+# Rust configuration
 
 rs_toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
 rs_toolchains.toolchain(
@@ -156,34 +232,3 @@ use_repo(rs_toolchains, "default_rust_toolchains")
 register_toolchains(
     "@default_rust_toolchains//...",
 )
-
-# C++ configuration
-
-qt = use_extension("@rules_qt//extension:qt.bzl", "fetch")
-qt.install(
-    name = "qt_linux_x86_64",
-    build_file = "@rules_qt//extension:qt/6.8.3/linux_x86_64.BUILD",
-    os = "linux_x86_64",
-    version = "6.8.3",
-)
-qt.install(
-    name = "qt_linux_aarch64",
-    build_file = "@rules_qt//extension:qt/6.8.3/linux_aarch64.BUILD",
-    os = "linux_aarch64",
-    version = "6.8.3",
-)
-qt.install(
-    name = "qt_mac_aarch64",
-    build_file = "@rules_qt//extension:qt/6.8.3/mac_aarch64.BUILD",
-    os = "macos",
-    version = "6.8.3",
-)
-qt.install(
-    name = "qt_mac_x86_64",
-    build_file = "@rules_qt//extension:qt/6.8.3/mac_aarch64.BUILD",
-    os = "macos",
-    version = "6.8.3",
-)
-use_repo(qt, "qt_linux_aarch64", "qt_linux_x86_64", "qt_mac_aarch64", "qt_mac_x86_64")
-
-register_toolchains("@rules_qt//tools:all")

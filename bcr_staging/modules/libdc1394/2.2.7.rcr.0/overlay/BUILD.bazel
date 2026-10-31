@@ -1,0 +1,241 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Bazel build of libdc1394-2, mirroring dc1394/Makefile.am (+ its juju/,
+# usb/ and vendor/ convenience libraries) for what upstream's configure
+# selects on Linux when libusb-1.0 is found but libraw1394 is not:
+#
+#   * HAVE_LINUX       -> juju backend (kernel "firewire-cdev" stack; uses
+#                         only the bundled firewire-cdev.h, no libraw1394)
+#   * HAVE_LIBUSB      -> usb backend (libusb-1.0)
+#   * HAVE_LIBRAW1394  -> legacy video1394/raw1394 backend: NOT built,
+#                         libraw1394 is not on the BCR. That stack was removed
+#                         from the Linux kernel in 2.6.37; juju replaces it.
+#
+# The SDL/OpenGL/Xv checks only affect the example programs, which are not
+# built. Upstream installs headers to <prefix>/include/dc1394/, so consumers
+# write `#include <dc1394/dc1394.h>`.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc_autoconf//autoconf:autoconf.bzl", "autoconf")
+load("@rules_cc_autoconf//autoconf:autoconf_hdr.bzl", "autoconf_hdr")
+load("@rules_cc_autoconf//autoconf:checks.bzl", "checks")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:LGPL-2.1-or-later"],
+    license_text = "COPYING",
+)
+
+exports_files(["COPYING"])
+
+autoconf(
+    name = "config_checks",
+    checks = [
+        # AC_INIT([libdc1394],[2.2.7],[libdc1394-devel@lists.sf.net])
+        checks.AC_DEFINE("PACKAGE", '"libdc1394"'),
+        checks.AC_DEFINE("PACKAGE_BUGREPORT", '"libdc1394-devel@lists.sf.net"'),
+        checks.AC_DEFINE("PACKAGE_NAME", '"libdc1394"'),
+        checks.AC_DEFINE("PACKAGE_STRING", '"libdc1394 2.2.7"'),
+        checks.AC_DEFINE("PACKAGE_TARNAME", '"libdc1394"'),
+        checks.AC_DEFINE("PACKAGE_URL", '""'),
+        checks.AC_DEFINE("PACKAGE_VERSION", '"2.2.7"'),
+        checks.AC_DEFINE("VERSION", '"2.2.7"'),
+        checks.AC_DEFINE("LT_OBJDIR", '".libs/"'),
+
+        # Platform / optional library selection (see header comment).
+        checks.AC_DEFINE("HAVE_LINUX", "1"),
+        checks.AC_DEFINE("HAVE_LIBUSB", "1"),
+
+        # LT_INIT, AC_HEADER_STDC and
+        # AC_CHECK_HEADERS(stdint.h fcntl.h sys/ioctl.h unistd.h sys/mman.h netinet/in.h)
+        checks.AC_CHECK_HEADER(
+            "dlfcn.h",
+            define = "HAVE_DLFCN_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "fcntl.h",
+            define = "HAVE_FCNTL_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "inttypes.h",
+            define = "HAVE_INTTYPES_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "memory.h",
+            define = "HAVE_MEMORY_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "netinet/in.h",
+            define = "HAVE_NETINET_IN_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "stdint.h",
+            define = "HAVE_STDINT_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "stdlib.h",
+            define = "HAVE_STDLIB_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "strings.h",
+            define = "HAVE_STRINGS_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "string.h",
+            define = "HAVE_STRING_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "sys/ioctl.h",
+            define = "HAVE_SYS_IOCTL_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "sys/mman.h",
+            define = "HAVE_SYS_MMAN_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "sys/param.h",
+            define = "HAVE_SYS_PARAM_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "sys/stat.h",
+            define = "HAVE_SYS_STAT_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "sys/types.h",
+            define = "HAVE_SYS_TYPES_H",
+        ),
+        checks.AC_CHECK_HEADER(
+            "unistd.h",
+            define = "HAVE_UNISTD_H",
+        ),
+        checks.AC_DEFINE("STDC_HEADERS", "1"),
+
+        # AC_FUNC_MMAP
+        checks.AC_CHECK_FUNC(
+            "getpagesize",
+            define = "HAVE_GETPAGESIZE",
+        ),
+        checks.AC_CHECK_FUNC(
+            "mmap",
+            define = "HAVE_MMAP",
+        ),
+    ],
+)
+
+# config.h.in ships in the release tarball (autoheader output).
+autoconf_hdr(
+    name = "config_h",
+    out = "generated/config.h",
+    template = "config.h.in",
+    deps = [":config_checks"],
+)
+
+cc_library(
+    name = "config",
+    hdrs = [":config_h"],
+    strip_include_prefix = "generated",
+    visibility = ["//visibility:private"],
+)
+
+# Mirrors AM_CFLAGS = -I$(top_srcdir) -I$(top_srcdir)/dc1394 used by every
+# sub-library: sources include "config.h", "platform.h", "dc1394/internal.h",
+# "../internal.h" etc.
+cc_library(
+    name = "internal_hdrs",
+    hdrs = glob([
+        "dc1394/*.h",
+        "dc1394/juju/*.h",
+        "dc1394/usb/*.h",
+        "dc1394/vendor/*.h",
+    ]),
+    includes = [
+        ".",
+        "dc1394",
+    ],
+    visibility = ["//visibility:private"],
+    deps = [":config"],
+)
+
+PUBLIC_HDRS = [
+    "dc1394/camera.h",
+    "dc1394/capture.h",
+    "dc1394/control.h",
+    "dc1394/conversions.h",
+    "dc1394/dc1394.h",
+    "dc1394/format7.h",
+    "dc1394/iso.h",
+    "dc1394/log.h",
+    "dc1394/register.h",
+    "dc1394/types.h",
+    "dc1394/utils.h",
+    "dc1394/video.h",
+    "dc1394/vendor/avt.h",
+    "dc1394/vendor/basler.h",
+    "dc1394/vendor/basler_sff.h",
+    "dc1394/vendor/pixelink.h",
+]
+
+cc_library(
+    name = "dc1394",
+    srcs = [
+        # libdc1394_la_SOURCES
+        "dc1394/bayer.c",
+        "dc1394/capture.c",
+        "dc1394/control.c",
+        "dc1394/conversions.c",
+        "dc1394/enumeration.c",
+        "dc1394/format7.c",
+        "dc1394/internal.c",
+        "dc1394/iso.c",
+        "dc1394/log.c",
+        "dc1394/register.c",
+        "dc1394/utils.c",
+        # juju/libdc1394-juju.la (HAVE_LINUX)
+        "dc1394/juju/capture.c",
+        "dc1394/juju/control.c",
+        # usb/libdc1394-usb.la (HAVE_LIBUSB)
+        "dc1394/usb/capture.c",
+        "dc1394/usb/control.c",
+        # vendor/libdc1394-vendor.la
+        "dc1394/vendor/avt.c",
+        "dc1394/vendor/basler.c",
+        "dc1394/vendor/basler_sff_registry.c",
+        "dc1394/vendor/pixelink.c",
+    ],
+    hdrs = PUBLIC_HDRS,
+    copts = ["-std=gnu99"],
+    implementation_deps = [
+        ":internal_hdrs",
+        "@libusb",
+    ],
+    include_prefix = "dc1394",
+    linkopts = [
+        "-lm",
+        "-pthread",
+    ],
+    strip_include_prefix = "dc1394",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+alias(
+    name = "libdc1394",
+    actual = ":dc1394",
+)

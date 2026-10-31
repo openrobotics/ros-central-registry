@@ -1,0 +1,37 @@
+--- a/src/wl_init.c
++++ b/src/wl_init.c
+@@ -28,6 +28,7 @@
+ 
+ #if defined(_GLFW_WAYLAND)
+ 
++#include <dlfcn.h>
+ #include <errno.h>
+ #include <limits.h>
+ #include <linux/input.h>
+@@ -656,7 +657,25 @@
+     _glfw.wl.egl.window_resize = (PFN_wl_egl_window_resize)
+         _glfwPlatformGetModuleSymbol(_glfw.wl.egl.handle, "wl_egl_window_resize");
+ 
+-    _glfw.wl.xkb.handle = _glfwPlatformLoadModule("libxkbcommon.so.0");
++    // Prefer an xkbcommon that is already linked into the process (e.g. one
++    // bundled into a shared library this program depends on) over dlopen()ing
++    // the system copy: with two xkbcommon builds in one process, each one's
++    // exported symbols interpose the other's internal calls, which crashes on
++    // the first keyboard event.
++    {
++        void* self = dlopen(NULL, RTLD_LAZY);
++        if (self && dlsym(self, "xkb_context_new") &&
++            dlsym(self, "xkb_compose_table_new_from_locale"))
++        {
++            _glfw.wl.xkb.handle = self;
++        }
++        else
++        {
++            if (self)
++                dlclose(self);
++            _glfw.wl.xkb.handle = _glfwPlatformLoadModule("libxkbcommon.so.0");
++        }
++    }
+     if (!_glfw.wl.xkb.handle)
+     {
+         _glfwInputError(GLFW_PLATFORM_ERROR,

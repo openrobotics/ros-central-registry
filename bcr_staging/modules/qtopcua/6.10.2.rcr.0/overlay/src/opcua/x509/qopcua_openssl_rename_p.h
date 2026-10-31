@@ -1,0 +1,83 @@
+// Bazel overlay (not part of upstream Qt): force-included into :opcua_x509.
+//
+// QtOpcUa's openssl_symbols.cpp defines global q_<openssl function> wrappers
+// with the same names (and some of the same signatures) as qtbase's OpenSSL
+// TLS backend (qsslsocket_openssl_symbols.cpp). Upstream they live in different
+// shared objects; here both are linked statically into the same binary, so
+// give QtOpcUa's copies a distinct prefix.
+
+#ifndef QOPCUA_OPENSSL_RENAME_P_H
+#define QOPCUA_OPENSSL_RENAME_P_H
+
+#define q_ASN1_INTEGER_dup qopcua_q_ASN1_INTEGER_dup
+#define q_ASN1_INTEGER_free qopcua_q_ASN1_INTEGER_free
+#define q_ASN1_INTEGER_new qopcua_q_ASN1_INTEGER_new
+#define q_ASN1_OCTET_STRING_free qopcua_q_ASN1_OCTET_STRING_free
+#define q_ASN1_OCTET_STRING_new qopcua_q_ASN1_OCTET_STRING_new
+#define q_ASN1_OCTET_STRING_set qopcua_q_ASN1_OCTET_STRING_set
+#define q_AUTHORITY_KEYID_free qopcua_q_AUTHORITY_KEYID_free
+#define q_AUTHORITY_KEYID_new qopcua_q_AUTHORITY_KEYID_new
+#define q_BIO_ctrl qopcua_q_BIO_ctrl
+#define q_BIO_free_all qopcua_q_BIO_free_all
+#define q_BIO_new qopcua_q_BIO_new
+#define q_BIO_new_mem_buf qopcua_q_BIO_new_mem_buf
+#define q_BIO_s_mem qopcua_q_BIO_s_mem
+#define q_ERR_error_string_n qopcua_q_ERR_error_string_n
+#define q_ERR_get_error qopcua_q_ERR_get_error
+#define q_EVP_PKEY_CTX_free qopcua_q_EVP_PKEY_CTX_free
+#define q_EVP_PKEY_CTX_new_id qopcua_q_EVP_PKEY_CTX_new_id
+#define q_EVP_PKEY_free qopcua_q_EVP_PKEY_free
+#define q_EVP_PKEY_get_base_id qopcua_q_EVP_PKEY_get_base_id
+#define q_EVP_PKEY_keygen qopcua_q_EVP_PKEY_keygen
+#define q_EVP_PKEY_keygen_init qopcua_q_EVP_PKEY_keygen_init
+#define q_EVP_aes_128_cbc qopcua_q_EVP_aes_128_cbc
+#define q_EVP_sha1 qopcua_q_EVP_sha1
+#define q_EVP_sha256 qopcua_q_EVP_sha256
+#define q_GENERAL_NAMES_new qopcua_q_GENERAL_NAMES_new
+#define q_GENERAL_NAME_new qopcua_q_GENERAL_NAME_new
+#define q_OBJ_txt2obj qopcua_q_OBJ_txt2obj
+#define q_OPENSSL_init_crypto qopcua_q_OPENSSL_init_crypto
+#define q_OPENSSL_sk_pop_free qopcua_q_OPENSSL_sk_pop_free
+#define q_OPENSSL_sk_push qopcua_q_OPENSSL_sk_push
+#define q_PEM_read_bio_PUBKEY qopcua_q_PEM_read_bio_PUBKEY
+#define q_PEM_read_bio_PrivateKey qopcua_q_PEM_read_bio_PrivateKey
+#define q_PEM_write_bio_PKCS8PrivateKey qopcua_q_PEM_write_bio_PKCS8PrivateKey
+#define q_PEM_write_bio_PUBKEY qopcua_q_PEM_write_bio_PUBKEY
+#define q_PEM_write_bio_X509 qopcua_q_PEM_write_bio_X509
+#define q_PEM_write_bio_X509_REQ qopcua_q_PEM_write_bio_X509_REQ
+#define q_RSA_pkey_ctx_ctrl qopcua_q_RSA_pkey_ctx_ctrl
+#define q_X509V3_EXT_conf_nid qopcua_q_X509V3_EXT_conf_nid
+#define q_X509_EXTENSION_free qopcua_q_X509_EXTENSION_free
+#define q_X509_EXTENSION_set_critical qopcua_q_X509_EXTENSION_set_critical
+#define q_X509_NAME_add_entry_by_OBJ qopcua_q_X509_NAME_add_entry_by_OBJ
+#define q_X509_NAME_digest qopcua_q_X509_NAME_digest
+#define q_X509_NAME_dup qopcua_q_X509_NAME_dup
+#define q_X509_REQ_add_extensions qopcua_q_X509_REQ_add_extensions
+#define q_X509_REQ_free qopcua_q_X509_REQ_free
+#define q_X509_REQ_get_subject_name qopcua_q_X509_REQ_get_subject_name
+#define q_X509_REQ_new qopcua_q_X509_REQ_new
+#define q_X509_REQ_set_pubkey qopcua_q_X509_REQ_set_pubkey
+#define q_X509_REQ_set_version qopcua_q_X509_REQ_set_version
+#define q_X509_REQ_sign qopcua_q_X509_REQ_sign
+#define q_X509_add1_ext_i2d qopcua_q_X509_add1_ext_i2d
+#define q_X509_add_ext qopcua_q_X509_add_ext
+#define q_X509_free qopcua_q_X509_free
+#define q_X509_get_ext_d2i qopcua_q_X509_get_ext_d2i
+#define q_X509_get_issuer_name qopcua_q_X509_get_issuer_name
+#define q_X509_get_serialNumber qopcua_q_X509_get_serialNumber
+#define q_X509_get_subject_name qopcua_q_X509_get_subject_name
+#define q_X509_getm_notAfter qopcua_q_X509_getm_notAfter
+#define q_X509_getm_notBefore qopcua_q_X509_getm_notBefore
+#define q_X509_gmtime_adj qopcua_q_X509_gmtime_adj
+#define q_X509_new qopcua_q_X509_new
+#define q_X509_pubkey_digest qopcua_q_X509_pubkey_digest
+#define q_X509_set_pubkey qopcua_q_X509_set_pubkey
+#define q_X509_set_serialNumber qopcua_q_X509_set_serialNumber
+#define q_X509_set_version qopcua_q_X509_set_version
+#define q_X509_sign qopcua_q_X509_sign
+#define q_getTimeFromASN1 qopcua_q_getTimeFromASN1
+#define q_i2d_X509_REQ_bio qopcua_q_i2d_X509_REQ_bio
+#define q_i2d_X509_bio qopcua_q_i2d_X509_bio
+#define q_resolveOpenSslSymbols qopcua_q_resolveOpenSslSymbols
+
+#endif // QOPCUA_OPENSSL_RENAME_P_H

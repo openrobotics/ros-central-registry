@@ -1,0 +1,60 @@
+#ifndef GPSD_CONFIG_H
+#define VERSION "3.25"
+#define REVISION "3.25"
+#define GPSD_PROTO_VERSION_MAJOR 3
+#define GPSD_PROTO_VERSION_MINOR 15
+#define GPSD_URL "https://gpsd.io"
+#if !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+#if !defined(_DEFAULT_SOURCE)
+#define _DEFAULT_SOURCE
+#endif
+#if !defined(_BSD_SOURCE)
+#define _BSD_SOURCE
+#endif
+#if !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
+#if !defined(__APPLE__)
+#define HAVE_LIBRT 1
+#define HAVE_LINUX_CAN_H 1
+#define HAVE_LINUX_SERIAL_H 1
+#define HAVE_SYS_SYSMACROS_H 1
+#define STRERROR_R_STR
+#else
+#define HAVE_STRLCAT 1
+#define HAVE_STRLCPY 1
+#endif
+#define HAVE_STDATOMIC_H 1
+#define HAVE_BUILTIN_ENDIANNESS 1
+#define HAVE_ARPA_INET_H 1
+#define HAVE_NETDB_H 1
+#define HAVE_NETINET_IN_H 1
+#define HAVE_NETINET_IP_H 1
+#define HAVE_SYS_SOCKET_H 1
+#define HAVE_SYS_UN_H 1
+#define HAVE_SYSLOG_H 1
+#define HAVE_TERMIOS_H 1
+#define SIZEOF_TIME_T 8
+#define HAVE_CFMAKERAW 1
+#define HAVE_CLOCK_GETTIME 1
+#define HAVE_DAEMON 1
+#define HAVE_FCNTL 1
+#define HAVE_FORK 1
+#define HAVE_GETOPT_LONG 1
+#define HAVE_GMTIME_R 1
+#define HAVE_INET_NTOP 1
+#define HAVE_STRNLEN 1
+#define HAVE_STRPTIME 1
+#define SOCKET_EXPORT_ENABLE 1
+#define SHM_EXPORT_ENABLE 1
+#define IPV6_ENABLE 1
+#define NETFEED_ENABLE 1
+#define PASSTHROUGH_ENABLE 1
+#define RTCM104V2_ENABLE 1
+#define RTCM104V3_ENABLE 1
+#define AIVDM_ENABLE 1
+#define NMEA0183_ENABLE 1
+#define GPSD_CONFIG_H
+#endif

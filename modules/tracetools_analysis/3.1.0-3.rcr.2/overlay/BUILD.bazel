@@ -1,0 +1,189 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+[py_pytest(
+    name = "test_{0}".format(linter),
+    srcs = ["//test:test_{0}.py".format(linter)],
+    data = [
+        ".coveragerc",
+        "CHANGELOG.rst",
+        "analysis/callback_duration.ipynb",
+        "analysis/lifecycle_states.ipynb",
+        "analysis/memory_usage.ipynb",
+        "analysis/sample_data/converted_pingpong",
+        "docs/Makefile",
+        "docs/source/about.rst",
+        "docs/source/api.rst",
+        "docs/source/api/tracetools_analysis.rst",
+        "docs/source/conf.py",
+        "docs/source/index.rst",
+        "package.xml",
+        "resource/tracetools_analysis",
+        "setup.cfg",
+        "setup.py",
+        "tracetools_analysis/__init__.py",
+        "tracetools_analysis/conversion/__init__.py",
+        "tracetools_analysis/conversion/ctf.py",
+        "tracetools_analysis/convert.py",
+        "tracetools_analysis/data_model/__init__.py",
+        "tracetools_analysis/data_model/cpu_time.py",
+        "tracetools_analysis/data_model/memory_usage.py",
+        "tracetools_analysis/data_model/profile.py",
+        "tracetools_analysis/data_model/ros2.py",
+        "tracetools_analysis/loading/__init__.py",
+        "tracetools_analysis/process.py",
+        "tracetools_analysis/processor/__init__.py",
+        "tracetools_analysis/processor/cpu_time.py",
+        "tracetools_analysis/processor/memory_usage.py",
+        "tracetools_analysis/processor/profile.py",
+        "tracetools_analysis/processor/ros2.py",
+        "tracetools_analysis/scripts/__init__.py",
+        "tracetools_analysis/scripts/auto.py",
+        "tracetools_analysis/scripts/cb_durations.py",
+        "tracetools_analysis/scripts/memory_usage.py",
+        "tracetools_analysis/utils/__init__.py",
+        "tracetools_analysis/utils/cpu_time.py",
+        "tracetools_analysis/utils/memory_usage.py",
+        "tracetools_analysis/utils/profile.py",
+        "tracetools_analysis/utils/ros2.py",
+    ],
+    deps = ["@ament_{0}".format(linter)],
+) for linter in [
+    "copyright",
+    "flake8",
+    "mypy",
+    "pep257",
+    "xmllint",
+]]
+
+py_library(
+    name = "tracetools_analysis",
+    srcs = [
+        "tracetools_analysis/__init__.py",
+        "tracetools_analysis/conversion/__init__.py",
+        "tracetools_analysis/conversion/ctf.py",
+        "tracetools_analysis/convert.py",
+        "tracetools_analysis/data_model/__init__.py",
+        "tracetools_analysis/data_model/cpu_time.py",
+        "tracetools_analysis/data_model/memory_usage.py",
+        "tracetools_analysis/data_model/profile.py",
+        "tracetools_analysis/data_model/ros2.py",
+        "tracetools_analysis/loading/__init__.py",
+        "tracetools_analysis/process.py",
+        "tracetools_analysis/processor/__init__.py",
+        "tracetools_analysis/processor/cpu_time.py",
+        "tracetools_analysis/processor/memory_usage.py",
+        "tracetools_analysis/processor/profile.py",
+        "tracetools_analysis/processor/ros2.py",
+        "tracetools_analysis/scripts/__init__.py",
+        "tracetools_analysis/scripts/auto.py",
+        "tracetools_analysis/scripts/cb_durations.py",
+        "tracetools_analysis/scripts/memory_usage.py",
+        "tracetools_analysis/utils/__init__.py",
+        "tracetools_analysis/utils/cpu_time.py",
+        "tracetools_analysis/utils/memory_usage.py",
+        "tracetools_analysis/utils/profile.py",
+        "tracetools_analysis/utils/ros2.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@tracetools_read",
+        "@tracetools_trace",
+        requirement("numpy"),
+        requirement("packaging"),
+        requirement("pandas"),
+    ],
+)
+
+[
+    (
+        write_file(
+            name = "{0}_entry".format(script),
+            out = "{0}_entry.py".format(script),
+            content = [
+                "import sys",
+                "from {0} import main".format(module),
+                "sys.exit(main())",
+                "",
+            ],
+        ),
+        py_binary(
+            name = script,
+            srcs = [":{0}_entry".format(script)],
+            data = [":ament_index"],
+            main = "{0}_entry.py".format(script),
+            deps = [":tracetools_analysis"],
+        ),
+    )
+    for script, module in [
+        ("auto", "tracetools_analysis.scripts.auto"),
+        ("cb_durations", "tracetools_analysis.scripts.cb_durations"),
+        ("convert", "tracetools_analysis.convert"),
+        ("memory_usage", "tracetools_analysis.scripts.memory_usage"),
+        ("process", "tracetools_analysis.process"),
+    ]
+]
+
+ament_index(
+    name = "ament_index",
+    data = ["//launch:launch_files"],
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    console_scripts = {
+        "auto": "tracetools_analysis.scripts.auto:main",
+        "cb_durations": "tracetools_analysis.scripts.cb_durations:main",
+        "convert": "tracetools_analysis.convert:main",
+        "memory_usage": "tracetools_analysis.scripts.memory_usage:main",
+        "process": "tracetools_analysis.process:main",
+    },
+    executables = [
+        ":auto",
+        ":cb_durations",
+        ":convert",
+        ":memory_usage",
+        ":process",
+    ],
+    package_xml = "package.xml",
+    python = [":tracetools_analysis"],
+    deps = [":ament_index"] + [
+        "@ament_copyright//:ament_package",
+        "@ament_flake8//:ament_package",
+        "@ament_mypy//:ament_package",
+        "@ament_pep257//:ament_package",
+        "@ament_xmllint//:ament_package",
+        "@rosdistro//:ament_package",
+        "@tracetools_read//:ament_package",
+        "@tracetools_trace//:ament_package",
+    ],
+)

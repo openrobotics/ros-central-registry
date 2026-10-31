@@ -1,0 +1,81 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+}
+
+BINARY_DEPENDENCIES = DEPENDENCIES | {"//:mode": "//:mode_library"}
+
+cc_binary(
+    name = "modes_observer_test_node",
+    srcs = ["launchtest/modes_observer_test_node.cpp"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = BINARY_DEPENDENCIES.values(),
+)
+
+genrule(
+    name = "modefiles_h",
+    srcs = [
+        "modefiles.h.in",
+        "test_modes.yaml",
+        "test_modes_rules.yaml",
+        "test_modes_wrong.yaml",
+    ],
+    outs = ["generated/system_modes/modefiles.h"],
+    cmd = "sed" + " -e 's|@MODE_FILE_CORRECT@|$(rootpath test_modes.yaml)|'" + " -e 's|@MODE_FILE_RULES@|$(rootpath test_modes_rules.yaml)|'" + " -e 's|@MODE_FILE_WRONG@|$(rootpath test_modes_wrong.yaml)|'" + " $(location modefiles.h.in) > $@",
+)
+
+cc_library(
+    name = "modefiles",
+    hdrs = [":modefiles_h"],
+    includes = ["generated"],
+    visibility = ["//visibility:private"],
+)
+
+[cc_test(
+    name = test.removesuffix(".py"),
+    timeout = "moderate",
+    srcs = ["{}.cpp".format(test)],
+    data = [
+        "test_modes.yaml",
+        "test_modes_rules.yaml",
+        "test_modes_wrong.yaml",
+    ] + ["//:ament_index"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = BINARY_DEPENDENCIES.values() + extra + [
+        ":modefiles",
+        "@rosdistro//cc:googletest",
+    ],
+) for test, extra in {
+    "test_default_mode": [],
+    "test_mode": [],
+    "test_mode_handling": [],
+    "test_mode_inference": [],
+    "test_mode_manager": ["//:mode_manager_library"],
+    "test_mode_monitor": ["//:mode_monitor_library"],
+    "test_mode_observer": [],
+    "test_state_and_mode_struct": [],
+}.items()]

@@ -1,0 +1,187 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Zlib",
+    ],
+    license_text = "LICENSE.md",
+)
+
+cmake_configure_file(
+    name = "ois_prereqs_h",
+    src = "includes/OISPrereqs.h.in",
+    out = "includes/OISPrereqs.h",
+    defines = [
+        "OIS_MAJOR_VERSION=1",
+        "OIS_MINOR_VERSION=5",
+        "OIS_PATCH_VERSION=1",
+        "OIS_SOVERSION=1.5.0",
+    ],
+)
+
+OIS_PUBLIC_HEADERS = [
+    "includes/OIS.h",
+    "includes/OISConfig.h",
+    "includes/OISEffect.h",
+    "includes/OISEvents.h",
+    "includes/OISException.h",
+    "includes/OISFactoryCreator.h",
+    "includes/OISForceFeedback.h",
+    "includes/OISInputManager.h",
+    "includes/OISInterface.h",
+    "includes/OISJoyStick.h",
+    "includes/OISKeyboard.h",
+    "includes/OISMouse.h",
+    "includes/OISMultiTouch.h",
+    "includes/OISObject.h",
+    ":ois_prereqs_h",
+]
+
+# Expose headers under both <OIS/*.h> and <*.h> so consumers using either
+# include convention resolve cleanly.
+cc_library(
+    name = "ois_prefixed_headers",
+    hdrs = OIS_PUBLIC_HEADERS,
+    include_prefix = "OIS",
+    strip_include_prefix = "includes",
+)
+
+[
+    genrule(
+        name = "copy_" + name,
+        srcs = ["src/mac/" + name + ".mm"],
+        outs = ["src/mac/" + name + ".cc"],
+        cmd = "cp $< $@",
+    )
+    for name in [
+        "CocoaInputManager",
+        "CocoaJoyStick",
+        "CocoaKeyboard",
+        "CocoaMouse",
+    ]
+]
+
+cc_library(
+    name = "ois",
+    srcs = [
+        "src/OISEffect.cpp",
+        "src/OISException.cpp",
+        "src/OISForceFeedback.cpp",
+        "src/OISInputManager.cpp",
+        "src/OISJoyStick.cpp",
+        "src/OISKeyboard.cpp",
+        "src/OISObject.cpp",
+    ] + select({
+        "@platforms//os:linux": [
+            "includes/linux/EventHelpers.h",
+            "includes/linux/LinuxForceFeedback.h",
+            "includes/linux/LinuxInputManager.h",
+            "includes/linux/LinuxJoyStickEvents.h",
+            "includes/linux/LinuxKeyboard.h",
+            "includes/linux/LinuxMouse.h",
+            "includes/linux/LinuxPrereqs.h",
+            "src/linux/EventHelpers.cpp",
+            "src/linux/LinuxForceFeedback.cpp",
+            "src/linux/LinuxInputManager.cpp",
+            "src/linux/LinuxJoyStickEvents.cpp",
+            "src/linux/LinuxKeyboard.cpp",
+            "src/linux/LinuxMouse.cpp",
+        ],
+        "@platforms//os:macos": [
+            "includes/mac/CocoaHelpers.h",
+            "includes/mac/CocoaInputManager.h",
+            "includes/mac/CocoaJoyStick.h",
+            "includes/mac/CocoaKeyboard.h",
+            "includes/mac/CocoaMouse.h",
+            "includes/mac/MacHIDManager.h",
+            "includes/mac/MacHelpers.h",
+            "includes/mac/MacInputManager.h",
+            "includes/mac/MacJoyStick.h",
+            "includes/mac/MacKeyboard.h",
+            "includes/mac/MacMouse.h",
+            "includes/mac/MacPrereqs.h",
+            "src/mac/CocoaInputManager.cc",
+            "src/mac/CocoaJoyStick.cc",
+            "src/mac/CocoaKeyboard.cc",
+            "src/mac/CocoaMouse.cc",
+            "src/mac/MacHIDManager.cpp",
+            "src/mac/MacHelpers.cpp",
+            "src/mac/MacInputManager.cpp",
+            "src/mac/MacJoyStick.cpp",
+            "src/mac/MacKeyboard.cpp",
+            "src/mac/MacMouse.cpp",
+        ],
+        "@platforms//os:windows": [
+            "includes/win32/Win32ForceFeedback.h",
+            "includes/win32/Win32InputManager.h",
+            "includes/win32/Win32JoyStick.h",
+            "includes/win32/Win32KeyBoard.h",
+            "includes/win32/Win32Mouse.h",
+            "includes/win32/Win32Prereqs.h",
+            "src/win32/Win32ForceFeedback.cpp",
+            "src/win32/Win32InputManager.cpp",
+            "src/win32/Win32JoyStick.cpp",
+            "src/win32/Win32KeyBoard.cpp",
+            "src/win32/Win32Mouse.cpp",
+        ],
+        "//conditions:default": [],
+    }),
+    hdrs = OIS_PUBLIC_HEADERS,
+    copts = select({
+        "@platforms//os:macos": [
+            "-x",
+            "objective-c++",
+        ],
+        "@platforms//os:windows": [
+            "-DOIS_WIN32_XINPUT_SUPPORT",
+        ],
+        "//conditions:default": [],
+    }),
+    includes = ["includes"] + select({
+        "@platforms//os:linux": ["includes/linux"],
+        "@platforms//os:macos": ["includes/mac"],
+        "@platforms//os:windows": ["includes/win32"],
+        "//conditions:default": [],
+    }),
+    linkopts = select({
+        "@platforms//os:macos": [
+            "-framework Cocoa",
+            "-framework Foundation",
+            "-framework IOKit",
+        ],
+        "@platforms//os:windows": [
+            "-ldinput8",
+            "-ldxguid",
+            "-lxinput",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":ois_prefixed_headers",
+    ] + select({
+        "@platforms//os:linux": ["@libx11"],
+        "//conditions:default": [],
+    }),
+)

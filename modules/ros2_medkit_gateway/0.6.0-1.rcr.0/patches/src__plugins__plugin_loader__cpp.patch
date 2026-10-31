@@ -1,0 +1,48 @@
+--- a/src/plugins/plugin_loader.cpp
++++ b/src/plugins/plugin_loader.cpp
+@@ -120,10 +120,17 @@
+     return tl::make_unexpected("Plugin path must be absolute: " + plugin_path);
+   }
+ 
+-  // Gateway plugins are always unversioned .so files loaded by explicit path.
+-  // Versioned sonames (libfoo.so.1) are a system packaging concern and not supported.
+-  if (fs_path.extension() != ".so") {
+-    return tl::make_unexpected("Plugin path must have .so extension: " + plugin_path);
++  // Gateway plugins are always unversioned shared libraries (.so, or .dylib on
++  // macOS) loaded by explicit path. Versioned sonames (libfoo.so.1) are a
++  // system packaging concern and not supported.
++#if defined(__APPLE__)
++  constexpr const char * kPluginExtension = ".dylib";
++#else
++  constexpr const char * kPluginExtension = ".so";
++#endif
++  if (fs_path.extension() != kPluginExtension) {
++    return tl::make_unexpected(
++        std::string("Plugin path must have ") + kPluginExtension + " extension: " + plugin_path);
+   }
+ 
+   std::error_code ec;
+@@ -133,12 +140,20 @@
+   }
+ 
+   // Re-check extension after symlink resolution
+-  if (canonical_path.extension() != ".so") {
+-    return tl::make_unexpected("Plugin path must have .so extension after resolving symlinks: " + plugin_path);
++  if (canonical_path.extension() != kPluginExtension) {
++    return tl::make_unexpected(std::string("Plugin path must have ") + kPluginExtension +
++                               " extension after resolving symlinks: " + plugin_path);
+   }
+ 
+   // --- dlopen ---
+-  void * handle = dlopen(canonical_path.c_str(), RTLD_NOW | RTLD_LOCAL);
++  // RTLD_NODELETE keeps the plugin's code/rodata pages mapped across dlclose()
++  // during GatewayNode teardown. GatewayNode inherits from rclcpp::Node, so its
++  // base-class destructor (~Node -> ~CallbackGroup) runs AFTER ~PluginManager()
++  // destroys plugins; any rclcpp subscriptions/timers/clients created by a
++  // plugin leave expired std::weak_ptr control blocks in CallbackGroup whose
++  // vtables reside in the plugin .so and are invoked when ~Node() releases the
++  // last weak_ptr.
++  void * handle = dlopen(canonical_path.c_str(), RTLD_NOW | RTLD_LOCAL | RTLD_NODELETE);
+   if (!handle) {
+     return tl::make_unexpected("Failed to load plugin: " + std::string(dlerror()));
+   }

@@ -1,0 +1,182 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@chomp_motion_planner//:chomp_motion_planner": "@chomp_motion_planner//:chomp_motion_planner_library",
+    "@class_loader//:class_loader": "@class_loader//:class_loader_library",
+    "@moveit_core//:moveit_collision_detection": "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_collision_detection_bullet": "@moveit_core//:moveit_collision_detection_bullet_library",
+    "@moveit_core//:moveit_collision_detection_fcl": "@moveit_core//:moveit_collision_detection_fcl_library",
+    "@moveit_core//:moveit_collision_distance_field": "@moveit_core//:moveit_collision_distance_field_library",
+    "@moveit_core//:moveit_constraint_samplers": "@moveit_core//:moveit_constraint_samplers_library",
+    "@moveit_core//:moveit_distance_field": "@moveit_core//:moveit_distance_field_library",
+    "@moveit_core//:moveit_dynamics_solver": "@moveit_core//:moveit_dynamics_solver_library",
+    "@moveit_core//:moveit_exceptions": "@moveit_core//:moveit_exceptions_library",
+    "@moveit_core//:moveit_kinematic_constraints": "@moveit_core//:moveit_kinematic_constraints_library",
+    "@moveit_core//:moveit_kinematics_base": "@moveit_core//:moveit_kinematics_base_library",
+    "@moveit_core//:moveit_kinematics_metrics": "@moveit_core//:moveit_kinematics_metrics_library",
+    "@moveit_core//:moveit_planning_interface": "@moveit_core//:moveit_planning_interface_library",
+    "@moveit_core//:moveit_planning_scene": "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model": "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state": "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory": "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_smoothing_base": "@moveit_core//:moveit_smoothing_base_library",
+    "@moveit_core//:moveit_test_utils": "@moveit_core//:moveit_test_utils_library",
+    "@moveit_core//:moveit_trajectory_processing": "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_transforms": "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils": "@moveit_core//:moveit_utils_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+}
+
+CC_DEPS = [
+    "@chomp_motion_planner//:_gen_textual_hdrs",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+]
+
+cc_library(
+    name = "moveit_chomp_interface_library",
+    srcs = [
+        "src/chomp_interface.cpp",
+        "src/chomp_planning_context.cpp",
+    ],
+    hdrs = [
+        "include/chomp_interface/chomp_interface.h",
+        "include/chomp_interface/chomp_interface.hpp",
+        "include/chomp_interface/chomp_planning_context.h",
+        "include/chomp_interface/chomp_planning_context.hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = ["include"],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_chomp_interface",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":moveit_chomp_interface_library"],
+)
+
+cc_library(
+    name = "moveit_chomp_planner_plugin_library",
+    srcs = ["src/chomp_plugin.cpp"],
+    hdrs = [
+        "include/chomp_interface/chomp_interface.h",
+        "include/chomp_interface/chomp_interface.hpp",
+        "include/chomp_interface/chomp_planning_context.h",
+        "include/chomp_interface/chomp_planning_context.hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = ["include"],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":moveit_chomp_interface_library"],
+)
+
+cc_shared_library(
+    name = "moveit_chomp_planner_plugin",
+    dynamic_deps = DEPENDENCIES.keys() + [":moveit_chomp_interface"],
+    deps = [":moveit_chomp_planner_plugin_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":moveit_chomp_interface",
+        ":moveit_chomp_planner_plugin",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "moveit_core",
+    plugins = ["chomp_interface_plugin_description.xml"],
+    sonames = {
+        "moveit_chomp_interface": ["libmoveit_chomp_interface.so.2.15.2"],
+    },
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@chomp_motion_planner//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_core//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "moveit_core",
+        "chomp_motion_planner",
+        "moveit_core",
+        "pluginlib",
+        "rclcpp",
+        "rsl",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    libraries = [
+        ":moveit_chomp_interface",
+        ":moveit_chomp_planner_plugin",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "moveit_chomp_interface": ["libmoveit_chomp_interface.so.2.15.2"],
+    },
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@chomp_motion_planner//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_core//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+    ],
+)
+
+launch_ros_binary(
+    name = "test_rrbot_chomp_planning_pipeline_launch_xml",
+    src = "test/rrbot_chomp_planning_pipeline.launch.xml",
+    data = [":ament_index"],
+)

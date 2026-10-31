@@ -1,0 +1,140 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+HEADERS = ["include/robot_state_publisher/robot_state_publisher.hpp"]
+
+DEPENDENCIES = {
+    "@builtin_interfaces//:cc_shared": "@builtin_interfaces//:cc",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@kdl_parser//:kdl_parser": "@kdl_parser//:kdl_parser_library",
+    "@rcl_interfaces//:cc_shared": "@rcl_interfaces//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@urdf//:urdf": "@urdf//:urdf_library",
+}
+
+cc_library(
+    name = "robot_state_publisher_node_library",
+    srcs = ["src/robot_state_publisher.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "robot_state_publisher_node",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":robot_state_publisher_node_library"],
+)
+
+rclcpp_components_register_node(
+    name = "robot_state_publisher",
+    component = ":robot_state_publisher_node",
+    data = [":ament_index"],
+    executor = "SingleThreadedExecutor",
+    node_name = "robot_state_publisher",
+    plugin = "robot_state_publisher::RobotStatePublisher",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":robot_state_publisher_node"],
+)
+
+write_file(
+    name = "rmw_test_fixture_implementation_py",
+    out = "rmw_test_fixture_implementation.py",
+    content = [
+        "def rmw_test_isolation_start(): pass",
+        "def rmw_test_isolation_stop(): pass",
+    ],
+)
+
+py_library(
+    name = "rmw_test_fixture_implementation",
+    srcs = [":rmw_test_fixture_implementation_py"],
+    imports = ["."],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":robot_state_publisher_record"],
+    data = [
+        "urdf/test-desc.urdf",
+        "urdf/test-desc.urdf.xacro",
+    ] + ["//launch:launch_files"],
+    package_xml = "package.xml",
+    deps = ["@urdf//:ament_index"],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_robot_state_publisher_node",
+    components = [":robot_state_publisher_record"],
+    executables = [":robot_state_publisher"],
+    headers = HEADERS,
+    libraries = [":robot_state_publisher_node"],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@kdl_parser//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@tf2_ros_py//:ament_package",
+        "@urdf//:ament_package",
+    ],
+)

@@ -1,0 +1,90 @@
+--- a/rmf_demos_fleet_adapter/fleet_manager.py
++++ b/rmf_demos_fleet_adapter/fleet_manager.py
+@@ -18,6 +18,7 @@
+ import copy
+ import json
+ import math
++import signal
+ import sys
+ import threading
+ import time
+@@ -28,13 +29,13 @@
+ from pydantic import BaseModel
+ from pyproj import Transformer
+ import rclpy
++from rclpy.executors import ExternalShutdownException
+ from rclpy.node import Node
+ from rclpy.qos import qos_profile_system_default
+ from rclpy.qos import QoSDurabilityPolicy as Durability
+ from rclpy.qos import QoSHistoryPolicy as History
+ from rclpy.qos import QoSProfile
+ from rclpy.qos import QoSReliabilityPolicy as Reliability
+-import rmf_adapter as adpt
+ import rmf_adapter.geometry as geometry
+ import rmf_adapter.vehicletraits as traits
+ from rmf_fleet_msgs.msg import DockSummary
+@@ -156,7 +157,7 @@
+                 self.get_logger().info(f'Malformed GPS Message!: {e}')
+ 
+         if self.gps:
+-            while True:
++            while rclpy.ok():
+                 try:
+                     self.sio.connect('http://0.0.0.0:8080')
+                     break
+@@ -558,7 +559,6 @@
+ def main(argv=sys.argv):
+     # Init rclpy and adapter
+     rclpy.init(args=argv)
+-    adpt.init_rclcpp()
+     args_without_ros = rclpy.utilities.remove_ros_args(argv)
+ 
+     parser = argparse.ArgumentParser(
+@@ -578,17 +578,36 @@
+     with open(args.config_file, 'r') as f:
+         config = yaml.safe_load(f)
+ 
+-    fleet_manager = FleetManager(config)
+-
+-    spin_thread = threading.Thread(target=rclpy.spin, args=(fleet_manager,))
+-    spin_thread.start()
+-
+-    uvicorn.run(
+-        app,
+-        host=config['fleet_manager']['ip'],
+-        port=config['fleet_manager']['port'],
+-        log_level='warning',
+-    )
++    fleet_manager = None
++    spin_thread = None
++    try:
++        fleet_manager = FleetManager(config)
++
++        def spin_fn():
++            try:
++                rclpy.spin(fleet_manager)
++            except (KeyboardInterrupt, ExternalShutdownException):
++                pass
++
++        spin_thread = threading.Thread(target=spin_fn, args=())
++        spin_thread.start()
++
++        uvicorn.run(
++            app,
++            host=config['fleet_manager']['ip'],
++            port=config['fleet_manager']['port'],
++            log_level='warning',
++        )
++    except (KeyboardInterrupt, SystemExit):
++        pass
++    finally:
++        signal.signal(signal.SIGINT, signal.SIG_IGN)
++        rclpy.try_shutdown()
++        if spin_thread is not None and spin_thread.is_alive():
++            spin_thread.join()
++        if fleet_manager is not None:
++            fleet_manager.destroy_node()
++        app.router.routes.clear()
+ 
+ 
+ if __name__ == '__main__':

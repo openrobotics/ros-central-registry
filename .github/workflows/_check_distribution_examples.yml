@@ -42,15 +42,17 @@ jobs:
         shell: bash
     env:
       USE_BAZEL_VERSION: ${{ matrix.bazel }}
+      # Only write to the shared remote cache from the upstream repo, never from forks.
+      CACHE_WRITE_CONFIG: ${{ (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry' && '--config=ci-cache-write' || '' }}
     strategy:
       fail-fast: false
       matrix:
-        bazel: ${{ github.event_name == 'pull_request' && fromJSON('["9.x"]') || fromJSON('["8.x", "9.x"]') }}
+        bazel: ${{ github.event_name == 'pull_request' && fromJSON('["9.x"]') || fromJSON('["9.x", "last_rc"]') }}
         ros:
-        - lyrical.2026-06-08.rcr.2
+        - lyrical.2026-10-05.rcr.0
         variant:
         - perception
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm"]') || fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm", "macos-26-intel", "macos-26"]') }}
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm", "macos-26"]') || fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm", "macos-26"]') }}
     steps:
 
     # Pin Xcode explicitly on macOS runners.
@@ -59,6 +61,26 @@ jobs:
       uses: maxim-lobanov/setup-xcode@v1.7.0
       with:
         xcode-version: '26.3'
+
+    # The stock GitHub Actions Ubuntu image preinstalls ~30+ GB of toolchains
+    # (.NET, Android, Haskell, CodeQL, etc.) that our hermetic Bazel build
+    # never uses, leaving too little room for a full distribution build.
+    - name: Free disk space (Linux)
+      if: runner.os == 'Linux'
+      uses: jlumbroso/free-disk-space@v2.0.0
+
+    # Like upstream libQt6Gui, QtGui links the glvnd dispatch libraries
+    # (libGL, libGLX, libOpenGL, libEGL), so every Linux binary using it,
+    # including host tools such as qsb, needs them at runtime. The x86_64
+    # runner image ships them; the arm64 one does not.
+    - name: Install GL runtime libraries (Linux)
+      if: runner.os == 'Linux'
+      # Runs before checkout, so the job's default working-directory
+      # (workspace/) doesn't exist yet.
+      working-directory: .
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends libegl1 libgl1 libglx0 libopengl0
 
     # Setup bazel with controlled caching that is invariant to RMW implementation.
     - name: Checkout repository
@@ -87,19 +109,45 @@ jobs:
         bazelisk-cache: true
         disk-cache: false
         repository-cache: true
+        # Pin the Bazel server heap for the free GitHub-hosted runners: 16 GB
+        # on ubuntu-26.04 / ubuntu-26.04-arm, 7 GB on the 3-core M1 macos-26
+        # image. Half of RAM each way; the other half is what the workspace
+        # .bazelrc's `build:ci --local_resources=memory=HOST_RAM*.5` hands out
+        # to concurrently running compiler/test actions. This is the only
+        # place the heap is set (startup options can't be made per-OS inside
+        # .bazelrc); without it the JVM would default to 25% of RAM, which is
+        # too small to analyze the distribution.
+        bazelrc: |
+          common --repo_contents_cache=
+          startup --host_jvm_args=-Xmx${{ runner.os == 'macOS' && '3g' || '8g' }}
 
     # Checks examples
-    - name: Examples
+    - name: Analyze (examples)
+      id: analyze
+      working-directory: ./examples
+      env:
+        TMPDIR: ${{ runner.temp }}
+      run: |
+        bazel build --nobuild --config ci $CACHE_WRITE_CONFIG //... 2>&1 | tee examples_analyze.log
+
+    - name: Build (examples)
       id: examples
       working-directory: ./examples
+      env:
+        TMPDIR: ${{ runner.temp }}
       run: |
-        export TMPDIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
-        CACHE_WRITE_CONFIG="${{ (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry' && '--config=ci-cache-write' || '' }}"
         bazel build --config ci $CACHE_WRITE_CONFIG //... 2>&1 | tee examples_dynamic.log
-        bazel build --config ci $CACHE_WRITE_CONFIG --dynamic_mode=off --@rosdistro//:rmw=rmw_fastrtps_cpp //:example_ros_publisher_cc 2>&1 | tee examples_static_rmw_fastrtps_cpp.log
-        bazel build --config ci $CACHE_WRITE_CONFIG --dynamic_mode=off --@rosdistro//:rmw=rmw_fastrtps_dynamic_cpp //:example_ros_publisher_cc 2>&1 | tee examples_static_rmw_fastrtps_dynamic_cpp.log
-        bazel build --config ci $CACHE_WRITE_CONFIG --dynamic_mode=off --@rosdistro//:rmw=rmw_cyclonedds_cpp //:example_ros_publisher_cc 2>&1 | tee examples_static_rmw_cyclonedds_cpp.log
-        bazel build --config ci $CACHE_WRITE_CONFIG --dynamic_mode=off --@rosdistro//:rmw=rmw_zenoh_cpp //:example_ros_publisher_cc 2>&1 | tee examples_static_rmw_zenoh_cpp.log
+
+    # Statically linked (--config portable) builds of one example, once per RMW.
+    - name: Build (examples, portable)
+      id: examples_portable
+      working-directory: ./examples
+      env:
+        TMPDIR: ${{ runner.temp }}
+      run: |
+        for rmw in rmw_fastrtps_cpp rmw_fastrtps_dynamic_cpp rmw_cyclonedds_cpp rmw_zenoh_cpp; do
+          bazel build --config ci $CACHE_WRITE_CONFIG --config portable --@rosdistro//:rmw=$rmw //:example_ros_publisher_cc 2>&1 | tee examples_static_$rmw.log
+        done
     - name: Update status badge (examples)
       uses: Schneegans/dynamic-badges-action@v1.8.0
       with:
@@ -107,8 +155,8 @@ jobs:
         gistID: f796805a77e0f05cc837b18e60142773
         filename: ${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}_examples.json
         label: ${{ matrix.bazel }}
-        message: ${{ steps.examples.outcome == 'success' && '✓' || 'x' }}
-        color: ${{ steps.examples.outcome == 'success' && 'green' || 'red' }}
+        message: ${{ steps.examples.outcome == 'success' && steps.examples_portable.outcome == 'success' && '✓' || 'x' }}
+        color: ${{ steps.examples.outcome == 'success' && steps.examples_portable.outcome == 'success' && 'green' || 'red' }}
       if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push' && (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry'
 
     - name: Example logs

@@ -1,0 +1,139 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
+load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load("@pip_ros//:requirements.bzl", "all_requirements")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rules_python//python/uv:lock.bzl", "lock")
+
+package(default_visibility = ["//visibility:public"])
+
+# File exports
+
+exports_files(["requirements.txt"])
+
+# Arguments
+
+string_flag(
+    name = "rmw",
+    build_setting_default = "dynamic",
+)
+
+config_setting(
+    name = "rmw_dynamic",
+    flag_values = {":rmw": "dynamic"},
+)
+
+config_setting(
+    name = "dynamic_mode_off",
+    values = {
+        "dynamic_mode": "off",
+    },
+)
+
+bool_flag(
+    name = "enable_tracing",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "tracing_enabled_linux",
+    constraint_values = ["@platforms//os:linux"],
+    flag_values = {":enable_tracing": "True"},
+)
+
+# Root of the installed underlay produced by ament_underlay / <pkg>:tar,
+# e.g. /opt/ros/lyrical. The distro name is the first component of this
+# module's version (lyrical.2026-10-05.rcr.0 -> lyrical).
+string_flag(
+    name = "install_prefix",
+    build_setting_default = "/opt/ros/" + module_version().split(".")[0],
+)
+
+# Python
+
+lock(
+    name = "requirements",
+    srcs = ["pyproject.toml"],
+    out = "requirements.txt",
+    args = ["--universal"],
+)
+
+# Fails CI if requirements.txt is stale relative to pyproject.toml.
+diff_test(
+    name = "requirements_test",
+    file1 = ":requirements.txt",
+    file2 = ":requirements",
+)
+
+### PACKAGING
+
+# Third-party shared libraries built from source by this module (see
+# //cc:BUILD.bazel). Installing them under <prefix>/rosdistro/lib decouples
+# the underlay from whatever the host OS happens to provide.
+THIRD_PARTY_SHARED_LIBRARIES = [
+    "//cc:boringssl",
+    "//cc:bullet-BulletCollision",
+    "//cc:bzip2",
+    "//cc:console_bridge",
+    "//cc:curl",
+    "//cc:cyclonedds",
+    "//cc:fastcdr",
+    "//cc:fastdds",
+    "//cc:foxglove_sdk",
+    "//cc:libyaml",
+    "//cc:libzip",
+    "//cc:lz4",
+    "//cc:lz4_frame",
+    "//cc:lz4_hc",
+    "//cc:mcap",
+    "//cc:ogg",
+    "//cc:opencv",
+    "//cc:orocos-kdl",
+    "//cc:protobuf",
+    "//cc:sdl2",
+    "//cc:sqlite3",
+    "//cc:theora",
+    "//cc:tinyxml2",
+    "//cc:asio",
+    "//cc:osqp",
+    "//cc:yaml-cpp",
+    "//cc:zmq",
+    "//cc:zenoh-cpp",
+    "//cc:zlib",
+    "//cc:zstd",
+    # Ogre (rviz rendering backend) and its render system plugins.
+    "//cc:Codec_STBI",
+    "//cc:OgreMain",
+    "//cc:OgreOverlay",
+    "//cc:RenderSystem_GL",
+    "//cc:RenderSystem_GL3Plus",
+]
+
+ament_package(
+    name = "ament_package",
+    libraries = THIRD_PARTY_SHARED_LIBRARIES + select({
+        ":tracing_enabled_linux": [
+            "//cc:lttng_ctl_shared",
+            "//cc:lttng_ust_shared",
+        ],
+        "//conditions:default": [],
+    }),
+    # Every pip dependency of the distribution, so the underlay's
+    # lib/pythonX.Y/site-packages is self-contained.
+    python = all_requirements,
+    python_strip_prefix = "site-packages",
+    deps = [],
+)

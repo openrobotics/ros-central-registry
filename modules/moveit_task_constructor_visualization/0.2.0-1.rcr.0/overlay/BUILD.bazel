@@ -1,0 +1,478 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@class_loader//:class_loader": "@class_loader//:class_loader_library",
+    "@moveit_core//:moveit_collision_detection": "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_planning_scene": "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model": "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state": "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory": "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_trajectory_processing": "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_transforms": "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils": "@moveit_core//:moveit_utils_library",
+    "@moveit_ros_visualization//:moveit_rviz_plugin_render_tools": "@moveit_ros_visualization//:moveit_rviz_plugin_render_tools_library",
+    "@moveit_task_constructor_core//:moveit_task_constructor_core": "@moveit_task_constructor_core//:moveit_task_constructor_core_library",
+    "@moveit_task_constructor_core//:moveit_task_constructor_core_stages": "@moveit_task_constructor_core//:moveit_task_constructor_core_stages_library",
+    "@moveit_task_constructor_msgs//:cc_shared": "@moveit_task_constructor_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:OgreMain": "@rosdistro//cc:OgreMain_library",
+    "@rosdistro//cc:boost.chrono_shared": "@rosdistro//cc:boost.chrono",
+    "@rosdistro//cc:boost.serialization_shared": "@rosdistro//cc:boost.serialization",
+    "@rosdistro//cc:boost.thread_shared": "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rviz2//:rviz_common": "@rviz2//:rviz_common_library",
+    "@rviz2//:rviz_default_plugins": "@rviz2//:rviz_default_plugins_library",
+    "@rviz_rendering//:rviz_rendering": "@rviz_rendering//:rviz_rendering_library",
+}
+
+QT_DEPS = {
+    "@qtbase//:core_shared": "@qtbase//:core",
+    "@qtbase//:gui_shared": "@qtbase//:gui",
+    "@qtbase//:widgets_shared": "@qtbase//:widgets",
+    "@qtsvg//:svg_shared": "@qtsvg//:svg",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:boost.algorithm",
+    "@rosdistro//cc:boost.lexical_cast",
+    "@rosdistro//cc:fmt",
+] + QT_DEPS.values()
+
+DYNAMIC_DEPS = DEPENDENCIES.keys() + QT_DEPS.keys()
+
+LOCAL_DEFINES = ros_local_defines() + [
+    "NDEBUG",
+    "_FILE_OFFSET_BITS=64",
+]
+
+# CMAKE_AUTOMOC: run moc over every header declaring Q_OBJECT. Sources that
+# `#include "moc_<name>.cpp"` themselves get the output as a textual header
+# (found via the "_gen/moc" include dir); the rest are compiled directly.
+MOC_HEADERS = {
+    "flat_merge_proxy_model": "motion_planning_tasks/utils/flat_merge_proxy_model.h",
+    "job_queue": "motion_planning_tasks/src/job_queue.h",
+    "local_task_model": "motion_planning_tasks/src/local_task_model.h",
+    "marker_visualization": "visualization_tools/include/moveit/visualization_tools/marker_visualization.h",
+    "meta_task_list_model": "motion_planning_tasks/src/meta_task_list_model.h",
+    "remote_task_model": "motion_planning_tasks/src/remote_task_model.h",
+    "task_display": "motion_planning_tasks/src/task_display.h",
+    "task_list_model": "motion_planning_tasks/src/task_list_model.h",
+    "task_panel": "motion_planning_tasks/src/task_panel.h",
+    "task_solution_panel": "visualization_tools/include/moveit/visualization_tools/task_solution_panel.h",
+    "task_solution_visualization": "visualization_tools/include/moveit/visualization_tools/task_solution_visualization.h",
+    "tree_merge_proxy_model": "motion_planning_tasks/utils/tree_merge_proxy_model.h",
+}
+
+[
+    genrule(
+        name = "moc_" + name,
+        srcs = [hdr],
+        outs = ["_gen/moc/moc_" + name + ".cpp"],
+        cmd = "$(execpath @qtbase//:moc) $< -o $@",
+        tools = ["@qtbase//:moc"],
+    )
+    for name, hdr in MOC_HEADERS.items()
+]
+
+UTILS_HDRS = [
+    "motion_planning_tasks/utils/flat_merge_proxy_model.h",
+    "motion_planning_tasks/utils/icon.h",
+    "motion_planning_tasks/utils/tree_merge_proxy_model.h",
+]
+
+PROPERTIES_HDRS = [
+    "motion_planning_tasks/properties/property_factory.h",
+]
+
+VISUALIZATION_TOOLS_HDRS = [
+    "visualization_tools/include/moveit/visualization_tools/display_solution.h",
+    "visualization_tools/include/moveit/visualization_tools/marker_visualization.h",
+    "visualization_tools/include/moveit/visualization_tools/task_solution_panel.h",
+    "visualization_tools/include/moveit/visualization_tools/task_solution_visualization.h",
+]
+
+RVIZ_PLUGIN_HDRS = [
+    "motion_planning_tasks/src/factory_model.h",
+    "motion_planning_tasks/src/icons.h",
+    "motion_planning_tasks/src/job_queue.h",
+    "motion_planning_tasks/src/local_task_model.h",
+    "motion_planning_tasks/src/meta_task_list_model.h",
+    "motion_planning_tasks/src/pluginlib_factory.h",
+    "motion_planning_tasks/src/remote_task_model.h",
+    "motion_planning_tasks/src/task_display.h",
+    "motion_planning_tasks/src/task_list_model.h",
+    "motion_planning_tasks/src/task_panel.h",
+    "motion_planning_tasks/src/task_panel_p.h",
+]
+
+cc_library(
+    name = "motion_planning_tasks_utils_library",
+    srcs = [
+        "motion_planning_tasks/utils/flat_merge_proxy_model.cpp",
+        "motion_planning_tasks/utils/icon.cpp",
+        "motion_planning_tasks/utils/tree_merge_proxy_model.cpp",
+    ],
+    hdrs = UTILS_HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/moc",
+        "motion_planning_tasks",
+    ],
+    local_defines = LOCAL_DEFINES,
+    textual_hdrs = [
+        ":moc_flat_merge_proxy_model",
+        ":moc_tree_merge_proxy_model",
+    ],
+    deps = QT_DEPS.values(),
+)
+
+cc_shared_library(
+    name = "motion_planning_tasks_utils",
+    dynamic_deps = QT_DEPS.keys(),
+    deps = [":motion_planning_tasks_utils_library"],
+)
+
+cc_library(
+    name = "motion_planning_tasks_properties_library",
+    srcs = [
+        "motion_planning_tasks/properties/property_factory.cpp",
+        "motion_planning_tasks/properties/property_from_yaml.cpp",
+    ],
+    hdrs = PROPERTIES_HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "motion_planning_tasks",
+        "motion_planning_tasks/properties",
+    ],
+    local_defines = LOCAL_DEFINES,
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "motion_planning_tasks_properties",
+    dynamic_deps = DYNAMIC_DEPS,
+    deps = [":motion_planning_tasks_properties_library"],
+)
+
+cc_library(
+    name = "moveit_task_visualization_tools_library",
+    srcs = [
+        "visualization_tools/src/display_solution.cpp",
+        "visualization_tools/src/marker_visualization.cpp",
+        "visualization_tools/src/task_solution_panel.cpp",
+        "visualization_tools/src/task_solution_visualization.cpp",
+        ":moc_marker_visualization",
+        ":moc_task_solution_panel",
+        ":moc_task_solution_visualization",
+    ],
+    hdrs = VISUALIZATION_TOOLS_HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "visualization_tools/include",
+    ],
+    local_defines = LOCAL_DEFINES,
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_task_visualization_tools",
+    dynamic_deps = DYNAMIC_DEPS,
+    deps = [":moveit_task_visualization_tools_library"],
+)
+
+genrule(
+    name = "resources_rcc",
+    srcs = [
+        "motion_planning_tasks/src/resources.qrc",
+    ] + glob(["motion_planning_tasks/src/icons/*.png"]),
+    outs = ["_gen/rcc/qrc_resources.cpp"],
+    cmd = "ROOT=$$PWD && cd $$(dirname $(location motion_planning_tasks/src/resources.qrc)) && $$ROOT/$(execpath @qtbase//:rcc) --name resources --output $$ROOT/$@ resources.qrc",
+    tools = ["@qtbase//:rcc"],
+)
+
+cc_library(
+    name = "motion_planning_tasks_rviz_plugin_library",
+    srcs = [
+        "motion_planning_tasks/src/factory_model.cpp",
+        "motion_planning_tasks/src/icons.cpp",
+        "motion_planning_tasks/src/job_queue.cpp",
+        "motion_planning_tasks/src/local_task_model.cpp",
+        "motion_planning_tasks/src/meta_task_list_model.cpp",
+        "motion_planning_tasks/src/plugin_init.cpp",
+        "motion_planning_tasks/src/remote_task_model.cpp",
+        "motion_planning_tasks/src/task_display.cpp",
+        "motion_planning_tasks/src/task_list_model.cpp",
+        "motion_planning_tasks/src/task_panel.cpp",
+        ":gen_ui_global_settings_h",
+        ":gen_ui_task_panel_h",
+        ":gen_ui_task_view_h",
+        ":moc_job_queue",
+        ":moc_local_task_model",
+        ":moc_meta_task_list_model",
+        ":moc_remote_task_model",
+        ":moc_task_display",
+        ":resources_rcc",
+    ],
+    hdrs = RVIZ_PLUGIN_HDRS,
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/moc",
+        "motion_planning_tasks",
+        "motion_planning_tasks/src",
+    ],
+    local_defines = LOCAL_DEFINES,
+    textual_hdrs = [
+        ":moc_task_list_model",
+        ":moc_task_panel",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":motion_planning_tasks_properties_library",
+        ":motion_planning_tasks_utils_library",
+        ":moveit_task_visualization_tools_library",
+    ],
+)
+
+cc_shared_library(
+    name = "motion_planning_tasks_rviz_plugin",
+    dynamic_deps = DYNAMIC_DEPS + [
+        ":motion_planning_tasks_properties",
+        ":motion_planning_tasks_utils",
+        ":moveit_task_visualization_tools",
+        ":transitive_dynamic_deps",
+    ],
+    deps = [":motion_planning_tasks_rviz_plugin_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DYNAMIC_DEPS,
+)
+
+genrule(
+    name = "gen_ui_global_settings_h",
+    srcs = ["motion_planning_tasks/src/global_settings.ui"],
+    outs = ["_gen/include/ui_global_settings.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location motion_planning_tasks/src/global_settings.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_task_panel_h",
+    srcs = ["motion_planning_tasks/src/task_panel.ui"],
+    outs = ["_gen/include/ui_task_panel.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location motion_planning_tasks/src/task_panel.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+genrule(
+    name = "gen_ui_task_view_h",
+    srcs = ["motion_planning_tasks/src/task_view.ui"],
+    outs = ["_gen/include/ui_task_view.h"],
+    cmd = "$(execpath @qtbase//:uic) $(location motion_planning_tasks/src/task_view.ui) -o $@",
+    tools = ["@qtbase//:uic"],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "icons/classes/Motion Planning Tasks.svg",
+    ],
+    prefix = "share/icons/classes",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        ":ament_files_0",
+    ],
+    libraries = [
+        ":motion_planning_tasks_properties",
+        ":motion_planning_tasks_utils",
+        ":moveit_task_visualization_tools",
+        ":motion_planning_tasks_rviz_plugin",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "rviz_common",
+    plugins = ["motion_planning_tasks_rviz_plugin_description.xml"],
+    sonames = {
+        "motion_planning_tasks_rviz_plugin": ["libmotion_planning_tasks_rviz_plugin.so.0.2.0"],
+        "moveit_task_visualization_tools": ["libmoveit_task_visualization_tools.so.0.2.0"],
+    },
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@launch//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@libyaml_vendor//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_ros_visualization//:ament_package",
+        "@moveit_task_constructor_core//:ament_package",
+        "@moveit_task_constructor_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rviz2//:ament_package",
+    ],
+)
+
+cc_test(
+    name = "moveit_task_constructor_visualization-test-merge-models",
+    srcs = ["motion_planning_tasks/test/test_merge_models.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "NDEBUG",
+    ],
+    deps = [
+        ":motion_planning_tasks_utils_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "moveit_task_constructor_visualization-test-solution-models",
+    srcs = ["motion_planning_tasks/test/test_solution_models.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = LOCAL_DEFINES + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":motion_planning_tasks_rviz_plugin_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_binary(
+    name = "moveit_task_constructor_visualization-test-task_model",
+    testonly = True,
+    srcs = ["motion_planning_tasks/test/test_task_model.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = LOCAL_DEFINES + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":motion_planning_tasks_rviz_plugin_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_test(
+    name = "motion_planning_tasks_test_test.launch.py",
+    src = "motion_planning_tasks/test/test.launch.py",
+    args = [
+        "test_binary:=$(location :moveit_task_constructor_visualization-test-task_model)",
+    ],
+    data = [
+        ":ament_index",
+        ":moveit_task_constructor_visualization-test-task_model",
+    ],
+    deps = [
+        "@launch//:test_support",
+        "@moveit_task_constructor_core//:moveit",
+        "@moveit_task_constructor_msgs//:py",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "Boost",
+        "ament_cmake",
+        "moveit_core",
+        "moveit_ros_visualization",
+        "moveit_task_constructor_core",
+        "moveit_task_constructor_msgs",
+        "rclcpp",
+        "rviz_common",
+        "rviz_default_plugins",
+        "rviz_ogre_vendor",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_targets = False,
+    headers = [
+        "visualization_tools/include/moveit/visualization_tools/display_solution.h",
+        "visualization_tools/include/moveit/visualization_tools/marker_visualization.h",
+        "visualization_tools/include/moveit/visualization_tools/task_solution_panel.h",
+        "visualization_tools/include/moveit/visualization_tools/task_solution_visualization.h",
+    ],
+    headers_strip_prefix = "visualization_tools/include",
+    include_prefix = "",
+    libraries = [
+        ":motion_planning_tasks_properties",
+        ":motion_planning_tasks_utils",
+        ":moveit_task_visualization_tools",
+        ":motion_planning_tasks_rviz_plugin",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@launch//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@libyaml_vendor//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_ros_visualization//:ament_package",
+        "@moveit_task_constructor_core//:ament_package",
+        "@moveit_task_constructor_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rviz2//:ament_package",
+    ],
+)

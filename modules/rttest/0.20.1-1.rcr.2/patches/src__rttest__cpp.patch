@@ -1,0 +1,81 @@
+--- a/src/rttest.cpp
++++ b/src/rttest.cpp
+@@ -16,11 +16,18 @@
+ 
+ #include <alloca.h>
+ #include <limits.h>
++#ifndef __APPLE__
+ #include <malloc.h>
++#endif
++#include <pthread.h>
+ #include <sys/mman.h>
+ #include <sys/resource.h>
+ #include <string.h>
+ #include <unistd.h>
++
++#ifndef RUSAGE_THREAD
++#define RUSAGE_THREAD RUSAGE_SELF
++#endif
+ 
+ #include <algorithm>
+ #include <cassert>
+@@ -445,15 +452,17 @@
+   if (getrusage(RUSAGE_THREAD, &this->prev_usage) != 0) {
+     return -1;
+   }
++#ifndef __APPLE__
+   assert(this->prev_usage.ru_majflt >= prev_maj_pagefaults);
+   assert(this->prev_usage.ru_minflt >= prev_min_pagefaults);
++#endif
+   if (this->params.iterations == 0) {
+     i = 0;
+   }
+   this->sample_buffer.major_pagefaults[i] =
+-    this->prev_usage.ru_majflt - prev_maj_pagefaults;
++    static_cast<size_t>(std::max<long>(0, this->prev_usage.ru_majflt - prev_maj_pagefaults));
+   this->sample_buffer.minor_pagefaults[i] =
+-    this->prev_usage.ru_minflt - prev_min_pagefaults;
++    static_cast<size_t>(std::max<long>(0, this->prev_usage.ru_minflt - prev_min_pagefaults));
+   return 0;
+ }
+ 
+@@ -607,6 +616,7 @@
+     return -1;
+   }
+ 
++#ifndef __APPLE__
+   // Turn off malloc trimming.
+   if (mallopt(M_TRIM_THRESHOLD, -1) == 0) {
+     perror("mallopt for trim threshold failed");
+@@ -621,6 +631,7 @@
+     munlockall();
+     return -1;
+   }
++#endif
+ 
+   struct rusage usage;
+   size_t page_size = sysconf(_SC_PAGESIZE);
+@@ -650,8 +661,10 @@
+         delete[] ptr;
+       }
+ 
++#ifndef __APPLE__
+       mallopt(M_TRIM_THRESHOLD, 128 * 1024);
+       mallopt(M_MMAP_MAX, 65536);
++#endif
+       munlockall();
+       return -1;
+     }
+@@ -712,8 +725,12 @@
+ 
+   param.sched_priority = sched_priority;
+ 
++#ifdef __APPLE__
++  return pthread_setschedparam(pthread_self(), policy, &param);
++#else
+   // note that sched_setscheduler can set the priority of an arbitrary process
+   return sched_setscheduler(0, policy, &param);
++#endif
+ }
+ 
+ int Rttest::accumulate_statistics(size_t iteration)

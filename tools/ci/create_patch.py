@@ -199,10 +199,10 @@ class ModuleRollup:
 
     @property
     def changed(self) -> bool:
-        if self.module == "rosdistro":
-            old_module_dot_bazel = (self.current_module_dir / "MODULE.bazel").read_text()
-            new_module_dot_bazel = (self.vendor_module_dir / "MODULE.bazel").read_text()
-            if old_module_dot_bazel != new_module_dot_bazel:
+        old_module_path = self.current_module_dir / "MODULE.bazel"
+        new_module_path = self.vendor_module_dir / "MODULE.bazel"
+        if old_module_path.exists() and new_module_path.exists():
+            if old_module_path.read_text() != new_module_path.read_text():
                 return True
         return self.new_patches != self.old_patches or self.new_overlays != self.old_overlays
 
@@ -369,6 +369,7 @@ def apply_rollup(
     metadata_path: Path,
     updated_versions: Dict[str, str] = None,
     modules_dir: Path = None,
+    target_workspace: Path = None,
 ) -> None:
     if rollup.new_module_dir != rollup.current_module_dir:
         shutil.copytree(rollup.current_module_dir, rollup.new_module_dir, dirs_exist_ok=True)
@@ -384,7 +385,7 @@ def apply_rollup(
         overlay_path.write_text(content)
 
     module_file = rollup.new_module_dir / "MODULE.bazel"
-    if rollup.module == "rosdistro":
+    if (rollup.vendor_module_dir / "MODULE.bazel").exists():
         shutil.copy2(rollup.vendor_module_dir / "MODULE.bazel", module_file)
 
     content = module_file.read_text()
@@ -411,6 +412,100 @@ def apply_rollup(
     module_file.write_text(content)
     bzlmod_lib.regenerate_integrity_hashes(rollup.new_module_dir)
     bzlmod_lib.add_version_to_metadata_json(metadata_path, rollup.new_version)
+
+    # Re-snapshot the packaged directory we just wrote, so a follow-up
+    # create_patch run that amends this same branch-only version in place
+    # doesn't mistake our own write for concurrent on-disk drift (see
+    # _check_package_dir_not_stale).
+    if target_workspace is not None:
+        vendor_modules.write_package_manifest(
+            target_workspace, modules_path, rollup.module, rollup.new_version
+        )
+
+
+def revendor_rolled_up_modules(
+    target_workspace: Path, modules_dir: Path, modules: List[str], run=subprocess.run,
+) -> Tuple[List[str], Path]:
+    """
+    Re-vendors modules whose branch-only version apply_rollup just amended in
+    place, and refreshes the workspace bookkeeping for them.
+
+    `bazel vendor` keys "the vendored copy is current" on vendor/@<module>+.marker,
+    which stops matching the registry entry as soon as modules/<module>/<version>/
+    changes. From then on Bazel silently ignores vendor/<module>+/ and builds the
+    registry copy instead, so any further in-place edit appears to have no effect
+    (see vendor_modules.clear_vendored_module). Right after an in-place amend the
+    registry entry describes exactly the vendored tree, so re-vendoring is lossless;
+    as a safety net each module's previous tree is backed up and modules whose
+    re-vendored tree differs (e.g. stray untracked files) are reported back.
+
+    Returns (modules whose re-vendored tree differs from before, backup directory).
+    The backup directory is removed when nothing differs.
+    """
+    vendor_dir = target_workspace / "vendor"
+    backup_root = Path(tempfile.mkdtemp(prefix="create_patch_vendor_backup_"))
+    before = {}
+    for module in modules:
+        module_dir = vendor_dir / f"{module}+"
+        before[module] = bzlmod_lib.hash_directory_tree(module_dir)
+        shutil.copytree(module_dir, backup_root / f"{module}+", symlinks=True)
+        vendor_modules.clear_vendored_module(target_workspace, module)
+
+    cmd = ["bazel", "vendor", "--vendor_dir=vendor"] + [f"--repo=@{m}" for m in modules]
+    try:
+        run(cmd, cwd=target_workspace, check=True)
+    except BaseException:
+        # Put every tree back exactly as it was before re-raising.
+        for module in modules:
+            module_dir = vendor_dir / f"{module}+"
+            shutil.rmtree(module_dir, ignore_errors=True)
+            shutil.copytree(backup_root / f"{module}+", module_dir, symlinks=True)
+        raise
+
+    changed = []
+    for module in modules:
+        module_dir = vendor_dir / f"{module}+"
+        if not vendor_modules.was_vendored(target_workspace, module):
+            # Never leave the developer without their tree.
+            shutil.copytree(backup_root / f"{module}+", module_dir, symlinks=True)
+            changed.append(module)
+            continue
+        if bzlmod_lib.hash_directory_tree(module_dir) != before[module]:
+            changed.append(module)
+        vendor_modules.write_vendor_manifest(target_workspace, module)
+        vendor_modules.write_vendor_snapshot(target_workspace, module)
+        version = read_module_version(module_dir / "MODULE.bazel", module)
+        vendor_modules.write_package_manifest(target_workspace, modules_dir, module, version)
+
+    if not changed:
+        shutil.rmtree(backup_root, ignore_errors=True)
+    return changed, backup_root
+
+
+def _revendor_after_rollups(
+    rollups: List["ModuleRollup"], target_workspace: Path, modules_dir: Path,
+) -> None:
+    """Prints the outcome of revendor_rolled_up_modules for main()."""
+    amended = [r.module for r in rollups if r.overwrite_in_place]
+    incremented = [r.module for r in rollups if not r.overwrite_in_place]
+    if incremented:
+        print(
+            "Note: new version(s) created for " + ", ".join(incremented) + "; this "
+            "workspace still resolves the previous version, so re-run "
+            "//tools/ci:setup_workspace and //tools/ci:vendor_modules before "
+            "editing them further."
+        )
+    if not amended:
+        return
+    print("Re-vendoring " + ", ".join(amended) + " so further edits keep taking effect...")
+    changed, backup_root = revendor_rolled_up_modules(target_workspace, modules_dir, amended)
+    if changed:
+        print(
+            "Warning: the re-vendored tree differs from your previous one for "
+            + ", ".join(changed) + " (e.g. untracked files that aren't part of the "
+            f"patch); your previous trees are backed up under {backup_root}.",
+            file=sys.stderr,
+        )
 
 
 def discover_vendored_modules(target_workspace: Path, modules_dir: Path) -> List[str]:
@@ -444,7 +539,15 @@ def module_has_local_edits(target_workspace: Path, module: str) -> bool:
     with open(manifest_path, "r") as f:
         manifest = json.load(f)
     vendor_module_dir = target_workspace / "vendor" / f"{module}+"
-    return bzlmod_lib.hash_directory_tree(vendor_module_dir) != manifest
+    if bzlmod_lib.hash_directory_tree(vendor_module_dir) != manifest:
+        return True
+    snapshot_module_bazel = (
+        target_workspace / vendor_modules.VENDOR_SNAPSHOT_DIR_NAME / f"{module}+" / "MODULE.bazel"
+    )
+    vendor_module_bazel = vendor_module_dir / "MODULE.bazel"
+    if snapshot_module_bazel.exists() and vendor_module_bazel.exists():
+        return snapshot_module_bazel.read_text() != vendor_module_bazel.read_text()
+    return False
 
 
 def confirm(prompt: str) -> bool:
@@ -488,6 +591,13 @@ def main():
         "branch relative to this ref are amended in place instead of "
         "incremented. Defaults to 'origin/main'.",
     )
+    parser.add_argument(
+        "--no-revendor",
+        action="store_true",
+        help="Don't re-vendor modules amended in place afterwards. Without the "
+        "re-vendor, Bazel silently stops using their vendored sources until you "
+        "re-run //tools/ci:vendor_modules.",
+    )
     args = parser.parse_args()
 
     workspace_root = Path(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ".")).resolve()
@@ -526,8 +636,11 @@ def main():
             modules_dir / args.module / "metadata.json",
             updated_versions={rollup.module: rollup.new_version},
             modules_dir=modules_dir,
+            target_workspace=target_workspace,
         )
         print(f"Done. modules/{args.module}/{rollup.new_version}/ is ready to commit as a PR.")
+        if not args.no_revendor:
+            _revendor_after_rollups([rollup], target_workspace, modules_dir)
         return
 
     # Auto-detect mode: find vendored modules, cheaply filter to those with
@@ -578,8 +691,11 @@ def main():
             modules_dir / rollup.module / "metadata.json",
             updated_versions=updated_versions,
             modules_dir=modules_dir,
+            target_workspace=target_workspace,
         )
         print(f"Done. modules/{rollup.module}/{rollup.new_version}/ is ready to commit as a PR.")
+    if not args.no_revendor:
+        _revendor_after_rollups(rollups, target_workspace, modules_dir)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,175 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@io_context//:io_context": "@io_context//:io_context_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:asio": "@rosdistro//cc:asio_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+}
+
+NODE_DEPENDENCIES = {
+    "@lifecycle_msgs//:cc_shared": "@lifecycle_msgs//:cc",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+}
+
+HEADERS = [
+    "include/serial_driver/serial_bridge_node.hpp",
+    "include/serial_driver/serial_driver.hpp",
+    "include/serial_driver/serial_port.hpp",
+    "include/serial_driver/visibility_control.hpp",
+]
+
+# ament_auto_add_library(serial_driver SHARED ...)
+cc_library(
+    name = "serial_driver_library",
+    srcs = [
+        "src/serial_driver.cpp",
+        "src/serial_port.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + NODE_DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "serial_driver",
+    dynamic_deps = DEPENDENCIES.keys() + NODE_DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":serial_driver_library"],
+)
+
+# ament_auto_add_library(serial_driver_nodes SHARED src/serial_bridge_node.cpp)
+cc_library(
+    name = "serial_driver_nodes_library",
+    srcs = ["src/serial_bridge_node.cpp"],
+    local_defines = ros_local_defines(),
+    deps = [":serial_driver_library"],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "serial_driver_nodes",
+    dynamic_deps = DEPENDENCIES.keys() + NODE_DEPENDENCIES.keys() + [":serial_driver"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":serial_driver_nodes_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + NODE_DEPENDENCIES.keys() + [":serial_driver"],
+)
+
+rclcpp_components_register_node(
+    name = "serial_bridge",
+    component = ":serial_driver_nodes",
+    data = [":ament_index"],
+    node_name = "serial_bridge",
+    plugin = "drivers::serial_driver::SerialBridgeNode",
+)
+
+### TESTS
+
+[cc_test(
+    name = name,
+    srcs = ["test/{0}.cpp".format(name)],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":serial_driver_library",
+        ":serial_driver_nodes_library",
+        "@rosdistro//cc:googletest",
+    ],
+) for name in [
+    "test_serial_driver",
+    "test_serial_port",
+]]
+
+### PACKAGING
+
+ament_index(
+    name = "ament_index",
+    components = [":serial_bridge_record"],
+    data = [
+        "launch/serial_driver_bridge_node.launch.py",
+        "params/example.params.yaml",
+    ],
+    libraries = [
+        ":serial_driver",
+        ":serial_driver_nodes",
+    ],
+    package_xml = "package.xml",
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake = ["serial_driver-extras.cmake"],
+    cmake_export_targets = False,
+    cmake_extras = ["serial_driver-extras.cmake"],
+    components = [":serial_bridge_record"],
+    executables = [":serial_bridge"],
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [
+        ":serial_driver",
+        ":serial_driver_nodes",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index",
+        "@ament_cmake_auto//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@asio_cmake_module//:ament_package",
+        "@io_context//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+# Opens a real serial device (/dev/ttyS0 by default in params/example.params.yaml).
+launch_ros_binary(
+    name = "launch_serial_driver_bridge_node_launch_py",
+    src = "launch/serial_driver_bridge_node.launch.py",
+    data = [":ament_index"],
+    deps = [
+        ":serial_bridge",
+        "@lifecycle_msgs//:py",
+    ],
+)

@@ -1,0 +1,41 @@
+--- a/webots/src/controller/launcher/webots_controller.c
++++ b/webots/src/controller/launcher/webots_controller.c
+@@ -392,10 +392,11 @@
+   const char *lib_controller = "/Contents/lib/controller:";
+   const char *path_env_variable = "DYLD_LIBRARY_PATH";
+ #endif
++  const char *old_path = getenv(path_env_variable) ? getenv(path_env_variable) : "";
+   const size_t new_path_size =
+-    snprintf(NULL, 0, "%s=%s%s%s", path_env_variable, WEBOTS_HOME, lib_controller, getenv(path_env_variable)) + 1;
++    snprintf(NULL, 0, "%s=%s%s%s/lib:%s", path_env_variable, WEBOTS_HOME, lib_controller, WEBOTS_HOME, old_path) + 1;
+   new_path = malloc(new_path_size);
+-  sprintf(new_path, "%s=%s%s%s", path_env_variable, WEBOTS_HOME, lib_controller, getenv(path_env_variable));
++  sprintf(new_path, "%s=%s%s%s/lib:%s", path_env_variable, WEBOTS_HOME, lib_controller, WEBOTS_HOME, old_path);
+   putenv(new_path);
+ }
+ 
+@@ -775,12 +776,20 @@
+     // Note: PYTHONPATH environment variable doesn't need to be set because it is already configured to point to the Python
+     // installation folder of the lib controller when the ROS 2 package is sourced.
+     add_lib_controller_to_path();
++    char driver_bin[MAX_LINE_BUFFER_SIZE];
++    snprintf(driver_bin, sizeof(driver_bin), "%s/lib/webots_ros2_driver/driver", WEBOTS_HOME);
++    if (access(driver_bin, X_OK) != 0)
++      snprintf(driver_bin, sizeof(driver_bin), "%s/bin/driver", WEBOTS_HOME);
+     size_t current_size = 0;
+     char **new_argv = NULL;
+-    new_argv = add_single_argument(new_argv, &current_size, "ros2");
+-    new_argv = add_single_argument(new_argv, &current_size, "run");
+-    new_argv = add_single_argument(new_argv, &current_size, "webots_ros2_driver");
+-    new_argv = add_single_argument(new_argv, &current_size, "driver");
++    if (access(driver_bin, X_OK) == 0) {
++      new_argv = add_single_argument(new_argv, &current_size, driver_bin);
++    } else {
++      new_argv = add_single_argument(new_argv, &current_size, "ros2");
++      new_argv = add_single_argument(new_argv, &current_size, "run");
++      new_argv = add_single_argument(new_argv, &current_size, "webots_ros2_driver");
++      new_argv = add_single_argument(new_argv, &current_size, "driver");
++    }
+     new_argv = add_controller_arguments(new_argv, argv, &current_size, false);
+     new_argv = add_single_argument(new_argv, &current_size, NULL);
+ #ifdef _WIN32

@@ -1,0 +1,111 @@
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:LGPL-2.1-or-later"],
+    license_text = "COPYING",
+)
+
+exports_files(["COPYING"])
+
+# Mirrors Version.txt, which upstream's CMakeLists.txt parses to fill in the
+# @VARIABLE@ placeholders below (CAPI_VERSION is CURRENT-AGE.AGE.REVISION).
+_VERSION_SUBSTITUTIONS = {
+    "@VERSION@": "3.15.0",
+    "@VERSION_MAJOR@": "3",
+    "@VERSION_MINOR@": "15",
+    "@VERSION_PATCH@": "0",
+    "@JTS_PORT@": "1.20.0",
+    "@CAPI_VERSION@": "1.21.0",
+    "@CAPI_VERSION_MAJOR@": "1",
+    "@CAPI_VERSION_MINOR@": "21",
+    "@CAPI_VERSION_PATCH@": "0",
+}
+
+expand_template(
+    name = "version_h",
+    out = "include/geos/version.h",
+    substitutions = _VERSION_SUBSTITUTIONS,
+    template = "include/geos/version.h.in",
+)
+
+# Doc-comment substitutions copied verbatim from capi/CMakeLists.txt.
+expand_template(
+    name = "geos_c_h",
+    out = "capi/geos_c.h",
+    substitutions = dict(
+        _VERSION_SUBSTITUTIONS.items() + {
+            "@INPUT_CURVES_CONVERTED_TO_LINES@": "This function does not support curved types directly. If curve-to-line\n* conversion parameters are registered with the context, curved\n* inputs will be automatically converted to lines. Otherwise, the\n* operation will fail.",
+            "@OUTPUT_LINES_CONVERTED_TO_CURVES@": "This function outputs linear geometry types only. If line-to-curve\n* conversion parameters are registered with the context, and a \n* curved input was provided, outputs will be automatically \n* converted to curved types.",
+        }.items(),
+    ),
+    template = "capi/geos_c.h.in",
+)
+
+# Vendored Ryu float-to-string library (src/deps/ryu, Apache-2.0 OR BSL-1.0),
+# built as an OBJECT library upstream and linked privately into geos.
+cc_library(
+    name = "ryu",
+    srcs = ["src/deps/ryu/d2s.c"],
+    hdrs = glob(["src/deps/ryu/*.h"]),
+    includes = ["src/deps"],
+    visibility = ["//visibility:private"],
+)
+
+# C++ API (libgeos). Upstream marks it unstable and requires consumers to
+# define USE_UNSTABLE_GEOS_CPP_API (exported via geos_cxx_flags).
+cc_library(
+    name = "geos",
+    srcs = glob(["src/**/*.cpp"]),
+    hdrs = glob([
+        "include/**/*.h",
+        "include/**/*.hpp",
+    ]) + [":version_h"],
+    defines = ["USE_UNSTABLE_GEOS_CPP_API"],
+    includes = ["include"],
+    deps = [":ryu"],
+)
+
+# Stable C API (libgeos_c), consumed as #include <geos_c.h>.
+cc_library(
+    name = "geos_c",
+    srcs = [
+        "capi/geos_c.cpp",
+        "capi/geos_ts_c.cpp",
+    ],
+    hdrs = [":geos_c_h"],
+    includes = ["capi"],
+    deps = [":geos"],
+)
+
+cc_library(
+    name = "test_geos_unit_headers",
+    testonly = True,
+    hdrs = glob([
+        "tests/unit/**/*.h",
+        "tests/unit/**/*.hpp",
+    ]),
+    includes = ["tests/unit"],
+    visibility = ["//visibility:private"],
+)
+
+# Upstream's single tut-based unit test binary (tests/unit/CMakeLists.txt).
+cc_test(
+    name = "test_geos_unit",
+    size = "small",
+    srcs = glob(["tests/unit/**/*.cpp"]),
+    data = glob(["tests/resources/**"]),
+    deps = [
+        ":geos",
+        ":geos_c",
+        ":test_geos_unit_headers",
+    ],
+)

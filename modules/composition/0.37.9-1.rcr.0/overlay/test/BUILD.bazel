@@ -1,0 +1,93 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+COMPOSITION_TESTS = {
+    "test_dlopen_composition": [
+        "DLOPEN_COMPOSITION_EXECUTABLE=../composition+/dlopen_composition",
+        "EXPECTED_OUTPUT_ALL=../composition+/test/composition_all",
+        "rmw_implementation=rmw_fastrtps_cpp",
+    ] + select({
+        "@platforms//os:osx": [
+            "TALKER_LIBRARY=../composition+/libtalker_component.dylib",
+            "LISTENER_LIBRARY=../composition+/liblistener_component.dylib",
+            "SERVER_LIBRARY=../composition+/libserver_component.dylib",
+            "CLIENT_LIBRARY=../composition+/libclient_component.dylib",
+        ],
+        "//conditions:default": [
+            "TALKER_LIBRARY=../composition+/libtalker_component.so",
+            "LISTENER_LIBRARY=../composition+/liblistener_component.so",
+            "SERVER_LIBRARY=../composition+/libserver_component.so",
+            "CLIENT_LIBRARY=../composition+/libclient_component.so",
+        ],
+    }),
+    "test_linktime_composition": [
+        "LINKTIME_COMPOSITION_EXECUTABLE=../composition+/linktime_composition",
+        "EXPECTED_OUTPUT_ALL=../composition+/test/composition_all",
+        "rmw_implementation=rmw_fastrtps_cpp",
+    ],
+    "test_manual_composition": [
+        "MANUAL_COMPOSITION_EXECUTABLE=../composition+/manual_composition",
+        "EXPECTED_OUTPUT_ALL=../composition+/test/composition_all",
+        "rmw_implementation=rmw_fastrtps_cpp",
+    ],
+}
+
+[cmake_configure_file(
+    name = "{0}_py".format(test_name),
+    src = "{0}.py.in".format(test_name),
+    out = "{0}.py".format(test_name),
+    defines = defines,
+) for test_name, defines in COMPOSITION_TESTS.items()]
+
+# Each test runs a single composition executable and matches its output
+# against composition_all.regex; only dlopen_composition loads the component
+# libraries by path at runtime, so only it needs them as data.
+launch_ros_test(
+    name = "test_dlopen_composition",
+    src = "test_dlopen_composition_py",
+    data = [
+        "composition_all.regex",
+        "//:client_component",
+        "//:listener_component",
+        "//:server_component",
+        "//:talker_component",
+    ],
+    deps = [
+        "//:dlopen_composition",
+        "//:rmw_test_fixture_implementation",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+[launch_ros_test(
+    name = "test_{0}".format(executable),
+    src = "test_{0}_py".format(executable),
+    data = ["composition_all.regex"],
+    deps = [
+        "//:{0}".format(executable),
+        "//:rmw_test_fixture_implementation",
+        "@rules_python//python/runfiles",
+    ],
+) for executable in [
+    "linktime_composition",
+    "manual_composition",
+]]

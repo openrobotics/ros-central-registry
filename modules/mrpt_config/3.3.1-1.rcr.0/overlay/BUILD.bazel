@@ -1,0 +1,180 @@
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@mrpt_expr//:mrpt_expr": "@mrpt_expr//:mrpt_expr_library",
+}
+
+CC_DEPS = [
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+cc_library(
+    name = "mrpt_config_library",
+    srcs = [
+        "src/CConfigFile.cpp",
+        "src/CConfigFileBase.cpp",
+        "src/CConfigFileMemory.cpp",
+        "src/CConfigFilePrefixer.cpp",
+        "src/CLoadableOptions.cpp",
+        "src/config_parser.cpp",
+    ],
+    hdrs = [
+        "3rdparty/simpleini/ConvertUTF.h",
+        "3rdparty/simpleini/SimpleIni.h",
+        "3rdparty/simpleini/tests/pch.h",
+        "include/mrpt/config/CConfigFile.h",
+        "include/mrpt/config/CConfigFileBase.h",
+        "include/mrpt/config/CConfigFileMemory.h",
+        "include/mrpt/config/CConfigFilePrefixer.h",
+        "include/mrpt/config/CLoadableOptions.h",
+        "include/mrpt/config/OptionsCapable.h",
+        "include/mrpt/config/config_parser.h",
+        "include/mrpt/config/registerAllClasses.h",
+    ] + [":config_h"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "3rdparty/simpleini",
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "mrpt_config",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mrpt_config_library"],
+)
+
+cc_library(
+    name = "_bindings_library",
+    srcs = ["python_bindings/mrpt_config_py.cpp"],
+    hdrs = [
+        "3rdparty/simpleini/ConvertUTF.h",
+        "3rdparty/simpleini/SimpleIni.h",
+        "3rdparty/simpleini/tests/pch.h",
+        "include/mrpt/config/CConfigFile.h",
+        "include/mrpt/config/CConfigFileBase.h",
+        "include/mrpt/config/CConfigFileMemory.h",
+        "include/mrpt/config/CConfigFilePrefixer.h",
+        "include/mrpt/config/CLoadableOptions.h",
+        "include/mrpt/config/OptionsCapable.h",
+        "include/mrpt/config/config_parser.h",
+        "include/mrpt/config/registerAllClasses.h",
+    ] + [":config_h"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "3rdparty/simpleini",
+        "_gen/include",
+        "include",
+        "src",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mrpt_config_library"],
+)
+
+cc_shared_library(
+    name = "_bindings",
+    dynamic_deps = DEPENDENCIES.keys() + [":mrpt_config"],
+    exports_filter = ["//:__subpackages__"],
+    shared_lib_name = "mrpt/config/_bindings.so",
+    deps = [":_bindings_library"],
+)
+
+py_library(
+    name = "mrpt",
+    srcs = ["python/mrpt/config/__init__.py"],
+    imports = ["python"],
+    deps = ["@mrpt_expr//:mrpt"],
+)
+
+expand_template(
+    name = "config_h",
+    out = "_gen/include/mrpt/config/config.h",
+    substitutions = {
+        "${CMAKE_MRPT_HAS_SIMPLEINI_SYSTEM}": "0",
+        "${CMAKE_MRPT_HAS_SIMPLEINI}": "1",
+    },
+    template = "config.h.in",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mrpt_config",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_config": [
+            "libmrpt_config.so.3.3",
+            "libmrpt_config.so.3.3.1",
+        ],
+    },
+    deps = [
+        "@mrpt_common//:ament_package",
+        "@mrpt_expr//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [
+        ":config_h",
+    ] + [
+        "include/mrpt/config/CConfigFile.h",
+        "include/mrpt/config/CConfigFileBase.h",
+        "include/mrpt/config/CConfigFileMemory.h",
+        "include/mrpt/config/CConfigFilePrefixer.h",
+        "include/mrpt/config/CLoadableOptions.h",
+        "include/mrpt/config/OptionsCapable.h",
+        "include/mrpt/config/config_parser.h",
+        "include/mrpt/config/registerAllClasses.h",
+    ],
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_config",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":mrpt",
+        ":_bindings",
+    ],
+    python_strip_prefix = "python",
+    sonames = {
+        "mrpt_config": [
+            "libmrpt_config.so.3.3",
+            "libmrpt_config.so.3.3.1",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_common//:ament_package",
+        "@mrpt_expr//:ament_package",
+    ],
+)

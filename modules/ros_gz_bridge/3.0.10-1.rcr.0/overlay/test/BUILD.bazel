@@ -1,0 +1,357 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@launch_testing//:defs.bzl", "launch_test")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+BRIDGE_MESSAGE_TYPES = [
+    "builtin_interfaces",
+    "actuator_msgs",
+    "geometry_msgs",
+    "gps_msgs",
+    "marine_acoustic_msgs",
+    "nav_msgs",
+    "rcl_interfaces",
+    "ros_gz_interfaces",
+    "rosgraph_msgs",
+    "sensor_msgs",
+    "std_msgs",
+    "tf2_msgs",
+    "trajectory_msgs",
+    "vision_msgs",
+]
+
+MESSAGE_DEPS = ["@{0}//:cc".format(pkg) for pkg in BRIDGE_MESSAGE_TYPES if pkg not in ("builtin_interfaces", "rcl_interfaces")]
+
+DEPENDENCIES = {
+    "@gz_msgs_vendor//:gz_msgs": "@gz_msgs_vendor//:gz_msgs_library",
+    "@gz_transport_vendor//:gz_transport": "@gz_transport_vendor//:gz_transport_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+GZ_MSGS_VERSION = "12.0.2"
+
+TEST_GENERATED_SOURCES = [
+    "generated/test/gz_publisher.cpp",
+    "generated/test/gz_subscriber.cpp",
+    "generated/test/ros_publisher.cpp",
+] + ["generated/test/{0}_subscriber.cpp".format(pkg) for pkg in BRIDGE_MESSAGE_TYPES]
+
+TEST_EXECUTABLES = [
+    ":test_gz_publisher",
+    ":test_gz_server",
+    ":test_gz_subscriber",
+    ":test_launch_action_subscriber",
+    ":test_ros_client",
+    ":test_ros_publisher",
+    ":test_ros_subscriber",
+]
+
+[cc_test(
+    name = name,
+    timeout = "moderate",
+    srcs = srcs,
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + MESSAGE_DEPS + [
+        "//:ros_gz_bridge_library",
+        "@rosdistro//cc:googletest",
+    ],
+) for name, srcs in [
+    (
+        "ros_gz_bridge_gid_filtering",
+        ["test_gid_filtering.cpp"],
+    ),
+    (
+        "ros_gz_bridge_node_lifetime",
+        ["test_node_lifetime.cpp"],
+    ),
+]]
+
+cc_test(
+    name = "ros_gz_bridge_bridge_config",
+    timeout = "moderate",
+    srcs = [
+        "bridge_config.cpp",
+        "//:bridge_config_chdir.cpp",
+    ],
+    data = [
+        "config/empty.yaml",
+        "config/frame_id.yaml",
+        "config/full.yaml",
+        "config/invalid.yaml",
+        "config/invalid_qos.yaml",
+        "config/minimum.yaml",
+        "config/qos.yaml",
+        "config/test-config.yaml",
+    ],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + MESSAGE_DEPS + [
+        "//:ros_gz_bridge_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+genrule(
+    name = "generate_tests",
+    srcs = [
+        "resource/gz_publisher.cpp.em",
+        "resource/gz_subscriber.cpp.em",
+        "resource/ros_pkg_subscriber.cpp.em",
+        "resource/ros_publisher.cpp.em",
+    ],
+    outs = TEST_GENERATED_SOURCES,
+    cmd = "$(execpath //:ros_gz_bridge_generate_tests) " + "--output-path $(RULEDIR)/generated/test " + "--template-dir $$(dirname $(execpath resource/gz_publisher.cpp.em)) " + "--gz-msgs-ver " + GZ_MSGS_VERSION,
+    tools = ["//:ros_gz_bridge_generate_tests"],
+)
+
+cc_library(
+    name = "test_utils",
+    srcs = [
+        "utils/gz_test_msg.cpp",
+        "utils/ros_test_msg.cpp",
+    ],
+    hdrs = [
+        "utils/gz_test_msg.hpp",
+        "utils/ros_test_msg.hpp",
+        "utils/test_utils.hpp",
+    ],
+    includes = ["."],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + MESSAGE_DEPS + [
+        "//:ros_gz_bridge_library",
+        "@googletest//:gtest",
+    ],
+)
+
+[cc_binary(
+    name = name,
+    srcs = srcs,
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    includes = ["subscribers"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":test_utils",
+        "@googletest//:gtest",
+    ],
+) for name, srcs in [
+    (
+        "test_gz_publisher",
+        ["generated/test/gz_publisher.cpp"],
+    ),
+    (
+        "test_ros_publisher",
+        ["generated/test/ros_publisher.cpp"],
+    ),
+    (
+        "test_gz_subscriber",
+        ["generated/test/gz_subscriber.cpp"],
+    ),
+    (
+        "test_gz_server",
+        ["serverclient/gz_server.cpp"],
+    ),
+    (
+        "test_ros_client",
+        ["serverclient/ros_client.cpp"],
+    ),
+    (
+        "test_ros_subscriber",
+        [
+            "subscribers/ros_subscriber.cpp",
+            "subscribers/ros_subscriber.hpp",
+        ] + ["generated/test/{0}_subscriber.cpp".format(pkg) for pkg in BRIDGE_MESSAGE_TYPES],
+    ),
+    (
+        "test_launch_action_subscriber",
+        [
+            "subscribers/launch_action_subscriber.cpp",
+            "subscribers/ros_subscriber.hpp",
+        ],
+    ),
+]]
+
+launch_test(
+    name = "test_launch_test_ros_subscriber_launch",
+    src = "launch/test_ros_subscriber.launch.py",
+    args = ["gz_msgs_ver:=" + GZ_MSGS_VERSION],
+    data = [
+        "config/empty.yaml",
+        "config/frame_id.yaml",
+        "config/full.yaml",
+        "config/invalid.yaml",
+        "config/invalid_qos.yaml",
+        "config/minimum.yaml",
+        "config/qos.yaml",
+        "config/test-config.yaml",
+        "launch/test_launch_action.launch.xml",
+        "launch/test_launch_action_classic.launch.xml",
+    ] + TEST_EXECUTABLES + [
+        "//:ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+    tags = ["manual"],
+    deps = [
+        "//:bridge_node",
+        "//:parameter_bridge",
+        "//:ros_gz_bridge_py",
+        "//:static_bridge",
+        "@launch_ros",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+launch_test(
+    name = "test_launch_test_gz_subscriber_launch",
+    src = "launch/test_gz_subscriber.launch.py",
+    args = ["gz_msgs_ver:=" + GZ_MSGS_VERSION],
+    data = [
+        "config/empty.yaml",
+        "config/frame_id.yaml",
+        "config/full.yaml",
+        "config/invalid.yaml",
+        "config/invalid_qos.yaml",
+        "config/minimum.yaml",
+        "config/qos.yaml",
+        "config/test-config.yaml",
+        "launch/test_launch_action.launch.xml",
+        "launch/test_launch_action_classic.launch.xml",
+    ] + TEST_EXECUTABLES + [
+        "//:ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+    tags = ["manual"],
+    deps = [
+        "//:bridge_node",
+        "//:parameter_bridge",
+        "//:ros_gz_bridge_py",
+        "//:static_bridge",
+        "@launch_ros",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+launch_test(
+    name = "test_launch_test_gz_server_launch",
+    src = "launch/test_gz_server.launch.py",
+    args = [],
+    data = [
+        "config/empty.yaml",
+        "config/frame_id.yaml",
+        "config/full.yaml",
+        "config/invalid.yaml",
+        "config/invalid_qos.yaml",
+        "config/minimum.yaml",
+        "config/qos.yaml",
+        "config/test-config.yaml",
+        "launch/test_launch_action.launch.xml",
+        "launch/test_launch_action_classic.launch.xml",
+    ] + TEST_EXECUTABLES + [
+        "//:ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+    tags = ["manual"],
+    deps = [
+        "//:bridge_node",
+        "//:parameter_bridge",
+        "//:ros_gz_bridge_py",
+        "//:static_bridge",
+        "@launch_ros",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+launch_test(
+    name = "test_launch_test_launch_action_launch",
+    src = "launch/test_launch_action.launch.py",
+    args = [],
+    data = [
+        "config/empty.yaml",
+        "config/frame_id.yaml",
+        "config/full.yaml",
+        "config/invalid.yaml",
+        "config/invalid_qos.yaml",
+        "config/minimum.yaml",
+        "config/qos.yaml",
+        "config/test-config.yaml",
+        "launch/test_launch_action.launch.xml",
+        "launch/test_launch_action_classic.launch.xml",
+        ":launch_test_launch_action_launch_xml",
+    ] + TEST_EXECUTABLES + [
+        "//:ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+    tags = ["manual"],
+    deps = [
+        "//:bridge_node",
+        "//:parameter_bridge",
+        "//:ros_gz_bridge_py",
+        "//:static_bridge",
+        "@launch_ros",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+launch_test(
+    name = "test_launch_test_launch_action_classic_launch",
+    src = "launch/test_launch_action_classic.launch.py",
+    args = [],
+    data = [
+        "config/empty.yaml",
+        "config/frame_id.yaml",
+        "config/full.yaml",
+        "config/invalid.yaml",
+        "config/invalid_qos.yaml",
+        "config/minimum.yaml",
+        "config/qos.yaml",
+        "config/test-config.yaml",
+        "launch/test_launch_action.launch.xml",
+        "launch/test_launch_action_classic.launch.xml",
+        ":launch_test_launch_action_classic_launch_xml",
+    ] + TEST_EXECUTABLES + [
+        "//:ament_index",
+        "@rclcpp_components//:ament_index",
+    ],
+    tags = ["manual"],
+    deps = [
+        "//:bridge_node",
+        "//:parameter_bridge",
+        "//:ros_gz_bridge_py",
+        "//:static_bridge",
+        "@launch_ros",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+launch_ros_binary(
+    name = "launch_test_launch_action_launch_xml",
+    src = "launch/test_launch_action.launch.xml",
+    data = ["//:ament_index"],
+)
+
+launch_ros_binary(
+    name = "launch_test_launch_action_classic_launch_xml",
+    src = "launch/test_launch_action_classic.launch.xml",
+    data = ["//:ament_index"],
+)

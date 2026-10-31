@@ -1,0 +1,627 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rosidl_default_generators//:defs.bzl", "default_generators", "rosidl_ament_package")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+DEPENDENCIES = {
+    ":cc_shared": ":cc",
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@builtin_interfaces//:cc_shared": "@builtin_interfaces//:cc",
+    "@data_tamer_cpp//:data_tamer": "@data_tamer_cpp//:data_tamer_library",
+    "@data_tamer_msgs//:cc_shared": "@data_tamer_msgs//:cc",
+    "@foxglove_sdk_vendor//:foxglove_sdk_vendor_cpp": "@foxglove_sdk_vendor//:foxglove_sdk_vendor_cpp_library",
+    "@geographic_msgs//:cc_shared": "@geographic_msgs//:cc",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@rcl_interfaces//:cc_shared": "@rcl_interfaces//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:lz4": "@rosdistro//cc:lz4_library",
+    "@rosdistro//cc:mcap": "@rosdistro//cc:mcap_library",
+    "@rosdistro//cc:protobuf": "@rosdistro//cc:protobuf_library",
+    "@rosdistro//cc:zlib": "@rosdistro//cc:zlib_library",
+    "@rosdistro//cc:zstd": "@rosdistro//cc:zstd_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@tf2_msgs//:cc_shared": "@tf2_msgs//:cc",
+    "@visualization_msgs//:cc_shared": "@visualization_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@geographic_msgs//:validation",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:nlohmann_json",
+]
+
+cc_library(
+    name = "data_tamer_tools_tools_library",
+    srcs = [
+        "src/foxglove_utils.cpp",
+        "src/helpers.cpp",
+        "src/ros_topic_discovery.cpp",
+        ":gen_foxglove_sdk_impl_cpp",
+    ],
+    hdrs = [
+        "include/data_tamer_tools/foxglove_datatamer_relays.hpp",
+        "include/data_tamer_tools/foxglove_source_registry.hpp",
+        "include/data_tamer_tools/foxglove_typed_relays.hpp",
+        "include/data_tamer_tools/foxglove_utils.hpp",
+        "include/data_tamer_tools/helpers.hpp",
+        "include/data_tamer_tools/ros_topic_discovery.hpp",
+        "include/data_tamer_tools/sinks/mcap_sink.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/data_tamer_tools",
+        "_gen/include/data_tamer_tools/data_tamer_tools",
+        "include",
+        "include/data_tamer_tools",
+    ],
+    local_defines = ros_local_defines() + [
+        'DATA_TAMER_VERSION=\\"1.0.0\\"',
+        "USING_ROS2=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "data_tamer_tools_tools",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":data_tamer_tools_tools_library"],
+)
+
+cc_library(
+    name = "foxglove_relay_library",
+    srcs = [
+        "src/foxglove_datatamer_relays.cpp",
+        "src/foxglove_relay.cpp",
+        "src/foxglove_typed_relays.cpp",
+    ],
+    hdrs = [
+        "include/data_tamer_tools/foxglove_datatamer_relays.hpp",
+        "include/data_tamer_tools/foxglove_source_registry.hpp",
+        "include/data_tamer_tools/foxglove_typed_relays.hpp",
+        "include/data_tamer_tools/foxglove_utils.hpp",
+        "include/data_tamer_tools/helpers.hpp",
+        "include/data_tamer_tools/ros_topic_discovery.hpp",
+        "include/data_tamer_tools/sinks/mcap_sink.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/data_tamer_tools",
+        "_gen/include/data_tamer_tools/data_tamer_tools",
+        "include",
+        "include/data_tamer_tools",
+    ],
+    local_defines = ros_local_defines() + [
+        'DATA_TAMER_VERSION=\\"1.0.0\\"',
+        "USING_ROS2=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":data_tamer_tools_tools_library",
+    ],
+)
+
+cc_shared_library(
+    name = "foxglove_relay",
+    dynamic_deps = DEPENDENCIES.keys() + [":data_tamer_tools_tools"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":foxglove_relay_library"],
+)
+
+cc_library(
+    name = "log_rotation_coordinator_component_library",
+    srcs = ["src/log_rotation_coordinator.cpp"],
+    hdrs = [
+        "include/data_tamer_tools/foxglove_datatamer_relays.hpp",
+        "include/data_tamer_tools/foxglove_source_registry.hpp",
+        "include/data_tamer_tools/foxglove_typed_relays.hpp",
+        "include/data_tamer_tools/foxglove_utils.hpp",
+        "include/data_tamer_tools/helpers.hpp",
+        "include/data_tamer_tools/ros_topic_discovery.hpp",
+        "include/data_tamer_tools/sinks/mcap_sink.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/data_tamer_tools",
+        "_gen/include/data_tamer_tools/data_tamer_tools",
+        "include",
+        "include/data_tamer_tools",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "log_rotation_coordinator_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":log_rotation_coordinator_component_library"],
+)
+
+cc_library(
+    name = "mcap_sink_library",
+    srcs = ["src/mcap_sink.cpp"],
+    hdrs = [
+        "include/data_tamer_tools/foxglove_datatamer_relays.hpp",
+        "include/data_tamer_tools/foxglove_source_registry.hpp",
+        "include/data_tamer_tools/foxglove_typed_relays.hpp",
+        "include/data_tamer_tools/foxglove_utils.hpp",
+        "include/data_tamer_tools/helpers.hpp",
+        "include/data_tamer_tools/ros_topic_discovery.hpp",
+        "include/data_tamer_tools/sinks/mcap_sink.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/data_tamer_tools",
+        "_gen/include/data_tamer_tools/data_tamer_tools",
+        "include",
+        "include/data_tamer_tools",
+    ],
+    local_defines = ros_local_defines() + [
+        'DATA_TAMER_VERSION=\\"1.0.0\\"',
+        "USING_ROS2=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":data_tamer_tools_tools_library",
+    ],
+)
+
+cc_shared_library(
+    name = "mcap_sink",
+    dynamic_deps = DEPENDENCIES.keys() + [":data_tamer_tools_tools"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mcap_sink_library"],
+)
+
+cc_library(
+    name = "rosout_logger_component_library",
+    srcs = ["src/rosout_logger.cpp"],
+    hdrs = [
+        "include/data_tamer_tools/foxglove_datatamer_relays.hpp",
+        "include/data_tamer_tools/foxglove_source_registry.hpp",
+        "include/data_tamer_tools/foxglove_typed_relays.hpp",
+        "include/data_tamer_tools/foxglove_utils.hpp",
+        "include/data_tamer_tools/helpers.hpp",
+        "include/data_tamer_tools/ros_topic_discovery.hpp",
+        "include/data_tamer_tools/sinks/mcap_sink.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/data_tamer_tools",
+        "_gen/include/data_tamer_tools/data_tamer_tools",
+        "include",
+        "include/data_tamer_tools",
+    ],
+    local_defines = ros_local_defines() + [
+        'DATA_TAMER_VERSION=\\"1.0.0\\"',
+        "USING_ROS2=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":data_tamer_tools_tools_library",
+    ],
+)
+
+cc_shared_library(
+    name = "rosout_logger_component",
+    dynamic_deps = DEPENDENCIES.keys() + [":data_tamer_tools_tools"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rosout_logger_component_library"],
+)
+
+rclcpp_components_register_node(
+    name = "foxglove_relay_node",
+    component = ":foxglove_relay",
+    data = [
+        ":ament_index_extra",
+    ],
+    node_name = "foxglove_relay_node",
+    plugin = "data_tamer_tools::DtRos2ToFoxgloveBridge",
+)
+
+rclcpp_components_register_node(
+    name = "log_rotation_coordinator",
+    component = ":log_rotation_coordinator_component",
+    node_name = "log_rotation_coordinator",
+    plugin = "data_tamer_tools::LogRotationCoordinator",
+)
+
+rclcpp_components_register_node(
+    name = "rosout_logger",
+    component = ":rosout_logger_component",
+    node_name = "rosout_logger",
+    plugin = "data_tamer_tools::RosoutLogger",
+)
+
+rclcpp_components_register_nodes(
+    name = "log_rotation_coordinator_component_components",
+    component = ":log_rotation_coordinator_component",
+    plugins = ["data_tamer_tools::LogRotationCoordinator"],
+)
+
+rclcpp_components_register_nodes(
+    name = "rosout_logger_component_components",
+    component = ":rosout_logger_component",
+    plugins = ["data_tamer_tools::RosoutLogger"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":foxglove_relay",
+        ":log_rotation_coordinator_component",
+        ":mcap_sink",
+        ":rosout_logger_component",
+    ] + [":data_tamer_tools_tools"],
+)
+
+cc_binary(
+    name = "mcap_converter",
+    srcs = ["src/mcap_converter.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/data_tamer_tools",
+        "_gen/include/data_tamer_tools/data_tamer_tools",
+        "include",
+        "include/data_tamer_tools",
+    ],
+    local_defines = ros_local_defines() + [
+        'DATA_TAMER_VERSION=\\"1.0.0\\"',
+        "USING_ROS2=1",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":data_tamer_tools_tools_library",
+    ],
+)
+
+write_file(
+    name = "gen_foxglove_sdk_impl_cpp",
+    out = "_gen/foxglove_sdk_impl.cpp",
+    content = [
+        "#include <foxglove/channel.hpp>",
+        "#include <foxglove/context.hpp>",
+        "#include <foxglove/error.hpp>",
+        "#include <foxglove/mcap.hpp>",
+        "#include <foxglove/messages.hpp>",
+        "#include <foxglove/websocket.hpp>",
+        "#include <atomic>",
+        "",
+        "struct foxglove_context { int dummy = 0; };",
+        "struct foxglove_channel { uint64_t id = 0; };",
+        "struct foxglove_websocket_server { uint16_t port = 8765; };",
+        "struct foxglove_mcap_writer { int dummy = 0; };",
+        "",
+        "namespace foxglove {",
+        "namespace {",
+        "std::atomic<uint64_t> g_next_channel_id{1};",
+        "foxglove_error noop_server_deleter(foxglove_websocket_server* p) { delete p; return FOXGLOVE_ERROR_OK; }",
+        "foxglove_error noop_mcap_deleter(foxglove_mcap_writer* p) { delete p; return FOXGLOVE_ERROR_OK; }",
+        "}  // namespace",
+        "",
+        "Context::Context(const foxglove_context* context) : impl_(context, [](const foxglove_context* p) { delete p; }) {}",
+        "Context Context::create() { return Context(new foxglove_context{}); }",
+        'const char* strerror(FoxgloveError) { return "ok"; }',
+        "",
+        "std::optional<Schema> ChannelDescriptor::schema() const noexcept { return std::nullopt; }",
+        "",
+        "RawChannel::RawChannel(const foxglove_channel* channel) : impl_(channel) {}",
+        "FoxgloveResult<RawChannel> RawChannel::create(",
+        "    const std::string_view&,",
+        "    const std::string_view&,",
+        "    std::optional<Schema>,",
+        "    const Context&,",
+        "    std::optional<std::map<std::string, std::string>>) {",
+        "  return RawChannel(new foxglove_channel{g_next_channel_id.fetch_add(1)});",
+        "}",
+        "FoxgloveError RawChannel::log(const std::byte*, size_t, std::optional<uint64_t>, std::optional<uint64_t>) noexcept {",
+        "  return FoxgloveError::Ok;",
+        "}",
+        "void RawChannel::close() noexcept {}",
+        "uint64_t RawChannel::id() const noexcept { return impl_ ? impl_->id : 0; }",
+        "",
+        "WebSocketServer::WebSocketServer(",
+        "    foxglove_websocket_server* server,",
+        "    std::unique_ptr<WebSocketServerCallbacks> callbacks,",
+        "    std::unique_ptr<FetchAssetHandler> fetch_asset,",
+        "    std::unique_ptr<SinkChannelFilterFn> sink_channel_filter,",
+        "    std::unique_ptr<ParameterHandler> parameter_handler)",
+        "    : callbacks_(std::move(callbacks)),",
+        "      fetch_asset_(std::move(fetch_asset)),",
+        "      sink_channel_filter_(std::move(sink_channel_filter)),",
+        "      parameter_handler_(std::move(parameter_handler)),",
+        "      impl_(server, &noop_server_deleter) {}",
+        "FoxgloveResult<WebSocketServer> WebSocketServer::create(WebSocketServerOptions&& options) {",
+        "  auto* srv = new foxglove_websocket_server{options.port};",
+        "  return WebSocketServer(srv, nullptr, nullptr, nullptr, nullptr);",
+        "}",
+        "uint16_t WebSocketServer::port() const { return impl_ ? impl_->port : 8765; }",
+        "FoxgloveError WebSocketServer::stop() { return FoxgloveError::Ok; }",
+        "",
+        "McapWriter::McapWriter(",
+        "    foxglove_mcap_writer* writer,",
+        "    std::unique_ptr<SinkChannelFilterFn> sink_channel_filter,",
+        "    std::unique_ptr<CustomWriter> custom_writer)",
+        "    : sink_channel_filter_(std::move(sink_channel_filter)),",
+        "      custom_writer_(std::move(custom_writer)),",
+        "      impl_(writer, &noop_mcap_deleter) {}",
+        "FoxgloveResult<McapWriter> McapWriter::create(const McapWriterOptions&) {",
+        "  return McapWriter(new foxglove_mcap_writer{}, nullptr, nullptr);",
+        "}",
+        "FoxgloveError McapWriter::close() { return FoxgloveError::Ok; }",
+        "",
+        "namespace messages {",
+        "void ChannelDeleter::operator()(const foxglove_channel* ptr) const noexcept { delete ptr; }",
+        "",
+        "FoxgloveError Log::encode(uint8_t*, size_t, size_t* encoded_len) {",
+        "  if (encoded_len) *encoded_len = 0;",
+        "  return FoxgloveError::Ok;",
+        "}",
+        'Schema Log::schema() { return Schema{"foxglove.Log", "protobuf", nullptr, 0}; }',
+        "",
+        "FoxgloveResult<FrameTransformChannel> FrameTransformChannel::create(const std::string_view&, const Context&) { return FrameTransformChannel(ChannelUniquePtr(new foxglove_channel{g_next_channel_id.fetch_add(1)})); }",
+        "FoxgloveError FrameTransformChannel::log(const FrameTransform&, std::optional<uint64_t>, std::optional<uint64_t>) noexcept { return FoxgloveError::Ok; }",
+        "void FrameTransformChannel::close() noexcept {}",
+        "uint64_t FrameTransformChannel::id() const noexcept { return impl_ ? impl_->id : 0; }",
+        "",
+        "FoxgloveResult<GeoJSONChannel> GeoJSONChannel::create(const std::string_view&, const Context&) { return GeoJSONChannel(ChannelUniquePtr(new foxglove_channel{g_next_channel_id.fetch_add(1)})); }",
+        "FoxgloveError GeoJSONChannel::log(const GeoJSON&, std::optional<uint64_t>, std::optional<uint64_t>) noexcept { return FoxgloveError::Ok; }",
+        "void GeoJSONChannel::close() noexcept {}",
+        "uint64_t GeoJSONChannel::id() const noexcept { return impl_ ? impl_->id : 0; }",
+        "",
+        "FoxgloveResult<LaserScanChannel> LaserScanChannel::create(const std::string_view&, const Context&) { return LaserScanChannel(ChannelUniquePtr(new foxglove_channel{g_next_channel_id.fetch_add(1)})); }",
+        "FoxgloveError LaserScanChannel::log(const LaserScan&, std::optional<uint64_t>, std::optional<uint64_t>) noexcept { return FoxgloveError::Ok; }",
+        "void LaserScanChannel::close() noexcept {}",
+        "uint64_t LaserScanChannel::id() const noexcept { return impl_ ? impl_->id : 0; }",
+        "",
+        "FoxgloveResult<LocationFixChannel> LocationFixChannel::create(const std::string_view&, const Context&) { return LocationFixChannel(ChannelUniquePtr(new foxglove_channel{g_next_channel_id.fetch_add(1)})); }",
+        "FoxgloveError LocationFixChannel::log(const LocationFix&, std::optional<uint64_t>, std::optional<uint64_t>) noexcept { return FoxgloveError::Ok; }",
+        "void LocationFixChannel::close() noexcept {}",
+        "uint64_t LocationFixChannel::id() const noexcept { return impl_ ? impl_->id : 0; }",
+        "",
+        "FoxgloveResult<LogChannel> LogChannel::create(const std::string_view&, const Context&) { return LogChannel(ChannelUniquePtr(new foxglove_channel{g_next_channel_id.fetch_add(1)})); }",
+        "FoxgloveError LogChannel::log(const Log&, std::optional<uint64_t>, std::optional<uint64_t>) noexcept { return FoxgloveError::Ok; }",
+        "void LogChannel::close() noexcept {}",
+        "uint64_t LogChannel::id() const noexcept { return impl_ ? impl_->id : 0; }",
+        "",
+        "FoxgloveResult<SceneUpdateChannel> SceneUpdateChannel::create(const std::string_view&, const Context&) { return SceneUpdateChannel(ChannelUniquePtr(new foxglove_channel{g_next_channel_id.fetch_add(1)})); }",
+        "FoxgloveError SceneUpdateChannel::log(const SceneUpdate&, std::optional<uint64_t>, std::optional<uint64_t>) noexcept { return FoxgloveError::Ok; }",
+        "void SceneUpdateChannel::close() noexcept {}",
+        "uint64_t SceneUpdateChannel::id() const noexcept { return impl_ ? impl_->id : 0; }",
+        "",
+        "}  // namespace messages",
+        "}  // namespace foxglove",
+    ],
+)
+
+pkg_files(
+    name = "pkg_files_inc_31",
+    srcs = ["include/data_tamer_tools/foxglove_datatamer_relays.hpp"],
+    prefix = "include/data_tamer_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_32",
+    srcs = ["include/data_tamer_tools/foxglove_source_registry.hpp"],
+    prefix = "include/data_tamer_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_33",
+    srcs = ["include/data_tamer_tools/foxglove_typed_relays.hpp"],
+    prefix = "include/data_tamer_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_34",
+    srcs = ["include/data_tamer_tools/foxglove_utils.hpp"],
+    prefix = "include/data_tamer_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_35",
+    srcs = ["include/data_tamer_tools/helpers.hpp"],
+    prefix = "include/data_tamer_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_36",
+    srcs = ["include/data_tamer_tools/ros_topic_discovery.hpp"],
+    prefix = "include/data_tamer_tools",
+)
+
+pkg_files(
+    name = "pkg_files_inc_37",
+    srcs = ["include/data_tamer_tools/sinks/mcap_sink.hpp"],
+    prefix = "include/data_tamer_tools/sinks",
+)
+
+default_generators(
+    package_xml = "package.xml",
+    deps = [
+        "//msg:LogDir",
+        "//srv:Rotate",
+    ],
+)
+
+ament_index(
+    name = "ament_index_extra",
+    components = [
+        ":foxglove_relay_node_record",
+        ":log_rotation_coordinator_record",
+        ":rosout_logger_record",
+        ":log_rotation_coordinator_component_components",
+        ":rosout_logger_component_components",
+    ],
+    data = [
+        "//launch:launch_files",
+        "//test:data/capture.3026812782465800491.schema.txt",
+        "//test:data/capture.3026812782465800491.snapshot.bin",
+    ],
+    export_name = "data_tamer_tools",
+    lib_data = [
+        ":log_rotation_coordinator",
+        ":mcap_converter",
+        ":rosout_logger",
+    ],
+    libraries = [
+        ":data_tamer_tools_tools",
+        ":foxglove_relay",
+        ":log_rotation_coordinator_component",
+        ":mcap_sink",
+        ":rosout_logger_component",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_cppcheck//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@data_tamer_cpp//:ament_package",
+        "@data_tamer_msgs//:ament_package",
+        "@foxglove_sdk_vendor//:ament_package",
+        "@geographic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@mcap_vendor//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)
+
+rosidl_ament_package(
+    cmake_export_dependencies_list = [
+        "data_tamer_cpp",
+        "fastcdr",
+        "foxglove_sdk_vendor",
+        "geographic_msgs",
+        "geometry_msgs",
+        "nlohmann_json",
+        "rclcpp",
+        "rclcpp_components",
+        "rclcpp_lifecycle",
+        "rcutils",
+        "rmw",
+        "rosidl_runtime_c",
+        "rosidl_runtime_cpp",
+        "rosidl_typesupport_c",
+        "rosidl_typesupport_cpp",
+        "rosidl_typesupport_fastrtps_c",
+        "rosidl_typesupport_fastrtps_cpp",
+        "rosidl_typesupport_interface",
+        "sensor_msgs",
+        "service_msgs",
+        "tf2_msgs",
+        "visualization_msgs",
+    ],
+    executables = [
+        ":foxglove_relay_node",
+    ],
+    install = [
+        ":pkg_files_inc_31",
+        ":pkg_files_inc_32",
+        ":pkg_files_inc_33",
+        ":pkg_files_inc_34",
+        ":pkg_files_inc_35",
+        ":pkg_files_inc_36",
+        ":pkg_files_inc_37",
+    ],
+    interface_library = "data_tamer_tools_tools",
+    interface_library_export = "data_tamer_toolsTargets",
+    interface_library_location = "lib/libdata_tamer_tools_tools.so",
+    libraries = [
+        ":data_tamer_tools_tools",
+        ":foxglove_relay",
+        ":log_rotation_coordinator_component",
+        ":mcap_sink",
+        ":rosout_logger_component",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        ":ament_index_extra",
+        "@builtin_interfaces//:ament_package",
+        "@std_msgs//:ament_package",
+    ] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_cppcheck//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_lint_cmake//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint//:ament_package",
+        "@data_tamer_cpp//:ament_package",
+        "@data_tamer_msgs//:ament_package",
+        "@foxglove_sdk_vendor//:ament_package",
+        "@geographic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@mcap_vendor//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rosidl_default_generators//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@tf2_msgs//:ament_package",
+        "@visualization_msgs//:ament_package",
+    ],
+)

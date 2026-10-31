@@ -1,0 +1,32 @@
+--- a/src/utils.cpp
++++ b/src/utils.cpp
+@@ -14,6 +14,7 @@
+ // limitations under the License.
+ 
+ #include <chrono>
++#include <memory>
+ 
+ #include "nav2_rviz_plugins/utils.hpp"
+ 
+@@ -30,7 +31,20 @@
+     return;
+   }
+ 
+-  auto parameter_client = std::make_shared<rclcpp::AsyncParametersClient>(node, server_name);
++  // The panel threads that call this can race with shutdown (Ctrl-C); creating a
++  // client on an invalid context throws and would abort rviz2.
++  if (!rclcpp::ok()) {
++    return;
++  }
++  std::shared_ptr<rclcpp::AsyncParametersClient> parameter_client;
++  try {
++    parameter_client = std::make_shared<rclcpp::AsyncParametersClient>(node, server_name);
++  } catch (const rclcpp::exceptions::RCLError & e) {
++    RCLCPP_WARN(
++      node->get_logger(), "Not loading %s plugins from '%s': %s",
++      plugin_type.c_str(), server_name.c_str(), e.what());
++    return;
++  }
+ 
+   // Wait for the service to be available before calling it
+   bool server_unavailable = false;

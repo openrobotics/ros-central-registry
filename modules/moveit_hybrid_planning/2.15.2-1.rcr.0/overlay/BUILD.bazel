@@ -1,0 +1,647 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+generate_parameter_library(
+    name = "hp_manager_parameters",
+    yaml_file = "hybrid_planning_manager/hybrid_planning_manager_component/res/hp_manager_parameters.yaml",
+)
+
+generate_parameter_library(
+    name = "local_planner_parameters",
+    yaml_file = "local_planner/local_planner_component/res/local_planner_parameters.yaml",
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@class_loader//:class_loader": "@class_loader//:class_loader_library",
+    "@generate_parameter_library//:rclcpp_lifecycle": "@generate_parameter_library//:rclcpp_lifecycle_library",
+    "@moveit_core//:moveit_kinematic_constraints": "@moveit_core//:moveit_kinematic_constraints_library",
+    "@moveit_core//:moveit_planning_interface": "@moveit_core//:moveit_planning_interface_library",
+    "@moveit_core//:moveit_planning_scene": "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model": "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state": "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory": "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_trajectory_processing": "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_utils": "@moveit_core//:moveit_utils_library",
+    "@moveit_msgs//:cc_shared": "@moveit_msgs//:cc",
+    "@moveit_ros_planning//:moveit_cpp": "@moveit_ros_planning//:moveit_cpp_library",
+    "@moveit_ros_planning//:moveit_planning_pipeline": "@moveit_ros_planning//:moveit_planning_pipeline_library",
+    "@moveit_ros_planning//:moveit_planning_pipeline_interfaces": "@moveit_ros_planning//:moveit_planning_pipeline_interfaces_library",
+    "@moveit_ros_planning//:moveit_planning_scene_monitor": "@moveit_ros_planning//:moveit_planning_scene_monitor_library",
+    "@moveit_ros_planning//:moveit_robot_model_loader": "@moveit_ros_planning//:moveit_robot_model_loader_library",
+    "@moveit_ros_planning//:moveit_trajectory_execution_manager": "@moveit_ros_planning//:moveit_trajectory_execution_manager_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcl//:rcl": "@rcl//:rcl_library",
+    "@rcl_action//:rcl_action": "@rcl_action//:rcl_action_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@std_srvs//:cc_shared": "@std_srvs//:cc",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@trajectory_msgs//:cc_shared": "@trajectory_msgs//:cc",
+}
+
+CC_DEPS = [
+    ":hp_manager_parameters",
+    ":local_planner_parameters",
+    "@generate_parameter_library//:generate_parameter_library",
+]
+
+HYBRID_HDRS = glob([
+    "global_planner/global_planner_component/include/**/*.h*",
+    "global_planner/global_planner_plugins/include/**/*.h*",
+    "hybrid_planning_manager/hybrid_planning_manager_component/include/**/*.h*",
+    "hybrid_planning_manager/planner_logic_plugins/include/**/*.h*",
+    "local_planner/local_constraint_solver_plugins/include/**/*.h*",
+    "local_planner/local_planner_component/include/**/*.h*",
+    "local_planner/trajectory_operator_plugins/include/**/*.h*",
+])
+
+cc_library(
+    name = "forward_trajectory_plugin_library",
+    srcs = ["local_planner/local_constraint_solver_plugins/src/forward_trajectory.cpp"],
+    hdrs = HYBRID_HDRS + [
+        ":hp_manager_parameters_gen",
+        ":local_planner_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_hybrid_planning",
+        "global_planner/global_planner_component/include",
+        "global_planner/global_planner_plugins/include",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include",
+        "hybrid_planning_manager/planner_logic_plugins/include",
+        "local_planner/local_constraint_solver_plugins/include",
+        "local_planner/local_planner_component/include",
+        "local_planner/trajectory_operator_plugins/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_shared_library(
+    name = "forward_trajectory_plugin",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@moveit_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@std_srvs//:cc_shared",
+        "@trajectory_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":forward_trajectory_plugin_library"],
+)
+
+cc_library(
+    name = "motion_planning_pipeline_plugin_library",
+    srcs = ["global_planner/global_planner_plugins/src/moveit_planning_pipeline.cpp"],
+    hdrs = HYBRID_HDRS + [
+        ":hp_manager_parameters_gen",
+        ":local_planner_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_hybrid_planning",
+        "global_planner/global_planner_component/include",
+        "global_planner/global_planner_plugins/include",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include",
+        "hybrid_planning_manager/planner_logic_plugins/include",
+        "local_planner/local_constraint_solver_plugins/include",
+        "local_planner/local_planner_component/include",
+        "local_planner/trajectory_operator_plugins/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "motion_planning_pipeline_plugin",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@moveit_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@std_srvs//:cc_shared",
+        "@trajectory_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":motion_planning_pipeline_plugin_library"],
+)
+
+cc_library(
+    name = "moveit_global_planner_component_library",
+    srcs = ["global_planner/global_planner_component/src/global_planner_component.cpp"],
+    hdrs = HYBRID_HDRS + [
+        ":hp_manager_parameters_gen",
+        ":local_planner_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_hybrid_planning",
+        "global_planner/global_planner_component/include",
+        "global_planner/global_planner_plugins/include",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include",
+        "hybrid_planning_manager/planner_logic_plugins/include",
+        "local_planner/local_constraint_solver_plugins/include",
+        "local_planner/local_planner_component/include",
+        "local_planner/trajectory_operator_plugins/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_global_planner_component",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@moveit_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@std_srvs//:cc_shared",
+        "@trajectory_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":moveit_global_planner_component_library"],
+)
+
+cc_library(
+    name = "moveit_hybrid_planning_manager_library",
+    srcs = ["hybrid_planning_manager/hybrid_planning_manager_component/src/hybrid_planning_manager.cpp"],
+    hdrs = HYBRID_HDRS + [
+        ":hp_manager_parameters_gen",
+        ":local_planner_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_hybrid_planning",
+        "global_planner/global_planner_component/include",
+        "global_planner/global_planner_plugins/include",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include",
+        "hybrid_planning_manager/planner_logic_plugins/include",
+        "local_planner/local_constraint_solver_plugins/include",
+        "local_planner/local_planner_component/include",
+        "local_planner/trajectory_operator_plugins/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_hybrid_planning_manager",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@moveit_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@std_srvs//:cc_shared",
+        "@trajectory_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":moveit_hybrid_planning_manager_library"],
+)
+
+cc_library(
+    name = "moveit_local_planner_component_library",
+    srcs = ["local_planner/local_planner_component/src/local_planner_component.cpp"],
+    hdrs = HYBRID_HDRS + [
+        ":hp_manager_parameters_gen",
+        ":local_planner_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_hybrid_planning",
+        "global_planner/global_planner_component/include",
+        "global_planner/global_planner_plugins/include",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include",
+        "hybrid_planning_manager/planner_logic_plugins/include",
+        "local_planner/local_constraint_solver_plugins/include",
+        "local_planner/local_planner_component/include",
+        "local_planner/trajectory_operator_plugins/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "moveit_local_planner_component",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@moveit_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@std_srvs//:cc_shared",
+        "@trajectory_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":moveit_local_planner_component_library"],
+)
+
+cc_library(
+    name = "single_plan_execution_plugin_library",
+    srcs = ["hybrid_planning_manager/planner_logic_plugins/src/single_plan_execution.cpp"],
+    hdrs = HYBRID_HDRS + [
+        ":hp_manager_parameters_gen",
+        ":local_planner_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_hybrid_planning",
+        "global_planner/global_planner_component/include",
+        "global_planner/global_planner_plugins/include",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include",
+        "hybrid_planning_manager/planner_logic_plugins/include",
+        "local_planner/local_constraint_solver_plugins/include",
+        "local_planner/local_planner_component/include",
+        "local_planner/trajectory_operator_plugins/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "single_plan_execution_plugin",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@moveit_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@std_srvs//:cc_shared",
+        "@trajectory_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":single_plan_execution_plugin_library"],
+)
+
+cc_library(
+    name = "replan_invalidated_trajectory_plugin_library",
+    srcs = ["hybrid_planning_manager/planner_logic_plugins/src/replan_invalidated_trajectory.cpp"],
+    hdrs = HYBRID_HDRS + [
+        ":hp_manager_parameters_gen",
+        ":local_planner_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_hybrid_planning",
+        "global_planner/global_planner_component/include",
+        "global_planner/global_planner_plugins/include",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include",
+        "hybrid_planning_manager/planner_logic_plugins/include",
+        "local_planner/local_constraint_solver_plugins/include",
+        "local_planner/local_planner_component/include",
+        "local_planner/trajectory_operator_plugins/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":single_plan_execution_plugin_library"],
+)
+
+cc_shared_library(
+    name = "replan_invalidated_trajectory_plugin",
+    dynamic_deps = [
+        ":single_plan_execution_plugin",
+        ":transitive_dynamic_deps",
+        "@moveit_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@std_srvs//:cc_shared",
+        "@trajectory_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":replan_invalidated_trajectory_plugin_library"],
+)
+
+cc_library(
+    name = "simple_sampler_plugin_library",
+    srcs = ["local_planner/trajectory_operator_plugins/src/simple_sampler.cpp"],
+    hdrs = HYBRID_HDRS + [
+        ":hp_manager_parameters_gen",
+        ":local_planner_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_hybrid_planning",
+        "global_planner/global_planner_component/include",
+        "global_planner/global_planner_plugins/include",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include",
+        "hybrid_planning_manager/planner_logic_plugins/include",
+        "local_planner/local_constraint_solver_plugins/include",
+        "local_planner/local_planner_component/include",
+        "local_planner/trajectory_operator_plugins/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "simple_sampler_plugin",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@moveit_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@std_srvs//:cc_shared",
+        "@trajectory_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":simple_sampler_plugin_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "moveit_global_planner_component_components",
+    component = ":moveit_global_planner_component",
+    plugins = ["moveit::hybrid_planning::GlobalPlannerComponent"],
+)
+
+rclcpp_components_register_nodes(
+    name = "moveit_hybrid_planning_manager_components",
+    component = ":moveit_hybrid_planning_manager",
+    plugins = ["moveit::hybrid_planning::HybridPlanningManager"],
+)
+
+rclcpp_components_register_nodes(
+    name = "moveit_local_planner_component_components",
+    component = ":moveit_local_planner_component",
+    plugins = ["moveit::hybrid_planning::LocalPlannerComponent"],
+)
+
+cc_binary(
+    name = "cancel_action",
+    srcs = [
+        "test/cancel_action.cpp",
+        ":hp_manager_parameters_gen",
+        ":local_planner_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_hybrid_planning",
+        "global_planner/global_planner_component/include",
+        "global_planner/global_planner_plugins/include",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include",
+        "hybrid_planning_manager/planner_logic_plugins/include",
+        "local_planner/local_constraint_solver_plugins/include",
+        "local_planner/local_planner_component/include",
+        "local_planner/trajectory_operator_plugins/include",
+    ],
+    local_defines = ros_local_defines() + [
+        "NDEBUG",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":moveit_global_planner_component_components",
+        ":moveit_hybrid_planning_manager_components",
+        ":moveit_local_planner_component_components",
+    ],
+    data = [
+        "test/config/demo_controller.yaml",
+        "test/config/global_planner.yaml",
+        "test/config/hybrid_planning_demo.rviz",
+        "test/config/hybrid_planning_manager.yaml",
+        "test/config/local_planner.yaml",
+        "test/launch/hybrid_planning_common.py",
+        "test/launch/test_basic_integration.test.py",
+    ],
+    data_strip_prefix = "test",
+    lib_data = [
+        ":cancel_action",
+    ],
+    libraries = [
+        ":forward_trajectory_plugin",
+        ":motion_planning_pipeline_plugin",
+        ":moveit_global_planner_component",
+        ":moveit_hybrid_planning_manager",
+        ":moveit_local_planner_component",
+        ":single_plan_execution_plugin",
+        ":replan_invalidated_trajectory_plugin",
+        ":simple_sampler_plugin",
+    ],
+    package_xml = "package.xml",
+    plugins = [
+        "forward_trajectory_plugin.xml",
+        "moveit_planning_pipeline_plugin.xml",
+        "replan_invalidated_trajectory_plugin.xml",
+        "simple_sampler_plugin.xml",
+        "single_plan_execution_plugin.xml",
+    ],
+    sonames = {
+        "forward_trajectory_plugin": ["libforward_trajectory_plugin.so.2.15.2"],
+        "motion_planning_pipeline_plugin": ["libmotion_planning_pipeline_plugin.so.2.15.2"],
+        "moveit_global_planner_component": ["libmoveit_global_planner_component.so.2.15.2"],
+        "moveit_hybrid_planning_manager": ["libmoveit_hybrid_planning_manager.so.2.15.2"],
+        "moveit_local_planner_component": ["libmoveit_local_planner_component.so.2.15.2"],
+        "replan_invalidated_trajectory_plugin": ["libreplan_invalidated_trajectory_plugin.so.2.15.2"],
+        "simple_sampler_plugin": ["libsimple_sampler_plugin.so.2.15.2"],
+        "single_plan_execution_plugin": ["libsingle_plan_execution_plugin.so.2.15.2"],
+    },
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@controller_manager//:ament_package",
+        "@forward_command_controller//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_configs_utils//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_msgs//:ament_package",
+        "@moveit_planners_ompl//:ament_package",
+        "@moveit_resources_panda_moveit_config//:ament_package",
+        "@moveit_ros_planning//:ament_package",
+        "@moveit_ros_planning_interface//:ament_package",
+        "@moveit_simple_controller_manager//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@robot_state_publisher//:ament_package",
+        "@ros_testing//:ament_package",
+        "@rviz2//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@trajectory_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "moveit_core",
+        "moveit_msgs",
+        "moveit_ros_planning",
+        "moveit_ros_planning_interface",
+        "pluginlib",
+        "rclcpp",
+        "rclcpp_action",
+        "rclcpp_components",
+        "std_msgs",
+        "std_srvs",
+        "tf2_ros",
+        "trajectory_msgs",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = [
+        "global_planner/global_planner_component/include/moveit/global_planner/global_planner_component.h",
+        "global_planner/global_planner_component/include/moveit/global_planner/global_planner_component.hpp",
+        "global_planner/global_planner_component/include/moveit/global_planner/global_planner_interface.h",
+        "global_planner/global_planner_component/include/moveit/global_planner/global_planner_interface.hpp",
+        "global_planner/global_planner_plugins/include/moveit/global_planner/moveit_planning_pipeline.h",
+        "global_planner/global_planner_plugins/include/moveit/global_planner/moveit_planning_pipeline.hpp",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include/moveit/hybrid_planning_manager/hybrid_planning_events.h",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include/moveit/hybrid_planning_manager/hybrid_planning_events.hpp",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include/moveit/hybrid_planning_manager/hybrid_planning_manager.h",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include/moveit/hybrid_planning_manager/hybrid_planning_manager.hpp",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include/moveit/hybrid_planning_manager/planner_logic_interface.h",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include/moveit/hybrid_planning_manager/planner_logic_interface.hpp",
+        "local_planner/local_constraint_solver_plugins/include/moveit/local_constraint_solver_plugins/forward_trajectory.h",
+        "local_planner/local_constraint_solver_plugins/include/moveit/local_constraint_solver_plugins/forward_trajectory.hpp",
+        "local_planner/local_planner_component/include/moveit/local_planner/feedback_types.h",
+        "local_planner/local_planner_component/include/moveit/local_planner/feedback_types.hpp",
+        "local_planner/local_planner_component/include/moveit/local_planner/local_constraint_solver_interface.h",
+        "local_planner/local_planner_component/include/moveit/local_planner/local_constraint_solver_interface.hpp",
+        "local_planner/local_planner_component/include/moveit/local_planner/local_planner_component.h",
+        "local_planner/local_planner_component/include/moveit/local_planner/local_planner_component.hpp",
+        "local_planner/local_planner_component/include/moveit/local_planner/trajectory_operator_interface.h",
+        "local_planner/local_planner_component/include/moveit/local_planner/trajectory_operator_interface.hpp",
+        "hybrid_planning_manager/planner_logic_plugins/include/moveit/planner_logic_plugins/replan_invalidated_trajectory.h",
+        "hybrid_planning_manager/planner_logic_plugins/include/moveit/planner_logic_plugins/replan_invalidated_trajectory.hpp",
+        "hybrid_planning_manager/planner_logic_plugins/include/moveit/planner_logic_plugins/single_plan_execution.h",
+        "hybrid_planning_manager/planner_logic_plugins/include/moveit/planner_logic_plugins/single_plan_execution.hpp",
+        "local_planner/trajectory_operator_plugins/include/moveit/trajectory_operator_plugins/simple_sampler.h",
+        "local_planner/trajectory_operator_plugins/include/moveit/trajectory_operator_plugins/simple_sampler.hpp",
+    ],
+    headers_strip_prefixes = [
+        "global_planner/global_planner_component/include",
+        "global_planner/global_planner_plugins/include",
+        "hybrid_planning_manager/hybrid_planning_manager_component/include",
+        "hybrid_planning_manager/planner_logic_plugins/include",
+        "local_planner/local_constraint_solver_plugins/include",
+        "local_planner/local_planner_component/include",
+        "local_planner/trajectory_operator_plugins/include",
+    ],
+    libraries = [
+        ":forward_trajectory_plugin",
+        ":motion_planning_pipeline_plugin",
+        ":moveit_global_planner_component",
+        ":moveit_hybrid_planning_manager",
+        ":moveit_local_planner_component",
+        ":single_plan_execution_plugin",
+        ":replan_invalidated_trajectory_plugin",
+        ":simple_sampler_plugin",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@controller_manager//:ament_package",
+        "@forward_command_controller//:ament_package",
+        "@moveit_common//:ament_package",
+        "@moveit_configs_utils//:ament_package",
+        "@moveit_core//:ament_package",
+        "@moveit_msgs//:ament_package",
+        "@moveit_planners_ompl//:ament_package",
+        "@moveit_resources_panda_moveit_config//:ament_package",
+        "@moveit_ros_planning//:ament_package",
+        "@moveit_ros_planning_interface//:ament_package",
+        "@moveit_simple_controller_manager//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@robot_state_publisher//:ament_package",
+        "@ros_testing//:ament_package",
+        "@rviz2//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@trajectory_msgs//:ament_package",
+    ],
+)

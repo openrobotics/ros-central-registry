@@ -1,0 +1,448 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:GPL-3.0-only"],
+)
+
+DEPENDENCIES = {
+    "@diagnostic_msgs//:cc_shared": "@diagnostic_msgs//:cc",
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@geographic_msgs//:cc_shared": "@geographic_msgs//:cc",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@libmavconn//:mavconn": "@libmavconn//:mavconn_library",
+    "@mavros_msgs//:cc_shared": "@mavros_msgs//:cc",
+    "@message_filters//:message_filters": "@message_filters//:message_filters_library",
+    "@nav_msgs//:cc_shared": "@nav_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcl//:rcl": "@rcl//:rcl_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:geographiclib": "@rosdistro//cc:geographiclib_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@std_srvs//:cc_shared": "@std_srvs//:cc",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_ros//:static_transform_broadcaster_node": "@tf2_ros//:static_transform_broadcaster_node_library",
+    "@tf2_ros//:tf2_ros": "@tf2_ros//:tf2_ros_library",
+    "@trajectory_msgs//:cc_shared": "@trajectory_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@angles//:angles",
+    "@eigen_stl_containers//:eigen_stl_containers",
+    "@geographic_msgs//:validation",
+    "@mavros_msgs//:mavlink_convert",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+]
+
+cc_library(
+    name = "mavros_library",
+    srcs = [
+        "src/lib/enum_sensor_orientation.cpp",
+        "src/lib/enum_to_string.cpp",
+        "src/lib/ftf_frame_conversions.cpp",
+        "src/lib/ftf_quaternion_utils.cpp",
+        "src/lib/mavros_router.cpp",
+        "src/lib/mavros_uas.cpp",
+        "src/lib/plugin.cpp",
+        "src/lib/uas_ap.cpp",
+        "src/lib/uas_data.cpp",
+        "src/lib/uas_executor.cpp",
+        "src/lib/uas_stringify.cpp",
+        "src/lib/uas_tf.cpp",
+        "src/lib/uas_timesync.cpp",
+    ],
+    hdrs = [
+        "include/mavros/frame_tf.hpp",
+        "include/mavros/inline_vector.hpp",
+        "include/mavros/mavros_plugin_register_macro.hpp",
+        "include/mavros/mavros_router.hpp",
+        "include/mavros/mavros_uas.hpp",
+        "include/mavros/mission_protocol_base.hpp",
+        "include/mavros/plugin.hpp",
+        "include/mavros/plugin_filter.hpp",
+        "include/mavros/px4_custom_mode.hpp",
+        "include/mavros/qos.hpp",
+        "include/mavros/setpoint_mixin.hpp",
+        "include/mavros/uas_executor.hpp",
+        "include/mavros/utils.hpp",
+    ] + [
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+# Upstream's plugin unit tests #include these plugin sources directly
+# (e.g. test/test_command.cpp includes "../src/plugins/command.cpp").
+cc_library(
+    name = "plugin_sources_for_tests",
+    textual_hdrs = [
+        "src/plugins/command.cpp",
+        "src/plugins/mission_protocol_base.cpp",
+        "src/plugins/param.cpp",
+        "src/plugins/waypoint.cpp",
+    ],
+    visibility = ["//test:__pkg__"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_shared_library(
+    name = "mavros",
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        "@diagnostic_msgs//:cc_shared",
+        "@geographic_msgs//:cc_shared",
+        "@geometry_msgs//:cc_shared",
+        "@mavros_msgs//:cc_shared",
+        "@nav_msgs//:cc_shared",
+        "@sensor_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@std_srvs//:cc_shared",
+        "@trajectory_msgs//:cc_shared",
+    ],
+    deps = [":mavros_library"],
+)
+
+cc_library(
+    name = "mavros_plugins_library",
+    srcs = [
+        "src/plugins/actuator_control.cpp",
+        "src/plugins/altitude.cpp",
+        "src/plugins/command.cpp",
+        "src/plugins/dummy.cpp",
+        "src/plugins/ftp.cpp",
+        "src/plugins/geofence.cpp",
+        "src/plugins/global_position.cpp",
+        "src/plugins/home_position.cpp",
+        "src/plugins/imu.cpp",
+        "src/plugins/local_position.cpp",
+        "src/plugins/manual_control.cpp",
+        "src/plugins/mission_protocol_base.cpp",
+        "src/plugins/nav_controller_output.cpp",
+        "src/plugins/param.cpp",
+        "src/plugins/rallypoint.cpp",
+        "src/plugins/rc_io.cpp",
+        "src/plugins/setpoint_accel.cpp",
+        "src/plugins/setpoint_attitude.cpp",
+        "src/plugins/setpoint_position.cpp",
+        "src/plugins/setpoint_raw.cpp",
+        "src/plugins/setpoint_trajectory.cpp",
+        "src/plugins/setpoint_velocity.cpp",
+        "src/plugins/sys_status.cpp",
+        "src/plugins/sys_time.cpp",
+        "src/plugins/waypoint.cpp",
+        "src/plugins/wind_estimation.cpp",
+    ],
+    hdrs = [
+        "include/mavros/frame_tf.hpp",
+        "include/mavros/inline_vector.hpp",
+        "include/mavros/mavros_plugin_register_macro.hpp",
+        "include/mavros/mavros_router.hpp",
+        "include/mavros/mavros_uas.hpp",
+        "include/mavros/mission_protocol_base.hpp",
+        "include/mavros/plugin.hpp",
+        "include/mavros/plugin_filter.hpp",
+        "include/mavros/px4_custom_mode.hpp",
+        "include/mavros/qos.hpp",
+        "include/mavros/setpoint_mixin.hpp",
+        "include/mavros/uas_executor.hpp",
+        "include/mavros/utils.hpp",
+    ] + [
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mavros_library"],
+)
+
+cc_shared_library(
+    name = "mavros_plugins",
+    dynamic_deps = [
+        ":mavros",
+        ":transitive_dynamic_deps",
+        "@diagnostic_msgs//:cc_shared",
+        "@geographic_msgs//:cc_shared",
+        "@geometry_msgs//:cc_shared",
+        "@mavros_msgs//:cc_shared",
+        "@nav_msgs//:cc_shared",
+        "@sensor_msgs//:cc_shared",
+        "@std_msgs//:cc_shared",
+        "@std_srvs//:cc_shared",
+        "@trajectory_msgs//:cc_shared",
+    ],
+    deps = [":mavros_plugins_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "mavros_components",
+    component = ":mavros",
+    plugins = [
+        "mavros::router::Router",
+        "mavros::uas::UAS",
+    ],
+)
+
+cc_binary(
+    name = "mavros_node",
+    srcs = [
+        "include/mavros/frame_tf.hpp",
+        "include/mavros/inline_vector.hpp",
+        "include/mavros/mavros_plugin_register_macro.hpp",
+        "include/mavros/mavros_router.hpp",
+        "include/mavros/mavros_uas.hpp",
+        "include/mavros/mission_protocol_base.hpp",
+        "include/mavros/plugin.hpp",
+        "include/mavros/plugin_filter.hpp",
+        "include/mavros/px4_custom_mode.hpp",
+        "include/mavros/qos.hpp",
+        "include/mavros/setpoint_mixin.hpp",
+        "include/mavros/uas_executor.hpp",
+        "include/mavros/utils.hpp",
+        "src/mavros_node.cpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [
+        ":transitive_dynamic_deps",
+        ":mavros",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "include",
+        "include/mavros",
+    ],
+    local_defines = ros_local_defines() + [
+        "MAVROS_HAVE_EVENTS_CBG_EXECUTOR",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":mavros_library"],
+)
+
+py_library(
+    name = "mavros_py",
+    srcs = [
+        "mavros/__init__.py",
+        "mavros/base.py",
+        "mavros/cmd/__init__.py",
+        "mavros/cmd/__main__.py",
+        "mavros/cmd/checkid.py",
+        "mavros/cmd/cmd.py",
+        "mavros/cmd/ftp.py",
+        "mavros/cmd/mission.py",
+        "mavros/cmd/param.py",
+        "mavros/cmd/safety.py",
+        "mavros/cmd/system.py",
+        "mavros/cmd/utils.py",
+        "mavros/command.py",
+        "mavros/ftp.py",
+        "mavros/global_position.py",
+        "mavros/local_position.py",
+        "mavros/mavlink.py",
+        "mavros/mission.py",
+        "mavros/nuttx_crc32.py",
+        "mavros/param.py",
+        "mavros/setpoint.py",
+        "mavros/system.py",
+        "mavros/utils.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@angles//:angles_py",
+        "@diagnostic_msgs//:py",
+        "@diagnostic_updater//:diagnostic_updater_py",
+        "@geographic_msgs//:py",
+        "@geometry_msgs//:py",
+        "@mavros_msgs//:py",
+        "@message_filters//:message_filters_py",
+        "@nav_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+        "@std_srvs//:py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":mavros_components"],
+    data = [
+        "//launch:launch_files",
+        "//test:test_plugin_params.yaml",
+    ],
+    lib_data = [
+        "scripts/install_geographiclib_datasets.sh",
+        "scripts/mav",
+    ],
+    libraries = [
+        ":mavros",
+        ":mavros_plugins",
+    ],
+    package_xml = "package.xml",
+    plugins = ["mavros_plugins.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_google_benchmark//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@eigen_stl_containers//:ament_package",
+        "@geographic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@libmavconn//:ament_package",
+        "@mavlink//:ament_package",
+        "@mavros_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcl//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@trajectory_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "Eigen3",
+        "eigen3_cmake_module",
+    ],
+    cmake_export_targets = False,
+    executables = [
+        ":mavros_node",
+    ],
+    headers = [
+        "include/mavros/frame_tf.hpp",
+        "include/mavros/inline_vector.hpp",
+        "include/mavros/mavros_plugin_register_macro.hpp",
+        "include/mavros/mavros_router.hpp",
+        "include/mavros/mavros_uas.hpp",
+        "include/mavros/mission_protocol_base.hpp",
+        "include/mavros/plugin.hpp",
+        "include/mavros/plugin_filter.hpp",
+        "include/mavros/px4_custom_mode.hpp",
+        "include/mavros/qos.hpp",
+        "include/mavros/setpoint_mixin.hpp",
+        "include/mavros/uas_executor.hpp",
+        "include/mavros/utils.hpp",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":mavros",
+        ":mavros_plugins",
+    ],
+    package_xml = "package.xml",
+    python = [":mavros_py"],
+    setup_cfg = "setup.cfg",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_google_benchmark//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@angles//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@eigen_stl_containers//:ament_package",
+        "@geographic_msgs//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@libmavconn//:ament_package",
+        "@mavlink//:ament_package",
+        "@mavros_msgs//:ament_package",
+        "@message_filters//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcl//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rosidl_default_runtime//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_ros//:ament_package",
+        "@trajectory_msgs//:ament_package",
+    ],
+)

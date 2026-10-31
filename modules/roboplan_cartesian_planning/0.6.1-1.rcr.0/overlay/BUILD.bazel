@@ -1,0 +1,216 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+cc_library(
+    name = "_test_root_headers",
+    hdrs = [
+        "include/roboplan_cartesian_planning/cartesian_path_planner.hpp",
+    ] + [
+    ],
+    includes = [],
+)
+
+DEPENDENCIES = {
+    "@roboplan//:roboplan": "@roboplan//:roboplan_library",
+    "@roboplan_example_models//:roboplan_example_models": "@roboplan_example_models//:roboplan_example_models_library",
+    "@roboplan_oink//:roboplan_oink": "@roboplan_oink//:roboplan_oink_library",
+    "@roboplan_toppra//:roboplan_toppra": "@roboplan_toppra//:roboplan_toppra_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+# Only the Python extension module uses nanobind (upstream CMake links it
+# solely into bindings/); keep it out of the core shared library so it is
+# not statically linked into both.
+BINDINGS_DEPS = [
+    "@rosdistro//cc:nanobind",
+    "@rosdistro//cc:nanobind_eigen",
+    "@rules_python//python/cc:current_py_cc_headers",
+]
+
+CC_DEPS = [
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:tl_expected",
+]
+
+cc_library(
+    name = "roboplan_cartesian_planning_library",
+    srcs = ["src/cartesian_path_planner.cpp"],
+    hdrs = [
+        "include/roboplan_cartesian_planning/cartesian_path_planner.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "_gen/include",
+        "include",
+        "include/roboplan_cartesian_planning",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "roboplan_cartesian_planning",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":roboplan_cartesian_planning_library"],
+)
+
+cc_library(
+    name = "_cartesian_ext_library",
+    srcs = [
+        "bindings/src/cartesian_path_planner.cpp",
+        "bindings/src/cartesian_path_planner_ext.cpp",
+    ],
+    hdrs = [
+        "bindings/include/modules/cartesian_path_planner.hpp",
+        "include/roboplan_cartesian_planning/cartesian_path_planner.hpp",
+    ] + [
+    ],
+    includes = [
+        "_gen/include",
+        "bindings/include",
+        "include",
+        "include/roboplan_cartesian_planning",
+    ],
+    local_defines = ros_local_defines() + [
+        "COAL_HAS_OCTOMAP",
+        "COAL_HAVE_OCTOMAP",
+        "OCTOMAP_MAJOR_VERSION=1",
+        "OCTOMAP_MINOR_VERSION=10",
+        "OCTOMAP_PATCH_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_MAJOR_VERSION=3",
+        "PINOCCHIO_URDFDOM_HEADERS_MINOR_VERSION=0",
+        "PINOCCHIO_URDFDOM_HEADERS_PATCH_VERSION=0",
+        "PINOCCHIO_WITH_COLLISION",
+        "PINOCCHIO_WITH_HPP_FCL",
+        "PINOCCHIO_WITH_URDFDOM",
+        'ROBOPLAN_VERSION=\\"0.6.1\\"',
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + BINDINGS_DEPS + [":roboplan_cartesian_planning_library"],
+)
+
+cc_shared_library(
+    name = "_cartesian_ext",
+    dynamic_deps = DEPENDENCIES.keys() + [":roboplan_cartesian_planning"],
+    exports_filter = ["//:__subpackages__"],
+    shared_lib_name = "roboplan/cartesian_planning/_cartesian_ext.so",
+    deps = [":_cartesian_ext_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":roboplan_cartesian_planning",
+        # The Python extension module is not a link-time dependency of
+        # C++ consumers (it expects libpython symbols from the interpreter).
+    ],
+)
+
+py_library(
+    name = "roboplan",
+    srcs = ["bindings/python/roboplan/cartesian_planning/__init__.py"],
+    imports = ["bindings/python"],
+    deps = [
+        "@roboplan//:roboplan_py",
+        "@roboplan_example_models//:roboplan",
+        "@roboplan_oink//:roboplan",
+        "@roboplan_toppra//:roboplan",
+    ],
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = ["include/roboplan_cartesian_planning/cartesian_path_planner.hpp"],
+    prefix = "lib/cmake/roboplan_cartesian_planning",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [":ament_files_0"],
+    libraries = [":roboplan_cartesian_planning"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_example_models//:ament_package",
+        "@roboplan_oink//:ament_package",
+        "@roboplan_toppra//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = ["include/roboplan_cartesian_planning/cartesian_path_planner.hpp"],
+    include_prefix = "",
+    libraries = [":roboplan_cartesian_planning"],
+    package_xml = "package.xml",
+    python = [
+        ":roboplan",
+        ":_cartesian_ext",
+        "bindings/python/roboplan/cartesian_planning/_cartesian_ext.pyi",
+        "bindings/python/roboplan/cartesian_planning/py.typed",
+    ],
+    python_env_hook = False,
+    python_strip_prefix = "bindings/python",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@roboplan//:ament_package",
+        "@roboplan_example_models//:ament_package",
+        "@roboplan_oink//:ament_package",
+        "@roboplan_toppra//:ament_package",
+    ],
+)

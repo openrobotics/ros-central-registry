@@ -1,0 +1,297 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@cmake_configure_file//:cmake_configure_file.bzl", "cmake_configure_file")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_exports_header", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+ros_exports_header(
+    name = "cv_bridge_header",
+    out = "include/cv_bridge/cv_bridge_export.h",
+    library = "cv_bridge",
+)
+
+cmake_configure_file(
+    name = "cv_bridge_extras",
+    src = "cmake/cv_bridge-extras.cmake.in",
+    out = "cmake/cv_bridge-extras.cmake",
+    defines = [
+        "OpenCV_VERSION=4.10.0",
+        "OpenCV_VERSION_MAJOR=4",
+        "OpenCV_VERSION_MINOR=10",
+        "OpenCV_VERSION_PATCH=0",
+        "OpenCV_SHARED=ON",
+        "OpenCV_CONFIG_PATH=/usr/lib/cmake/opencv4",
+        "OpenCV_INSTALL_PATH=/usr",
+        "OpenCV_LIB_COMPONENTS=opencv_core;opencv_imgproc;opencv_imgcodecs",
+        "OpenCV_USE_MANGLED_PATHS=FALSE",
+        "OpenCV_MODULES_SUFFIX=",
+    ],
+)
+
+HEADERS = [
+    "include/cv_bridge/cv_bridge.hpp",
+    "include/cv_bridge/cv_mat_sensor_msgs_image_type_adapter.hpp",
+    "include/cv_bridge/rgb_colors.hpp",
+    "include/cv_bridge/visibility_control.h",
+] + [":cv_bridge_header"]
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+}
+
+cc_library(
+    name = "cv_bridge_library",
+    srcs = [
+        "src/cv_bridge.cpp",
+        "src/cv_mat_sensor_msgs_image_type_adapter.cpp",
+        "src/rgb_colors.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "@rosdistro//cc:boost.endian",
+    ],
+)
+
+cc_shared_library(
+    name = "cv_bridge",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":cv_bridge_library"],
+)
+
+write_file(
+    name = "cv_bridge_boost_pybind11_src",
+    out = "src/cv_bridge_boost_pybind11.cpp",
+    content = [
+        "#include <pybind11/numpy.h>",
+        "#include <pybind11/pybind11.h>",
+        "#include <cv_bridge/cv_bridge.hpp>",
+        "#include <opencv2/core/core.hpp>",
+        "#include <stdexcept>",
+        "#include <string>",
+        "#include <vector>",
+        "",
+        "namespace py = pybind11;",
+        "",
+        "static cv::Mat numpy_to_mat(py::array arr_in) {",
+        "  py::array arr = py::array::ensure(arr_in, py::array::c_style);",
+        "  if (!arr) {",
+        '    throw py::type_error("Input is not a contiguous numpy array");',
+        "  }",
+        "  py::buffer_info buf = arr.request();",
+        "  int depth = -1;",
+        "  if (arr.dtype().is(py::dtype::of<uint8_t>())) depth = CV_8U;",
+        "  else if (arr.dtype().is(py::dtype::of<int8_t>())) depth = CV_8S;",
+        "  else if (arr.dtype().is(py::dtype::of<uint16_t>())) depth = CV_16U;",
+        "  else if (arr.dtype().is(py::dtype::of<int16_t>())) depth = CV_16S;",
+        "  else if (arr.dtype().is(py::dtype::of<int32_t>())) depth = CV_32S;",
+        "  else if (arr.dtype().is(py::dtype::of<float>())) depth = CV_32F;",
+        "  else if (arr.dtype().is(py::dtype::of<double>())) depth = CV_64F;",
+        "  else if (arr.dtype().is(py::dtype::of<int64_t>()) || arr.dtype().is(py::dtype::of<uint64_t>())) {",
+        '    arr = arr.attr("astype")("int32");',
+        "    buf = arr.request();",
+        "    depth = CV_32S;",
+        "  } else {",
+        '    throw py::type_error("Unsupported numpy array dtype");',
+        "  }",
+        "  int rows = 1, cols = 1, channels = 1;",
+        "  if (buf.ndim == 2) {",
+        "    rows = static_cast<int>(buf.shape[0]);",
+        "    cols = static_cast<int>(buf.shape[1]);",
+        "  } else if (buf.ndim == 3) {",
+        "    rows = static_cast<int>(buf.shape[0]);",
+        "    cols = static_cast<int>(buf.shape[1]);",
+        "    channels = static_cast<int>(buf.shape[2]);",
+        "  } else if (buf.ndim == 1) {",
+        "    rows = static_cast<int>(buf.shape[0]);",
+        "  } else {",
+        '    throw py::type_error("Unsupported array dimensionality");',
+        "  }",
+        "  return cv::Mat(rows, cols, CV_MAKETYPE(depth, channels), buf.ptr).clone();",
+        "}",
+        "",
+        "static py::object mat_to_numpy(const cv::Mat & m) {",
+        "  if (!m.data) return py::none();",
+        "  cv::Mat mat = m.isContinuous() ? m : m.clone();",
+        "  int depth = CV_MAT_DEPTH(mat.type());",
+        "  int cn = CV_MAT_CN(mat.type());",
+        "  py::dtype dt;",
+        "  if (depth == CV_8U) dt = py::dtype::of<uint8_t>();",
+        "  else if (depth == CV_8S) dt = py::dtype::of<int8_t>();",
+        "  else if (depth == CV_16U) dt = py::dtype::of<uint16_t>();",
+        "  else if (depth == CV_16S) dt = py::dtype::of<int16_t>();",
+        "  else if (depth == CV_32S) dt = py::dtype::of<int32_t>();",
+        "  else if (depth == CV_32F) dt = py::dtype::of<float>();",
+        "  else if (depth == CV_64F) dt = py::dtype::of<double>();",
+        '  else throw std::runtime_error("Unsupported cv::Mat depth");',
+        "  std::vector<py::ssize_t> shape = {mat.rows, mat.cols};",
+        "  std::vector<py::ssize_t> strides = {static_cast<py::ssize_t>(mat.step[0]), static_cast<py::ssize_t>(mat.elemSize())};",
+        "  if (cn > 1) {",
+        "    shape.push_back(cn);",
+        "    strides.push_back(static_cast<py::ssize_t>(mat.elemSize1()));",
+        "  }",
+        "  return py::array(dt, shape, strides, mat.data);",
+        "}",
+        "",
+        "PYBIND11_MODULE(cv_bridge_boost, m) {",
+        '  m.def("getCvType", &cv_bridge::getCvType);',
+        '  m.def("CV_MAT_CNWrap", [](int i) { return CV_MAT_CN(i); });',
+        '  m.def("CV_MAT_DEPTHWrap", [](int i) { return CV_MAT_DEPTH(i); });',
+        '  m.def("cvtColor2", [](py::array obj_in, const std::string & encoding_in, const std::string & encoding_out) {',
+        "    cv::Mat mat_in = numpy_to_mat(obj_in);",
+        "    cv_bridge::CvImagePtr cv_image(new cv_bridge::CvImage(std_msgs::msg::Header(), encoding_in, mat_in));",
+        "    cv::Mat mat = cv_bridge::cvtColor(cv_image, encoding_out)->image;",
+        "    return mat_to_numpy(mat);",
+        "  });",
+        '  m.def("cvtColorForDisplay", [](',
+        "      py::array obj_in,",
+        "      const std::string & encoding_in,",
+        "      const std::string & encoding_out,",
+        "      bool do_dynamic_scaling,",
+        "      double min_image_value,",
+        "      double max_image_value,",
+        "      int colormap) {",
+        "    cv::Mat mat_in = numpy_to_mat(obj_in);",
+        "    cv_bridge::CvImagePtr cv_image(new cv_bridge::CvImage(std_msgs::msg::Header(), encoding_in, mat_in));",
+        "    cv_bridge::CvtColorForDisplayOptions options;",
+        "    options.do_dynamic_scaling = do_dynamic_scaling;",
+        "    options.min_image_value = min_image_value;",
+        "    options.max_image_value = max_image_value;",
+        "    options.colormap = colormap;",
+        "    cv::Mat mat = cv_bridge::cvtColorForDisplay(cv_image, encoding_out, options)->image;",
+        "    return mat_to_numpy(mat);",
+        "  },",
+        '  py::arg("source"),',
+        '  py::arg("encoding_in"),',
+        '  py::arg("encoding_out"),',
+        '  py::arg("do_dynamic_scaling") = false,',
+        '  py::arg("min_image_value") = 0.0,',
+        '  py::arg("max_image_value") = 0.0,',
+        '  py::arg("colormap") = -1);',
+        "}",
+        "",
+    ],
+)
+
+cc_library(
+    name = "cv_bridge_boost_library",
+    srcs = [":cv_bridge_boost_pybind11_src"],
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + [
+        ":cv_bridge_library",
+        "@rosdistro//cc:pybind11",
+        "@rules_python//python/cc:current_py_cc_headers",
+    ],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "cv_bridge_boost",
+    dynamic_deps = DEPENDENCIES.keys() + [":cv_bridge"],
+    exports_filter = ["//:__subpackages__"],
+    shared_lib_name = "python/cv_bridge/boost/cv_bridge_boost.so",
+    deps = [":cv_bridge_boost_library"],
+)
+
+py_library(
+    name = "cv_bridge_py",
+    srcs = [
+        "python/cv_bridge/__init__.py",
+        "python/cv_bridge/core.py",
+    ],
+    data = [
+        ":cv_bridge_boost",
+        ":transitive_dynamic_deps_py",
+    ],
+    imports = ["python"],
+    deps = [
+        "@sensor_msgs//:py",
+        requirement("numpy"),
+        requirement("opencv-python"),
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        ":cv_bridge",
+        "@sensor_msgs//:cc_shared",
+    ],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps_py",
+    dynamic_deps = [
+        ":cv_bridge",
+        ":cv_bridge_boost",
+        "@sensor_msgs//:cc_shared",
+    ],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake = [":cv_bridge_extras"],
+    cmake_export_dependencies_list = [
+        "OpenCV",
+        "rclcpp",
+        "sensor_msgs",
+    ],
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_cv_bridge",
+    cmake_extras = ["cv_bridge-extras.cmake"],
+    headers = HEADERS,
+    libraries = [":cv_bridge"],
+    package_xml = "package.xml",
+    python = [
+        ":cv_bridge_py",
+        ":cv_bridge_boost",
+    ],
+    python_strip_prefix = "python",
+    deps = [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@python_cmake_module//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

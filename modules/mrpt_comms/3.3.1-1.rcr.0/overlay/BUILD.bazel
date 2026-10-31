@@ -1,0 +1,208 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@mrpt_io//:mrpt_io": "@mrpt_io//:mrpt_io_library",
+}
+
+PUBLIC_HEADERS = [
+    "include/mrpt/comms.h",
+    "include/mrpt/comms/CClientTCPSocket.h",
+    "include/mrpt/comms/CInterfaceFTDI.h",
+    "include/mrpt/comms/CSerialPort.h",
+    "include/mrpt/comms/CServerTCPSocket.h",
+    "include/mrpt/comms/net_utils.h",
+    "include/mrpt/comms/nodelets.h",
+    "include/mrpt/comms/registerAllClasses.h",
+]
+
+# *_WIN.cpp sources are dropped on non-Windows platforms by upstream's
+# mrpt_add_library().
+cc_library(
+    name = "mrpt_comms_library",
+    srcs = [
+        "src/CClientTCPSocket.cpp",
+        "src/CInterfaceFTDI_LIN.cpp",
+        "src/CInterfaceFTDI_common.cpp",
+        "src/CSerialPort.cpp",
+        "src/CServerTCPSocket.cpp",
+        "src/CServerTCPSocket_common.cpp",
+        "src/net_utils.cpp",
+        "src/nodelets.cpp",
+    ],
+    hdrs = PUBLIC_HEADERS + [":config_h"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "include",
+    ],
+    linkopts = ["-lpthread"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "mrpt_comms",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":mrpt_comms_library"],
+)
+
+TEST_DEPENDENCIES = DEPENDENCIES | {
+    ":mrpt_comms": ":mrpt_comms_library",
+    "@mrpt_poses//:mrpt_poses": "@mrpt_poses//:mrpt_poses_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = TEST_DEPENDENCIES.keys(),
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_mrpt_comms",
+    # tests/nodelets_unittest.cpp and tests/sockets_unittest.cpp are omitted:
+    # they #include "../../../mrpt_examples_cpp/..." sources, which only
+    # resolve in upstream's MRPT monorepo checkout, not in this package.
+    srcs = [
+        "tests/CSerialPort_extra_unittest.cpp",
+        "tests/CSerialPort_unittest.cpp",
+        "tests/comms_test_server.cpp",
+        "tests/comms_test_server.h",
+        "tests/net_utils_unittest.cpp",
+        "tests/nodelets_extra_unittest.cpp",
+        "tests/tcp_sockets_unittest.cpp",
+        "@mrpt_common//:common_sources/mrpt_test_main.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    local_defines = ["CMAKE_UNITTEST_BASEDIR=\\\".\\\""],
+    deps = TEST_DEPENDENCIES.values() + [
+        "@mrpt_common//:mrpt_test_common",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_library(
+    name = "_bindings_library",
+    srcs = ["python_bindings/mrpt_comms_py.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":mrpt_comms_library",
+        "@rosdistro//cc:pybind11",
+        "@rules_python//python/cc:current_py_cc_headers",
+    ],
+)
+
+cc_shared_library(
+    name = "_bindings",
+    dynamic_deps = DEPENDENCIES.keys() + [":mrpt_comms"],
+    shared_lib_name = "mrpt/comms/_bindings.so",
+    deps = [":_bindings_library"],
+)
+
+py_library(
+    name = "mrpt",
+    srcs = ["python/mrpt/comms/__init__.py"],
+    imports = ["python"],
+    deps = [
+        "@mrpt_io//:mrpt",
+        "@mrpt_poses//:mrpt",
+    ],
+)
+
+# libftdi is not available in this hermetic build, so FTDI support is
+# disabled, exactly as upstream's cmake/script_ftdi.cmake does when libftdi1
+# cannot be found.
+expand_template(
+    name = "config_h",
+    out = "_gen/include/mrpt/comms/config.h",
+    substitutions = {
+        "${CMAKE_MRPT_HAS_FTDI}": "0",
+        "${LIBFTDI_VERSION_MAJOR}": "0",
+        "${LIBFTDI_VERSION_MINOR}": "0",
+    },
+    template = "config.h.in",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [
+        ":mrpt_comms",
+    ],
+    package_xml = "package.xml",
+    sonames = {
+        "mrpt_comms": [
+            "libmrpt_comms.so.3.3",
+            "libmrpt_comms.so.3.3.1",
+        ],
+    },
+    deps = [
+        "@mrpt_common//:ament_package",
+        "@mrpt_io//:ament_package",
+        "@mrpt_poses//:ament_package",
+    ],
+)
+
+ament_package(
+    build_type = "cmake",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    egg_info = False,
+    headers = [":config_h"] + PUBLIC_HEADERS,
+    include_prefix = "",
+    install_package_xml = False,
+    libraries = [
+        ":mrpt_comms",
+    ],
+    package_xml = "package.xml",
+    python = [
+        ":mrpt",
+        ":_bindings",
+    ],
+    python_strip_prefix = "python",
+    sonames = {
+        "mrpt_comms": [
+            "libmrpt_comms.so.3.3",
+            "libmrpt_comms.so.3.3.1",
+        ],
+    },
+    deps = [":ament_index"] + [
+        "@mrpt_common//:ament_package",
+        "@mrpt_io//:ament_package",
+        "@mrpt_poses//:ament_package",
+    ],
+)

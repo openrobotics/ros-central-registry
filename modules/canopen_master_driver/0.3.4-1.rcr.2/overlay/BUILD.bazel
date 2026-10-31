@@ -1,0 +1,228 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+HEADERS = [
+    "include/canopen_master_driver/lely_master_bridge.hpp",
+    "include/canopen_master_driver/lifecycle_master_driver.hpp",
+    "include/canopen_master_driver/master_driver.hpp",
+    "include/canopen_master_driver/node_interfaces/node_canopen_basic_master.hpp",
+    "include/canopen_master_driver/node_interfaces/node_canopen_basic_master_impl.hpp",
+    "include/canopen_master_driver/visibility_control.h",
+]
+
+# Map of shared library (key) to its static library (value).
+DEPENDENCIES = {
+    "@canopen_core//:node_canopen_driver": "@canopen_core//:node_canopen_driver_library",
+    "@canopen_core//:node_canopen_master": "@canopen_core//:node_canopen_master_library",
+    "@canopen_interfaces//:cc_shared": "@canopen_interfaces//:cc",
+    "@lely_core_libraries//:lely-can": "@lely_core_libraries//:lely-can_library",
+    "@lely_core_libraries//:lely-co": "@lely_core_libraries//:lely-co_library",
+    "@lely_core_libraries//:lely-coapp": "@lely_core_libraries//:lely-coapp_library",
+    "@lely_core_libraries//:lely-ev": "@lely_core_libraries//:lely-ev_library",
+    "@lely_core_libraries//:lely-io2": "@lely_core_libraries//:lely-io2_library",
+    "@lely_core_libraries//:lely-libc": "@lely_core_libraries//:lely-libc_library",
+    "@lely_core_libraries//:lely-util": "@lely_core_libraries//:lely-util_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+}
+
+CC_DEPS = [
+]
+
+COPTS = [
+    "-Wno-missing-template-arg-list-after-template-kw",
+]
+
+cc_library(
+    name = "lely_master_bridge_library",
+    srcs = ["src/lely_master_bridge.cpp"],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "lely_master_bridge",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":lely_master_bridge_library"],
+)
+
+cc_library(
+    name = "node_canopen_basic_master_library",
+    srcs = ["src/node_interfaces/node_canopen_basic_master.cpp"],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":lely_master_bridge_library"],
+)
+
+cc_shared_library(
+    name = "node_canopen_basic_master",
+    dynamic_deps = DEPENDENCIES.keys() + [":lely_master_bridge"],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":node_canopen_basic_master_library"],
+)
+
+cc_library(
+    name = "lifecycle_master_driver_library",
+    srcs = ["src/lifecycle_master_driver.cpp"],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["CANOPEN_MASTER_DRIVER_BUILDING_LIBRARY"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":lely_master_bridge_library",
+        ":node_canopen_basic_master_library",
+    ],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "lifecycle_master_driver",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":lely_master_bridge",
+        ":node_canopen_basic_master",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":lifecycle_master_driver_library"],
+)
+
+cc_library(
+    name = "master_driver_library",
+    srcs = ["src/master_driver.cpp"],
+    hdrs = HEADERS,
+    copts = COPTS,
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["CANOPEN_MASTER_DRIVER_BUILDING_LIBRARY"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        ":lely_master_bridge_library",
+        ":node_canopen_basic_master_library",
+    ],
+    alwayslink = True,
+)
+
+cc_shared_library(
+    name = "master_driver",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":lely_master_bridge",
+        ":node_canopen_basic_master",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":master_driver_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "lifecycle_master_driver_components",
+    component = ":lifecycle_master_driver",
+    plugins = ["ros2_canopen::LifecycleMasterDriver"],
+)
+
+rclcpp_components_register_nodes(
+    name = "master_driver_components",
+    component = ":master_driver",
+    plugins = ["ros2_canopen::MasterDriver"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":lely_master_bridge",
+        ":node_canopen_basic_master",
+        "@canopen_core//:device_container",
+        "@rclcpp_components//:component_manager",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":lifecycle_master_driver_components",
+        ":master_driver_components",
+    ],
+    libraries = [
+        ":lely_master_bridge",
+        ":node_canopen_basic_master",
+        ":lifecycle_master_driver",
+        ":master_driver",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@canopen_core//:ament_package",
+        "@canopen_interfaces//:ament_package",
+        "@lely_core_libraries//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "canopen_core",
+        "canopen_interfaces",
+        "lely_core_libraries",
+        "rclcpp",
+        "rclcpp_components",
+        "rclcpp_lifecycle",
+    ],
+    cmake_export_name = "export_canopen_master_driver",
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [
+        ":lely_master_bridge",
+        ":node_canopen_basic_master",
+        ":lifecycle_master_driver",
+        ":master_driver",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@canopen_core//:ament_package",
+        "@canopen_interfaces//:ament_package",
+        "@lely_core_libraries//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+    ],
+)

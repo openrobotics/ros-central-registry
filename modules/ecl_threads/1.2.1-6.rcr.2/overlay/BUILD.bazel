@@ -1,0 +1,184 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+DEPENDENCIES = {
+    "@ecl_errors//:ecl_errors": "@ecl_errors//:ecl_errors_library",
+    "@ecl_exceptions//:ecl_exceptions": "@ecl_exceptions//:ecl_exceptions_library",
+    "@ecl_time//:ecl_time": "@ecl_time//:ecl_time_library",
+    "@ecl_type_traits//:ecl_type_traits": "@ecl_type_traits//:ecl_type_traits_library",
+}
+
+CC_DEPS = [
+    "@ecl_concepts",
+    "@ecl_config",
+    "@ecl_utilities//:ecl_utilities_library",
+]
+
+HEADERS = [
+    "include/ecl/threads.hpp",
+    "include/ecl/threads/macros.hpp",
+    "include/ecl/threads/mutex.hpp",
+    "include/ecl/threads/mutex_pos.hpp",
+    "include/ecl/threads/mutex_w32.hpp",
+    "include/ecl/threads/priority.hpp",
+    "include/ecl/threads/priority_common.hpp",
+    "include/ecl/threads/priority_pos.hpp",
+    "include/ecl/threads/priority_win.hpp",
+    "include/ecl/threads/thread.hpp",
+    "include/ecl/threads/thread_exceptions_pos.hpp",
+    "include/ecl/threads/thread_pos.hpp",
+    "include/ecl/threads/thread_win.hpp",
+    "include/ecl/threads/threadable.hpp",
+]
+
+cc_library(
+    name = "ecl_threads_library",
+    srcs = [
+        "src/lib/mutex_pos.cpp",
+        "src/lib/mutex_w32.cpp",
+        "src/lib/priority_pos.cpp",
+        "src/lib/priority_win.cpp",
+        "src/lib/thread_pos.cpp",
+        "src/lib/thread_win.cpp",
+    ],
+    hdrs = HEADERS,
+    includes = ["include"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "ecl_threads",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    shared_lib_name = "libecl_threads.so",
+    deps = [":ecl_threads_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":ecl_threads"],
+)
+
+cc_binary(
+    name = "demo_mutex",
+    srcs = ["src/examples/mutex.cpp"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":ecl_threads_library"],
+)
+
+cc_binary(
+    name = "demo_thread",
+    srcs = ["src/examples/thread.cpp"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [":ecl_threads_library"],
+)
+
+cc_test(
+    name = "ecl_test_mutex",
+    srcs = ["src/test/mutex.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":ecl_threads_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "ecl_test_priorities",
+    srcs = ["src/test/priorities.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":ecl_threads_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "ecl_test_threadable",
+    srcs = ["src/test/threadable.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":ecl_threads_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "ecl_test_threads",
+    srcs = ["src/test/threads.cpp"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    deps = [
+        ":ecl_threads_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+### PACKAGING
+
+ament_index(
+    name = "ament_index",
+    libraries = [":ecl_threads"],
+    package_xml = "package.xml",
+    sonames = {"ecl_threads": ["libecl_threads.so.1.2.1"]},
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies_list = [
+        "ecl_concepts",
+        "ecl_config",
+        "ecl_errors",
+        "ecl_exceptions",
+        "ecl_time",
+        "ecl_utilities",
+    ],
+    executables = [
+        ":demo_mutex",
+        ":demo_thread",
+    ],
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [":ecl_threads"],
+    package_xml = "package.xml",
+    sonames = {"ecl_threads": ["libecl_threads.so.1.2.1"]},
+    deps = [
+        ":ament_index",
+        "@ecl_build//:ament_package",
+        "@ecl_concepts//:ament_package",
+        "@ecl_config//:ament_package",
+        "@ecl_errors//:ament_package",
+        "@ecl_exceptions//:ament_package",
+        "@ecl_license//:ament_package",
+        "@ecl_time//:ament_package",
+        "@ecl_utilities//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

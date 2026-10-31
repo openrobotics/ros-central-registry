@@ -1,0 +1,116 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+TEST_DEPS = [
+    "@rules_python//python/runfiles",
+    "@sensor_msgs//:py",
+]
+
+cc_library(
+    name = "dummy_topics_library",
+    srcs = ["filters/dummy_topics.cpp"],
+    local_defines = ros_local_defines(),
+    deps = [
+        "//:_test_root_headers",
+        "@pcl_conversions//:pcl_conversions_library",
+        "@rclcpp//:rclcpp_library",
+        "@rclcpp_components//:rclcpp_components_library",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "dummy_topics",
+    dynamic_deps = [
+        "@rclcpp//:rclcpp",
+        "@rclcpp_components//:rclcpp_components",
+        "@sensor_msgs//:cc_shared",
+    ],
+    exports_filter = [":dummy_topics_library"],
+    deps = [":dummy_topics_library"],
+)
+
+rclcpp_components_register_node(
+    name = "dummy_topics_node",
+    component = ":dummy_topics",
+    node_name = "dummy_topics",
+    plugin = "pcl_ros_tests_filters::DummyTopics",
+)
+
+# Each filter component is loaded into a component_container next to the
+# DummyTopics test component.
+FILTER_COMPONENTS = {
+    "ExtractIndices": {},
+    "PassThrough": {},
+    "ProjectInliers": {"PARAMETERS": "{'model_type': 0}"},
+    "RadiusOutlierRemoval": {},
+    "StatisticalOutlierRemoval": {},
+    "CropBox": {},
+    "VoxelGrid": {},
+}
+
+[launch_ros_test(
+    name = "test_pcl_ros_{0}".format(plugin),
+    src = "filters/test_filter_component.py",
+    data = [
+        "//:ament_index",
+        "//:test_solib_deps",
+    ],
+    env = {
+        "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
+        "FILTER_PLUGIN": "pcl_ros::{0}".format(plugin),
+    } | extra_env,
+    deps = TEST_DEPS + ["@rclcpp_components//:component_container"],
+) for plugin, extra_env in FILTER_COMPONENTS.items()]
+
+# Each standalone filter executable (rclcpp_components_register_node).
+FILTER_EXECUTABLES = {
+    "filter_extract_indices_node": {},
+    "filter_passthrough_node": {},
+    "filter_project_inliers_node": {"PARAMETERS": "{'model_type': 0}"},
+    "filter_radius_outlier_removal_node": {},
+    "filter_statistical_outlier_removal_node": {},
+    "filter_crop_box_node": {},
+    "filter_voxel_grid_node": {},
+}
+
+[launch_ros_test(
+    name = "test_{0}".format(executable),
+    src = "filters/test_filter_executable.py",
+    data = ["//:ament_index"],
+    env = {
+        "DUMMY_PLUGIN": "pcl_ros_tests_filters::DummyTopics",
+        "FILTER_EXECUTABLE": executable,
+    } | extra_env,
+    tags = ["exclusive"] if executable == "filter_extract_indices_node" else [],
+    deps = TEST_DEPS + ["//:{0}".format(executable)],
+) for executable, extra_env in FILTER_EXECUTABLES.items()]
+
+ament_index(
+    name = "pcl_ros_tests_filters_index",
+    components = [":dummy_topics_node_record"],
+    export_name = "pcl_ros_tests_filters",
+    libraries = [":dummy_topics"],
+)

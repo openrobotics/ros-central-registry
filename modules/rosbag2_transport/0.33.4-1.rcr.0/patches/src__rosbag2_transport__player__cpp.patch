@@ -1,0 +1,45 @@
+--- a/src/rosbag2_transport/player.cpp
++++ b/src/rosbag2_transport/player.cpp
+@@ -417,6 +417,8 @@
+   rclcpp::Service<rosbag2_interfaces::srv::Burst>::SharedPtr srv_burst_;
+   rclcpp::Service<rosbag2_interfaces::srv::Seek>::SharedPtr srv_seek_;
+   rclcpp::Service<rosbag2_interfaces::srv::Stop>::SharedPtr srv_stop_;
++  // One-shot timer that performs the stop requested via srv_stop_ (see there).
++  std::shared_ptr<rclcpp::TimerBase> deferred_stop_timer_;
+ 
+   rclcpp::Publisher<rosbag2_interfaces::msg::ReadSplitEvent>::SharedPtr split_event_pub_;
+ 
+@@ -2219,13 +2221,26 @@
+            "Received Stop request while not in playback. Ignoring request.");
+         set_service_error(response, "Player is already stopped.");
+       } else {
+-        try {
+-          owner_->stop();
+-          set_service_success(response);
+-        } catch (const std::exception & e) {
+-          RCLCPP_ERROR(owner_->get_logger(), "Error during Stop request: %s", e.what());
+-          set_service_error(response, e.what());
+-        }
++        // Don't stop synchronously from inside the service callback: stop()
++        // blocks until the playback thread has exited, at which point
++        // Player::play() returns in the calling thread and `ros2 bag play`
++        // starts tearing the node down -- racing the executor, which only
++        // sends this response after the callback returns. Under some RMWs
++        // (observed with rmw_fastrtps_cpp on macOS) the response was lost
++        // and the client blocked forever. Acknowledge now and perform the
++        // stop from a one-shot timer on the next executor iteration, i.e.
++        // after the response has been sent.
++        set_service_success(response);
++        deferred_stop_timer_ = owner_->create_wall_timer(
++          std::chrono::milliseconds(1),
++          [this]() {
++            deferred_stop_timer_->cancel();
++            try {
++              owner_->stop();
++            } catch (const std::exception & e) {
++              RCLCPP_ERROR(owner_->get_logger(), "Error during Stop request: %s", e.what());
++            }
++          });
+       }
+     });
+ }

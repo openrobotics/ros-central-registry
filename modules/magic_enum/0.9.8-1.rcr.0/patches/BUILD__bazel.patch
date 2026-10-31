@@ -1,0 +1,184 @@
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -1,13 +1,174 @@
+-load("@rules_cc//cc:defs.bzl", "cc_library")
++# Copyright 2026 Open Source Robotics Foundation, Inc.
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
+ 
+-licenses(["notice"])
++load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
++load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
++load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
++load("@rules_license//rules:license.bzl", "license")
++load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+ 
+-exports_files(["LICENSE"])
++package(
++    default_applicable_licenses = [":package_license"],
++    default_visibility = ["//visibility:public"],
++)
+ 
+-package(default_visibility = ["//visibility:public"])
++license(
++    name = "package_license",
++    license_kinds = [
++        "@rules_license//licenses/spdx:MIT",
++    ],
++)
++
++DEPENDENCIES = {
++}
++
++CC_DEPS = [
++    "@rosdistro//cc:fmt",
++]
+ 
+ cc_library(
+-    name = "magic_enum",
+-    hdrs = glob(["include/magic_enum/*.hpp"]),
+-    includes = ["include"],
++    name = "magic_enum_library",
++    hdrs = glob(
++        [
++            "**/*.h",
++            "**/*.hh",
++            "**/*.hpp",
++            "**/*.hxx",
++            "**/*.ipp",
++            "**/*.inl",
++            "**/*.txx",
++            "**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    copts = [
++        "-std=c++23",
++        "-Wno-missing-template-arg-list-after-template-kw",
++    ],
++    includes = [
++        "include",
++        "include/magic_enum",
++        "test/3rdparty",
++    ],
++    deps = DEPENDENCIES.values() + CC_DEPS,
+ )
++
++collect_transitive_dynamic_deps(
++    name = "transitive_dynamic_deps",
++    dynamic_deps = DEPENDENCIES.keys(),
++)
++
++# GenPkgConfig (cmake/GenPkgConfig) output, with the metadata taken from
++# CMakeLists.txt's project() call.
++genrule(
++    name = "magic_enum_pc",
++    srcs = ["CMakeLists.txt"],
++    outs = ["_gen/share/pkgconfig/magic_enum.pc"],
++    cmd = """
++proj="$$(sed -n '/^project(/,/^)/p' $<)"
++version="$$(printf '%s\\n' "$$proj" | sed -n 's/^ *VERSION "\\(.*\\)"$$/\\1/p')"
++url="$$(printf '%s\\n' "$$proj" | sed -n 's/^ *HOMEPAGE_URL "\\(.*\\)"$$/\\1/p')"
++desc="$$(printf '%s\\n' "$$proj" | sed -n '/DESCRIPTION/{n;s/^ *"\\(.*\\)"$$/\\1/p;}')"
++{
++  echo 'prefix=$${pcfiledir}/../..'
++  echo 'includedir=$${prefix}/include'
++  echo
++  echo 'Name: magic_enum'
++  echo "Description: $$desc"
++  echo "URL: $$url"
++  echo "Version: $$version"
++  echo 'Cflags: -I$${includedir}'
++} > $@
++""",
++)
++
++pkg_files(
++    name = "magic_enum_pc_files",
++    srcs = [":magic_enum_pc"],
++    prefix = "share/pkgconfig",
++)
++
++ament_index(
++    name = "ament_index",
++    package_xml = "package.xml",
++)
++
++# Mirrors test/CMakeLists.txt: every test source is built once per supported
++# C++ standard (plus test_range for C++17 only). REPO.bazel ignores test/ as a
++# package, so the doctest header and test helpers are listed explicitly.
++MAGIC_ENUM_TEST_HDRS = [
++    "test/3rdparty/doctest/doctest.h",
++    "test/aliases.hpp",
++    "test/test_helpers.hpp",
++]
++
++MAGIC_ENUM_TESTS = [
++    (test, std)
++    for test in [
++        "test",
++        "test_aliases",
++        "test_containers",
++        "test_flags",
++        "test_wchar_t",
++    ]
++    for std in [
++        "17",
++        "20",
++        "23",
++        "26",
++    ]
++] + [("test_range", "17")]
++
++[
++    cc_test(
++        name = "{}-cpp{}".format(test, std),
++        srcs = ["test/{}.cpp".format(test)] + MAGIC_ENUM_TEST_HDRS,
++        copts = [
++            # clang spells C++26 as c++2c.
++            "-std=c++2c" if std == "26" else "-std=c++" + std,
++            "-Wno-c2y-extensions",
++        ],
++        data = [":ament_index"],
++        includes = ["test/3rdparty"],
++        local_defines = ros_local_defines() + ["DOCTEST_CONFIG_USE_STD_HEADERS"],
++        deps = [":magic_enum_library"],
++    )
++    for test, std in MAGIC_ENUM_TESTS
++]
++
++ament_package(
++    build_type = "cmake",
++    cmake_export_dependencies = False,
++    cmake_export_include_directories = True,
++    cmake_export_libraries = False,
++    cmake_export_targets = True,
++    headers = glob(
++        [
++            "include/**/*.h",
++            "include/**/*.hh",
++            "include/**/*.hpp",
++            "include/**/*.hxx",
++            "include/**/*.ipp",
++            "include/**/*.inl",
++            "include/**/*.txx",
++            "include/**/*.tcc",
++        ],
++        allow_empty = True,
++    ),
++    include_prefix = "",
++    install = [":magic_enum_pc_files"],
++    package_xml = "package.xml",
++    deps = [":ament_index"] + [
++    ],
++)

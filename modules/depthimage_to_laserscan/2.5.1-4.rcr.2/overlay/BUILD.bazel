@@ -1,0 +1,176 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_exports_header", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+ros_exports_header(
+    name = "depthimage_to_laserscan_header",
+    out = "include/depthimage_to_laserscan/DepthImageToLaserScan_export.h",
+    library = "DEPTHIMAGETOLASERSCAN",
+)
+
+ros_exports_header(
+    name = "depthimage_to_laserscan_ros_header",
+    out = "include/depthimage_to_laserscan/DepthImageToLaserScanROS_export.h",
+    library = "DEPTHIMAGETOLASERSCANROS",
+)
+
+BASE_HEADERS = [
+    "include/depthimage_to_laserscan/DepthImageToLaserScan.hpp",
+    "include/depthimage_to_laserscan/DepthImageToLaserScanROS.hpp",
+    "include/depthimage_to_laserscan/depth_traits.hpp",
+] + [":depthimage_to_laserscan_header"]
+
+BASE_DEPENDENCIES = {
+    "@image_geometry//:image_geometry": "@image_geometry//:image_geometry_library",
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+}
+
+cc_library(
+    name = "DepthImageToLaserScan_library",
+    srcs = ["src/DepthImageToLaserScan.cpp"],
+    hdrs = BASE_HEADERS,
+    includes = ["include"],
+    deps = BASE_DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "DepthImageToLaserScan",
+    dynamic_deps = BASE_DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":DepthImageToLaserScan_library"],
+)
+
+ROS_HEADERS = [
+    "include/depthimage_to_laserscan/DepthImageToLaserScan.hpp",
+    "include/depthimage_to_laserscan/DepthImageToLaserScanROS.hpp",
+    "include/depthimage_to_laserscan/depth_traits.hpp",
+] + [":depthimage_to_laserscan_ros_header"]
+
+ROS_DEPENDENCIES = {
+    ":DepthImageToLaserScan": ":DepthImageToLaserScan_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+}
+
+cc_library(
+    name = "DepthImageToLaserScanROS_library",
+    srcs = ["src/DepthImageToLaserScanROS.cpp"],
+    hdrs = ROS_HEADERS,
+    includes = ["include"],
+    deps = ROS_DEPENDENCIES.values(),
+)
+
+cc_shared_library(
+    name = "DepthImageToLaserScanROS",
+    dynamic_deps = ROS_DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":DepthImageToLaserScanROS_library"],
+)
+
+rclcpp_components_register_node(
+    name = "node_depthimage_to_laserscan",
+    component = ":DepthImageToLaserScanROS",
+    executor = "SingleThreadedExecutor",
+    node_name = "depthimage_to_laserscan_component",
+    plugin = "depthimage_to_laserscan::DepthImageToLaserScanROS",
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps_ros",
+    dynamic_deps = [
+        ":DepthImageToLaserScanROS",
+        "@sensor_msgs//:cc_shared",
+    ],
+)
+
+cc_binary(
+    name = "depthimage_to_laserscan_node",
+    srcs = ["src/depthimage_to_laserscan.cpp"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps_ros"],
+    local_defines = ros_local_defines(),
+    deps = ROS_DEPENDENCIES.values() + [":DepthImageToLaserScanROS_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = [
+        ":DepthImageToLaserScan",
+        "@sensor_msgs//:cc_shared",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":node_depthimage_to_laserscan_record"],
+    data = ["cfg/param.yaml"] + ["//launch:launch_files"],
+    libraries = [
+        ":DepthImageToLaserScan",
+        ":DepthImageToLaserScanROS",
+    ],
+    package_xml = "package.xml",
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies_list = [
+        "OpenCV",
+        "image_geometry",
+        "rclcpp",
+        "sensor_msgs",
+    ],
+    cmake_export_name = "export_depthimage_to_laserscan",
+    executables = [":depthimage_to_laserscan_node"],
+    headers = [
+        "include/depthimage_to_laserscan/DepthImageToLaserScan.hpp",
+        "include/depthimage_to_laserscan/DepthImageToLaserScanROS.hpp",
+        "include/depthimage_to_laserscan/depth_traits.hpp",
+    ] + [
+        ":depthimage_to_laserscan_header",
+        ":depthimage_to_laserscan_ros_header",
+    ],
+    libraries = [
+        ":DepthImageToLaserScan",
+        ":DepthImageToLaserScanROS",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_ros//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@image_geometry//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

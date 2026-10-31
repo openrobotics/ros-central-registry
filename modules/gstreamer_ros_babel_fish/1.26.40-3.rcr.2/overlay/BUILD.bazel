@@ -1,0 +1,221 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package", "register_ament_files")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:gstreamer": "@rosdistro//cc:gstreamer_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "gstrosbabelfish_library",
+    srcs = [
+        "src/format_conversion.cpp",
+        "src/plugin.cpp",
+        "src/rbfimagesink.cpp",
+        "src/rbfimagesrc.cpp",
+        "src/ros_node_interface.cpp",
+    ],
+    hdrs = [
+        "include/gstreamer_ros_babel_fish/format_conversion.hpp",
+        "include/gstreamer_ros_babel_fish/rbfimagesink.hpp",
+        "include/gstreamer_ros_babel_fish/rbfimagesrc.hpp",
+        "include/gstreamer_ros_babel_fish/ros_node_interface.hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "gstrosbabelfish",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = [":gstrosbabelfish_library"],
+    deps = [":gstrosbabelfish_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":gstrosbabelfish"],
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "benchmark_full_pipeline",
+    srcs = [
+        "benchmark/benchmark_common.hpp",
+        "benchmark/benchmark_full_pipeline.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "benchmark",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":gstrosbabelfish_library"],
+)
+
+cc_binary(
+    name = "benchmark_imagesink",
+    srcs = [
+        "benchmark/benchmark_common.hpp",
+        "benchmark/benchmark_imagesink.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "benchmark",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":gstrosbabelfish_library"],
+)
+
+cc_binary(
+    name = "benchmark_imagesrc",
+    srcs = [
+        "benchmark/benchmark_common.hpp",
+        "benchmark/benchmark_imagesrc.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "benchmark",
+        "include",
+    ],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [":gstrosbabelfish_library"],
+)
+
+pkg_files(
+    name = "pkg_files_shlib_0_gstrosbabelfish",
+    srcs = [":gstrosbabelfish"],
+    attributes = pkg_attributes(mode = "0755"),
+    prefix = "lib/gstreamer-1.0-plugins",
+)
+
+register_ament_files(
+    name = "ament_files_0",
+    files = [
+        "register_gstreamer_plugin.dsv",
+    ],
+    prefix = "environment",
+    strip_prefix = "*",
+)
+
+ament_index(
+    name = "ament_index",
+    data = [":ament_files_0"],
+    lib_data = [":pkg_files_shlib_0_gstrosbabelfish"],
+    libraries = [":gstrosbabelfish"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@rclcpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)
+
+[
+    cc_test(
+        name = test_name,
+        srcs = ["test/" + test_name + ".cpp"],
+        copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+        data = [":ament_index"],
+        dynamic_deps = [":transitive_dynamic_deps"],
+        includes = [
+            "include",
+        ],
+        local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+        deps = DEPENDENCIES.values() + CC_DEPS + [
+            ":gstrosbabelfish_library",
+            "@rosdistro//cc:bazel_test_helper",
+            "@rosdistro//cc:googletest",
+        ],
+    )
+    for test_name in [
+        "test_format_conversion",
+        "test_gst_to_ros",
+        "test_nv_formats",
+        "test_pts_generation",
+        "test_rbfimagesink_standalone",
+        "test_rbfimagesrc_framerate",
+        "test_rbfimagesrc_standalone",
+        "test_ros_to_gst",
+        "test_shutdown_behavior",
+        "test_subscription_count",
+        "test_timestamp_sync",
+        "test_validation",
+    ]
+]
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "rclcpp",
+        "sensor_msgs",
+    ],
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    executables = [
+        ":benchmark_full_pipeline",
+        ":benchmark_imagesink",
+        ":benchmark_imagesrc",
+    ],
+    headers = [
+        "include/gstreamer_ros_babel_fish/format_conversion.hpp",
+        "include/gstreamer_ros_babel_fish/rbfimagesink.hpp",
+        "include/gstreamer_ros_babel_fish/rbfimagesrc.hpp",
+        "include/gstreamer_ros_babel_fish/ros_node_interface.hpp",
+    ],
+    include_prefix = "include",
+    libraries = [":gstrosbabelfish"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@rclcpp//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

@@ -1,0 +1,206 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+DEPENDENCIES = {
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@ros2_medkit_msgs//:cc_shared": "@ros2_medkit_msgs//:cc",
+    "@ros2_medkit_serialization//:ros2_medkit_serialization": "@ros2_medkit_serialization//:ros2_medkit_serialization_library",
+    "@rosbag2_cpp//:rosbag2_cpp": "@rosbag2_cpp//:rosbag2_cpp_library",
+    "@rosbag2_storage//:rosbag2_storage": "@rosbag2_storage//:rosbag2_storage_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:sqlite3": "@rosdistro//cc:sqlite3_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:nlohmann_json",
+]
+
+cc_library(
+    name = "fault_manager_lib_library",
+    srcs = [
+        "src/capture_thread_pool.cpp",
+        "src/correlation/config_parser.cpp",
+        "src/correlation/correlation_engine.cpp",
+        "src/correlation/pattern_matcher.cpp",
+        "src/correlation/types.cpp",
+        "src/entity_threshold_resolver.cpp",
+        "src/fault_manager_node.cpp",
+        "src/fault_storage.cpp",
+        "src/rosbag_capture.cpp",
+        "src/snapshot_capture.cpp",
+        "src/sqlite_fault_storage.cpp",
+    ],
+    hdrs = [
+        "include/ros2_medkit_fault_manager/capture_thread_pool.hpp",
+        "include/ros2_medkit_fault_manager/correlation/config_parser.hpp",
+        "include/ros2_medkit_fault_manager/correlation/correlation_engine.hpp",
+        "include/ros2_medkit_fault_manager/correlation/pattern_matcher.hpp",
+        "include/ros2_medkit_fault_manager/correlation/types.hpp",
+        "include/ros2_medkit_fault_manager/entity_threshold_resolver.hpp",
+        "include/ros2_medkit_fault_manager/fault_manager_node.hpp",
+        "include/ros2_medkit_fault_manager/fault_storage.hpp",
+        "include/ros2_medkit_fault_manager/rosbag_capture.hpp",
+        "include/ros2_medkit_fault_manager/snapshot_capture.hpp",
+        "include/ros2_medkit_fault_manager/sqlite_fault_storage.hpp",
+        "include/ros2_medkit_fault_manager/time_utils.hpp",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "fault_manager_node",
+    srcs = ["src/main.cpp"],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/ros2_medkit_fault_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":fault_manager_lib_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/fault_manager.yaml",
+        "config/snapshots.yaml",
+        "//launch:launch_files",
+        "//test:test_capture_thread_pool.cpp",
+        "//test:test_correlation.yaml",
+        "//test:test_correlation_config_parser.cpp",
+        "//test:test_correlation_engine.cpp",
+        "//test:test_entity_thresholds.cpp",
+        "//test:test_entity_thresholds.yaml",
+        "//test:test_entity_thresholds_integration.test.py",
+        "//test:test_fault_manager.cpp",
+        "//test:test_integration.test.py",
+        "//test:test_pattern_matcher.cpp",
+        "//test:test_rosbag_capture.cpp",
+        "//test:test_rosbag_entity_scope.test.py",
+        "//test:test_rosbag_integration.test.py",
+        "//test:test_snapshot_capture.cpp",
+        "//test:test_snapshots.yaml",
+        "//test:test_sqlite_storage.cpp",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_clang_tidy//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros2_medkit_cmake//:ament_package",
+        "@ros2_medkit_msgs//:ament_package",
+        "@ros2_medkit_serialization//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosbag2_storage_mcap//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    executables = [
+        ":fault_manager_node",
+    ],
+    headers = [
+        "include/ros2_medkit_fault_manager/capture_thread_pool.hpp",
+        "include/ros2_medkit_fault_manager/correlation/config_parser.hpp",
+        "include/ros2_medkit_fault_manager/correlation/correlation_engine.hpp",
+        "include/ros2_medkit_fault_manager/correlation/pattern_matcher.hpp",
+        "include/ros2_medkit_fault_manager/correlation/types.hpp",
+        "include/ros2_medkit_fault_manager/entity_threshold_resolver.hpp",
+        "include/ros2_medkit_fault_manager/fault_manager_node.hpp",
+        "include/ros2_medkit_fault_manager/fault_storage.hpp",
+        "include/ros2_medkit_fault_manager/rosbag_capture.hpp",
+        "include/ros2_medkit_fault_manager/snapshot_capture.hpp",
+        "include/ros2_medkit_fault_manager/sqlite_fault_storage.hpp",
+        "include/ros2_medkit_fault_manager/time_utils.hpp",
+    ],
+    include_prefix = "",
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_clang_format//:ament_package",
+        "@ament_cmake_clang_tidy//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@ros2_medkit_cmake//:ament_package",
+        "@ros2_medkit_msgs//:ament_package",
+        "@ros2_medkit_serialization//:ament_package",
+        "@rosbag2_cpp//:ament_package",
+        "@rosbag2_py//:ament_package",
+        "@rosbag2_storage//:ament_package",
+        "@rosbag2_storage_mcap//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

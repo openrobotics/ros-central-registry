@@ -1,0 +1,182 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+### DATA
+
+ament_index(
+    name = "ament_index",
+    data = ["demo_nodes_py/parameters/params.yaml"],
+    data_strip_prefix = "demo_nodes_py/parameters",
+    package_xml = "package.xml",
+)
+
+### PYTHON MODULE
+
+py_library(
+    name = "demo_nodes_py",
+    srcs = [
+        "demo_nodes_py/__init__.py",
+        "demo_nodes_py/events/__init__.py",
+        "demo_nodes_py/events/matched_event_detect.py",
+        "demo_nodes_py/logging/__init__.py",
+        "demo_nodes_py/logging/use_logger_service.py",
+        "demo_nodes_py/parameters/__init__.py",
+        "demo_nodes_py/parameters/async_param_client.py",
+        "demo_nodes_py/parameters/set_parameters_callback.py",
+        "demo_nodes_py/services/__init__.py",
+        "demo_nodes_py/services/add_two_ints_client.py",
+        "demo_nodes_py/services/add_two_ints_client_async.py",
+        "demo_nodes_py/services/add_two_ints_server.py",
+        "demo_nodes_py/services/introspection.py",
+        "demo_nodes_py/topics/__init__.py",
+        "demo_nodes_py/topics/listener.py",
+        "demo_nodes_py/topics/listener_qos.py",
+        "demo_nodes_py/topics/listener_serialized.py",
+        "demo_nodes_py/topics/talker.py",
+        "demo_nodes_py/topics/talker_qos.py",
+    ],
+    data = ["demo_nodes_py/parameters/params.yaml"] + [":ament_index"],
+    imports = ["."],
+    deps = [
+        "@ament_index_python",
+        "@example_interfaces//:py",
+        "@rclpy",
+    ],
+)
+
+### EXECUTABLES
+
+EXECUTABLES = {
+    "listener": "topics/listener",
+    "talker": "topics/talker",
+    "listener_qos": "topics/listener_qos",
+    "talker_qos": "topics/talker_qos",
+    "listener_serialized": "topics/listener_serialized",
+    "add_two_ints_client": "services/add_two_ints_client",
+    "add_two_ints_client_async": "services/add_two_ints_client_async",
+    "add_two_ints_server": "services/add_two_ints_server",
+    "async_param_client": "parameters/async_param_client",
+    "set_parameters_callback": "parameters/set_parameters_callback",
+    "introspection": "services/introspection",
+    "matched_event_detect": "events/matched_event_detect",
+    "use_logger_service": "logging/use_logger_service",
+}
+
+[
+    py_binary(
+        name = executable,
+        srcs = ["demo_nodes_py/{0}.py".format(src)],
+        data = [":ament_index"],
+        main = "demo_nodes_py/{0}.py".format(src),
+        deps = [
+            ":demo_nodes_py",
+        ],
+    )
+    for executable, src in EXECUTABLES.items()
+]
+
+### TESTS
+
+[
+    py_pytest(
+        name = "test_{0}".format(linter),
+        srcs = ["test/test_{0}.py".format(linter)],
+        data = [
+            "CHANGELOG.rst",
+            "README.md",
+            "demo_nodes_py/__init__.py",
+            "demo_nodes_py/events/__init__.py",
+            "demo_nodes_py/events/matched_event_detect.py",
+            "demo_nodes_py/logging/__init__.py",
+            "demo_nodes_py/logging/use_logger_service.py",
+            "demo_nodes_py/parameters/__init__.py",
+            "demo_nodes_py/parameters/async_param_client.py",
+            "demo_nodes_py/parameters/params.yaml",
+            "demo_nodes_py/parameters/set_parameters_callback.py",
+            "demo_nodes_py/services/__init__.py",
+            "demo_nodes_py/services/add_two_ints_client.py",
+            "demo_nodes_py/services/add_two_ints_client_async.py",
+            "demo_nodes_py/services/add_two_ints_server.py",
+            "demo_nodes_py/services/introspection.py",
+            "demo_nodes_py/topics/__init__.py",
+            "demo_nodes_py/topics/listener.py",
+            "demo_nodes_py/topics/listener_qos.py",
+            "demo_nodes_py/topics/listener_serialized.py",
+            "demo_nodes_py/topics/talker.py",
+            "demo_nodes_py/topics/talker_qos.py",
+            "img/qos_listener_talker.png",
+            "img/serialized_subscriber.png",
+            "img/server_client.png",
+            "img/set_parameters_callback.png",
+            "img/talker_listener.png",
+            "package.xml",
+            "resource/demo_nodes_py",
+            "setup.cfg",
+            "setup.py",
+            "test/test_copyright.py",
+            "test/test_flake8.py",
+            "test/test_pep257.py",
+            "test/test_xmllint.py",
+        ],
+        deps = ["@ament_{0}".format(linter)],
+    )
+    for linter in [
+        "copyright",
+        "flake8",
+        "pep257",
+        "xmllint",
+    ]
+]
+
+### PACKAGING
+
+ament_package(
+    name = "ament_package",
+    console_scripts = {
+        executable: "demo_nodes_py.{0}:main".format(src.replace("/", "."))
+        for executable, src in EXECUTABLES.items()
+    },
+    package_xml = "package.xml",
+    python = [":demo_nodes_py"],
+    setup_cfg = "setup.cfg",
+    deps = [
+        ":ament_index",
+        "@ament_copyright//:ament_package",
+        "@ament_flake8//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@ament_pep257//:ament_package",
+        "@ament_xmllint//:ament_package",
+        "@example_interfaces//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclpy//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)

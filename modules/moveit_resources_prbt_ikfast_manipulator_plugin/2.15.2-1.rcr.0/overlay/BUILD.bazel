@@ -1,0 +1,150 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+generate_parameter_library(
+    name = "prbt_ikfast_kinematics_parameters",
+    yaml_file = "src/prbt_ikfast_kinematics_parameters.yaml",
+)
+
+DEPENDENCIES = {
+    "@class_loader//:class_loader": "@class_loader//:class_loader_library",
+    "@moveit_core//:moveit_collision_detection": "@moveit_core//:moveit_collision_detection_library",
+    "@moveit_core//:moveit_collision_detection_bullet": "@moveit_core//:moveit_collision_detection_bullet_library",
+    "@moveit_core//:moveit_collision_detection_fcl": "@moveit_core//:moveit_collision_detection_fcl_library",
+    "@moveit_core//:moveit_collision_distance_field": "@moveit_core//:moveit_collision_distance_field_library",
+    "@moveit_core//:moveit_constraint_samplers": "@moveit_core//:moveit_constraint_samplers_library",
+    "@moveit_core//:moveit_distance_field": "@moveit_core//:moveit_distance_field_library",
+    "@moveit_core//:moveit_dynamics_solver": "@moveit_core//:moveit_dynamics_solver_library",
+    "@moveit_core//:moveit_exceptions": "@moveit_core//:moveit_exceptions_library",
+    "@moveit_core//:moveit_kinematic_constraints": "@moveit_core//:moveit_kinematic_constraints_library",
+    "@moveit_core//:moveit_kinematics_base": "@moveit_core//:moveit_kinematics_base_library",
+    "@moveit_core//:moveit_kinematics_metrics": "@moveit_core//:moveit_kinematics_metrics_library",
+    "@moveit_core//:moveit_planning_interface": "@moveit_core//:moveit_planning_interface_library",
+    "@moveit_core//:moveit_planning_scene": "@moveit_core//:moveit_planning_scene_library",
+    "@moveit_core//:moveit_robot_model": "@moveit_core//:moveit_robot_model_library",
+    "@moveit_core//:moveit_robot_state": "@moveit_core//:moveit_robot_state_library",
+    "@moveit_core//:moveit_robot_trajectory": "@moveit_core//:moveit_robot_trajectory_library",
+    "@moveit_core//:moveit_smoothing_base": "@moveit_core//:moveit_smoothing_base_library",
+    "@moveit_core//:moveit_test_utils": "@moveit_core//:moveit_test_utils_library",
+    "@moveit_core//:moveit_trajectory_processing": "@moveit_core//:moveit_trajectory_processing_library",
+    "@moveit_core//:moveit_transforms": "@moveit_core//:moveit_transforms_library",
+    "@moveit_core//:moveit_utils": "@moveit_core//:moveit_utils_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@tf2_eigen//:tf2_eigen": "@tf2_eigen//:tf2_eigen_library",
+    "@tf2_eigen_kdl//:tf2_eigen_kdl": "@tf2_eigen_kdl//:tf2_eigen_kdl_library",
+    "@tf2_geometry_msgs//:tf2_geometry_msgs": "@tf2_geometry_msgs//:tf2_geometry_msgs_library",
+    "@tf2_kdl//:tf2_kdl": "@tf2_kdl//:tf2_kdl_library",
+}
+
+CC_DEPS = [
+    ":prbt_ikfast_kinematics_parameters",
+    "@generate_parameter_library//:generate_parameter_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+]
+
+cc_library(
+    name = "prbt_manipulator_moveit_ikfast_plugin_library",
+    srcs = ["src/prbt_manipulator_ikfast_moveit_plugin.cpp"],
+    hdrs = ["include/ikfast.h"] + [":prbt_ikfast_kinematics_parameters_gen"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "_gen/include",
+        "_gen/include/moveit_resources_prbt_ikfast_manipulator_plugin",
+        "include",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    textual_hdrs = ["src/prbt_manipulator_ikfast_solver.cpp"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "prbt_manipulator_moveit_ikfast_plugin",
+    dynamic_deps = DEPENDENCIES.keys(),
+    deps = [":prbt_manipulator_moveit_ikfast_plugin_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":prbt_manipulator_moveit_ikfast_plugin"],
+    package_xml = "package.xml",
+    plugin_category = "moveit_core",
+    plugins = ["prbt_manipulator_moveit_ikfast_plugin_description.xml"],
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@moveit_core//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_eigen_kdl//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_kdl//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "fmt",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "rsl",
+        "tcb_span",
+        "tl-expected",
+        "generate_parameter_library",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "moveit_resources_prbt_ikfast_manipulator_pluginTargets",
+    libraries = [":prbt_manipulator_moveit_ikfast_plugin"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@moveit_core//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@tf2_eigen//:ament_package",
+        "@tf2_eigen_kdl//:ament_package",
+        "@tf2_geometry_msgs//:ament_package",
+        "@tf2_kdl//:ament_package",
+    ],
+)

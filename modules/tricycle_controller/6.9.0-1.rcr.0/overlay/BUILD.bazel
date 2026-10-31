@@ -1,0 +1,225 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+# Tests run with cwd = <runfiles>/_main, but this repository's own test data
+# lives under <runfiles>/<canonical repo name>/ when it is an external module.
+REPO_RUNFILES_PREFIX = "../%s/" % (repo_name() or "_main")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+cc_library(
+    name = "_test_root_headers",
+    hdrs = [
+        "include/tricycle_controller/odometry.hpp",
+        "include/tricycle_controller/steering_limiter.hpp",
+        "include/tricycle_controller/traction_limiter.hpp",
+        "include/tricycle_controller/tricycle_controller.hpp",
+    ],
+    includes = [],
+)
+
+DEPENDENCIES = {
+    "@ackermann_msgs//:cc_shared": "@ackermann_msgs//:cc",
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@builtin_interfaces//:cc_shared": "@builtin_interfaces//:cc",
+    "@controller_interface//:controller_interface": "@controller_interface//:controller_interface_library",
+    "@controller_manager//:controller_manager": "@controller_manager//:controller_manager_library",
+    "@generate_parameter_library//:rsl": "@generate_parameter_library//:rsl_library",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@hardware_interface//:hardware_interface": "@hardware_interface//:hardware_interface_library",
+    "@lifecycle_msgs//:cc_shared": "@lifecycle_msgs//:cc",
+    "@nav_msgs//:cc_shared": "@nav_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libcap": "@rosdistro//cc:libcap_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@std_srvs//:cc_shared": "@std_srvs//:cc",
+    "@tf2//:tf2": "@tf2//:tf2_library",
+    "@tf2_msgs//:cc_shared": "@tf2_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@generate_parameter_library//:generate_parameter_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@ros2_control_test_assets//:ros2_control_test_assets",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+]
+
+cc_library(
+    name = "tricycle_controller_library",
+    srcs = [
+        "src/odometry.cpp",
+        "src/steering_limiter.cpp",
+        "src/traction_limiter.cpp",
+        "src/tricycle_controller.cpp",
+    ],
+    hdrs = [
+        "include/tricycle_controller/odometry.hpp",
+        "include/tricycle_controller/steering_limiter.hpp",
+        "include/tricycle_controller/traction_limiter.hpp",
+        "include/tricycle_controller/tricycle_controller.hpp",
+    ] + [
+        ":tricycle_controller_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/tricycle_controller",
+        "include",
+        "include/tricycle_controller",
+    ],
+    local_defines = ros_local_defines() + [
+        "RCPPUTILS_VERSION_MAJOR=2",
+        "RCPPUTILS_VERSION_MINOR=14",
+        'TEST_FILES_DIRECTORY=\\"%stest\\"' % REPO_RUNFILES_PREFIX,
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "tricycle_controller",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":tricycle_controller_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":tricycle_controller"],
+)
+
+generate_parameter_library(
+    name = "tricycle_controller_parameters",
+    yaml_file = "src/tricycle_controller_parameter.yaml",
+)
+
+ament_index(
+    name = "ament_index",
+    libraries = [":tricycle_controller"],
+    package_xml = "package.xml",
+    plugin_category = "controller_interface",
+    plugins = ["tricycle_controller.xml"],
+    deps = [
+        "@ackermann_msgs//:ament_package",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@backward_ros//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@controller_interface//:ament_package",
+        "@controller_manager//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@hardware_interface_testing//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rcpputils//:ament_package",
+        "@realtime_tools//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@ros2_control_test_assets//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ackermann_msgs",
+        "builtin_interfaces",
+        "controller_interface",
+        "fmt",
+        "generate_parameter_library",
+        "geometry_msgs",
+        "hardware_interface",
+        "nav_msgs",
+        "pluginlib",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "rcpputils",
+        "realtime_tools",
+        "rsl",
+        "std_srvs",
+        "tcb_span",
+        "tf2",
+        "tf2_msgs",
+        "tl-expected",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_tricycle_controller",
+    headers = [
+        "include/tricycle_controller/odometry.hpp",
+        "include/tricycle_controller/steering_limiter.hpp",
+        "include/tricycle_controller/traction_limiter.hpp",
+        "include/tricycle_controller/tricycle_controller.hpp",
+        ":tricycle_controller_parameters_gen",
+    ],
+    libraries = [":tricycle_controller"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ackermann_msgs//:ament_package",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@backward_ros//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@controller_interface//:ament_package",
+        "@controller_manager//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@hardware_interface_testing//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@rcpputils//:ament_package",
+        "@realtime_tools//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@ros2_control_test_assets//:ament_package",
+        "@std_srvs//:ament_package",
+        "@tf2//:ament_package",
+        "@tf2_msgs//:ament_package",
+    ],
+)

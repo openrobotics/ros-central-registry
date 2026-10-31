@@ -1,0 +1,69 @@
+When mHidden is true on macOS (e.g. offscreen rendering in gz-rendering's
+Ogre2RenderEngine), create an offscreen OgreMetalView directly instead of
+instantiating an NSWindow. AppKit asserts main-thread execution on
+[NSWindow initWithContentRect:...], which aborts when GzServer runs on a
+background thread or inside a component_container.
+
+--- a/RenderSystems/Metal/src/OgreMetalWindow.mm
++++ b/RenderSystems/Metal/src/OgreMetalWindow.mm
+@@ -361,32 +361,39 @@ namespace Ogre
+         // create window if nothing was provided
+         if( !externalWindowHandle )
+         {
+             NSRect frame = NSMakeRect(0.0, 0.0, mRequestedWidth, mRequestedHeight);
+-            if (mRequestedWidth == 1)
++            if( mHidden )
++            {
++                externalWindowHandle = [[OgreMetalView alloc] initWithFrame:frame];
++            }
++            else
+             {
+-                // just make it big enough to see
+-                frame.size.width = frame.size.height = 500.0;
+-            }
+-            NSWindowStyleMask style = NSWindowStyleMaskResizable | NSWindowStyleMaskTitled |
+-                NSWindowStyleMaskClosable;
+-            if( mRequestedFullscreenMode )
+-            {
+-                frame.size = NSScreen.mainScreen.visibleFrame.size;
+-                style = NSWindowStyleMaskBorderless;
++                if (mRequestedWidth == 1)
++                {
++                    // just make it big enough to see
++                    frame.size.width = frame.size.height = 500.0;
++                }
++                NSWindowStyleMask style = NSWindowStyleMaskResizable | NSWindowStyleMaskTitled |
++                    NSWindowStyleMaskClosable;
++                if( mRequestedFullscreenMode )
++                {
++                    frame.size = NSScreen.mainScreen.visibleFrame.size;
++                    style = NSWindowStyleMaskBorderless;
++                }
++                NSWindow* window = [[NSWindow alloc] initWithContentRect:frame
++                                                               styleMask:style
++                                                                 backing:NSBackingStoreBuffered
++                                                                   defer:YES];
++                window.title = @(mTitle.c_str());
++                window.contentView = [[OgreMetalView alloc] initWithFrame:frame];
++                
++                externalWindowHandle = window;
++                SetupMetalWindowListeners( this, window );
++                if( !mHidden )
++                    [window orderFront: nil];
+             }
+-            NSWindow* window = [[NSWindow alloc] initWithContentRect:frame
+-                                                           styleMask:style
+-                                                             backing:NSBackingStoreBuffered
+-                                                               defer:YES];
+-            window.title = @(mTitle.c_str());
+-            window.contentView = [[OgreMetalView alloc] initWithFrame:frame];
+-            
+-            externalWindowHandle = window;
+-            SetupMetalWindowListeners( this, window );
+-            if( !mHidden )
+-                [window orderFront: nil];
+         }
+         else
+         {
+             mIsExternal = true;
+         }

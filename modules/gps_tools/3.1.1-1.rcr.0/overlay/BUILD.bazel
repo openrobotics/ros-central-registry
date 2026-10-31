@@ -1,0 +1,161 @@
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_nodes")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+)
+
+DEPENDENCIES = {
+    "@nav_msgs//:cc_shared": "@nav_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "utm_odometry_component_library",
+    srcs = ["src/utm_odometry_component.cpp"],
+    hdrs = ["include/gps_tools/conversions.h"],
+    includes = [
+        "include",
+        "include/gps_tools",
+    ],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "utm_odometry_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":utm_odometry_component_library"],
+)
+
+cc_library(
+    name = "utm_odometry_to_navsatfix_component_library",
+    srcs = ["src/utm_odometry_to_navsatfix_component.cpp"],
+    hdrs = ["include/gps_tools/conversions.h"],
+    includes = [
+        "include",
+        "include/gps_tools",
+    ],
+    local_defines = ros_local_defines() + ["COMPOSITION_BUILDING_DLL"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "utm_odometry_to_navsatfix_component",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":utm_odometry_to_navsatfix_component_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "utm_odometry_component_components",
+    component = ":utm_odometry_component",
+    plugins = ["gps_tools::UtmOdometryComponent"],
+)
+
+rclcpp_components_register_nodes(
+    name = "utm_odometry_to_navsatfix_component_components",
+    component = ":utm_odometry_to_navsatfix_component",
+    plugins = ["gps_tools::UtmOdometryToNavSatFixComponent"],
+)
+
+py_library(
+    name = "gps_tools_py",
+    srcs = [
+        "gps_tools/__init__.py",
+        "gps_tools/gps_message_converter.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@gps_msgs//:py",
+        "@nav_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [
+        ":utm_odometry_component_components",
+        ":utm_odometry_to_navsatfix_component_components",
+    ],
+    executables = [
+        "scripts/bag_converter",
+        "nodes/fix_translator",
+    ],
+    libraries = [
+        ":utm_odometry_component",
+        ":utm_odometry_to_navsatfix_component",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ament_cmake",
+        "ament_cmake_python",
+        "rclcpp",
+        "rclpy",
+    ],
+    cmake_export_targets = False,
+    headers = ["include/gps_tools/conversions.h"],
+    include_prefix = "",
+    libraries = [
+        ":utm_odometry_component",
+        ":utm_odometry_to_navsatfix_component",
+    ],
+    package_xml = "package.xml",
+    programs = [
+        "scripts/bag_converter",
+        "nodes/fix_translator",
+    ],
+    python = [":gps_tools_py"],
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@gps_msgs//:ament_package",
+        "@nav_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rclpy//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

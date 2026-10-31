@@ -1,0 +1,144 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+)
+
+DEPENDENCIES = {
+    "@builtin_interfaces//:cc_shared": "@builtin_interfaces//:cc",
+    "@geometry_msgs//:cc_shared": "@geometry_msgs//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:eigen",
+    "@vrpn//:quat_library",
+    "@vrpn//:vrpn_library",
+]
+
+cc_library(
+    name = "vrpn_mocap_library",
+    srcs = [
+        "src/client.cpp",
+        "src/tracker.cpp",
+    ],
+    hdrs = [
+        "include/vrpn_mocap/client.hpp",
+        "include/vrpn_mocap/tracker.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        "include",
+        "include/vrpn_mocap",
+    ],
+    local_defines = ros_local_defines() + ["VRPN_CLIENT_ONLY"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "vrpn_mocap",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":vrpn_mocap_library"],
+)
+
+# vrpn is only available as static libraries, which :vrpn_mocap links without
+# exporting, so client_node links vrpn_mocap statically (as upstream does).
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+cc_binary(
+    name = "client_node",
+    srcs = ["src/client_node.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/vrpn_mocap",
+    ],
+    local_defines = ros_local_defines() + ["VRPN_CLIENT_ONLY"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":vrpn_mocap_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "config/client.yaml",
+        "//launch:launch_files",
+    ],
+    lib_data = [
+        ":vrpn_mocap",
+    ],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@vrpn//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    executables = [
+        ":client_node",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@builtin_interfaces//:ament_package",
+        "@eigen3_cmake_module//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@rclcpp//:ament_package",
+        "@std_msgs//:ament_package",
+        "@tf2//:ament_package",
+        "@vrpn//:ament_package",
+    ],
+)

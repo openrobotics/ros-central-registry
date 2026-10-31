@@ -1,0 +1,186 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@lifecycle_msgs//:cc_shared": "@lifecycle_msgs//:cc",
+    "@plansys2_core//:plansys2_core": "@plansys2_core//:plansys2_core_library",
+    "@plansys2_msgs//:cc_shared": "@plansys2_msgs//:cc",
+    "@plansys2_pddl_parser//:plansys2_pddl_parser": "@plansys2_pddl_parser//:plansys2_pddl_parser_library",
+    "@plansys2_popf_plan_solver//:plansys2_popf_plan_solver": "@plansys2_popf_plan_solver//:plansys2_popf_plan_solver_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+]
+
+cc_library(
+    name = "plansys2_domain_expert_library",
+    srcs = [
+        "src/plansys2_domain_expert/DomainExpert.cpp",
+        "src/plansys2_domain_expert/DomainExpertClient.cpp",
+        "src/plansys2_domain_expert/DomainExpertNode.cpp",
+        "src/plansys2_domain_expert/DomainReader.cpp",
+    ],
+    hdrs = [
+        "include/plansys2_domain_expert/DomainExpert.hpp",
+        "include/plansys2_domain_expert/DomainExpertClient.hpp",
+        "include/plansys2_domain_expert/DomainExpertInterface.hpp",
+        "include/plansys2_domain_expert/DomainExpertNode.hpp",
+        "include/plansys2_domain_expert/DomainReader.hpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = [
+        "include",
+        "include/plansys2_domain_expert",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + ["PLUGINLIB__DISABLE_BOOST_FUNCTIONS"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "plansys2_domain_expert",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":plansys2_domain_expert_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":plansys2_domain_expert"],
+)
+
+cc_binary(
+    name = "domain_expert_node",
+    srcs = ["src/domain_expert_node.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":ament_index",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        "include",
+        "include/plansys2_domain_expert",
+        "test/unit",
+    ],
+    local_defines = ros_local_defines() + ["PLUGINLIB__DISABLE_BOOST_FUNCTIONS"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":plansys2_domain_expert_library"],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "//launch:launch_files",
+        "//test:pddl/domain_1_ok.pddl",
+        "//test:pddl/domain_2_error.pddl",
+        "//test:pddl/domain_charging.pddl",
+        "//test:pddl/domain_combined_processed.pddl",
+        "//test:pddl/domain_simple.pddl",
+        "//test:pddl/domain_simple_constants.pddl",
+        "//test:pddl/domain_simple_constants_processed.pddl",
+        "//test:pddl/domain_simple_derived.pddl",
+        "//test:pddl/domain_simple_derived_processed.pddl",
+        "//test:pddl/domain_simple_ext.pddl",
+        "//test:pddl/domain_simple_processed.pddl",
+        "//test:pddl/factory.pddl",
+        "//test:pddl/factory_processed.pddl",
+        "//test:pddl/problem_0.pddl",
+        "//test:pddl/problem_charging.pddl",
+        "//test:pddl/problem_simple_1.pddl",
+    ],
+    data_strip_prefix = "test",
+    libraries = [":plansys2_domain_expert"],
+    package_xml = "package.xml",
+    deps = [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@plansys2_core//:ament_package",
+        "@plansys2_msgs//:ament_package",
+        "@plansys2_pddl_parser//:ament_package",
+        "@plansys2_popf_plan_solver//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "ament_index_cpp",
+        "lifecycle_msgs",
+        "plansys2_core",
+        "plansys2_msgs",
+        "plansys2_pddl_parser",
+        "plansys2_popf_plan_solver",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "std_msgs",
+    ],
+    cmake_export_name = "export_plansys2_domain_expert",
+    executables = [
+        ":domain_expert_node",
+    ],
+    headers = [
+        "include/plansys2_domain_expert/DomainExpert.hpp",
+        "include/plansys2_domain_expert/DomainExpertClient.hpp",
+        "include/plansys2_domain_expert/DomainExpertInterface.hpp",
+        "include/plansys2_domain_expert/DomainExpertNode.hpp",
+        "include/plansys2_domain_expert/DomainReader.hpp",
+    ],
+    include_prefix = "",
+    libraries = [":plansys2_domain_expert"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@plansys2_core//:ament_package",
+        "@plansys2_msgs//:ament_package",
+        "@plansys2_pddl_parser//:ament_package",
+        "@plansys2_popf_plan_solver//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_lifecycle//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

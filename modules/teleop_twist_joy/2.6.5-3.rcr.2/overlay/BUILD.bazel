@@ -1,0 +1,129 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+)
+
+genrule(
+    name = "generate_export_header",
+    outs = ["include/teleop_twist_joy/teleop_twist_joy_export.h"],
+    cmd = "echo -e '#pragma once\\n#define TELEOP_TWIST_JOY_EXPORT' > $@",
+)
+
+HEADERS = [":generate_export_header"] + ["include/teleop_twist_joy/teleop_twist_joy.hpp"]
+
+cc_library(
+    name = "teleop_twist_joy_library",
+    srcs = ["src/teleop_twist_joy.cpp"],
+    hdrs = HEADERS,
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = [
+        "@geometry_msgs//:cc",
+        "@rclcpp//:rclcpp_library",
+        "@rclcpp_components//:rclcpp_components_library",
+        "@sensor_msgs//:cc",
+    ],
+)
+
+cc_shared_library(
+    name = "teleop_twist_joy",
+    dynamic_deps = [
+        "@geometry_msgs//:cc_shared",
+        "@rclcpp",
+        "@rclcpp_components",
+        "@sensor_msgs//:cc_shared",
+    ],
+    exports_filter = ["//:__subpackages__"],
+    deps = [":teleop_twist_joy_library"],
+)
+
+rclcpp_components_register_node(
+    name = "node_teleop_twist_joy",
+    component = ":teleop_twist_joy",
+    data = [":ament_index"],
+    executor = "SingleThreadedExecutor",
+    node_name = "teleop_twist_joy_node",
+    plugin = "teleop_twist_joy::TeleopTwistJoy",
+)
+
+cc_binary(
+    name = "teleop_node",
+    srcs = ["src/teleop_node.cpp"],
+    data = [":ament_index"],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":teleop_twist_joy_library",
+        "@rclcpp//:rclcpp_library",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    components = [":node_teleop_twist_joy_record"],
+    data = [
+        "config/atk3.config.yaml",
+        "config/pdp.config.yaml",
+        "config/ps3.config.yaml",
+        "config/ps3-holonomic.config.yaml",
+        "config/ps5.config.yaml",
+        "config/xbox.config.yaml",
+        "config/xd3.config.yaml",
+    ] + ["//launch:launch_files"],
+    libraries = [":teleop_twist_joy"],
+    package_xml = "package.xml",
+    deps = [
+        "@joy//:ament_index",
+    ],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_name = "export_teleop_twist_joy",
+    executables = [
+        ":node_teleop_twist_joy",
+        ":teleop_node",
+    ],
+    headers = HEADERS,
+    libraries = [":teleop_twist_joy"],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@geometry_msgs//:ament_package",
+        "@joy//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rosdistro//:ament_package",
+        "@sensor_msgs//:ament_package",
+    ],
+)

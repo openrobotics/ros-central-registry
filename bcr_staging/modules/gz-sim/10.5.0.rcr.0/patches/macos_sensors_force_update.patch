@@ -1,0 +1,20 @@
+Match the non-macOS render-thread condition in Sensors::Update by checking
+this->dataPtr->forceUpdate on macOS as well. Custom rendering sensors (such
+as DopplerVelocityLog in Tethys / dvl_world.sdf) request rendering via
+rendering::Events::ConnectForceRender() (which sets forceUpdate = true)
+rather than adding one of the built-in camera/lidar ECM components; without
+this check on macOS, renderUtil.Init() is never called and the sensor
+thread blocks forever on "Waiting for init".
+
+--- a/src/systems/sensors/Sensors.cc
++++ b/src/systems/sensors/Sensors.cc
+@@ -910,7 +910,8 @@ void Sensors::Update(const UpdateInfo &_info,
+ #ifdef __APPLE__
+   // On macOS the render engine must be initialised on the main thread.
+   if (!this->dataPtr->initialized &&
+-      (_ecm.HasComponentType(components::BoundingBoxCamera::typeId) ||
++      (this->dataPtr->forceUpdate ||
++       _ecm.HasComponentType(components::BoundingBoxCamera::typeId) ||
+        _ecm.HasComponentType(components::Camera::typeId) ||
+        _ecm.HasComponentType(components::DepthCamera::typeId) ||
+        _ecm.HasComponentType(components::GpuLidar::typeId) ||

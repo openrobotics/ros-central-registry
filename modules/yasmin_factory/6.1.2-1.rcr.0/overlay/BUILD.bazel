@@ -1,0 +1,279 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+cc_library(
+    name = "_test_root_headers",
+    hdrs = [
+        "include/yasmin_factory/yasmin_factory.hpp",
+        "include/yasmin_factory/yasmin_factory_action_server.hpp",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/yasmin_factory",
+    ],
+)
+
+DEPENDENCIES = {
+    "@action_msgs//:cc_shared": "@action_msgs//:cc",
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@class_loader//:class_loader": "@class_loader//:class_loader_library",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@yasmin//:yasmin": "@yasmin//:yasmin_library",
+    "@yasmin_msgs//:cc_shared": "@yasmin_msgs//:cc",
+    "@yasmin_ros//:yasmin_ros": "@yasmin_ros//:yasmin_ros_library",
+    "@yasmin_viewer//:yasmin_viewer": "@yasmin_viewer//:yasmin_viewer_library",
+}
+
+CC_DEPS = [
+    "@class_loader//:class_loader_headers",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:pybind11",
+    "@rules_python//python/cc:current_py_cc_headers",
+    "@rules_python//python/cc:current_py_cc_libs",
+]
+
+cc_library(
+    name = "yasmin_factory_library",
+    srcs = ["src/yasmin_factory.cpp"],
+    hdrs = [
+        "include/yasmin_factory/yasmin_factory.hpp",
+        "include/yasmin_factory/yasmin_factory_action_server.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/yasmin_factory",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "yasmin_factory",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":yasmin_factory_library"],
+)
+
+cc_library(
+    name = "yasmin_pybind_bridge_library",
+    srcs = ["src/pybind_bridge.cpp"],
+    hdrs = [
+        "include/yasmin_factory/yasmin_factory.hpp",
+        "include/yasmin_factory/yasmin_factory_action_server.hpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "include",
+        "include/yasmin_factory",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "yasmin_pybind_bridge",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    shared_lib_name = "yasmin_pybind_bridge.so",
+    deps = [":yasmin_pybind_bridge_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [
+        ":yasmin_factory",
+        ":yasmin_pybind_bridge",
+    ],
+)
+
+cc_binary(
+    name = "yasmin_factory_action_server",
+    srcs = ["src/yasmin_factory_action_server.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/yasmin_factory",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":yasmin_factory_library"],
+)
+
+cc_binary(
+    name = "yasmin_factory_node",
+    srcs = ["src/yasmin_factory_node.cpp"],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "include",
+        "include/yasmin_factory",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":yasmin_factory_library"],
+)
+
+py_library(
+    name = "yasmin_factory_py",
+    srcs = [
+        "yasmin_factory/__init__.py",
+        "yasmin_factory/factory.py",
+        "yasmin_factory/type_utils.py",
+        "yasmin_factory/yasmin_factory_action_server.py",
+        "yasmin_factory/yasmin_factory_node.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@action_msgs//:py",
+        "@ament_index_python",
+        "@rclpy",
+        "@yasmin//:yasmin_py",
+        "@yasmin_msgs//:py",
+        "@yasmin_ros//:yasmin_ros_py",
+        "@yasmin_viewer//:yasmin_viewer_py",
+        requirement("lxml"),
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    data = [
+        "//test:test_action_cancel.xml",
+        "//test:test_action_complete.xml",
+        "//test:test_file_path_sm.xml",
+        "//test:test_fsm_metadata.xml",
+        "//test:test_included_sm.xml",
+        "//test:test_nested_sm.xml",
+        "//test:test_orthogonal_sm.xml",
+        "//test:test_plugins.xml",
+        "//test:test_remapping.xml",
+        "//test:test_simple_sm_1.xml",
+        "//test:test_simple_sm_2.xml",
+    ],
+    data_strip_prefix = "test",
+    lib_data = [
+        ":yasmin_factory_action_server",
+        ":yasmin_factory_node",
+        "yasmin_factory/yasmin_factory_action_server.py",
+        "yasmin_factory/yasmin_factory_node.py",
+        ":yasmin_pybind_bridge",
+    ],
+    libraries = [
+        ":yasmin_factory",
+        "//test:yasmin_factory_test_states",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "yasmin",
+    plugins = ["//test:test_plugins.xml"],
+    deps = [
+        "@action_msgs//:ament_package",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@class_loader//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclpy//:ament_package",
+        "@tinyxml2_vendor//:ament_package",
+        "@yasmin//:ament_package",
+        "@yasmin_msgs//:ament_package",
+        "@yasmin_ros//:ament_package",
+        "@yasmin_viewer//:ament_package",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "TinyXML2",
+        "ament_index_cpp",
+        "pluginlib",
+        "pybind11",
+        "rclcpp",
+        "yasmin",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_yasmin_factory",
+    headers = [
+        "include/yasmin_factory/yasmin_factory.hpp",
+        "include/yasmin_factory/yasmin_factory_action_server.hpp",
+    ],
+    include_prefix = "",
+    libraries = [
+        ":yasmin_factory",
+        "//test:yasmin_factory_test_states",
+    ],
+    package_xml = "package.xml",
+    python = [":yasmin_factory_py"],
+    deps = [":ament_index"] + [
+        "@action_msgs//:ament_package",
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gtest//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@ament_index_cpp//:ament_package",
+        "@ament_index_python//:ament_package",
+        "@class_loader//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_action//:ament_package",
+        "@rclpy//:ament_package",
+        "@tinyxml2_vendor//:ament_package",
+        "@yasmin//:ament_package",
+        "@yasmin_msgs//:ament_package",
+        "@yasmin_ros//:ament_package",
+        "@yasmin_viewer//:ament_package",
+    ],
+)

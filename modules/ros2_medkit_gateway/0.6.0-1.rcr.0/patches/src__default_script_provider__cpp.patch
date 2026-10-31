@@ -1,0 +1,31 @@
+--- a/src/default_script_provider.cpp
++++ b/src/default_script_provider.cpp
+@@ -434,7 +434,18 @@
+   int stderr_pipe[2];
+   int stdin_pipe[2] = {-1, -1};
+ 
+-  if (pipe2(stdout_pipe, O_CLOEXEC) != 0 || pipe2(stderr_pipe, O_CLOEXEC) != 0) {
++  auto make_pipe = [](int fds[2]) -> int {
++#if defined(__APPLE__)
++    if (pipe(fds) != 0) return -1;
++    fcntl(fds[0], F_SETFD, FD_CLOEXEC);
++    fcntl(fds[1], F_SETFD, FD_CLOEXEC);
++    return 0;
++#else
++    return pipe2(fds, O_CLOEXEC);
++#endif
++  };
++
++  if (make_pipe(stdout_pipe) != 0 || make_pipe(stderr_pipe) != 0) {
+     {
+       std::lock_guard<std::mutex> lock(exec_mutex_);
+       active_execution_count_--;  // Release reserved slot
+@@ -443,7 +454,7 @@
+   }
+ 
+   if (pass_stdin_json) {
+-    if (pipe2(stdin_pipe, O_CLOEXEC) != 0) {
++    if (make_pipe(stdin_pipe) != 0) {
+       close(stdout_pipe[0]);
+       close(stdout_pipe[1]);
+       close(stderr_pipe[0]);

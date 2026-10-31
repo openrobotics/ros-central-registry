@@ -1,0 +1,257 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library", "cc_test")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+)
+
+# Boost::filesystem is a compiled Boost library: link the shared copy so
+# the loader and every plugin built against it share one instance.
+BOOST_FILESYSTEM_SHARED = "@rosdistro//cc:boost.filesystem_shared"
+
+CC_DEPS = [
+    "@rosdistro//cc:boost.algorithm",
+    "@rosdistro//cc:boost.any",
+    "@rosdistro//cc:boost.dll",
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.system",
+]
+
+HEADERS = [
+    "include/boost_plugin_loader/fwd.h",
+    "include/boost_plugin_loader/macros.h",
+    "include/boost_plugin_loader/plugin_loader.h",
+    "include/boost_plugin_loader/plugin_loader.hpp",
+    "include/boost_plugin_loader/utils.h",
+]
+
+# Upstream: add_library(boost_plugin_loader src/utils.cpp)
+cc_library(
+    name = "boost_plugin_loader_library",
+    srcs = ["src/utils.cpp"],
+    hdrs = HEADERS,
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = CC_DEPS,
+)
+
+cc_shared_library(
+    name = "boost_plugin_loader",
+    dynamic_deps = [BOOST_FILESYSTEM_SHARED],
+    deps = [":boost_plugin_loader_library"],
+)
+
+# examples/: boost_plugin_loader_example_plugin (links boost_plugin_loader)
+cc_library(
+    name = "boost_plugin_loader_example_plugin_library",
+    srcs = ["examples/plugin.cpp"],
+    hdrs = [
+        "examples/printer/printer.h",
+        "examples/shape/shape.h",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    includes = ["examples"],
+    local_defines = ros_local_defines(),
+    deps = [":boost_plugin_loader_library"],
+)
+
+cc_shared_library(
+    name = "boost_plugin_loader_example_plugin",
+    dynamic_deps = [
+        ":boost_plugin_loader",
+        BOOST_FILESYSTEM_SHARED,
+    ],
+    deps = [":boost_plugin_loader_example_plugin_library"],
+)
+
+# examples/: boost_plugin_loader_example_plugin_impl (links *_example_plugin)
+cc_library(
+    name = "boost_plugin_loader_example_plugin_impl_library",
+    srcs = [
+        "examples/printer/console_printer.cpp",
+        "examples/printer/hello_world_printer.cpp",
+        "examples/shape/square.cpp",
+        "examples/shape/triangle.cpp",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    local_defines = ros_local_defines(),
+    deps = [":boost_plugin_loader_example_plugin_library"],
+)
+
+cc_shared_library(
+    name = "boost_plugin_loader_example_plugin_impl",
+    dynamic_deps = [
+        ":boost_plugin_loader",
+        ":boost_plugin_loader_example_plugin",
+        BOOST_FILESYSTEM_SHARED,
+    ],
+    deps = [":boost_plugin_loader_example_plugin_impl_library"],
+)
+
+cc_binary(
+    name = "boost_plugin_loader_example",
+    srcs = ["examples/example.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [
+        ":boost_plugin_loader",
+        ":boost_plugin_loader_example_plugin",
+        BOOST_FILESYSTEM_SHARED,
+    ],
+    local_defines = ros_local_defines() + [
+        "PLUGINS=\\\"boost_plugin_loader_example_plugin_impl\\\"",
+        "PLUGIN_DIR=\\\"lib\\\"",
+    ],
+    deps = [":boost_plugin_loader_example_plugin_library"],
+)
+
+# test/: the test plugins and unit tests.
+TEST_PLUGIN_DEFINES = [
+    "SECTION_ADD=add",
+    "SECTION_MULTIPLY=mult",
+    "SYMBOL_NAME=plugin",
+]
+
+cc_library(
+    name = "boost_plugin_loader_test_plugin",
+    hdrs = [
+        "test/test_plugin.h",
+        "test/test_plugin_multiply.h",
+    ],
+    defines = TEST_PLUGIN_DEFINES,
+    includes = ["test"],
+    deps = [":boost_plugin_loader_library"],
+)
+
+cc_library(
+    name = "boost_plugin_loader_test_plugin_multiply_library",
+    srcs = ["test/test_plugin_multiply.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    local_defines = ros_local_defines(),
+    deps = [":boost_plugin_loader_test_plugin"],
+)
+
+cc_shared_library(
+    name = "boost_plugin_loader_test_plugin_multiply",
+    dynamic_deps = [
+        ":boost_plugin_loader",
+        BOOST_FILESYSTEM_SHARED,
+    ],
+    deps = [":boost_plugin_loader_test_plugin_multiply_library"],
+)
+
+cc_library(
+    name = "boost_plugin_loader_test_plugin_add_library",
+    srcs = ["test/test_plugin_add.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    local_defines = ros_local_defines(),
+    deps = [":boost_plugin_loader_test_plugin"],
+)
+
+cc_shared_library(
+    name = "boost_plugin_loader_test_plugin_add",
+    dynamic_deps = [
+        ":boost_plugin_loader",
+        BOOST_FILESYSTEM_SHARED,
+    ],
+    deps = [":boost_plugin_loader_test_plugin_add_library"],
+)
+
+# The test plugins are dlopen()ed from the runfiles copy of this repository
+# (the test's working directory is the runfiles root of the main repository).
+PLUGIN_DIR = "../{}".format(repo_name() or "_main")
+
+cc_test(
+    name = "boost_plugin_loader_plugin_loader_unit",
+    srcs = ["test/plugin_loader_unit.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = [
+        ":boost_plugin_loader_test_plugin_add",
+        ":boost_plugin_loader_test_plugin_multiply",
+    ],
+    dynamic_deps = [
+        ":boost_plugin_loader",
+        BOOST_FILESYSTEM_SHARED,
+    ],
+    local_defines = ros_local_defines() + [
+        "PLUGIN_DIR=\\\"{}\\\"".format(PLUGIN_DIR),
+        "PLUGINS_MULTIPLY=\\\"boost_plugin_loader_test_plugin_multiply\\\"",
+        "PLUGINS_ADD=\\\"boost_plugin_loader_test_plugin_add\\\"",
+    ],
+    deps = [
+        ":boost_plugin_loader_test_plugin",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "boost_plugin_loader_plugin_loader_anchor_unit",
+    srcs = ["test/plugin_loader_anchor_unit.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    dynamic_deps = [
+        ":boost_plugin_loader",
+        ":boost_plugin_loader_test_plugin_multiply",
+        BOOST_FILESYSTEM_SHARED,
+    ],
+    local_defines = ros_local_defines(),
+    deps = [
+        ":boost_plugin_loader_test_plugin_multiply_library",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+ament_index(
+    name = "ament_index",
+    lib_data = [":boost_plugin_loader_example"],
+    libraries = [
+        ":boost_plugin_loader",
+        ":boost_plugin_loader_example_plugin",
+        ":boost_plugin_loader_example_plugin_impl",
+        ":boost_plugin_loader_test_plugin_multiply",
+    ],
+    package_xml = "package.xml",
+    deps = ["@ros_industrial_cmake_boilerplate//:ament_package"],
+)
+
+ament_package(
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    headers = HEADERS,
+    include_prefix = "",
+    libraries = [
+        ":boost_plugin_loader",
+        ":boost_plugin_loader_example_plugin",
+        ":boost_plugin_loader_example_plugin_impl",
+        ":boost_plugin_loader_test_plugin_multiply",
+    ],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ros_industrial_cmake_boilerplate//:ament_package",
+    ],
+)

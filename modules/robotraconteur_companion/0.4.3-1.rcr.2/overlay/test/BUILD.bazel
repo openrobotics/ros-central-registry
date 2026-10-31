@@ -1,0 +1,158 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {
+    "@rosdistro//cc:opencv": "@rosdistro//cc:opencv_library",
+    "@rosdistro//cc:yaml-cpp": "@rosdistro//cc:yaml-cpp_library",
+}
+
+CC_DEPS = [
+    "@robotraconteur//:RobotRaconteurCore_library",
+    "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.filesystem",
+    "@rosdistro//cc:boost.predef",
+    "@rosdistro//cc:boost.program_options",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:eigen",
+]
+
+cc_test(
+    name = "test_device_connector",
+    srcs = ["test_device_connector.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = ["//:ament_index"] + [
+        "CMakeLists.txt",
+        "experimental.testing.companion.test_task_generator.robdef",
+        "sawyer_robot_default_config.yml",
+    ],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    # xfail: gtest failures under Bazel: DeviceConnector.TestDeviceConnector
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        "//:RobotRaconteurCompanion_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_eigen_converters",
+    srcs = ["test_eigen_converters.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = ["//:ament_index"] + [
+        "CMakeLists.txt",
+        "experimental.testing.companion.test_task_generator.robdef",
+        "sawyer_robot_default_config.yml",
+    ],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        "//:RobotRaconteurCompanion_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_image_util",
+    srcs = ["test_image_util.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = ["//:ament_index"] + [
+        "CMakeLists.txt",
+        "experimental.testing.companion.test_task_generator.robdef",
+        "sawyer_robot_default_config.yml",
+    ],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        "//:RobotRaconteurCompanion_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+cc_test(
+    name = "test_robdef_gen",
+    srcs = ["test_robdef_gen.cpp"],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = ["//:ament_index"] + [
+        "CMakeLists.txt",
+        "experimental.testing.companion.test_task_generator.robdef",
+        "sawyer_robot_default_config.yml",
+    ],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        "//:RobotRaconteurCompanion_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+# Equivalent of test/CMakeLists.txt's robotraconteur_generate_thunk() for
+# the test robdef, with AUTO_IMPORT and robdef/group1 as the include path.
+genrule(
+    name = "gen_test_task_generator_thunk",
+    srcs = [
+        "experimental.testing.companion.test_task_generator.robdef",
+        "//:robdef_group1",
+    ],
+    outs = [
+        "experimental__testing__companion__test_task_generator.h",
+        "experimental__testing__companion__test_task_generator_stubskel.h",
+        "experimental__testing__companion__test_task_generator_stubskel.cpp",
+    ],
+    cmd = (
+        "$(location @robotraconteur//:_bin/RobotRaconteurGen) --thunksource --lang=cpp " +
+        "--include-path=$$(dirname $$(echo $(locations //:robdef_group1) | cut -d' ' -f1)) " +
+        "--output-dir $(RULEDIR) --auto-import " +
+        "$(location experimental.testing.companion.test_task_generator.robdef)"
+    ),
+    tools = ["@robotraconteur//:_bin/RobotRaconteurGen"],
+)
+
+cc_test(
+    name = "test_task_generator",
+    srcs = [
+        "test_task_generator.cpp",
+        ":gen_test_task_generator_thunk",
+    ],
+    copts = ["-Wno-missing-template-arg-list-after-template-kw"],
+    data = ["//:ament_index"] + [
+        "CMakeLists.txt",
+        "experimental.testing.companion.test_task_generator.robdef",
+        "sawyer_robot_default_config.yml",
+    ],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    includes = ["."],
+    local_defines = ros_local_defines() + ["GTEST_HAS_PTHREAD=1"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        "//:RobotRaconteurCompanion_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)

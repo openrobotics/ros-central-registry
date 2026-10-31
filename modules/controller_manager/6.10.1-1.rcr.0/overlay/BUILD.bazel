@@ -1,0 +1,327 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@generate_parameter_library//:defs.bzl", "generate_parameter_library")
+load("@pip_ros//:requirements.bzl", "requirement")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines", "ros_version_header")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+package(
+    default_applicable_licenses = [":package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "package_license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+exports_files(["src/sleeping_policies.cpp"])
+
+cc_library(
+    name = "_test_root_headers",
+    hdrs = [
+        "include/controller_manager/controller_manager.hpp",
+        "include/controller_manager/controller_spec.hpp",
+        "include/controller_manager/sleeping_policies.hpp",
+    ] + [":controller_manager_parameters_gen"],
+    includes = [],
+)
+
+generate_parameter_library(
+    name = "controller_manager_parameters",
+    yaml_file = "src/controller_manager_parameters.yaml",
+)
+
+DEPENDENCIES = {
+    "@backward_ros//:backward": "@backward_ros//:backward_library",
+    "@controller_interface//:controller_interface": "@controller_interface//:controller_interface_library",
+    "@controller_manager_msgs//:cc_shared": "@controller_manager_msgs//:cc",
+    "@diagnostic_msgs//:cc_shared": "@diagnostic_msgs//:cc",
+    "@diagnostic_updater//:diagnostic_updater": "@diagnostic_updater//:diagnostic_updater_library",
+    "@example_interfaces//:cc_shared": "@example_interfaces//:cc",
+    "@generate_parameter_library//:rsl": "@generate_parameter_library//:rsl_library",
+    "@hardware_interface//:hardware_interface": "@hardware_interface//:hardware_interface_library",
+    "@libstatistics_collector//:cc_shared": "@libstatistics_collector//:cc",
+    "@libstatistics_collector//:libstatistics_collector": "@libstatistics_collector//:libstatistics_collector_library",
+    "@lifecycle_msgs//:cc_shared": "@lifecycle_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rcl_interfaces//:cc_shared": "@rcl_interfaces//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libcap": "@rosdistro//cc:libcap_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+}
+
+CC_DEPS = [
+    ":controller_manager_parameters",
+    "@generate_parameter_library//:generate_parameter_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@ros2_control_test_assets//:ros2_control_test_assets",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+]
+
+cc_library(
+    name = "controller_manager_library",
+    srcs = ["src/controller_manager.cpp"],
+    hdrs = [
+        "include/controller_manager/controller_manager.hpp",
+        "include/controller_manager/controller_spec.hpp",
+        "include/controller_manager/sleeping_policies.hpp",
+    ] + [
+        ":controller_manager_parameters_gen",
+        ":version_h",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_manager",
+        "_gen/include/controller_manager/controller_manager",
+        "include",
+        "include/controller_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS,
+)
+
+cc_shared_library(
+    name = "controller_manager",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":controller_manager_library"],
+)
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys() + [":controller_manager"],
+)
+
+cc_binary(
+    name = "ros2_control_node",
+    srcs = [
+        "src/ros2_control_node.cpp",
+        "src/sleeping_policies.cpp",
+    ] + [
+        "include/controller_manager/controller_manager.hpp",
+        "include/controller_manager/controller_spec.hpp",
+        "include/controller_manager/sleeping_policies.hpp",
+    ] + [
+        ":controller_manager_parameters_gen",
+        ":version_h",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = [
+        ".",
+        "_gen/include",
+        "_gen/include/controller_manager",
+        "_gen/include/controller_manager/controller_manager",
+        "include",
+        "include/controller_manager",
+    ],
+    local_defines = ros_local_defines() + ["_FILE_OFFSET_BITS=64"],
+    deps = DEPENDENCIES.values() + CC_DEPS + [":controller_manager_library"],
+)
+
+py_library(
+    name = "controller_manager_py",
+    srcs = [
+        "controller_manager/__init__.py",
+        "controller_manager/controller_manager_services.py",
+        "controller_manager/hardware_spawner.py",
+        "controller_manager/launch_utils.py",
+        "controller_manager/spawner.py",
+        "controller_manager/test_utils.py",
+        "controller_manager/unspawner.py",
+    ],
+    imports = ["."],
+    deps = [
+        "@controller_manager_msgs//:py",
+        "@diagnostic_msgs//:py",
+        "@diagnostic_updater//:diagnostic_updater_py",
+        "@example_interfaces//:py",
+        "@launch",
+        "@launch//:test_support",
+        "@launch_ros",
+        "@launch_testing",
+        "@launch_testing_ros",
+        "@libstatistics_collector//:py",
+        "@lifecycle_msgs//:py",
+        "@rcl_interfaces//:py",
+        "@rclpy",
+        "@ros2param",
+        "@ros2pkg",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+        requirement("filelock"),
+    ],
+)
+
+ros_version_header(
+    name = "version_h",
+    out = "_gen/include/controller_manager/controller_manager/version.h",
+)
+
+pkg_files(
+    name = "pkg_files_extra_9",
+    srcs = ["//test:test_ros2_control_node.yaml"],
+    prefix = "test",
+)
+
+# Console scripts installed to lib/controller_manager/. These are py_binary
+# targets (not bare python3 shims) so each one carries :controller_manager_py
+# and its transitive deps (controller_manager_msgs, rclpy, ...) in its own
+# runfiles.
+[
+    py_binary(
+        name = script,
+        srcs = ["controller_manager/{}.py".format(script)],
+        data = [":ament_index"],
+        main = "controller_manager/{}.py".format(script),
+        deps = [":controller_manager_py"],
+    )
+    for script in [
+        "hardware_spawner",
+        "spawner",
+        "unspawner",
+    ]
+]
+
+ament_index(
+    name = "ament_index",
+    data = ["//test:test_launch_utils/test_ros2_control_node_combined.yaml"],
+    libraries = [
+        ":controller_manager",
+        "//test:test_chainable_controller",
+        "//test:test_controller",
+        "//test:test_controller_failed_activate",
+        "//test:test_controller_failed_init",
+        "//test:test_controller_with_interfaces",
+    ],
+    package_xml = "package.xml",
+    plugin_category = "controller_interface",
+    plugins = [
+        "//test:test_chainable_controller/test_chainable_controller.xml",
+        "//test:test_controller/test_controller.xml",
+        "//test:test_controller_failed_activate/test_controller_failed_activate.xml",
+        "//test:test_controller_failed_init/test_controller_failed_init.xml",
+        "//test:test_controller_with_interfaces/test_controller_with_interfaces.xml",
+    ],
+    deps = [
+        "@controller_interface//:ament_index",
+        "@hardware_interface//:ament_index",
+        "@hardware_interface_testing//:ament_index",
+        "@pluginlib//:ament_index",
+    ],
+)
+
+ament_package(
+    cmake_export_dependencies_list = [
+        "controller_interface",
+        "controller_manager_msgs",
+        "diagnostic_updater",
+        "fmt",
+        "generate_parameter_library",
+        "hardware_interface",
+        "libstatistics_collector",
+        "lifecycle_msgs",
+        "pluginlib",
+        "rclcpp",
+        "rclcpp_lifecycle",
+        "realtime_tools",
+        "rsl",
+        "std_msgs",
+        "tcb_span",
+        "tl-expected",
+    ],
+    cmake_export_has_library_target = True,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_name = "export_controller_manager",
+    console_scripts = {
+        "hardware_spawner": "controller_manager.hardware_spawner:main",
+        "spawner": "controller_manager.spawner:main",
+        "unspawner": "controller_manager.unspawner:main",
+    },
+    executables = [":ros2_control_node"],
+    headers = [":version_h"] + [
+        "include/controller_manager/controller_manager.hpp",
+        "include/controller_manager/controller_spec.hpp",
+        "include/controller_manager/sleeping_policies.hpp",
+    ],
+    include_prefix = "",
+    install = [":pkg_files_extra_9"],
+    libraries = [
+        ":controller_manager",
+        "//test:test_chainable_controller",
+        "//test:test_controller",
+        "//test:test_controller_failed_activate",
+        "//test:test_controller_failed_init",
+        "//test:test_controller_with_interfaces",
+    ],
+    package_xml = "package.xml",
+    python = [":controller_manager_py"],
+    setup_cfg = "setup.cfg",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_gen_version_h//:ament_package",
+        "@ament_cmake_gmock//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_cmake_python//:ament_package",
+        "@backward_ros//:ament_package",
+        "@controller_interface//:ament_package",
+        "@controller_manager_msgs//:ament_package",
+        "@diagnostic_msgs//:ament_package",
+        "@diagnostic_updater//:ament_package",
+        "@example_interfaces//:ament_package",
+        "@generate_parameter_library//:ament_package",
+        "@hardware_interface//:ament_package",
+        "@hardware_interface_testing//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@libstatistics_collector//:ament_package",
+        "@lifecycle_msgs//:ament_package",
+        "@pluginlib//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclpy//:ament_package",
+        "@realtime_tools//:ament_package",
+        "@robot_state_publisher//:ament_package",
+        "@ros2_control_cmake//:ament_package",
+        "@ros2_control_test_assets//:ament_package",
+        "@ros2param//:ament_package",
+        "@ros2pkg//:ament_package",
+        "@sensor_msgs//:ament_package",
+        "@std_msgs//:ament_package",
+    ],
+)

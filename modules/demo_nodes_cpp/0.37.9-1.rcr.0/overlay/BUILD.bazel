@@ -1,0 +1,174 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rclcpp_components//:defs.bzl", "rclcpp_components_register_node")
+load("@rosdistro//ament:defs.bzl", "ament_index", "ament_package")
+load("@rosdistro//cc:defs.bzl", "collect_transitive_dynamic_deps", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_shared_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+)
+
+DEPENDENCIES = {
+    "@example_interfaces//:cc_shared": "@example_interfaces//:cc",
+    "@rcl//:rcl": "@rcl//:rcl_library",
+    "@rcl_interfaces//:cc_shared": "@rcl_interfaces//:cc",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_components//:rclcpp_components": "@rclcpp_components//:rclcpp_components_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rcutils//:rcutils": "@rcutils//:rcutils_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:libyaml": "@rosdistro//cc:libyaml_library",
+}
+
+collect_transitive_dynamic_deps(
+    name = "transitive_dynamic_deps",
+    dynamic_deps = DEPENDENCIES.keys(),
+)
+
+STANDALONE_EXECUTABLES = {
+    "allocator_tutorial": "topics/allocator_tutorial_pmr",
+    "add_two_ints_client": "services/add_two_ints_client",
+    "list_parameters_async": "parameters/list_parameters_async",
+    "parameter_events": "parameters/parameter_events",
+    "parameter_event_handler": "parameters/parameter_event_handler",
+    "set_and_get_parameters_async": "parameters/set_and_get_parameters_async",
+    "matched_event_detect": "events/matched_event_detect",
+    "use_logger_service": "logging/use_logger_service",
+}
+
+[cc_binary(
+    name = executable,
+    srcs = ["src/{0}.cpp".format(src)],
+    data = [":ament_index"],
+    dynamic_deps = [":transitive_dynamic_deps"],
+    includes = ["include"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values(),
+) for executable, src in STANDALONE_EXECUTABLES.items()]
+
+DEMO_COMPONENTS = {
+    "one_off_timer": ("timers/one_off_timer", "demo_nodes_cpp::OneOffTimerNode"),
+    "reuse_timer": ("timers/reuse_timer", "demo_nodes_cpp::ReuseTimerNode"),
+    "list_parameters": ("parameters/list_parameters", "demo_nodes_cpp::ListParameters"),
+    "parameter_blackboard": ("parameters/parameter_blackboard", "demo_nodes_cpp::ParameterBlackboard"),
+    "set_and_get_parameters": ("parameters/set_and_get_parameters", "demo_nodes_cpp::SetAndGetParameters"),
+    "parameter_events_async": ("parameters/parameter_events_async", "demo_nodes_cpp::ParameterEventsAsyncNode"),
+    "even_parameters_node": ("parameters/even_parameters_node", "demo_nodes_cpp::EvenParameterNode"),
+    "set_parameters_callback": ("parameters/set_parameters_callback", "demo_nodes_cpp::SetParametersCallback"),
+    "add_two_ints_server": ("services/add_two_ints_server", "demo_nodes_cpp::ServerNode"),
+    "add_two_ints_client_async": ("services/add_two_ints_client_async", "demo_nodes_cpp::ClientNode"),
+    "introspection_service": ("services/introspection_service", "demo_nodes_cpp::IntrospectionServiceNode"),
+    "introspection_client": ("services/introspection_client", "demo_nodes_cpp::IntrospectionClientNode"),
+    "content_filtering_publisher": ("topics/content_filtering_publisher", "demo_nodes_cpp::ContentFilteringPublisher"),
+    "content_filtering_subscriber": ("topics/content_filtering_subscriber", "demo_nodes_cpp::ContentFilteringSubscriber"),
+    "talker": ("topics/talker", "demo_nodes_cpp::Talker"),
+    "talker_loaned_message": ("topics/talker_loaned_message", "demo_nodes_cpp::LoanedMessageTalker"),
+    "talker_serialized_message": ("topics/talker_serialized_message", "demo_nodes_cpp::SerializedMessageTalker"),
+    "listener": ("topics/listener", "demo_nodes_cpp::Listener"),
+    "listener_serialized_message": ("topics/listener_serialized_message", "demo_nodes_cpp::SerializedMessageListener"),
+    "listener_best_effort": ("topics/listener_best_effort", "demo_nodes_cpp::ListenerBestEffort"),
+}
+
+[cc_library(
+    name = "{0}_cc_library".format(component),
+    srcs = ["src/{0}.cpp".format(src)],
+    hdrs = ["include/demo_nodes_cpp/visibility_control.h"],
+    includes = ["include"],
+    local_defines = ros_local_defines() + ["DEMO_NODES_CPP_BUILDING_DLL"],
+    deps = DEPENDENCIES.values(),
+) for component, (src, _) in DEMO_COMPONENTS.items()]
+
+[cc_shared_library(
+    name = "{0}_library".format(component),
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":{0}_cc_library".format(component)],
+) for component in DEMO_COMPONENTS.keys()]
+
+[rclcpp_components_register_node(
+    name = component,
+    component = ":{0}_library".format(component),
+    data = [":ament_index"],
+    executor = "SingleThreadedExecutor",
+    node_name = component,
+    plugin = plugin,
+) for component, (_, plugin) in DEMO_COMPONENTS.items()]
+
+ament_index(
+    name = "ament_index",
+    components = [":{0}_record".format(c) for c in DEMO_COMPONENTS.keys()],
+    data = ["//launch:launch_files"],
+    libraries = [":{0}_library".format(c) for c in DEMO_COMPONENTS.keys()],
+    package_xml = "package.xml",
+)
+
+write_file(
+    name = "rmw_test_fixture_implementation_py",
+    out = "rmw_test_fixture_implementation.py",
+    content = [
+        "def rmw_test_isolation_start(): pass",
+        "def rmw_test_isolation_stop(): pass",
+    ],
+)
+
+py_library(
+    name = "rmw_test_fixture_implementation",
+    srcs = [":rmw_test_fixture_implementation_py"],
+    imports = ["."],
+)
+
+ament_package(
+    name = "ament_package",
+    cmake_export_dependencies = False,
+    cmake_export_include_directories = False,
+    cmake_export_libraries = False,
+    cmake_export_targets = False,
+    components = [":{0}_record".format(c) for c in DEMO_COMPONENTS.keys()],
+    executables = [":{0}".format(e) for e in STANDALONE_EXECUTABLES.keys()] + [":{0}".format(c) for c in DEMO_COMPONENTS.keys()],
+    libraries = [":{0}_library".format(c) for c in DEMO_COMPONENTS.keys()],
+    package_xml = "package.xml",
+    deps = [":ament_index"] + [
+        "@ament_cmake//:ament_package",
+        "@ament_cmake_pytest//:ament_package",
+        "@ament_lint_auto//:ament_package",
+        "@ament_lint_common//:ament_package",
+        "@example_interfaces//:ament_package",
+        "@launch//:ament_package",
+        "@launch_ros//:ament_package",
+        "@launch_testing//:ament_package",
+        "@launch_testing_ament_cmake//:ament_package",
+        "@launch_testing_ros//:ament_package",
+        "@launch_xml//:ament_package",
+        "@rcl//:ament_package",
+        "@rcl_interfaces//:ament_package",
+        "@rclcpp//:ament_package",
+        "@rclcpp_components//:ament_package",
+        "@rcpputils//:ament_package",
+        "@rcutils//:ament_package",
+        "@rmw//:ament_package",
+        "@rosdistro//:ament_package",
+    ],
+)
