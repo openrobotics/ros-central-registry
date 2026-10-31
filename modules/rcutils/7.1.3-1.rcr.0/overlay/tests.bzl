@@ -66,12 +66,10 @@ def rcutils_cc_tests(tests, memory_tools_tests):
             ),
             env = {} if needs_memory_tools else env,
             local_defines = ros_local_defines() + [
-                # GitHub Actions runners restrict what /tmp can be used for.
-                # $(TMPDIR) is a Make variable set via --define=TMPDIR=...
-                # (see workspace/.bazelrc and tools/ci/setup_workspace.py),
-                # resolved from $RUNNER_TEMP/$TMPDIR with a /tmp fallback for
-                # local use.
-                "BUILD_DIR=\\\"$(TMPDIR)\\\"",
+                # Use the test's current working directory inside the Bazel
+                # sandbox rather than $(TMPDIR) ($RUNNER_TEMP), which is outside
+                # darwin-sandbox's writable paths on macOS.
+                "BUILD_DIR=this->cwd",
             ],
             target_compatible_with = target_compatible_with,
             deps = [
