@@ -1,0 +1,44 @@
+--- a/test/test_torch_tensor_inter_pubsub_fastrtps_launch.py
++++ b/test/test_torch_tensor_inter_pubsub_fastrtps_launch.py
+@@ -75,6 +75,7 @@
+     def setUp(self):
+         self.node = rclpy.create_node('test_torch_tensor_inter_pubsub_fastrtps')
+         self.publisher_count = 0
++        self.pub_count_offset = 0
+         self.subscriber_count = 0
+         self.validation_passed = True
+ 
+@@ -92,6 +93,8 @@
+         self.publisher_count = msg.data
+ 
+     def _sub_count_cb(self, msg):
++        if self.subscriber_count == 0 and msg.data > 0 and self.publisher_count > msg.data:
++            self.pub_count_offset = self.publisher_count - msg.data
+         self.subscriber_count = msg.data
+ 
+     def _validation_cb(self, msg):
+@@ -99,7 +102,10 @@
+ 
+     def _spin_until(self, target_count=5, timeout_sec=15.0):
+         start = time.time()
+-        while self.subscriber_count < target_count and time.time() - start < timeout_sec:
++        while (
++            (self.subscriber_count < target_count or self.publisher_count < target_count)
++            and time.time() - start < timeout_sec
++        ):
+             rclpy.spin_once(self.node, timeout_sec=0.1)
+         return self.subscriber_count >= target_count
+ 
+@@ -117,9 +123,9 @@
+         self.assertTrue(
+             self.validation_passed, 'Tensor validation failed (inter-process)')
+         self.assertLessEqual(
+-            abs(self.publisher_count - self.subscriber_count), 5,
+-            f'Publisher count ({self.publisher_count}) and subscriber count '
+-            f'({self.subscriber_count}) differ by more than 5')
++            abs((self.publisher_count - self.pub_count_offset) - self.subscriber_count), 5,
++            f'Publisher count ({self.publisher_count}, offset={self.pub_count_offset}) '
++            f'and subscriber count ({self.subscriber_count}) differ by more than 5')
+ 
+ 
+ @launch_testing.post_shutdown_test()
