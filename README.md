@@ -42,7 +42,7 @@ curl -Lo ~/.local/bin/bazel \
 chmod +x  ~/.local/bin/bazel
 ```
 
-## MacOS Tahoe (amd64 or arm64)
+## MacOS Tahoe (arm64 only)
 
 Install the system SDK frameworks and linker:
 
@@ -54,6 +54,14 @@ Install Homebrew and then the necessary tools:
 
 ```bash
 brew install bazelisk git
+```
+
+For high-precision coding and benchmarks on macOS, timer coalescing can introduce micro-second or milli-second jitter into your execution loops. We recommend disabling it before running any tests, and then enabling it again afterwards:
+
+```
+sudo sysctl -w kern.timer.coalescing_enabled=0
+<run tests>
+sudo sysctl -w kern.timer.coalescing_enabled=1
 ```
 
 # Verify your setup
