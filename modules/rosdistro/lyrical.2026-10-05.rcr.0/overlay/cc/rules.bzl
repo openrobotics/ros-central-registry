@@ -20,16 +20,6 @@ load(":aspects.bzl", "collect_transitive_dynamic_deps_aspect")
 load(":types.bzl", "CollectedCcSharedLibraryInfo")
 
 def _collect_transitive_dynamic_deps_impl(ctx):
-    if ctx.fragments.cpp.dynamic_mode() == "OFF":
-        return [
-            CcSharedLibraryInfo(
-                dynamic_deps = depset(),
-                exports = [],
-                linker_input = cc_common.create_linker_input(owner = ctx.label),
-                link_once_static_libs = [],
-            ),
-            DefaultInfo(),
-        ]
     transitive_cc_shared_library_infos = []
     transitive_runfiles_depsets = []
     for dep in ctx.attr.dynamic_deps:
@@ -71,11 +61,19 @@ def _collect_transitive_dynamic_deps_impl(ctx):
     user_link_flags = []
     additional_inputs = []
     if ctx.attr.dynamic_deps:
+        extra_lib_paths = []
         for dep in ctx.attr.extra_link_deps:
             if CcInfo in dep:
                 for li in dep[CcInfo].linking_context.linker_inputs.to_list():
-                    transitive_libs += li.libraries
+                    for lib in li.libraries:
+                        if lib.dynamic_library:
+                            extra_lib_paths.append(lib.dynamic_library.path)
+                            additional_inputs.append(lib.dynamic_library)
                     additional_inputs.extend(li.additional_inputs)
+        if extra_lib_paths:
+            user_link_flags.append("-Wl,--push-state,--as-needed")
+            user_link_flags.extend(extra_lib_paths)
+            user_link_flags.append("-Wl,--pop-state")
 
     linker_input = cc_common.create_linker_input(
         owner = ctx.label,
@@ -130,11 +128,6 @@ _collect_transitive_dynamic_deps_rule = rule(
 )
 
 def collect_transitive_dynamic_deps(name, dynamic_deps = [], **kwargs):
-    if type(dynamic_deps) != "select":
-        dynamic_deps = select({
-            Label("//:dynamic_mode_off"): [],
-            "//conditions:default": list(dynamic_deps),
-        })
     _collect_transitive_dynamic_deps_rule(
         name = name,
         dynamic_deps = dynamic_deps,

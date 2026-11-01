@@ -538,7 +538,7 @@ def _cc_ros_shared_library(ctx):
         ),
         DefaultInfo(
             files = files,
-            runfiles = _library_symlinks(ctx, transitive_files, [solib_files, _runtime_shared_library_files(ctx), depset(rosidl_runtime_dynamic_libraries(ctx))]),
+            runfiles = _library_symlinks(ctx, depset(transitive = [transitive_files, _runtime_shared_library_files(ctx)]), [solib_files, depset(rosidl_runtime_dynamic_libraries(ctx))]),
         ),
     ]
 
@@ -749,8 +749,8 @@ def _cc_proto_ros_library(ctx):
     )
     runfiles = ctx.runfiles() if static_typesupport else _library_symlinks(
         ctx,
-        transitive_files,
-        [_solib_files(extra_linker_inputs), _runtime_shared_library_files(ctx), depset(rosidl_runtime_dynamic_libraries(ctx))],
+        depset(transitive = [transitive_files, _runtime_shared_library_files(ctx)]),
+        [_solib_files(extra_linker_inputs), depset(rosidl_runtime_dynamic_libraries(ctx))],
     ).merge(
         ctx.attr.shared[DefaultInfo].default_runfiles,
     )

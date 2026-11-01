@@ -217,7 +217,7 @@ def rosidl_export_dynamic_link_flags(cc_toolchain):
         return []
     if "apple" in system:
         return ["-Wl,-export_dynamic"]
-    return ["-rdynamic"]
+    return ["-Wl,--export-dynamic-symbol=*rosidl_typesupport_*"]
 
 def generate_compilation_information(
         ctx,
