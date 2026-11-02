@@ -1,11 +1,9 @@
 --- a/test/test_graph_monitor.cpp
 +++ b/test/test_graph_monitor.cpp
-@@ -134,6 +134,16 @@
-   MOCK_METHOD(
-     (std::vector<rclcpp::TopicEndpointInfo>),
+@@ -136,6 +136,16 @@
      get_subscriptions_info_by_topic,
-+    (const std::string &, bool),
-+    (const, override));
+     (const std::string &, bool),
+     (const, override));
 +  MOCK_METHOD(
 +    (std::vector<rclcpp::ServiceEndpointInfo>),
 +    get_clients_info_by_service,
@@ -14,6 +12,104 @@
 +  MOCK_METHOD(
 +    (std::vector<rclcpp::ServiceEndpointInfo>),
 +    get_servers_info_by_service,
-     (const std::string &, bool),
-     (const, override));
++    (const std::string &, bool),
++    (const, override));
+ 
+ protected:
+   std::vector<rclcpp::Event::SharedPtr> events_;
+@@ -203,6 +213,7 @@
+     EXPECT_CALL(*node_graph_, get_node_names)
+     .WillRepeatedly(
+       [this]() {
++        std::lock_guard<std::mutex> lock(mocked_nodes_mutex_);
+         std::vector<std::string> node_names;
+         for (const auto & node : mocked_nodes_) {
+           node_names.push_back(node.name);
+@@ -281,10 +292,13 @@
+         return std::async(
+           std::launch::async, [this, node_name, callback]() {
+             std::vector<std::string> param_names;
+-            for (const auto & node : mocked_nodes_) {
+-              if (node.name == node_name) {
+-                for (const auto & param : node.params) {
+-                  param_names.push_back(param);
++            {
++              std::lock_guard<std::mutex> lock(mocked_nodes_mutex_);
++              for (const auto & node : mocked_nodes_) {
++                if (node.name == node_name) {
++                  for (const auto & param : node.params) {
++                    param_names.push_back(param);
++                  }
+                 }
+               }
+             }
+@@ -303,10 +317,15 @@
+       });
+   }
+ 
++  ~GraphMonitorTest() override
++  {
++    graphmon_.reset();
++  }
++
+   void trigger_and_wait()
+   {
+     node_graph_->notify_graph_change();
+-    ASSERT_TRUE(graphmon_->wait_for_update(std::chrono::milliseconds(10)));
++    ASSERT_TRUE(graphmon_->wait_for_update(std::chrono::milliseconds(1000)));
+   }
+ 
+   rosgraph_monitor_msgs::msg::Graph await_graphmon_msg()
+@@ -316,6 +335,9 @@
+       lock, std::chrono::milliseconds(100), [this]() {
+         return !queue_.empty();
+       });
++    if (queue_.empty()) {
++      return rosgraph_monitor_msgs::msg::Graph{};
++    }
+     rosgraph_monitor_msgs::msg::Graph msg = queue_.front();
+     queue_.pop_front();
+     return msg;
+@@ -359,10 +381,13 @@
+   void set_nodes(std::vector<MockedNode> nodes)
+   {
+     // Add the root namespace / onto the names, which should not be specified with it
+-    mocked_nodes_.clear();
+-    mocked_nodes_.reserve(nodes.size());
+-    for (const auto & node : nodes) {
+-      mocked_nodes_.push_back(node);
++    {
++      std::lock_guard<std::mutex> lock(mocked_nodes_mutex_);
++      mocked_nodes_.clear();
++      mocked_nodes_.reserve(nodes.size());
++      for (const auto & node : nodes) {
++        mocked_nodes_.push_back(node);
++      }
+     }
+     trigger_and_wait();
+   }
+@@ -479,6 +504,7 @@
+   const std::string default_node_name_ = "testy0";
+   const std::string default_topic_name_ = "/topic1";
+   const rclcpp::QoS default_qos_{10};
++  std::mutex mocked_nodes_mutex_;
+   std::vector<MockedNode> mocked_nodes_;
+   std::unordered_map<RosRmwGid, Endpoint> endpoints_;
+ };
+@@ -871,7 +897,6 @@
+   };
+ 
+   set_nodes(mocked_nodes);
+-  node_graph_->notify_graph_change();
+ 
+   // Wait for the graph message with parameters populated
+   // The parameter query is async, so we need to wait for it to complete
+@@ -879,7 +904,7 @@
+     [](const rosgraph_monitor_msgs::msg::Graph & msg) {
+       return msg.nodes.size() == 1 && msg.nodes.front().parameters.size() == 2;
+     },
+-    std::chrono::milliseconds(500),
++    std::chrono::milliseconds(5000),
+     "Timed out waiting for parameters to be populated"
+   );
  

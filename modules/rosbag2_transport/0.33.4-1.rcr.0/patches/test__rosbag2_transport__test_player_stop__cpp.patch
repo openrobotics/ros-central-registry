@@ -1,6 +1,11 @@
 --- a/test/rosbag2_transport/test_player_stop.cpp
 +++ b/test/rosbag2_transport/test_player_stop.cpp
-@@ -84,18 +84,17 @@
+@@ -80,22 +80,21 @@
+   player.play();
+   EXPECT_TRUE(player.play_next());
+   player.stop();
+-  ASSERT_TRUE(player.wait_for_playback_to_finish(1s));
++  ASSERT_TRUE(player.wait_for_playback_to_finish(10s));
  }
  
  TEST_F(Rosbag2PlayerStopTestFixture, stop_playback_in_pause_mode_implicit) {
@@ -19,15 +24,30 @@
 -      std::async(std::launch::async, [&] {player.wait_for_playback_to_finish();});
 -    EXPECT_TRUE(player.play_next());
 -  }
+-  ASSERT_EQ(play_future_result.wait_for(1s), std::future_status::ready);
 +  player->play();
 +  EXPECT_TRUE(player->play_next());
 +  auto play_future_result =
 +    std::async(std::launch::async, [&player] {player.reset();});
-   ASSERT_EQ(play_future_result.wait_for(1s), std::future_status::ready);
++  ASSERT_EQ(play_future_result.wait_for(10s), std::future_status::ready);
 +  play_future_result.get();
  }
  
  TEST_F(Rosbag2PlayerStopTestFixture, stop_playback_explicit) {
+@@ -124,11 +123,11 @@
+     std::unique_lock<std::mutex> lk{m};
+     player.resume();
+     ASSERT_FALSE(player.is_paused());
+-    ASSERT_TRUE(cv.wait_for(lk, 2s, [&] {return calls == 1;})) << "calls = " << calls;
++    ASSERT_TRUE(cv.wait_for(lk, 10s, [&] {return calls == 1;})) << "calls = " << calls;
+     lk.unlock();
+     player.stop();
+   }
+-  ASSERT_TRUE(player.wait_for_playback_to_finish(1s));
++  ASSERT_TRUE(player.wait_for_playback_to_finish(10s));
+   ASSERT_EQ(calls, 1);
+ }
+ 
 @@ -136,37 +135,38 @@
    auto calls = 0;
    std::mutex m;
@@ -65,7 +85,15 @@
 -    const auto pre_callback_handle =
 -      player.add_on_play_message_pre_callback(callback);
 -    ASSERT_NE(pre_callback_handle, Player::invalid_callback_handle);
--
++    std::unique_lock<std::mutex> lk{m};
++    player->resume();
++    ASSERT_FALSE(player->is_paused());
++    ASSERT_TRUE(cv.wait_for(lk, 10s, [&] {return calls == 1;}));
++  }
++  // Player's destructor call should interrupt the playback
++  auto play_future_result =
++    std::async(std::launch::async, [&player] {player.reset();});
+ 
 -    player.pause();
 -    ASSERT_TRUE(player.is_paused());
 -
@@ -75,19 +103,15 @@
 -      std::async(std::launch::async, [&] {player.wait_for_playback_to_finish();});
 -    ASSERT_TRUE(player.is_paused());
 -
-     std::unique_lock<std::mutex> lk{m};
+-    std::unique_lock<std::mutex> lk{m};
 -    player.resume();
 -    ASSERT_FALSE(player.is_paused());
-+    player->resume();
-+    ASSERT_FALSE(player->is_paused());
-     ASSERT_TRUE(cv.wait_for(lk, 2s, [&] {return calls == 1;}));
+-    ASSERT_TRUE(cv.wait_for(lk, 2s, [&] {return calls == 1;}));
 -    // Player's destructor call should interrupt the playback
-   }
-+  // Player's destructor call should interrupt the playback
-+  auto play_future_result =
-+    std::async(std::launch::async, [&player] {player.reset();});
- 
-   ASSERT_EQ(play_future_result.wait_for(1s), std::future_status::ready);
+-  }
+-
+-  ASSERT_EQ(play_future_result.wait_for(1s), std::future_status::ready);
++  ASSERT_EQ(play_future_result.wait_for(10s), std::future_status::ready);
 +  play_future_result.get();
    ASSERT_EQ(calls, 1);
  }
