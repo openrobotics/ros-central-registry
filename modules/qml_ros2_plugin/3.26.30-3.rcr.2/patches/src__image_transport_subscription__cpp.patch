@@ -1,0 +1,145 @@
+--- a/src/image_transport_subscription.cpp
++++ b/src/image_transport_subscription.cpp
+@@ -30,6 +30,24 @@
+            Qt::AutoConnection );
+ }
+ 
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++QVideoSink *ImageTransportSubscription::videoSink() const { return surface_; }
++
++void ImageTransportSubscription::setVideoSink( QVideoSink *surface )
++{
++  if ( surface == surface_ )
++    return;
++  surface_ = surface;
++  if ( surface_ == nullptr && subscribed_ ) {
++    shutdownSubscriber();
++    return;
++  }
++  if ( !subscribed_ )
++    initSubscriber();
++  if ( last_frame_.isValid() )
++    presentFrame( last_frame_ );
++}
++#else
+ QAbstractVideoSurface *ImageTransportSubscription::videoSurface() const { return surface_; }
+ 
+ void ImageTransportSubscription::setVideoSurface( QAbstractVideoSurface *surface )
+@@ -48,6 +66,7 @@
+   if ( last_frame_.isValid() )
+     presentFrame( last_frame_ );
+ }
++#endif
+ 
+ void ImageTransportSubscription::onRos2Initialized() { initSubscriber(); }
+ 
+@@ -71,6 +90,28 @@
+   // TODO Transport hints
+   const rclcpp::Node::SharedPtr &node = Ros2Qml::getInstance().node();
+   image_transport::TransportHints transport_hints( *node, default_transport_.toStdString() );
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  QList<QVideoFrameFormat::PixelFormat> supported_formats =
++      has_supported_formats_override_
++          ? supported_formats_override_
++          : QList<QVideoFrameFormat::PixelFormat>{
++                QVideoFrameFormat::Format_XRGB8888,
++                QVideoFrameFormat::Format_ARGB8888,
++                QVideoFrameFormat::Format_ARGB8888_Premultiplied,
++                QVideoFrameFormat::Format_XBGR8888,
++                QVideoFrameFormat::Format_ABGR8888,
++                QVideoFrameFormat::Format_BGRA8888,
++                QVideoFrameFormat::Format_BGRA8888_Premultiplied,
++                QVideoFrameFormat::Format_BGRX8888,
++                QVideoFrameFormat::Format_RGBA8888,
++                QVideoFrameFormat::Format_RGBX8888,
++                QVideoFrameFormat::Format_Y8,
++                QVideoFrameFormat::Format_Y16,
++                QVideoFrameFormat::Format_YUYV,
++                QVideoFrameFormat::Format_UYVY };
++#else
++  QList<QVideoFrame::PixelFormat> supported_formats = surface_->supportedPixelFormats();
++#endif
+   subscription_ = ImageTransportManager::getInstance().subscribe(
+       node, topic_, queue_size_, transport_hints,
+       [this]( const QVideoFrame &frame, const ImageInformation &info ) {
+@@ -80,7 +121,7 @@
+         }
+         presentFrame( frame );
+       },
+-      surface_->supportedPixelFormats() );
++      supported_formats );
+   subscribed_ = subscription_ != nullptr;
+   if ( !was_subscribed )
+     emit subscribedChanged();
+@@ -95,8 +136,10 @@
+   if ( !subscribed_ )
+     return;
+   subscription_.reset();
++#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
+   if ( surface_ != nullptr && surface_->isActive() )
+     surface_->stop();
++#endif
+   subscribed_ = false;
+   last_framerate_ = 0;
+   last_network_latency_ = -1;
+@@ -110,8 +153,13 @@
+ 
+ void ImageTransportSubscription::onNoImageTimeout()
+ {
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  if ( surface_ == nullptr )
++    return;
++#else
+   if ( surface_ == nullptr || !surface_->isActive() )
+     return;
++#endif
+   int elapsed_time_milliseconds =
+       static_cast<int>( ( clock_.now() - last_frame_timestamp_ ).nanoseconds() / 1000000 );
+ 
+@@ -121,9 +169,14 @@
+     no_image_timer_.start( timeout_ - elapsed_time_milliseconds );
+     return;
+   }
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  surface_->setVideoFrame( QVideoFrame() );
++#else
+   surface_->present( QVideoFrame() );
+-}
+-
++#endif
++}
++
++#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
+ namespace
+ {
+ const char *videoSurfaceErrorToString( QAbstractVideoSurface::Error error )
+@@ -144,11 +197,21 @@
+   }
+ }
+ } // namespace
++#endif
+ 
+ void ImageTransportSubscription::presentFrame( const QVideoFrame &frame )
+ {
+   if ( surface_ == nullptr )
+     return;
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  if ( frame.pixelFormat() == QVideoFrameFormat::Format_Invalid ) {
++    QML_ROS2_PLUGIN_ERROR( "Could not find compatible format for video surface." );
++    shutdownSubscriber();
++    return;
++  }
++  last_frame_ = frame;
++  surface_->setVideoFrame( frame );
++#else
+   const QVideoSurfaceFormat &surface_format = surface_->surfaceFormat();
+   if ( surface_format.frameWidth() != frame.width() ||
+        surface_format.frameHeight() != frame.height() ||
+@@ -172,6 +235,7 @@
+   }
+   last_frame_ = frame;
+   surface_->present( frame );
++#endif
+   // Return if this is the last frame of our subscription.
+   if ( subscription_ == nullptr )
+     return;

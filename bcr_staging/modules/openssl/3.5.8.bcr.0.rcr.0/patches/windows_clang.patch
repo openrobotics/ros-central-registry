@@ -1,0 +1,182 @@
+diff --git a/BUILD.bazel b/BUILD.bazel
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -181,6 +181,8 @@ load(
+ 
+ package(default_visibility = ["//:__subpackages__"])
+ 
++exports_files(["VERSION.dat"])
++
+ # --- Feature toggle flags (generated macro) ---
+ openssl_feature_flags()
+ 
+@@ -206,6 +208,28 @@ perl_library(
+     includes = ["util/perl"],
+ )
+ 
++filegroup(
++    name = "configdata_pm",
++    srcs = select({
++        "//configs:android_arm64": ["configdata/android_arm64/configdata.pm"],
++        "//configs:android_x86_64": ["configdata/android_x86_64/configdata.pm"],
++        "//configs:darwin_arm64": ["configdata/darwin_arm64/configdata.pm"],
++        "//configs:darwin_x86_64": ["configdata/darwin_x86_64/configdata.pm"],
++        "//configs:freebsd_aarch64": ["configdata/freebsd_aarch64/configdata.pm"],
++        "//configs:freebsd_x86_64": ["configdata/freebsd_x86_64/configdata.pm"],
++        "//configs:ios_arm64": ["configdata/ios_arm64/configdata.pm"],
++        "//configs:linux_aarch64": ["configdata/linux_aarch64/configdata.pm"],
++        "//configs:linux_arm": ["configdata/linux_arm/configdata.pm"],
++        "//configs:linux_ppc64le": ["configdata/linux_ppc64le/configdata.pm"],
++        "//configs:linux_riscv64": ["configdata/linux_riscv64/configdata.pm"],
++        "//configs:linux_s390x": ["configdata/linux_s390x/configdata.pm"],
++        "//configs:linux_x86_64": ["configdata/linux_x86_64/configdata.pm"],
++        "//configs:windows_arm64": ["configdata/windows_arm64/configdata.pm"],
++        "//configs:windows_x64": ["configdata/windows_x64/configdata.pm"],
++        "//conditions:default": ["configdata/no_asm/configdata.pm"],
++    }),
++)
++
+ perl_library(
+     name = "configdata",
+     srcs = select({
+@@ -357,7 +381,7 @@ perl_genrule(
+         "//configs:linux_aarch64": "linux64",
+         "//configs:linux_x86_64": "elf",
+         "//configs:windows_arm64_msvc": "win64",
+-        "//configs:windows_arm64_non_msvc": "linux64",
++        "//configs:windows_arm64_non_msvc": "win64",
+         "//configs:windows_x64_msvc": "masm",
+         "//configs:windows_x64_non_msvc": "mingw64",
+         "//conditions:default": "",
+diff --git a/bazel/BUILD.bazel b/bazel/BUILD.bazel
+--- a/bazel/BUILD.bazel
++++ b/bazel/BUILD.bazel
+@@ -24,7 +24,6 @@ perl_binary(
+     srcs = ["batch_dofile.pl"],
+     main = "batch_dofile.pl",
+     perlopt = [
+-        "-Mconfigdata",
+         "-Moids_to_c",
+     ],
+     visibility = ["//:__pkg__"],
+diff --git a/bazel/batch_dofile.pl b/bazel/batch_dofile.pl
+--- a/bazel/batch_dofile.pl
++++ b/bazel/batch_dofile.pl
+@@ -20,6 +20,15 @@ use lib "$FindBin::Bin/perl";
+ use OpenSSL::fallback "$FindBin::Bin/../external/perl/MODULES.txt";
+ use OpenSSL::Template;
+ 
++BEGIN {
++    if ($ENV{OPENSSL_CONFIGDATA_DIR}) {
++        unshift @INC, $ENV{OPENSSL_CONFIGDATA_DIR};
++    }
++}
++use configdata;
++$config{sourcedir} = "$FindBin::Bin/..";
++$config{builddir} = "$FindBin::Bin/..";
++
+ die "You must run this script with -Mconfigdata\n"
+     if !exists($config{target});
+ 
+diff --git a/bazel/openssl_genrule.bzl b/bazel/openssl_genrule.bzl
+--- a/bazel/openssl_genrule.bzl
++++ b/bazel/openssl_genrule.bzl
+@@ -88,7 +88,7 @@ _DOFILE_DER_SRC_TEMPLATES = {
+ 
+ def _run_dofile(ctx, out_files_list):
+     """Run batch_dofile once for all templates."""
+-    inputs = []
++    inputs = [ctx.file._configdata, ctx.file._version_dat]
+     outputs = []
+     args = ctx.actions.args()
+ 
+@@ -112,6 +112,7 @@ def _run_dofile(ctx, out_files_list):
+         arguments = [args],
+         inputs = inputs,
+         outputs = outputs,
++        env = {"OPENSSL_CONFIGDATA_DIR": ctx.file._configdata.dirname},
+         mnemonic = "OpenSSLDofile",
+         progress_message = "Generating %d template files" % len(outputs),
+     )
+@@ -199,6 +200,14 @@ Template outputs go into DefaultInfo; app outputs go into OutputGroupInfo("app")
+             allow_files = True,
+             doc = "Map of .in template file labels to their canonical output paths.",
+         ),
++        "_configdata": attr.label(
++            allow_single_file = True,
++            default = Label("//:configdata_pm"),
++        ),
++        "_version_dat": attr.label(
++            allow_single_file = True,
++            default = Label("//:VERSION.dat"),
++        ),
+         "_batch_dofile": attr.label(
+             cfg = "exec",
+             executable = True,
+diff --git a/configs/BUILD.bazel b/configs/BUILD.bazel
+--- a/configs/BUILD.bazel
++++ b/configs/BUILD.bazel
+@@ -151,6 +151,7 @@ selects.config_setting_group(
+     match_any = [
+         ":windows_clang_cl",
+         ":windows_mingw",
++        ":windows_clang",
+     ],
+     visibility = ["//visibility:public"],
+ )
+@@ -160,6 +161,7 @@ selects.config_setting_group(
+     match_any = [
+         ":windows_x64_clang_cl",
+         ":windows_x64_mingw",
++        ":windows_x64_clang",
+     ],
+     visibility = ["//visibility:public"],
+ )
+@@ -169,6 +171,7 @@ selects.config_setting_group(
+     match_any = [
+         ":windows_arm64_clang_cl",
+         ":windows_arm64_mingw",
++        ":windows_arm64_clang",
+     ],
+     visibility = ["//visibility:public"],
+ )
+@@ -186,6 +189,24 @@ config_setting(
+     visibility = ["//visibility:public"],
+ )
+ 
++selects.config_setting_group(
++    name = "windows_x64_clang",
++    match_all = [
++        ":windows_x64",
++        ":windows_clang",
++    ],
++    visibility = ["//visibility:public"],
++)
++
++selects.config_setting_group(
++    name = "windows_arm64_clang",
++    match_all = [
++        ":windows_arm64",
++        ":windows_clang",
++    ],
++    visibility = ["//visibility:public"],
++)
++
+ config_setting(
+     name = "linux_riscv64",
+     constraint_values = [
+diff --git a/crypto/perlasm/x86_64-xlate.pl b/crypto/perlasm/x86_64-xlate.pl
+--- a/crypto/perlasm/x86_64-xlate.pl
++++ b/crypto/perlasm/x86_64-xlate.pl
+@@ -87,9 +87,7 @@
+ # syntax
+ my $gnuas=0;
+ 
+-if    ($flavour eq "mingw64")	{ $gas=1; $elf=0; $win64=1;
+-				  $prefix=`echo __USER_LABEL_PREFIX__ | $ENV{CC} -E -P -`;
+-				  $prefix =~ s|\R$||; # Better chomp
++if    ($flavour eq "mingw64")	{ $gas=1; $elf=0; $win64=1; $prefix="";
+ 				}
+ elsif ($flavour eq "macosx")	{ $gas=1; $elf=0; $prefix="_"; $decor="L\$"; }
+ elsif ($flavour eq "masm")	{ $gas=0; $elf=0; $masm=$masmref; $win64=1; $decor="\$L\$"; }
+

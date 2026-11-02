@@ -55,6 +55,11 @@ FORBIDDEN_DEPS = {
 EXTRA_PACKAGE_DEPS = {
     "rosidl_generator_c": {"rosidl_runtime_c"},
     "rosidl_typesupport_cpp": {"rosidl_generator_cpp"},
+    # The generated C++ FastRTPS typesupport calls the generated C FastRTPS
+    # typesupport's has_buffer_fields_*() helper for the same interface.
+    # Upstream CMake gets that target implicitly from the same
+    # rosidl_generate_interfaces() call; our aspect needs the module visible.
+    "rosidl_typesupport_fastrtps_cpp": {"rosidl_typesupport_fastrtps_c"},
     "rosidl_core_generators": {
         "rosidl_adapter", "rosidl_adapter_proto",
         "rosidl_generator_type_description",
@@ -194,21 +199,52 @@ def resolve_packages(distribution: dict, distro: str, date: str) -> Dict[str, Pa
     return packages
 
 
+# Every dependency tag defined by REP 149 (package.xml format 3), plus the
+# legacy format-1 run_depend. doc_depend is included too, so the deps
+# needed to eventually build package documentation from Bazel are declared
+# up front. Dropping any of these silently produces a MODULE.bazel missing
+# bazel_deps the package's BUILD files load -- e.g. every interface package
+# declares rosidl_default_generators (and ament_cmake) as a
+# buildtool_depend, not a build_depend.
+PACKAGE_XML_DEPEND_TAGS = frozenset({
+    "build_depend",
+    "build_export_depend",
+    "buildtool_depend",
+    "buildtool_export_depend",
+    "depend",
+    "doc_depend",
+    "exec_depend",
+    "run_depend",
+    "test_depend",
+})
+
+
+def parse_package_xml_dependencies(package_xml: str) -> Set[str]:
+    """
+    Returns every dependency name declared in a package.xml document via
+    any of PACKAGE_XML_DEPEND_TAGS. Conditions (`condition="..."`
+    attributes) are not evaluated -- a conditional dependency is kept, and
+    like every other name here is expected to be filtered by the caller
+    against the set of actually-resolved ROS packages.
+    """
+    root = ElementTree.fromstring(package_xml)
+    return {el.text.strip() for el in root if el.tag in PACKAGE_XML_DEPEND_TAGS and el.text}
+
+
 def fetch_package_xml_dependencies(pkg_source: PackageSource) -> Set[str]:
     """
     Fetch and parse a package's package.xml directly from its release tag,
-    returning every declared dependency name (depend/build_depend/
-    exec_depend/run_depend/test_depend). Callers are expected to filter
-    this down to names that are themselves resolved ROS packages --
-    anything else (an apt/system dependency) is meaningless to Bazel and
-    should be dropped, matching the legacy pipeline's behavior.
+    returning every declared dependency name (see
+    parse_package_xml_dependencies). Callers are expected to filter this
+    down to names that are themselves resolved ROS packages -- anything
+    else (an apt/system dependency) is meaningless to Bazel and should be
+    dropped, matching the legacy pipeline's behavior.
     """
     url = f"https://raw.githubusercontent.com/{pkg_source.repo_owner}/{pkg_source.repo_name}/{pkg_source.tag}/package.xml"
     response = requests.get(url, timeout=60)
     response.raise_for_status()
-    root = ElementTree.fromstring(response.text)
-    dep_tags = {"depend", "build_depend", "exec_depend", "run_depend", "test_depend"}
-    return {el.text.strip() for el in root if el.tag in dep_tags and el.text}
+    return parse_package_xml_dependencies(response.text)
+
 
 
 def list_new_tags(distro: str, already_bootstrapped: Set[str]) -> List[str]:

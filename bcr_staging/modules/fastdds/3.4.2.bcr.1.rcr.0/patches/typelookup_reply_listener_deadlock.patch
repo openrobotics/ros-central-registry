@@ -1,0 +1,42 @@
+--- a/src/cpp/fastdds/builtin/type_lookup_service/TypeLookupReplyListener.cpp
++++ b/src/cpp/fastdds/builtin/type_lookup_service/TypeLookupReplyListener.cpp
+@@ -99,7 +99,18 @@
+ 
+         if (!replies_queue_.empty())
+         {
+-            TypeLookup_Reply& reply = replies_queue_.front().reply;
++            // Take the reply out of the queue and process it without holding
++            // replies_processor_cv_mutex_. Processing may send new requests,
++            // which takes the writer's mutexes; meanwhile a reception thread
++            // holding the reader's mutex can be blocked in
++            // on_new_cache_change_added() waiting for this mutex, and the
++            // writer's (intraprocess) delivery may be waiting for that
++            // reader's mutex, which deadlocks the three threads.
++            ReplyWithServerGUID reply_with_server = std::move(replies_queue_.front());
++            replies_queue_.pop();
++            guard.unlock();
++
++            TypeLookup_Reply& reply = reply_with_server.reply;
+ 
+             // Check if the received reply SampleIdentity corresponds to an outstanding request
+             auto& request_id {reply.header().relatedRequestId()};
+@@ -129,7 +140,7 @@
+                         if (RETCODE_OK == reply.return_value().getTypeDependencies()._d())
+                         {
+                             check_get_type_dependencies_reply(
+-                                request_id, type_id, replies_queue_.front().type_server,
++                                request_id, type_id, reply_with_server.type_server,
+                                 reply.return_value().getTypeDependencies().result());
+                         }
+                         else
+@@ -146,8 +157,8 @@
+                         break;
+                 }
+             }
+-            // Remove the requests from the queue
+-            replies_queue_.pop();
++
++            guard.lock();
+         }
+     }
+ }

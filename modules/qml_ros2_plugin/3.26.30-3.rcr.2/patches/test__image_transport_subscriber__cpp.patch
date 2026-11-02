@@ -1,0 +1,90 @@
+--- a/test/image_transport_subscriber.cpp
++++ b/test/image_transport_subscriber.cpp
+@@ -48,6 +48,25 @@
+   return ::testing::AssertionSuccess();
+ }
+ 
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++struct MockSurface : public QVideoSink {
++  MockSurface()
++  {
++    connect( this, &QVideoSink::videoFrameChanged, this,
++             [this]( const QVideoFrame &frame ) { last_frame = frame; } );
++  }
++  QVideoFrame last_frame;
++};
++
++struct MockNoFormatSurface : public QVideoSink {
++  MockNoFormatSurface()
++  {
++    connect( this, &QVideoSink::videoFrameChanged, this,
++             [this]( const QVideoFrame &frame ) { last_frame = frame; } );
++  }
++  QVideoFrame last_frame;
++};
++#else
+ struct MockSurface : public QAbstractVideoSurface {
+   QList<QVideoFrame::PixelFormat> supportedPixelFormats( QAbstractVideoBuffer::HandleType ) const override
+   {
+@@ -79,6 +98,7 @@
+ 
+   QVideoFrame last_frame;
+ };
++#endif
+ 
+ TEST( ImageTransportSubscription, testCorrectFormat )
+ {
+@@ -92,10 +112,12 @@
+   subscriber.setDefaultTransport( "raw" );
+   EXPECT_EQ( subscriber.defaultTransport(), "raw" );
+   MockSurface mock_surface;
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  subscriber.setSupportedPixelFormats( { QVideoFrameFormat::Format_XRGB8888 } );
++#endif
+   subscriber.setVideoSurface( &mock_surface );
+-  processSomeEvents();
++  ASSERT_TRUE( waitFor( [&img_pub]() { return img_pub->get_subscription_count() == 1U; } ) );
+   EXPECT_EQ( subscriber.topic().toStdString(), img_pub->get_topic_name() );
+-  ASSERT_TRUE( waitFor( [&img_pub]() { return img_pub->get_subscription_count() == 1U; } ) );
+ 
+   auto image = std::make_shared<sensor_msgs::msg::Image>();
+   image->width = 2;
+@@ -107,11 +129,23 @@
+   processSomeEvents();
+ 
+   ASSERT_TRUE( waitFor( [&mock_surface] { return mock_surface.last_frame.isValid(); }, 100 ) );
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  ASSERT_EQ( mock_surface.last_frame.pixelFormat(), QVideoFrameFormat::Format_XRGB8888 );
++  EXPECT_TRUE( mock_surface.last_frame.map( QVideoFrame::ReadOnly ) );
++  EXPECT_EQ( mock_surface.last_frame.mappedBytes( 0 ), 4 * 3 * 2 );
++  EXPECT_EQ( mock_surface.last_frame.bytesPerLine( 0 ), 4 * 2 );
++  uint32_t reference[] = { 0xffff0000, 0xff00ff00, 0xffc86400,
++                           0xff0064c8, 0xff326414, 0xff9696c8 };
++  auto *ref_ptr = reinterpret_cast<uint8_t *>( reference );
++  EXPECT_TRUE( compareImage( mock_surface.last_frame.bits( 0 ),
++                             std::vector<uint8_t>( ref_ptr, ref_ptr + 24 ) ) );
++#else
+   ASSERT_EQ( mock_surface.last_frame.pixelFormat(), QVideoFrame::Format_RGB24 );
+   EXPECT_TRUE( mock_surface.last_frame.map( QAbstractVideoBuffer::MapMode::ReadOnly ) );
+   EXPECT_EQ( mock_surface.last_frame.mappedBytes(), 3 * 3 * 2 );
+   EXPECT_EQ( mock_surface.last_frame.bytesPerLine(), 3 * 2 );
+   EXPECT_TRUE( compareImage( mock_surface.last_frame.bits(), image->data ) );
++#endif
+ }
+ 
+ TEST( ImageTransportSubscription, testWrongFormat )
+@@ -124,10 +158,12 @@
+   subscriber.setDefaultTransport( "raw" );
+   EXPECT_EQ( subscriber.defaultTransport(), "raw" );
+   MockNoFormatSurface mock_surface;
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++  subscriber.setSupportedPixelFormats( {} );
++#endif
+   subscriber.setVideoSurface( &mock_surface );
+-  processSomeEvents();
++  ASSERT_TRUE( waitFor( [&img_pub]() { return img_pub->get_subscription_count() == 1U; } ) );
+   EXPECT_EQ( subscriber.topic().toStdString(), img_pub->get_topic_name() );
+-  ASSERT_EQ( img_pub->get_subscription_count(), 1U );
+ 
+   auto image = std::make_shared<sensor_msgs::msg::Image>();
+   image->width = 2;

@@ -69,6 +69,29 @@ When amending a branch-only version in place, the summary line reads
 "Amending X@V in place (branch-only, not yet published)" instead of
 "Creating X@V (from Y)".
 
+## After a rollup: your vendored copy keeps working
+
+Rewriting `modules/<pkg>/<ver>/` makes Bazel consider the vendored copy
+out of date: it silently stops reading `workspace/vendor/<pkg>+/` and builds
+the registry copy instead, so further edits there would appear to do nothing.
+To avoid that, `create_patch` **re-vendors every module it amended in place**
+right after writing it ("Re-vendoring X so further edits keep taking
+effect..."). That's lossless, because the registry entry now describes exactly
+your vendored tree. As a safety net your previous tree is backed up, and a
+warning names any module whose re-vendored tree differs (typically untracked
+files that aren't part of the patch) and where the backup is.
+
+- Pass `--no-revendor` to skip this (then re-run `vendor-module` yourself
+  before editing that package again).
+- When a rollup **creates a new version** instead (the old one was already on
+  `main`), the workspace still resolves the old version, so it prints a note
+  telling you to re-run `setup-workspace` and `vendor-module` before editing
+  that package further.
+- To check what Bazel is actually building from, look at
+  `$(bazel info output_base)/external/<pkg>+`: it's a symlink into
+  `workspace/vendor/` when your edits are live, and into the repository cache
+  when they aren't.
+
 ## What your PR should look like
 
 Exactly the new (or, if amended in place, the same) version directory/
@@ -102,8 +125,9 @@ automatically) — in particular:
 
 Before running `create_patch` and committing:
 1. **Remove reject/conflict artifacts**: Ensure no `.rej`, `.orig`, or temporary conflict files exist under `workspace/vendor/<module>+/`. If left behind, `create_patch` will treat them as new overlay files and write them to `source.json`, causing `check_pr_modules.py` and CI builds to fail.
-2. **Format build files**: Run `buildifier -mode fix -r .` from the repo root so all new and modified `BUILD.bazel`/`.bzl` files adhere to formatting standards.
-3. **Validate modules**: Run `bazel run //tools/ci:check_pr_modules` locally. This verifies that all overlay and patch hashes in `source.json` match disk files exactly, immutability rules are respected, and no undeclared or missing files exist.
+2. **Verify copyright header order**: Ensure the `# Copyright ...` header comment block is at the very top (line 1) of every `BUILD.bazel` and `.bzl` file, **before** any `load(...)` statements. Never prepend a `load(...)` statement above the copyright header.
+3. **Format build files**: Run `buildifier -mode fix -r .` from the repo root so all new and modified `BUILD.bazel`/`.bzl` files adhere to formatting standards (and if you run `buildifier` on files under `modules/<pkg>/<ver>/overlay/` after `create_patch`, make sure to re-run `create_patch` or regenerate `source.json` integrity hashes afterwards).
+4. **Validate modules**: Run `bazel test //tools/ci/...` (and `check_pr_modules`) locally. This verifies that all overlay and patch hashes in `source.json` match disk files exactly, immutability rules are respected, and no undeclared or missing files exist.
 
 ## Gotchas
 

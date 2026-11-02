@@ -1,0 +1,55 @@
+--- a/modules/simulator/src/parse_utils.cpp
++++ b/modules/simulator/src/parse_utils.cpp
+@@ -22,6 +22,7 @@
+ #include <cstdlib>
+ #include <iostream>
+ #include <sstream>
++#include <vector>
+ 
+ thread_local const bool MVSIM_VERBOSE_PARSE = mrpt::get_env<bool>("MVSIM_VERBOSE_PARSE", false);
+ 
+@@ -133,6 +134,34 @@
+ 	MRPT_TRY_END
+ }
+ 
++// Resolves `ros2 pkg prefix <pkg>` from the ament resource index on
++// AMENT_PREFIX_PATH (what the ros2 CLI itself does), so world files using it
++// also work where the `ros2` CLI isn't installed on PATH. Returns false if the
++// command isn't of that form or the package can't be found.
++bool resolveRos2PkgPrefix(const std::string& cmd, std::string& out)
++{
++	std::istringstream ss(cmd);
++	std::string ros2, pkg_verb, prefix_verb, pkgName, extra;
++	if (!(ss >> ros2 >> pkg_verb >> prefix_verb >> pkgName) || (ss >> extra) ||
++		ros2 != "ros2" || pkg_verb != "pkg" || prefix_verb != "prefix")
++	{
++		return false;
++	}
++	const std::string prefixes = mrpt::get_env<std::string>("AMENT_PREFIX_PATH");
++	std::vector<std::string> paths;
++	mrpt::system::tokenize(prefixes, ":", paths);
++	for (const auto& prefix : paths)
++	{
++		if (mrpt::system::fileExists(
++				prefix + "/share/ament_index/resource_index/packages/" + pkgName))
++		{
++			out = prefix;
++			return true;
++		}
++	}
++	return false;
++}
++
+ std::string parseCmdRuns(const std::string& text)
+ {
+ 	MRPT_TRY_START
+@@ -159,7 +188,8 @@
+ 	// Launch command and get console output:
+ 	std::string cmdOut;
+ 
+-	int ret = mrpt::system::executeCommand(cmd, &cmdOut);
++	int ret = 0;
++	if (!resolveRos2PkgPrefix(cmd, cmdOut)) ret = mrpt::system::executeCommand(cmd, &cmdOut);
+ 	if (ret != 0)
+ 	{
+ 		THROW_EXCEPTION_FMT("Error (retval=%i) executing external command: `%s`", ret, cmd.c_str());

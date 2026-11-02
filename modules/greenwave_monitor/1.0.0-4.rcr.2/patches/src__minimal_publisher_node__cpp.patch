@@ -1,0 +1,39 @@
+--- a/src/minimal_publisher_node.cpp
++++ b/src/minimal_publisher_node.cpp
+@@ -30,6 +30,7 @@
+   const auto frequency_hz = this->get_parameter("frequency_hz").as_double();
+   const auto period_ns = static_cast<int64_t>(
+     ::greenwave_diagnostics::constants::kSecondsToNanoseconds / frequency_hz);
++  period_ns_ = period_ns;
+   const auto create_subscriber = this->get_parameter("create_subscriber").as_bool();
+ 
+   message_type_ = this->get_parameter("message_type").as_string();
+@@ -90,9 +91,18 @@
+ 
+ void MinimalPublisher::timer_callback()
+ {
++  if (count_ == 0) {
++    start_time_ = this->now() - rclcpp::Duration::from_nanoseconds(15000000LL);
++  }
++  builtin_interfaces::msg::Time stamp =
++    start_time_ + rclcpp::Duration::from_nanoseconds(static_cast<int64_t>(count_) * period_ns_);
++  if (stamp.nanosec == 0) {
++    stamp.nanosec = 1;
++  }
++
+   if (message_type_ == "image") {
+     auto message = sensor_msgs::msg::Image();
+-    message.header.stamp = this->now();
++    message.header.stamp = stamp;
+     message.header.frame_id = "frame_" + std::to_string(count_++);
+     message.height = height_;
+     message.width = width_;
+@@ -109,7 +119,7 @@
+       message);
+   } else if (message_type_ == "imu") {
+     auto message = sensor_msgs::msg::Imu();
+-    message.header.stamp = this->now();
++    message.header.stamp = stamp;
+     message.header.frame_id = "frame_" + std::to_string(count_++);
+     message.orientation.x = 0.0;
+     message.orientation.y = 0.0;

@@ -47,14 +47,21 @@ def find_changed_packages(diffs: List[Tuple[str, str]], target_dir: str) -> List
     status) version directory under target_dir -- every package this repo's
     own patching model (setup-workspace/vendor-module/create-patch) could
     have touched, since a patch is always a brand-new version directory,
-    never an edit to an existing one. Excludes distribution umbrella/variant
-    modules which are already exercised by the matrix variant builds.
+    never an edit to an existing one.
+
+    If a distribution umbrella/variant module (e.g. `ros`) has a newly-added
+    version in the diff, this PR is a distribution bootstrap or weekly rollup
+    that already exercises the distribution via the matrix variant builds, so
+    returns an empty list rather than attempting to build every touched
+    package in a second pass.
     """
-    return sorted({
+    new_packages = {
         package
         for package, _version in module_diff.find_new_module_versions(diffs, target_dir)
-        if package not in DISTRIBUTION_VARIANTS
-    })
+    }
+    if new_packages & DISTRIBUTION_VARIANTS:
+        return []
+    return sorted(new_packages)
 
 
 def main():

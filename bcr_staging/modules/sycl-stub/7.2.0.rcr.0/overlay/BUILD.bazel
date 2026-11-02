@@ -1,0 +1,106 @@
+# The SYCL headers of Intel's oneAPI DPC++ (intel/llvm's sycl/include, and
+# the Unified Runtime's API headers that they include), for
+# host C++ code that uses the SYCL runtime API (e.g. PyTorch's XPU backend),
+# and a stub of the SYCL runtime library (libsycl.so) that has no platforms,
+# so no devices. Intel's runtime is built for libstdc++'s ABI, which C++ code
+# built with libc++ cannot call, so the stub never loads it.
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@hip-stub//bazel:rocm_shim.bzl", "rocm_shim_library")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load("//bazel:sycl_symbols.bzl", "SYCL_STUB_SYMBOLS")
+
+package(default_applicable_licenses = [":license"])
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
+    license_text = "sycl/LICENSE.TXT",
+)
+
+exports_files([
+    "sycl/LICENSE.TXT",
+    "sycl/source/device_aspect_macros_generator.py",
+])
+
+# The versions of sycl/CMakeLists.txt: SYCL_MAJOR_VERSION (the library's
+# SONAME), and SYCL_COMPILER_VERSION (the release's date).
+SYCL_MAJOR_VERSION = 9
+
+SYCL_COMPILER_VERSION = 20261017
+
+# sycl/CMakeLists.txt's configure_file()s: sycl/version.hpp and
+# sycl/feature_test.hpp (without the CUDA and HIP backends).
+write_file(
+    name = "version_hpp",
+    out = "gen/include/sycl/version.hpp",
+    content = [
+        "// Generated as CMakeLists.txt does (source/version.hpp.in).",
+        "#define __SYCL_COMPILER_VERSION {}".format(SYCL_COMPILER_VERSION),
+        "#define __LIBSYCL_MAJOR_VERSION {}".format(SYCL_MAJOR_VERSION),
+        "#define __LIBSYCL_MINOR_VERSION 0",
+        "#define __LIBSYCL_PATCH_VERSION 0",
+        "",
+    ],
+)
+
+genrule(
+    name = "feature_test_hpp",
+    srcs = ["sycl/source/feature_test.hpp.in"],
+    outs = ["gen/include/sycl/feature_test.hpp"],
+    cmd = "sed -e 's/#cmakedefine01 \\(SYCL_EXT_ONEAPI_BACKEND_[A-Z]*\\)/#define \\1 0/' $< > $@",
+)
+
+genrule(
+    name = "device_aspect_macros",
+    srcs = [
+        "sycl/include/sycl/info/aspects.def",
+        "sycl/include/sycl/info/aspects_deprecated.def",
+    ],
+    outs = ["gen/include/sycl/device_aspect_macros.hpp"],
+    cmd = "$(execpath //bazel:device_aspect_macros_generator) $$(dirname $$(dirname $(execpath sycl/include/sycl/info/aspects.def))) $(RULEDIR)/gen/include/sycl",
+    tools = ["//bazel:device_aspect_macros_generator"],
+)
+
+cc_library(
+    name = "sycl_headers",
+    hdrs = glob([
+        "sycl/include/**/*.def",
+        "sycl/include/**/*.h",
+        "sycl/include/**/*.hpp",
+        "unified-runtime/include/unified-runtime/*.def",
+        "unified-runtime/include/unified-runtime/*.h",
+        "unified-runtime/include/unified-runtime/*.hpp",
+    ]) + [
+        ":device_aspect_macros",
+        ":feature_test_hpp",
+        ":version_hpp",
+    ],
+    # The headers of host-only code (compiled without -fsycl).
+    defines = ["SYCL_DISABLE_FSYCL_SYCLHPP_WARNING"],
+    includes = [
+        "gen/include",
+        # sycl/device_aspect_traits.hpp's "device_aspect_macros.hpp".
+        "gen/include/sycl",
+        "sycl/include",
+        "unified-runtime/include",
+    ],
+    visibility = ["//visibility:public"],
+    deps = ["@opencl-headers//:opencl_headers"],
+)
+
+# The SYCL runtime: a stub that is never backed by Intel's library (built for
+# libstdc++). sycl::platform::get_platforms() returns no platforms, so PyTorch
+# finds no devices and calls nothing else: every other function aborts.
+rocm_shim_library(
+    name = "sycl",
+    fallbacks_src = "//bazel:sycl_stub.cc",
+    load_library = False,
+    soname = "libsycl.so.{}".format(SYCL_MAJOR_VERSION),
+    symbols = SYCL_STUB_SYMBOLS,
+    # libsycl has no symbol versions, and the stub exports sycl_stub.cc's
+    # definitions too.
+    version_script = False,
+    visibility = ["//visibility:public"],
+    deps = [":sycl_headers"],
+)

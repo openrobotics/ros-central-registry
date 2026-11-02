@@ -1,0 +1,47 @@
+--- a/include/rmw_fastrtps_shared_cpp/custom_service_info.hpp
++++ b/include/rmw_fastrtps_shared_cpp/custom_service_info.hpp
+@@ -19,6 +19,7 @@
+ #include <mutex>
+ #include <unordered_set>
+ #include <unordered_map>
++#include <vector>
+ 
+ #include "fastcdr/FastBuffer.h"
+ 
+@@ -97,7 +98,7 @@
+ 
+   void
+   on_publication_matched(
+-    eprosima::fastdds::dds::DataWriter * /* writer */,
++    eprosima::fastdds::dds::DataWriter * writer,
+     const eprosima::fastdds::dds::PublicationMatchedStatus & info) final
+   {
+     std::lock_guard<std::mutex> lock(mutex_);
+@@ -112,6 +113,27 @@
+         clients_endpoints_.erase(endpoint->second);
+         clients_endpoints_.erase(erase_endpoint_guid);
+       }
++    } else if (writer != nullptr) {
++      std::vector<eprosima::fastdds::dds::InstanceHandle_t> handles;
++      if (writer->get_matched_subscriptions(handles) == eprosima::fastdds::dds::RETCODE_OK) {
++        subscriptions_set_t current_subs;
++        for (const auto & handle : handles) {
++          current_subs.insert(eprosima::fastdds::rtps::iHandle2GUID(handle));
++        }
++        for (auto it = subscriptions_.begin(); it != subscriptions_.end(); ) {
++          if (current_subs.find(*it) == current_subs.end()) {
++            auto endpoint = clients_endpoints_.find(*it);
++            if (endpoint != clients_endpoints_.end()) {
++              clients_endpoints_.erase(endpoint->second);
++              clients_endpoints_.erase(*it);
++            }
++            it = subscriptions_.erase(it);
++          } else {
++            ++it;
++          }
++        }
++        subscriptions_ = std::move(current_subs);
++      }
+     } else {
+       return;
+     }

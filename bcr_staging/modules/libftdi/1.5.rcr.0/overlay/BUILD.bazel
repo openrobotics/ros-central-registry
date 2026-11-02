@@ -1,0 +1,101 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Bazel build of libftdi1, mirroring upstream src/CMakeLists.txt (libftdi1:
+# ftdi.c + ftdi_stream.c linked against libusb-1.0). The C++ wrapper
+# (FTDIPP), python bindings and docs are OFF by default upstream and are not
+# built. ftdi_eeprom (needs libconfuse, not on the BCR) and the example
+# programs are executables, not part of the library.
+#
+# Upstream installs ftdi.h to <prefix>/include/libftdi1/ and its pkg-config
+# file adds -I<prefix>/include/libftdi1, so both `#include <ftdi.h>` and
+# `#include <libftdi1/ftdi.h>` work for consumers; both are supported here.
+
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:LGPL-2.1-only"],
+    license_text = "COPYING.LIB",
+)
+
+exports_files([
+    "COPYING.LIB",
+    "LICENSE",
+])
+
+# configure_file(ftdi_version_i.h.in ftdi_version_i.h @ONLY), with
+# MAJOR_VERSION=1, MINOR_VERSION=5 from the top-level CMakeLists.txt and the
+# SNAPSHOT_VERSION fallback used when building outside a git checkout.
+expand_template(
+    name = "ftdi_version_i_h",
+    out = "generated/ftdi_version_i.h",
+    substitutions = {
+        "@MAJOR_VERSION@": "1",
+        "@MINOR_VERSION@": "5",
+        "@SNAPSHOT_VERSION@": "unknown",
+        "@VERSION_STRING@": "1.5",
+    },
+    template = "src/ftdi_version_i.h.in",
+)
+
+cc_library(
+    name = "ftdi_version_i",
+    hdrs = [":ftdi_version_i_h"],
+    strip_include_prefix = "generated",
+    visibility = ["//visibility:private"],
+)
+
+# `#include <libftdi1/ftdi.h>` (installed layout).
+cc_library(
+    name = "ftdi_prefixed_hdrs",
+    hdrs = ["src/ftdi.h"],
+    include_prefix = "libftdi1",
+    strip_include_prefix = "src",
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "ftdi1",
+    srcs = [
+        "src/ftdi.c",
+        "src/ftdi_i.h",
+        "src/ftdi_stream.c",
+    ],
+    # `#include <ftdi.h>` (pkg-config's -I<prefix>/include/libftdi1).
+    hdrs = ["src/ftdi.h"],
+    implementation_deps = [":ftdi_version_i"],
+    strip_include_prefix = "src",
+    deps = [
+        ":ftdi_prefixed_hdrs",
+        "@libusb",
+    ],
+)
+
+alias(
+    name = "ftdi",
+    actual = ":ftdi1",
+)
+
+alias(
+    name = "libftdi",
+    actual = ":ftdi1",
+)

@@ -1,0 +1,105 @@
+--- a/src/helpers/file_system_watcher.cpp
++++ b/src/helpers/file_system_watcher.cpp
+@@ -19,26 +19,39 @@
+ 
+ #include <QtCore>
+ #include <filesystem>
++#ifdef __linux__
+ #include <sys/inotify.h>
++#endif
+ #include <sys/stat.h>
+ #include <unistd.h>
+ 
+ namespace rqml
+ {
+ 
+-FileSystemWatcher::FileSystemWatcher() { file_descriptor_ = inotify_init1( IN_NONBLOCK ); }
++FileSystemWatcher::FileSystemWatcher()
++{
++#ifdef __linux__
++  file_descriptor_ = inotify_init1( IN_NONBLOCK );
++#endif
++}
+ 
+ FileSystemWatcher::~FileSystemWatcher()
+ {
++#ifdef __linux__
+   for ( const auto &[_, wd] : watched_directories_ ) { inotify_rm_watch( file_descriptor_, wd ); }
+   if ( file_descriptor_ >= 0 )
+     close( file_descriptor_ );
++#endif
+ }
+ 
+ bool FileSystemWatcher::isValid() const { return file_descriptor_ >= 0; }
+ 
+ bool FileSystemWatcher::addWatch( const std::string &path )
+ {
++#ifndef __linux__
++  (void)path;
++  return false;
++#else
+   if ( path.empty() )
+     return false;
+   if ( std::find( watched_paths_.begin(), watched_paths_.end(), path ) != watched_paths_.end() ) {
+@@ -93,10 +106,14 @@
+   if ( !is_directory )
+     info.filenames.insert( path.substr( separator_pos + 1 ) );
+   return true;
++#endif
+ }
+ 
+ void FileSystemWatcher::removeWatch( const std::string &path )
+ {
++#ifndef __linux__
++  (void)path;
++#else
+   watched_paths_.erase( std::find( watched_paths_.begin(), watched_paths_.end(), path ) );
+   // Only unregister if no other watches are left
+   if ( std::find( watched_paths_.begin(), watched_paths_.end(), path ) != watched_paths_.end() )
+@@ -136,11 +153,14 @@
+   std::string filename = path.substr( separator_pos + 1 );
+   watch_info_.at( watched_directories_.at( folder ) ).filenames.erase( filename );
+   removeFolderWatchIfNoFilesLeft( folder );
++#endif
+ }
+ 
+ void FileSystemWatcher::removeAllWatches()
+ {
++#ifdef __linux__
+   for ( const auto &[_, wd] : watched_directories_ ) { inotify_rm_watch( file_descriptor_, wd ); }
++#endif
+   watched_directories_.clear();
+   watched_paths_.clear();
+   watch_info_.clear();
+@@ -148,6 +168,9 @@
+ 
+ bool FileSystemWatcher::checkForChanges() const
+ {
++#ifndef __linux__
++  return false;
++#else
+   const size_t buffer_length = 16 * sizeof( struct inotify_event );
+   unsigned char buffer[buffer_length];
+   bool changed = false;
+@@ -184,10 +207,14 @@
+     }
+   }
+   return changed;
++#endif
+ }
+ 
+ void FileSystemWatcher::removeFolderWatchIfNoFilesLeft( const std::string &path )
+ {
++#ifndef __linux__
++  (void)path;
++#else
+   for ( const auto &file : watched_paths_ ) {
+     if ( file.length() < path.length() || file.substr( 0, path.length() ) != path )
+       continue;
+@@ -197,5 +224,6 @@
+   inotify_rm_watch( file_descriptor_, it->second );
+   watch_info_.erase( it->second );
+   watched_directories_.erase( it );
++#endif
+ }
+ } // namespace rqml

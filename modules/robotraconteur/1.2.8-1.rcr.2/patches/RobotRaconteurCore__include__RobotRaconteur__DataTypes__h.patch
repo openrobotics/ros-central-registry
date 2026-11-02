@@ -1,0 +1,536 @@
+--- a/RobotRaconteurCore/include/RobotRaconteur/DataTypes.h
++++ b/RobotRaconteurCore/include/RobotRaconteur/DataTypes.h
+@@ -243,20 +243,8 @@
+ /**
+  * @brief Base class for all Robot Raconteur value types (except primitives)
+  *
+- * RRValue is always stored in an RR_INTRUSIVE_PTR container. Allocating on the
+- * stack is undefined. RRValue extends boost::intrusive_ref_counter to support
+- * RR_INTRUSIVE_PTR
+- *
+- */
+-class ROBOTRACONTEUR_CORE_API RRValue : public boost::intrusive_ref_counter<RRValue>, boost::noncopyable
+-{
+-  public:
+-    RRValue();
+-
+-    virtual ~RRValue() {}
+-
+-    virtual std::string RRType() = 0;
+-};
++ * RRValue is defined in Error.h.
++ */
+ 
+ namespace detail
+ {
+@@ -377,6 +365,54 @@
+     virtual DataTypes GetTypeID() = 0;
+ };
+ 
++ROBOTRACONTEUR_CORE_API std::string GetRRDataTypeString(DataTypes type);
++ROBOTRACONTEUR_CORE_API bool IsTypeRRArray(DataTypes type);
++ROBOTRACONTEUR_CORE_API bool IsTypeNumeric(DataTypes type);
++
++/**
++ * @brief Base class for numeric and character array value types
++ *
++ * Arrays should be allocated using AllocateRRArray<T>(),
++ * AttachRRArray<T>(), AttachRRArrayCopy<T>(), AllocateRRArrayByType<T>(),
++ * or AllocateEmptyRRArray<T>()
++ *
++ */
++class ROBOTRACONTEUR_CORE_API RRBaseArray : public MessageElementData
++{
++  public:
++    RR_OVIRTUAL MessageStringPtr GetTypeString() RR_OVERRIDE
++    {
++        std::string type = GetRRDataTypeString(GetTypeID());
++        return type + "[]";
++    }
++
++    RR_OVIRTUAL ~RRBaseArray() RR_OVERRIDE {}
++
++    /**
++     * @brief Get the number of elements in the array
++     *
++     * @return size_t
++     */
++    virtual size_t size() = 0;
++
++    RR_OVIRTUAL std::string RRType() RR_OVERRIDE;
++
++    /**
++     * @brief Get a void pointer to the contained array
++     *
++     * @return void*
++     */
++    virtual void* void_ptr() = 0;
++
++    /**
++     * @brief Get the number of bytes per element of the array
++     *
++     * @return size_t
++     */
++    virtual size_t ElementSize() = 0;
++};
++
++
+ template <typename T>
+ class RRArray;
+ 
+@@ -468,16 +504,210 @@
+     static DataTypes GetTypeID() { return DataTypes_string_t; }
+     static MessageStringPtr GetElementTypeString() { return MessageStringPtr(""); }
+     static boost::string_ref GetRRElementTypeString() { return ""; }
+-    static RR_INTRUSIVE_PTR<RRValue> PrePack(boost::string_ref val) { return rr_cast<RRValue>(stringToRRArray(val)); }
+-    static std::string PreUnpack(const RR_INTRUSIVE_PTR<RRValue>& val)
+-    {
+-        return RRArrayToString(rr_cast<RRArray<char> >(val));
+-    }
++    static RR_INTRUSIVE_PTR<RRValue> PrePack(boost::string_ref val);
++    static std::string PreUnpack(const RR_INTRUSIVE_PTR<RRValue>& val);
+ 
+     virtual ~RRPrimUtil(){};
+ 
+     typedef RR_INTRUSIVE_PTR<RRArray<char> > BoxedType;
+ };
++
++/**
++ * @brief Numeric primitive or character array value type
++ *
++ * This class stores a numeric primitive or character array. Arrays should
++ * always be  allocated using AllocateRRArray<T>(),
++ * AttachRRArray<T>(), AttachRRArrayCopy<T>(), AllocateRRArrayByType<T>(),
++ * or AllocateEmptyRRArray<T>()
++ *
++ * Valid values for T are `rr_bool`, `double`, `float`, `int8_t`, `uint8_t`, `int16_t`,
++ * `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `cdouble`,
++ * `csingle`, or `char`. Attempts to use any other types will result in a compiler error.
++ *
++ * RRArray must be stored in RR_INTRUSIVE_PTR. It will be
++ * deleted automatically when the reference count goes to zero.
++ *
++ * @tparam T The type of the array elements
++ */
++template <typename T>
++class RRArray : public RRBaseArray
++{
++  public:
++    RR_OVIRTUAL DataTypes GetTypeID() RR_OVERRIDE { return RRPrimUtil<T>::GetTypeID(); }
++
++    RRArray(T* data, size_t length, bool owned) : data_(data), element_count(length), owned(owned) {}
++
++    RR_OVIRTUAL ~RRArray() RR_OVERRIDE
++    {
++        if (owned)
++            delete[] data_;
++    }
++
++    RR_OVIRTUAL void* void_ptr() RR_OVERRIDE { return data(); }
++
++    T* operator->() const { return data; }
++
++    RR_OVIRTUAL size_t size() RR_OVERRIDE { return element_count; }
++
++    RR_OVIRTUAL size_t ElementSize() RR_OVERRIDE { return sizeof(T); }
++
++    // C++ container support functions based on boost::array
++
++    // type definitions
++    /** value_type */
++    typedef T value_type;
++    /** iterator */
++    typedef T* iterator;
++    /** const_iterator */
++    typedef const T* const_iterator;
++    /** reference */
++    typedef T& reference;
++    /** const_reference */
++    typedef const T& const_reference;
++    /** size_type */
++    typedef std::size_t size_type;
++    /** difference_type */
++    typedef std::ptrdiff_t difference_type;
++
++    // iterator support
++
++    /** @brief returns an iterator to the beginning */
++    iterator begin() { return data_; }
++    /** @brief returns an iterator to the beginning */
++    const_iterator begin() const { return data_; }
++    /** @brief returns a const iterator to the beginning */
++    const_iterator cbegin() const { return data_; }
++
++    /** @brief returns an iterator to the end */
++    iterator end() { return data_ + element_count; }
++    /** @brief returns an iterator to the end */
++    const_iterator end() const { return data_ + element_count; }
++    /** @brief returns a const iterator to the end */
++    const_iterator cend() const { return data_ + element_count; }
++
++    /** reverse_iterator */
++    typedef boost::reverse_iterator<iterator> reverse_iterator;
++    /** const_reverse_iterator */
++    typedef boost::reverse_iterator<const_iterator> const_reverse_iterator;
++
++    /** @brief returns a reverse iterator to the beginning */
++    reverse_iterator rbegin() { return reverse_iterator(end()); }
++    /** @brief returns a reverse iterator to the beginning */
++    const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
++    /** @brief returns a reverse iterator to the beginning */
++    const_reverse_iterator crbegin() const { return const_reverse_iterator(end()); }
++
++    /** @brief returns a reverse iterator to the end */
++    reverse_iterator rend() { return reverse_iterator(begin()); }
++    /** @brief returns a reverse iterator to the end */
++    const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
++    /** @brief returns a reverse iterator to the end */
++    const_reverse_iterator crend() const { return const_reverse_iterator(begin()); }
++
++    /** @brief access specified element */
++    reference operator[](size_type i)
++    {
++        BOOST_ASSERT_MSG(i < element_count, "out of range");
++        return data_[i];
++    }
++
++    /** @brief access specified element */
++    const_reference operator[](size_type i) const
++    {
++        BOOST_ASSERT_MSG(i < element_count, "out of range");
++        return data_[i];
++    }
++
++    /** @brief access specified element with bounds checking */
++    reference at(size_type i)
++    {
++        rangecheck(i);
++        return data_[i];
++    }
++    /** @brief access specified element with bounds checking */
++    const_reference at(size_type i) const
++    {
++        rangecheck(i);
++        return data_[i];
++    }
++
++    /** @brief access the first element */
++    reference front() { return data_[0]; }
++
++    /** @brief access the first element */
++    const_reference front() const { return data_[0]; }
++
++    /** @brief access the last element */
++    reference back() { return data_[element_count - 1]; }
++
++    /** @brief access the last element */
++    const_reference back() const { return data_[element_count - 1]; }
++
++    /** @brief checks whether the container is empty */
++    bool empty() { return false; }
++    /** @brief returns the maximum possible number of elements */
++    size_type max_size() { return element_count; }
++
++    /** @brief direct access to the underlying array */
++    const T* data() const { return data_; }
++    /** @brief direct access to the underlying array */
++    T* data() { return data_; }
++
++    T* c_array() { return data_; }
++
++    /**
++     * @brief assignment with type conversion
++     *
++     * @tparam T2 The type of the input array
++     * @param rhs The input array to assign (and copy) to this array
++     * @return RRArray<T>& reference to this array
++     */
++    template <typename T2>
++    RRArray<T>& operator=(const RRArray<T2>& rhs)
++    {
++        std::copy(rhs.begin(), rhs.end(), begin());
++        return *this;
++    }
++
++    /**
++     * @brief Assign one value to all elements
++     *
++     * Synonym for fill()
++     *
++     * @param value The value to assign all elements
++     */
++    void assign(const T& value) { fill(value); }
++    /**
++     * @brief Fill array with value
++     *
++     * @param value The value to fill array with
++     */
++    void fill(const T& value) { std::fill_n(begin(), size(), value); }
++
++    void rangecheck(size_type i)
++    {
++        if (i >= size())
++        {
++            std::out_of_range e("array<>: index out of range");
++            boost::throw_exception(e);
++        }
++    }
++
++  private:
++    T* data_;
++    size_t element_count;
++    bool owned;
++};
++
++inline RR_INTRUSIVE_PTR<RRValue> RRPrimUtil<std::string>::PrePack(boost::string_ref val)
++{
++    return rr_cast<RRValue>(stringToRRArray(val));
++}
++
++inline std::string RRPrimUtil<std::string>::PreUnpack(const RR_INTRUSIVE_PTR<RRValue>& val)
++{
++    return RRArrayToString(rr_cast<RRArray<char> >(val));
++}
+ 
+ #define RRPrimUtilNumeric(x, code)                                                                                     \
+     template <>                                                                                                        \
+@@ -512,239 +742,6 @@
+ RRPrimUtilNumeric(cfloat, DataTypes_csingle_t);
+ RRPrimUtilNumeric(rr_bool, DataTypes_bool_t);
+ 
+-ROBOTRACONTEUR_CORE_API std::string GetRRDataTypeString(DataTypes type);
+-ROBOTRACONTEUR_CORE_API bool IsTypeRRArray(DataTypes type);
+-ROBOTRACONTEUR_CORE_API bool IsTypeNumeric(DataTypes type);
+-
+-/**
+- * @brief Base class for numeric and character array value types
+- *
+- * Arrays should be allocated using AllocateRRArray<T>(),
+- * AttachRRArray<T>(), AttachRRArrayCopy<T>(), AllocateRRArrayByType<T>(),
+- * or AllocateEmptyRRArray<T>()
+- *
+- */
+-class ROBOTRACONTEUR_CORE_API RRBaseArray : public MessageElementData
+-{
+-  public:
+-    RR_OVIRTUAL MessageStringPtr GetTypeString() RR_OVERRIDE
+-    {
+-        std::string type = GetRRDataTypeString(GetTypeID());
+-        return type + "[]";
+-    }
+-
+-    RR_OVIRTUAL ~RRBaseArray() RR_OVERRIDE {}
+-
+-    /**
+-     * @brief Get the number of elements in the array
+-     *
+-     * @return size_t
+-     */
+-    virtual size_t size() = 0;
+-
+-    RR_OVIRTUAL std::string RRType() RR_OVERRIDE;
+-
+-    /**
+-     * @brief Get a void pointer to the contained array
+-     *
+-     * @return void*
+-     */
+-    virtual void* void_ptr() = 0;
+-
+-    /**
+-     * @brief Get the number of bytes per element of the array
+-     *
+-     * @return size_t
+-     */
+-    virtual size_t ElementSize() = 0;
+-};
+-
+-/**
+- * @brief Numeric primitive or character array value type
+- *
+- * This class stores a numeric primitive or character array. Arrays should
+- * always be  allocated using AllocateRRArray<T>(),
+- * AttachRRArray<T>(), AttachRRArrayCopy<T>(), AllocateRRArrayByType<T>(),
+- * or AllocateEmptyRRArray<T>()
+- *
+- * Valid values for T are `rr_bool`, `double`, `float`, `int8_t`, `uint8_t`, `int16_t`,
+- * `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`, `cdouble`,
+- * `csingle`, or `char`. Attempts to use any other types will result in a compiler error.
+- *
+- * RRArray must be stored in RR_INTRUSIVE_PTR. It will be
+- * deleted automatically when the reference count goes to zero.
+- *
+- * @tparam T The type of the array elements
+- */
+-template <typename T>
+-class RRArray : public RRBaseArray
+-{
+-  public:
+-    RR_OVIRTUAL DataTypes GetTypeID() RR_OVERRIDE { return RRPrimUtil<T>::GetTypeID(); }
+-
+-    RRArray(T* data, size_t length, bool owned) : data_(data), element_count(length), owned(owned) {}
+-
+-    RR_OVIRTUAL ~RRArray() RR_OVERRIDE
+-    {
+-        if (owned)
+-            delete[] data_;
+-    }
+-
+-    RR_OVIRTUAL void* void_ptr() RR_OVERRIDE { return data(); }
+-
+-    T* operator->() const { return data; }
+-
+-    RR_OVIRTUAL size_t size() RR_OVERRIDE { return element_count; }
+-
+-    RR_OVIRTUAL size_t ElementSize() RR_OVERRIDE { return sizeof(T); }
+-
+-    // C++ container support functions based on boost::array
+-
+-    // type definitions
+-    /** value_type */
+-    typedef T value_type;
+-    /** iterator */
+-    typedef T* iterator;
+-    /** const_iterator */
+-    typedef const T* const_iterator;
+-    /** reference */
+-    typedef T& reference;
+-    /** const_reference */
+-    typedef const T& const_reference;
+-    /** size_type */
+-    typedef std::size_t size_type;
+-    /** difference_type */
+-    typedef std::ptrdiff_t difference_type;
+-
+-    // iterator support
+-
+-    /** @brief returns an iterator to the beginning */
+-    iterator begin() { return data_; }
+-    /** @brief returns an iterator to the beginning */
+-    const_iterator begin() const { return data_; }
+-    /** @brief returns a const iterator to the beginning */
+-    const_iterator cbegin() const { return data_; }
+-
+-    /** @brief returns an iterator to the end */
+-    iterator end() { return data_ + element_count; }
+-    /** @brief returns an iterator to the end */
+-    const_iterator end() const { return data_ + element_count; }
+-    /** @brief returns a const iterator to the end */
+-    const_iterator cend() const { return data_ + element_count; }
+-
+-    /** reverse_iterator */
+-    typedef boost::reverse_iterator<iterator> reverse_iterator;
+-    /** const_reverse_iterator */
+-    typedef boost::reverse_iterator<const_iterator> const_reverse_iterator;
+-
+-    /** @brief returns a reverse iterator to the beginning */
+-    reverse_iterator rbegin() { return reverse_iterator(end()); }
+-    /** @brief returns a reverse iterator to the beginning */
+-    const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
+-    /** @brief returns a reverse iterator to the beginning */
+-    const_reverse_iterator crbegin() const { return const_reverse_iterator(end()); }
+-
+-    /** @brief returns a reverse iterator to the end */
+-    reverse_iterator rend() { return reverse_iterator(begin()); }
+-    /** @brief returns a reverse iterator to the end */
+-    const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
+-    /** @brief returns a reverse iterator to the end */
+-    const_reverse_iterator crend() const { return const_reverse_iterator(begin()); }
+-
+-    /** @brief access specified element */
+-    reference operator[](size_type i)
+-    {
+-        BOOST_ASSERT_MSG(i < element_count, "out of range");
+-        return data_[i];
+-    }
+-
+-    /** @brief access specified element */
+-    const_reference operator[](size_type i) const
+-    {
+-        BOOST_ASSERT_MSG(i < element_count, "out of range");
+-        return data_[i];
+-    }
+-
+-    /** @brief access specified element with bounds checking */
+-    reference at(size_type i)
+-    {
+-        rangecheck(i);
+-        return data_[i];
+-    }
+-    /** @brief access specified element with bounds checking */
+-    const_reference at(size_type i) const
+-    {
+-        rangecheck(i);
+-        return data_[i];
+-    }
+-
+-    /** @brief access the first element */
+-    reference front() { return data_[0]; }
+-
+-    /** @brief access the first element */
+-    const_reference front() const { return data_[0]; }
+-
+-    /** @brief access the last element */
+-    reference back() { return data_[element_count - 1]; }
+-
+-    /** @brief access the last element */
+-    const_reference back() const { return data_[element_count - 1]; }
+-
+-    /** @brief checks whether the container is empty */
+-    bool empty() { return false; }
+-    /** @brief returns the maximum possible number of elements */
+-    size_type max_size() { return element_count; }
+-
+-    /** @brief direct access to the underlying array */
+-    const T* data() const { return data_; }
+-    /** @brief direct access to the underlying array */
+-    T* data() { return data_; }
+-
+-    T* c_array() { return data_; }
+-
+-    /**
+-     * @brief assignment with type conversion
+-     *
+-     * @tparam T2 The type of the input array
+-     * @param rhs The input array to assign (and copy) to this array
+-     * @return RRArray<T>& reference to this array
+-     */
+-    template <typename T2>
+-    RRArray<T>& operator=(const RRArray<T2>& rhs)
+-    {
+-        std::copy(rhs.begin(), rhs.end(), begin());
+-        return *this;
+-    }
+-
+-    /**
+-     * @brief Assign one value to all elements
+-     *
+-     * Synonym for fill()
+-     *
+-     * @param value The value to assign all elements
+-     */
+-    void assign(const T& value) { fill(value); }
+-    /**
+-     * @brief Fill array with value
+-     *
+-     * @param value The value to fill array with
+-     */
+-    void fill(const T& value) { std::fill_n(begin(), size(), value); }
+-
+-    void rangecheck(size_type i)
+-    {
+-        if (i >= size())
+-        {
+-            std::out_of_range e("array<>: index out of range");
+-            boost::throw_exception(e);
+-        }
+-    }
+-
+-  private:
+-    T* data_;
+-    size_t element_count;
+-    bool owned;
+-};
+ 
+ template <typename T>
+ class RRMap_keytype

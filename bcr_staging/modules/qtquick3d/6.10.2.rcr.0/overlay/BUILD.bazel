@@ -1,0 +1,3587 @@
+load("@qt//:qt_internal_library.bzl", "qt_internal_library", "qt_static_plugin")
+load(
+    "@qt//:qt_tools.bzl",
+    "moc_gen",
+    "moc_out_copts",
+    "qt_depends_header",
+    "qt_export_header",
+    "qt_generate_qrc",
+    "qt_qml_plugin_gen",
+    "qt_qsb",
+    "qt_rcc_internal",
+    "qt_sync_headers",
+)
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load(":qtquick3d_config.bzl", "declare_qtquick3d_config_targets")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+    license_text = "LICENSES/GPL-3.0-only.txt",
+)
+
+license(
+    name = "license_embree",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+    license_text = "src/3rdparty/embree/LICENSE.txt",
+)
+
+license(
+    name = "license_meshoptimizer",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+    license_text = "src/3rdparty/meshoptimizer/LICENSE.md",
+)
+
+license(
+    name = "license_xatlas",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+    license_text = "src/3rdparty/xatlas/LICENSE",
+)
+
+license(
+    name = "license_tinyexr",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+    ],
+    license_text = "src/3rdparty/tinyexr/LICENSE",
+)
+
+license(
+    name = "license_godot",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+    license_text = "src/helpers/LICENSE.GODOT.txt",
+)
+
+exports_files([
+    "LICENSES/GPL-3.0-only.txt",
+    "src/3rdparty/embree/LICENSE.txt",
+    "src/3rdparty/meshoptimizer/LICENSE.md",
+    "src/3rdparty/openxr/LICENSE",
+    "src/3rdparty/openxr/src/external/jsoncpp/LICENSE",
+    "src/3rdparty/xatlas/LICENSE",
+    "src/3rdparty/tinyexr/LICENSE",
+    "src/helpers/LICENSE.GODOT.txt",
+])
+
+QT_VERSION = "6.10.2"
+
+common_copts = [
+    "-fPIC",
+    "-fvisibility=hidden",
+    "-fvisibility-inlines-hidden",
+]
+
+common_local_defines = [
+    "QT_ASCII_CAST_WARNINGS",
+    "QT_BUILDING_QT",
+    "QT_DEPRECATED_WARNINGS",
+    "QT_DISABLE_DEPRECATED_UP_TO=0x050000",
+    "QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH",
+    "QT_MOC_COMPAT",
+    "QT_NO_AS_CONST=1",
+    "QT_NO_CAST_TO_ASCII",
+    "QT_NO_CONTEXTLESS_CONNECT=1",
+    "QT_NO_EXCEPTIONS",
+    "QT_NO_FOREACH",
+    "QT_NO_FOREACH=1",
+    "QT_NO_JAVA_STYLE_ITERATORS",
+    "QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+    "QT_NO_QASCONST",
+    "QT_NO_QASCONST=1",
+    "QT_NO_QEXCHANGE",
+    "QT_NO_QSNPRINTF",
+    "QT_NO_QSNPRINTF=1",
+    "QT_NO_STD_FORMAT_SUPPORT",
+    "QT_USE_QSTRINGBUILDER",
+    "QT_WARN_DEPRECATED_UP_TO=0x070000",
+]
+
+declare_qtquick3d_config_targets()
+
+config_setting(
+    name = "_windows_arm64",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+        "@platforms//os:windows",
+    ],
+)
+
+# =============================================================================
+# 0. Vendored 3rdparty Libraries
+# =============================================================================
+
+cc_library(
+    name = "embree_bundled",
+    srcs = [
+        "src/3rdparty/embree/common/lexers/stringstream.cpp",
+        "src/3rdparty/embree/common/lexers/tokenstream.cpp",
+        "src/3rdparty/embree/common/math/constants.cpp",
+        "src/3rdparty/embree/common/simd/sse.cpp",
+        "src/3rdparty/embree/common/sys/alloc.cpp",
+        "src/3rdparty/embree/common/sys/barrier.cpp",
+        "src/3rdparty/embree/common/sys/condition.cpp",
+        "src/3rdparty/embree/common/sys/filename.cpp",
+        "src/3rdparty/embree/common/sys/library.cpp",
+        "src/3rdparty/embree/common/sys/mutex.cpp",
+        "src/3rdparty/embree/common/sys/regression.cpp",
+        "src/3rdparty/embree/common/sys/string.cpp",
+        "src/3rdparty/embree/common/sys/sysinfo.cpp",
+        "src/3rdparty/embree/common/sys/thread.cpp",
+        "src/3rdparty/embree/common/tasking/taskschedulerinternal.cpp",
+        "src/3rdparty/embree/kernels/builders/primrefgen.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh4_factory.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh8_factory.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_builder.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_builder_morton.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_builder_sah.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_builder_sah_mb.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_builder_sah_spatial.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_builder_twolevel.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_collider.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_intersector1_bvh4.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_refit.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_rotate.cpp",
+        "src/3rdparty/embree/kernels/bvh/bvh_statistics.cpp",
+        "src/3rdparty/embree/kernels/common/acceln.cpp",
+        "src/3rdparty/embree/kernels/common/accelset.cpp",
+        "src/3rdparty/embree/kernels/common/alloc.cpp",
+        "src/3rdparty/embree/kernels/common/device.cpp",
+        "src/3rdparty/embree/kernels/common/geometry.cpp",
+        "src/3rdparty/embree/kernels/common/rtcore.cpp",
+        "src/3rdparty/embree/kernels/common/rtcore_builder.cpp",
+        "src/3rdparty/embree/kernels/common/scene.cpp",
+        "src/3rdparty/embree/kernels/common/scene_triangle_mesh.cpp",
+        "src/3rdparty/embree/kernels/common/stat.cpp",
+        "src/3rdparty/embree/kernels/common/state.cpp",
+        "src/3rdparty/embree/kernels/geometry/primitive4.cpp",
+    ],
+    hdrs = glob([
+        "src/3rdparty/embree/include/embree3/*.h",
+        "src/3rdparty/embree/include/embree3/*.isph",
+        "src/3rdparty/embree/common/**/*.h",
+        "src/3rdparty/embree/kernels/**/*.h",
+    ]),
+    applicable_licenses = [":license_embree"],
+    copts = [
+        "-fPIC",
+        "-fvisibility=hidden",
+        "-fexceptions",
+        "-w",
+    ] + select({
+        "@platforms//os:windows": [
+            "-UUNICODE",
+            "-U_UNICODE",
+        ],
+        "//conditions:default": [],
+    }),
+    includes = ["src/3rdparty/embree/include"],
+    local_defines = [
+        "EMBREE_LOWEST_ISA",
+        "EMBREE_TARGET_SSE2",
+        "NDEBUG",
+        "TASKING_INTERNAL",
+        "__SSE2__",
+        "__SSE__",
+    ] + select({
+        # mingw-w64's <math.h> hides M_PI & co. under -std=c++17 (strict ANSI)
+        # unless this is defined; embree's math/constants.h needs them.
+        "@platforms//os:windows": ["_USE_MATH_DEFINES"],
+        "//conditions:default": [],
+    }),
+    target_compatible_with = select({
+        ":_windows_arm64": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    textual_hdrs = [
+        "src/3rdparty/embree/kernels/bvh/bvh_intersector1.cpp",
+    ],
+)
+
+cc_library(
+    name = "meshoptimizer_bundled",
+    srcs = [
+        "src/3rdparty/meshoptimizer/src/allocator.cpp",
+        "src/3rdparty/meshoptimizer/src/clusterizer.cpp",
+        "src/3rdparty/meshoptimizer/src/indexcodec.cpp",
+        "src/3rdparty/meshoptimizer/src/indexgenerator.cpp",
+        "src/3rdparty/meshoptimizer/src/overdrawanalyzer.cpp",
+        "src/3rdparty/meshoptimizer/src/overdrawoptimizer.cpp",
+        "src/3rdparty/meshoptimizer/src/partition.cpp",
+        "src/3rdparty/meshoptimizer/src/quantization.cpp",
+        "src/3rdparty/meshoptimizer/src/simplifier.cpp",
+        "src/3rdparty/meshoptimizer/src/spatialorder.cpp",
+        "src/3rdparty/meshoptimizer/src/stripifier.cpp",
+        "src/3rdparty/meshoptimizer/src/vcacheanalyzer.cpp",
+        "src/3rdparty/meshoptimizer/src/vcacheoptimizer.cpp",
+        "src/3rdparty/meshoptimizer/src/vertexcodec.cpp",
+        "src/3rdparty/meshoptimizer/src/vertexfilter.cpp",
+        "src/3rdparty/meshoptimizer/src/vfetchanalyzer.cpp",
+        "src/3rdparty/meshoptimizer/src/vfetchoptimizer.cpp",
+    ],
+    hdrs = ["src/3rdparty/meshoptimizer/src/meshoptimizer.h"],
+    applicable_licenses = [":license_meshoptimizer"],
+    copts = [
+        "-fPIC",
+        "-fvisibility=hidden",
+        "-w",
+    ],
+    includes = ["src/3rdparty/meshoptimizer/src"],
+)
+
+cc_library(
+    name = "xatlas_bundled",
+    srcs = ["src/3rdparty/xatlas/xatlas.cpp"],
+    hdrs = ["src/3rdparty/xatlas/xatlas.h"],
+    applicable_licenses = [":license_xatlas"],
+    copts = [
+        "-fPIC",
+        "-fvisibility=hidden",
+        "-w",
+    ],
+    includes = ["src/3rdparty/xatlas"],
+)
+
+cc_library(
+    name = "tinyexr_bundled",
+    hdrs = ["src/3rdparty/tinyexr/tinyexr.h"],
+    applicable_licenses = [":license_tinyexr"],
+    includes = ["src/3rdparty/tinyexr"],
+    deps = ["@zlib"],
+)
+
+license(
+    name = "license_openxr",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+    license_text = "src/3rdparty/openxr/LICENSE",
+)
+
+license(
+    name = "license_openxr_jsoncpp",
+    license_kinds = [
+        "@rules_license//licenses/spdx:MIT",
+    ],
+    license_text = "src/3rdparty/openxr/src/external/jsoncpp/LICENSE",
+)
+
+cc_library(
+    name = "BundledOpenXR",
+    srcs = [
+        "src/3rdparty/openxr/src/common/filesystem_utils.cpp",
+        "src/3rdparty/openxr/src/common/object_info.cpp",
+        "src/3rdparty/openxr/src/external/jsoncpp/src/lib_json/json_reader.cpp",
+        "src/3rdparty/openxr/src/external/jsoncpp/src/lib_json/json_value.cpp",
+        "src/3rdparty/openxr/src/external/jsoncpp/src/lib_json/json_writer.cpp",
+        "src/3rdparty/openxr/src/loader/android_utilities.cpp",
+        "src/3rdparty/openxr/src/loader/api_layer_interface.cpp",
+        "src/3rdparty/openxr/src/loader/loader_core.cpp",
+        "src/3rdparty/openxr/src/loader/loader_init_data.cpp",
+        "src/3rdparty/openxr/src/loader/loader_instance.cpp",
+        "src/3rdparty/openxr/src/loader/loader_logger.cpp",
+        "src/3rdparty/openxr/src/loader/loader_logger_recorders.cpp",
+        "src/3rdparty/openxr/src/loader/manifest_file.cpp",
+        "src/3rdparty/openxr/src/loader/runtime_interface.cpp",
+        "src/3rdparty/openxr/src/loader/xr_generated_loader.cpp",
+        "src/3rdparty/openxr/src/xr_generated_dispatch_table_core.c",
+    ],
+    hdrs = glob([
+        "src/3rdparty/openxr/include/openxr/*.h",
+        "src/3rdparty/openxr/src/**/*.h",
+        "src/3rdparty/openxr/src/**/*.hpp",
+    ]),
+    applicable_licenses = [
+        ":license_openxr",
+        ":license_openxr_jsoncpp",
+    ],
+    copts = [
+        "-fPIC",
+        "-fvisibility=hidden",
+        "-fexceptions",
+        "-w",
+    ],
+    includes = [
+        "src/3rdparty/openxr/include",
+        "src/3rdparty/openxr/src",
+        "src/3rdparty/openxr/src/common",
+        "src/3rdparty/openxr/src/external/jsoncpp/include",
+        "src/3rdparty/openxr/src/loader",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": ["-ldl"],
+        "//conditions:default": [],
+    }),
+    local_defines = [
+        "JSON_USE_EXCEPTION=0",
+        "XRLOADER_DISABLE_EXCEPTION_HANDLING",
+    ] + select({
+        "@platforms//os:linux": [
+            "HAVE_SECURE_GETENV",
+            "XR_OS_LINUX",
+        ],
+        "@platforms//os:macos": [
+            "XR_OS_APPLE",
+        ],
+        "@platforms//os:windows": [
+            "NOMINMAX",
+            "XR_OS_WINDOWS",
+            "XR_USE_PLATFORM_WIN32",
+        ],
+        "//conditions:default": [],
+    }),
+    textual_hdrs = [
+        "src/3rdparty/openxr/src/external/jsoncpp/src/lib_json/json_valueiterator.inl",
+    ],
+)
+
+# =============================================================================
+# 1. Quick3DGlslParserPrivate (src/glslparser)
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3dglslparserexports_h",
+    out = "generated_exports/qtquick3dglslparserexports.h",
+    module_infix = "QUICK3DGLSLPARSER",
+)
+
+qt_depends_header(
+    name = "glslparser_depends_h",
+    out = "generated_exports/QtQuick3DGlslParserPrivateDepends",
+    dep_modules = ["QtCore"],
+)
+
+qt_sync_headers(
+    name = "glslparser_sync_headers",
+    hdrs = glob(["src/glslparser/*.h"]),
+    generated_public_hdrs = [
+        ":glslparser_depends_h",
+        ":qtquick3dglslparserexports_h",
+    ],
+    internal_module = True,
+    module_name = "QtQuick3DGlslParser",
+    source_dir = "src/glslparser",
+    version = QT_VERSION,
+    deps = [
+        "@qtbase//:core_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "glslparser",
+    srcs = [
+        "src/glslparser/glslast.cpp",
+        "src/glslparser/glslastdump.cpp",
+        "src/glslparser/glslastvisitor.cpp",
+        "src/glslparser/glslengine.cpp",
+        "src/glslparser/glslkeywords.cpp",
+        "src/glslparser/glsllexer.cpp",
+        "src/glslparser/glslmemorypool.cpp",
+        "src/glslparser/glslparser.cpp",
+        "src/glslparser/glslparsertable.cpp",
+        "src/glslparser/glslsemantic.cpp",
+        "src/glslparser/glslsymbol.cpp",
+        "src/glslparser/glslsymbols.cpp",
+        "src/glslparser/glsltype.cpp",
+        "src/glslparser/glsltypes.cpp",
+    ],
+    hdrs = glob(["src/glslparser/*.h"]),
+    copts = common_copts,
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+    ],
+    includes = ["src/glslparser"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DGLSLPARSER_LIB",
+        "QT_BUILD_QUICK3DGLSLPARSER_PRIVATE_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+    ],
+    deps = [
+        ":glslparser_sync_headers",
+        "@qtbase//:core",
+    ],
+)
+
+# =============================================================================
+# 2. Quick3DUtils (src/utils)
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3dutilsexports_h",
+    out = "generated_exports/qtquick3dutilsexports.h",
+    module_infix = "QUICK3DUTILS",
+)
+
+qt_depends_header(
+    name = "utils_depends_h",
+    out = "generated_exports/QtQuick3DUtilsDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQuick",
+    ],
+)
+
+qt_sync_headers(
+    name = "utils_sync_headers",
+    hdrs = glob(["src/utils/*.h"]),
+    generated_private_hdrs = [
+        ":gen_qtquick3d_tracepoints_p_h",
+    ],
+    generated_public_hdrs = [
+        ":gen_qtquick3d_tracepoints_p_h",
+        ":qtquick3dutilsexports_h",
+        ":utils_depends_h",
+    ],
+    module_name = "QtQuick3DUtils",
+    source_dir = "src/utils",
+    ssg_filter = "(^|/)qssg.*[^_][^p]\\.h$",
+    version = QT_VERSION,
+    deps = [
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "utils",
+    srcs = [
+        "src/utils/qqsbcollection.cpp",
+        "src/utils/qquick3dprofiler.cpp",
+        "src/utils/qssgassert.cpp",
+        "src/utils/qssgbounds3.cpp",
+        "src/utils/qssgdataref.cpp",
+        "src/utils/qssglightmapuvgenerator.cpp",
+        "src/utils/qssgmesh.cpp",
+        "src/utils/qssgmeshbvh.cpp",
+        "src/utils/qssgmeshbvhbuilder.cpp",
+        "src/utils/qssgplane.cpp",
+        "src/utils/qssgrenderbasetypes.cpp",
+        "src/utils/qssgutils.cpp",
+    ],
+    hdrs = glob(["src/utils/*.h"]),
+    copts = common_copts,
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@qtbase//:dbus_shared"],
+    }),
+    exports_filter = [
+        ":meshoptimizer_bundled",
+        ":xatlas_bundled",
+    ],
+    includes = ["src/utils"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DUTILS_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_OPENGL_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QMLMETA_LIB",
+        "QT_QMLMODELS_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_hdrs = [
+        "src/utils/qquick3dprofiler_p.h",
+    ],
+    deps = [
+        ":meshoptimizer_bundled",
+        ":utils_sync_headers",
+        ":xatlas_bundled",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# 3. Quick3DAssetImport (src/assetimport)
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3dassetimportexports_h",
+    out = "generated_exports/qtquick3dassetimportexports.h",
+    module_infix = "QUICK3DASSETIMPORT",
+)
+
+qt_depends_header(
+    name = "assetimport_depends_h",
+    out = "generated_exports/QtQuick3DAssetImportDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQml",
+        "QtQuick3DUtils",
+    ],
+)
+
+qt_sync_headers(
+    name = "assetimport_sync_headers",
+    hdrs = glob(["src/assetimport/*.h"]),
+    generated_public_hdrs = [
+        ":assetimport_depends_h",
+        ":qtquick3dassetimportexports_h",
+    ],
+    module_name = "QtQuick3DAssetImport",
+    source_dir = "src/assetimport",
+    version = QT_VERSION,
+    deps = [
+        ":utils_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "assetimport",
+    srcs = [
+        "src/assetimport/qssgassetimporterfactory.cpp",
+        "src/assetimport/qssgassetimportmanager.cpp",
+    ],
+    hdrs = glob(["src/assetimport/*.h"]),
+    copts = common_copts,
+    dynamic_deps = [
+        ":utils_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@qtbase//:dbus_shared"],
+    }),
+    includes = ["src/assetimport"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DASSETIMPORT_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DUTILS_LIB",
+    ],
+    moc_hdrs = [
+        "src/assetimport/qssgassetimporter_p.h",
+        "src/assetimport/qssgassetimporterplugin_p.h",
+        "src/assetimport/qssgassetimportmanager_p.h",
+    ],
+    deps = [
+        ":assetimport_sync_headers",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+# =============================================================================
+# 4. Quick3DRuntimeRender (src/runtimerender)
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3druntimerenderexports_h",
+    out = "generated_exports/qtquick3druntimerenderexports.h",
+    module_infix = "QUICK3DRUNTIMERENDER",
+)
+
+qt_depends_header(
+    name = "runtimerender_depends_h",
+    out = "generated_exports/QtQuick3DRuntimeRenderDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQuick",
+        "QtQuick3DUtils",
+        "QtShaderTools",
+        "QtConcurrent",
+    ],
+)
+
+qt_sync_headers(
+    name = "runtimerender_sync_headers",
+    hdrs = glob(["src/runtimerender/**/*.h"]),
+    generated_private_hdrs = [
+        ":gen_qtquick3d_tracepoints_p_h",
+    ],
+    generated_public_hdrs = [
+        ":qtquick3druntimerenderexports_h",
+        ":runtimerender_depends_h",
+    ],
+    module_name = "QtQuick3DRuntimeRender",
+    source_dir = "src/runtimerender",
+    ssg_filter = "(^|/)qssg.*[^_][^p]\\.h$",
+    version = QT_VERSION,
+    deps = [
+        ":utils_sync_headers",
+        "@qtbase//:concurrent_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+        "@qtshadertools//:shadertools_sync_headers",
+    ],
+)
+
+_RUNTIMERENDER_RES_FILES = glob([
+    "src/runtimerender/res/effectlib/*.glsllib",
+    "src/runtimerender/res/primitives/*.mesh",
+])
+
+qt_generate_qrc(
+    name = "runtimerender_res_qrc",
+    srcs = _RUNTIMERENDER_RES_FILES,
+    out = "runtimerender_res.qrc",
+    prefix = "/",
+    strip_prefix = "src/runtimerender",
+)
+
+qt_rcc_internal(
+    name = "runtimerender_res",
+    data = _RUNTIMERENDER_RES_FILES,
+    qrc = ":runtimerender_res_qrc",
+    qrc_name = "res",
+)
+
+_RUNTIMERENDER_SHADER_HDRS = glob(
+    [
+        "src/runtimerender/res/rhishaders/**/*.glsllib",
+        "src/runtimerender/res/effectlib/**/*.glsllib",
+    ],
+    allow_empty = True,
+)
+
+qt_qsb(
+    name = "res_shaders",
+    srcs = [
+        "src/runtimerender/res/rhishaders/debugobject.frag",
+        "src/runtimerender/res/rhishaders/debugobject.vert",
+        "src/runtimerender/res/rhishaders/environmentmap.frag",
+        "src/runtimerender/res/rhishaders/environmentmap.vert",
+    ],
+    hdrs = _RUNTIMERENDER_SHADER_HDRS,
+    glsl = "100es,120,150",
+    multiview = True,
+    optimized = True,
+    prefix = "/",
+    strip_prefix = "src/runtimerender",
+)
+
+qt_qsb(
+    name = "res_shaders_pertarget",
+    srcs = [
+        "src/runtimerender/res/rhishaders/progressiveaa.frag",
+        "src/runtimerender/res/rhishaders/progressiveaa.vert",
+        "src/runtimerender/res/rhishaders/simplequad.frag",
+        "src/runtimerender/res/rhishaders/simplequad.vert",
+        "src/runtimerender/res/rhishaders/ssaaresolve.frag",
+        "src/runtimerender/res/rhishaders/ssaaresolve.vert",
+    ],
+    hdrs = _RUNTIMERENDER_SHADER_HDRS,
+    glsl = "100es,120,150",
+    multiview = True,
+    optimized = True,
+    pertargetcompile = True,
+    prefix = "/",
+    strip_prefix = "src/runtimerender",
+)
+
+qt_qsb(
+    name = "res_shaders_es3_pertarget",
+    srcs = [
+        "src/runtimerender/res/rhishaders/lightmapdilate.frag",
+        "src/runtimerender/res/rhishaders/lightmapdilate.vert",
+    ],
+    hdrs = _RUNTIMERENDER_SHADER_HDRS,
+    glsl = "300es,120,150",
+    multiview = True,
+    optimized = True,
+    pertargetcompile = True,
+    prefix = "/",
+    strip_prefix = "src/runtimerender",
+)
+
+qt_qsb(
+    name = "res_shaders_clear_mrt",
+    srcs = [
+        "src/runtimerender/res/rhishaders/clearmrt.frag",
+        "src/runtimerender/res/rhishaders/clearmrt.vert",
+    ],
+    hdrs = _RUNTIMERENDER_SHADER_HDRS,
+    glsl = "300es,150",
+    multiview = True,
+    optimized = True,
+    outputs = [
+        "res/rhishaders/clear_mrt.vert.qsb",
+        "res/rhishaders/clear_mrt.frag.qsb",
+    ],
+    prefix = "/",
+    strip_prefix = "src/runtimerender",
+)
+
+qt_qsb(
+    name = "res_shaders_es3_gl3",
+    srcs = [
+        "src/runtimerender/res/rhishaders/environmentmapprefilter.frag",
+        "src/runtimerender/res/rhishaders/environmentmapprefilter.vert",
+        "src/runtimerender/res/rhishaders/grid.frag",
+        "src/runtimerender/res/rhishaders/grid.vert",
+        "src/runtimerender/res/rhishaders/reflectionprobeprefilter.frag",
+        "src/runtimerender/res/rhishaders/reflectionprobeprefilter.vert",
+        "src/runtimerender/res/rhishaders/skybox.frag",
+        "src/runtimerender/res/rhishaders/skybox.vert",
+        "src/runtimerender/res/rhishaders/skyboxcube.frag",
+        "src/runtimerender/res/rhishaders/skyboxcube.vert",
+        "src/runtimerender/res/rhishaders/ssao.frag",
+        "src/runtimerender/res/rhishaders/ssao.vert",
+    ],
+    hdrs = _RUNTIMERENDER_SHADER_HDRS,
+    glsl = "300es,150",
+    multiview = True,
+    optimized = True,
+    prefix = "/",
+    strip_prefix = "src/runtimerender",
+)
+
+qt_qsb(
+    name = "res_shaders_compute",
+    srcs = [
+        "src/runtimerender/res/rhishaders/nlm_denoise.comp",
+    ],
+    hdrs = _RUNTIMERENDER_SHADER_HDRS,
+    glsl = "310es,430",
+    multiview = False,
+    optimized = True,
+    outputs = [
+        "res/rhishaders/nlm_denoise.comp.qsb",
+    ],
+    prefix = "/",
+    strip_prefix = "src/runtimerender",
+)
+
+qt_qsb(
+    name = "res_shaders_lightprobe_rgbe",
+    srcs = [
+        "src/runtimerender/res/rhishaders/environmentmapprefilter.frag",
+        "src/runtimerender/res/rhishaders/environmentmapprefilter.vert",
+    ],
+    hdrs = _RUNTIMERENDER_SHADER_HDRS,
+    defines = ["QSSG_ENABLE_RGBE_LIGHT_PROBE=1"],
+    glsl = "300es,150",
+    multiview = True,
+    optimized = True,
+    outputs = [
+        "res/rhishaders/environmentmapprefilter_rgbe.vert.qsb",
+        "res/rhishaders/environmentmapprefilter_rgbe.frag.qsb",
+    ],
+    prefix = "/",
+    strip_prefix = "src/runtimerender",
+)
+
+[
+    qt_qsb(
+        name = "res_shaders_" + skybox_variant,
+        srcs = [
+            "src/runtimerender/res/rhishaders/skybox.frag",
+            "src/runtimerender/res/rhishaders/skybox.vert",
+        ],
+        hdrs = _RUNTIMERENDER_SHADER_HDRS,
+        defines = skybox_defs,
+        glsl = "300es,150",
+        multiview = True,
+        optimized = True,
+        outputs = [
+            "res/rhishaders/" + skybox_variant + ".vert.qsb",
+            "res/rhishaders/" + skybox_variant + ".frag.qsb",
+        ],
+        prefix = "/",
+        strip_prefix = "src/runtimerender",
+    )
+    for skybox_variant, skybox_defs in [
+        ("skybox_hdr_none", []),
+        (
+            "skybox_rgbe_none",
+            ["QSSG_ENABLE_RGBE_LIGHT_PROBE=1"],
+        ),
+        (
+            "skybox_hdr_custom",
+            ["QSSG_FORCE_IBL_EXPOSURE=1"],
+        ),
+        (
+            "skybox_rgbe_custom",
+            [
+                "QSSG_ENABLE_RGBE_LIGHT_PROBE=1",
+                "QSSG_FORCE_IBL_EXPOSURE=1",
+            ],
+        ),
+        (
+            "skybox_hdr_linear",
+            ["QSSG_ENABLE_LINEAR_TONEMAPPING=1"],
+        ),
+        (
+            "skybox_rgbe_linear",
+            [
+                "QSSG_ENABLE_LINEAR_TONEMAPPING=1",
+                "QSSG_ENABLE_RGBE_LIGHT_PROBE=1",
+            ],
+        ),
+        (
+            "skybox_hdr_aces",
+            ["QSSG_ENABLE_ACES_TONEMAPPING=1"],
+        ),
+        (
+            "skybox_rgbe_aces",
+            [
+                "QSSG_ENABLE_ACES_TONEMAPPING=1",
+                "QSSG_ENABLE_RGBE_LIGHT_PROBE=1",
+            ],
+        ),
+        (
+            "skybox_hdr_hejldawson",
+            ["QSSG_ENABLE_HEJLDAWSON_TONEMAPPING=1"],
+        ),
+        (
+            "skybox_rgbe_hejldawson",
+            [
+                "QSSG_ENABLE_HEJLDAWSON_TONEMAPPING=1",
+                "QSSG_ENABLE_RGBE_LIGHT_PROBE=1",
+            ],
+        ),
+        (
+            "skybox_hdr_filmic",
+            ["QSSG_ENABLE_FILMIC_TONEMAPPING=1"],
+        ),
+        (
+            "skybox_rgbe_filmic",
+            [
+                "QSSG_ENABLE_FILMIC_TONEMAPPING=1",
+                "QSSG_ENABLE_RGBE_LIGHT_PROBE=1",
+            ],
+        ),
+    ]
+]
+
+qt_qsb(
+    name = "res_shaders_skyboxcube_runtime_tonemapping",
+    srcs = [
+        "src/runtimerender/res/rhishaders/skyboxcube.frag",
+        "src/runtimerender/res/rhishaders/skyboxcube.vert",
+    ],
+    hdrs = _RUNTIMERENDER_SHADER_HDRS,
+    defines = ["QSSG_RUNTIME_TONEMAPPING=1"],
+    glsl = "300es,150",
+    multiview = True,
+    optimized = True,
+    outputs = [
+        "res/rhishaders/skyboxcube_runtime_tonemapping.vert.qsb",
+        "res/rhishaders/skyboxcube_runtime_tonemapping.frag.qsb",
+    ],
+    prefix = "/",
+    strip_prefix = "src/runtimerender",
+)
+
+_PARTICLE_SHADER_TARGETS = [
+    # Group 1 (no GROUPFIX)
+    ("res_shaders_particlesnolight", "particles", "particles_nolight_simple", []),
+    (
+        "res_shaders_particlesnolightmapped",
+        "particles",
+        "particles_nolight_mapped",
+        ["QSSG_PARTICLES_ENABLE_MAPPED"],
+    ),
+    (
+        "res_shaders_particlesnolightanimated",
+        "particles",
+        "particles_nolight_animated",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_ANIMATED",
+        ],
+    ),
+    (
+        "res_shaders_particlesvlightsimple",
+        "particles",
+        "particles_vlight_simple",
+        ["QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING"],
+    ),
+    (
+        "res_shaders_particlesvlightmapped",
+        "particles",
+        "particles_vlight_mapped",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING",
+        ],
+    ),
+    (
+        "res_shaders_particlesvlightanimated",
+        "particles",
+        "particles_vlight_animated",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_ANIMATED",
+            "QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING",
+        ],
+    ),
+    ("res_shaders_lineparticles", "lineparticles", "lineparticles_nolight_simple", []),
+    (
+        "res_shaders_lineparticlestmapped",
+        "lineparticles",
+        "lineparticles_nolight_mapped",
+        ["QSSG_PARTICLES_ENABLE_MAPPED"],
+    ),
+    (
+        "res_shaders_lineparticlesanimated",
+        "lineparticles",
+        "lineparticles_nolight_animated",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_ANIMATED",
+        ],
+    ),
+    (
+        "res_shaders_lineparticlesvlightsimple",
+        "lineparticles",
+        "lineparticles_vlight_simple",
+        ["QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING"],
+    ),
+    (
+        "res_shaders_lineparticlesvlightmapped",
+        "lineparticles",
+        "lineparticles_vlight_mapped",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING",
+        ],
+    ),
+    (
+        "res_shaders_lineparticlesvlightanimated",
+        "lineparticles",
+        "lineparticles_vlight_animated",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_ANIMATED",
+            "QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING",
+        ],
+    ),
+    # Group 2 (GROUPFIX = oit_weightedblended)
+    (
+        "res_shaders_particlesnolightoit_weightedblended",
+        "particles",
+        "particles_nolight_simple_oit_weightedblended",
+        ["QSSG_OIT_METHOD=1"],
+    ),
+    (
+        "res_shaders_particlesnolightmappedoit_weightedblended",
+        "particles",
+        "particles_nolight_mapped_oit_weightedblended",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_OIT_METHOD=1",
+        ],
+    ),
+    (
+        "res_shaders_particlesnolightanimatedoit_weightedblended",
+        "particles",
+        "particles_nolight_animated_oit_weightedblended",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_ANIMATED",
+            "QSSG_OIT_METHOD=1",
+        ],
+    ),
+    (
+        "res_shaders_particlesvlightsimpleoit_weightedblended",
+        "particles",
+        "particles_vlight_oit_weightedblended",
+        [
+            "QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING",
+            "QSSG_OIT_METHOD=1",
+        ],
+    ),
+    (
+        "res_shaders_particlesvlightmappedoit_weightedblended",
+        "particles",
+        "particles_vlight_mapped_oit_weightedblended",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING",
+            "QSSG_OIT_METHOD=1",
+        ],
+    ),
+    (
+        "res_shaders_particlesvlightanimatedoit_weightedblended",
+        "particles",
+        "particles_vlight_animated_oit_weightedblended",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_ANIMATED",
+            "QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING",
+            "QSSG_OIT_METHOD=1",
+        ],
+    ),
+    (
+        "res_shaders_lineparticlesoit_weightedblended",
+        "lineparticles",
+        "lineparticles_nolight_simple_oit_weightedblended",
+        ["QSSG_OIT_METHOD=1"],
+    ),
+    (
+        "res_shaders_lineparticlestmappedoit_weightedblended",
+        "lineparticles",
+        "lineparticles_nolight_mapped_oit_weightedblended",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_OIT_METHOD=1",
+        ],
+    ),
+    (
+        "res_shaders_lineparticlesanimatedoit_weightedblended",
+        "lineparticles",
+        "lineparticles_nolight_animated_oit_weightedblended",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_ANIMATED",
+            "QSSG_OIT_METHOD=1",
+        ],
+    ),
+    (
+        "res_shaders_lineparticlesvlightsimpleoit_weightedblended",
+        "lineparticles",
+        "lineparticles_vlight_simple_oit_weightedblended",
+        [
+            "QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING",
+            "QSSG_OIT_METHOD=1",
+        ],
+    ),
+    (
+        "res_shaders_lineparticlesvlightmappedoit_weightedblended",
+        "lineparticles",
+        "lineparticles_vlight_mapped_oit_weightedblended",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING",
+            "QSSG_OIT_METHOD=1",
+        ],
+    ),
+    (
+        "res_shaders_lineparticlesvlightanimatedoit_weightedblended",
+        "lineparticles",
+        "lineparticles_vlight_animated_oit_weightedblended",
+        [
+            "QSSG_PARTICLES_ENABLE_MAPPED",
+            "QSSG_PARTICLES_ENABLE_ANIMATED",
+            "QSSG_PARTICLES_ENABLE_VERTEX_LIGHTING",
+            "QSSG_OIT_METHOD=1",
+        ],
+    ),
+]
+
+[
+    qt_qsb(
+        name = pname,
+        srcs = [
+            "src/runtimerender/res/rhishaders/" + pin + ".vert",
+            "src/runtimerender/res/rhishaders/" + pin + ".frag",
+        ],
+        hdrs = _RUNTIMERENDER_SHADER_HDRS,
+        defines = pdefs,
+        glsl = "300es,150",
+        multiview = True,
+        optimized = True,
+        outputs = [
+            "res/rhishaders/" + pout + ".vert.qsb",
+            "res/rhishaders/" + pout + ".frag.qsb",
+        ],
+        prefix = "/",
+        strip_prefix = "src/runtimerender",
+    )
+    for pname, pin, pout, pdefs in _PARTICLE_SHADER_TARGETS
+]
+
+[
+    qt_qsb(
+        name = uv_name,
+        srcs = [
+            "src/runtimerender/res/rhishaders/lightmapuvraster.frag",
+            "src/runtimerender/res/rhishaders/lightmapuvraster.vert",
+        ],
+        hdrs = _RUNTIMERENDER_SHADER_HDRS,
+        defines = uv_defs,
+        glsl = "300es,120,330",
+        multiview = True,
+        optimized = True,
+        outputs = [
+            "res/rhishaders/" + uv_out + ".vert.qsb",
+            "res/rhishaders/" + uv_out + ".frag.qsb",
+        ],
+        prefix = "/",
+        strip_prefix = "src/runtimerender",
+    )
+    for uv_name, uv_out, uv_defs in [
+        ("res_lightmapuvraster_default", "lightmapuvraster", []),
+        (
+            "res_lightmapuvraster_uv",
+            "lightmapuvraster_uv",
+            ["QSSG_LIGHTMAPUVRASTER_UV"],
+        ),
+        (
+            "res_lightmapuvraster_uv_tangent",
+            "lightmapuvraster_uv_tangent",
+            ["QSSG_LIGHTMAPUVRASTER_UV_TANGENT"],
+        ),
+    ]
+]
+
+[
+    qt_qsb(
+        name = oit_name,
+        srcs = [
+            "src/runtimerender/res/rhishaders/oitcomposite.frag",
+            "src/runtimerender/res/rhishaders/oitcomposite.vert",
+        ],
+        hdrs = _RUNTIMERENDER_SHADER_HDRS,
+        defines = oit_defs,
+        glsl = "300es,150",
+        multiview = True,
+        optimized = True,
+        outputs = [
+            "res/rhishaders/" + oit_out + ".vert.qsb",
+            "res/rhishaders/" + oit_out + ".frag.qsb",
+        ],
+        pertargetcompile = True,
+        prefix = "/",
+        strip_prefix = "src/runtimerender",
+    )
+    for oit_name, oit_out, oit_defs in [
+        (
+            "res_shaders_composite_weightedblended",
+            "oitcomposite_weightedblended",
+            ["QSSG_OIT_METHOD=1"],
+        ),
+        (
+            "res_shaders_composite_weightedblended_ms",
+            "oitcomposite_weightedblended_ms",
+            [
+                "QSSG_OIT_METHOD=1",
+                "QSSG_MULTISAMPLE",
+            ],
+        ),
+    ]
+]
+
+qt_internal_library(
+    name = "runtimerender",
+    srcs = [
+        "src/runtimerender/extensionapi/qssgrenderextensions.cpp",
+        "src/runtimerender/extensionapi/qssgrenderhelpers.cpp",
+        "src/runtimerender/graphobjects/qssgrendercamera.cpp",
+        "src/runtimerender/graphobjects/qssgrenderdefaultmaterial.cpp",
+        "src/runtimerender/graphobjects/qssgrendereffect.cpp",
+        "src/runtimerender/graphobjects/qssgrendergeometry.cpp",
+        "src/runtimerender/graphobjects/qssgrendergraphobject.cpp",
+        "src/runtimerender/graphobjects/qssgrenderimage.cpp",
+        "src/runtimerender/graphobjects/qssgrenderinstancetable.cpp",
+        "src/runtimerender/graphobjects/qssgrenderitem2d.cpp",
+        "src/runtimerender/graphobjects/qssgrenderjoint.cpp",
+        "src/runtimerender/graphobjects/qssgrenderlayer.cpp",
+        "src/runtimerender/graphobjects/qssgrenderlight.cpp",
+        "src/runtimerender/graphobjects/qssgrendermodel.cpp",
+        "src/runtimerender/graphobjects/qssgrendermorphtarget.cpp",
+        "src/runtimerender/graphobjects/qssgrendernode.cpp",
+        "src/runtimerender/graphobjects/qssgrenderparticles.cpp",
+        "src/runtimerender/graphobjects/qssgrenderreflectionprobe.cpp",
+        "src/runtimerender/graphobjects/qssgrenderresourceloader.cpp",
+        "src/runtimerender/graphobjects/qssgrenderroot.cpp",
+        "src/runtimerender/graphobjects/qssgrenderskeleton.cpp",
+        "src/runtimerender/graphobjects/qssgrenderskin.cpp",
+        "src/runtimerender/graphobjects/qssgrendertexturedata.cpp",
+        "src/runtimerender/qssgdebugdrawsystem.cpp",
+        "src/runtimerender/qssglightmapio.cpp",
+        "src/runtimerender/qssgrenderclippingfrustum.cpp",
+        "src/runtimerender/qssgrendercommands.cpp",
+        "src/runtimerender/qssgrendercontextcore.cpp",
+        "src/runtimerender/qssgrenderdefaultmaterialshadergenerator.cpp",
+        "src/runtimerender/qssgrenderray.cpp",
+        "src/runtimerender/qssgrenderreflectionmap.cpp",
+        "src/runtimerender/qssgrendershadercache.cpp",
+        "src/runtimerender/qssgrendershadercodegenerator.cpp",
+        "src/runtimerender/qssgrendershadermetadata.cpp",
+        "src/runtimerender/qssgrendershadowmap.cpp",
+        "src/runtimerender/qssgrhicontext.cpp",
+        "src/runtimerender/qssgrhicustommaterialsystem.cpp",
+        "src/runtimerender/qssgrhieffectsystem.cpp",
+        "src/runtimerender/qssgrhiparticles.cpp",
+        "src/runtimerender/qssgrhiquadrenderer.cpp",
+        "src/runtimerender/qssgruntimerenderlogging.cpp",
+        "src/runtimerender/qssgshadermaterialadapter.cpp",
+        "src/runtimerender/rendererimpl/qssglayerrenderdata.cpp",
+        "src/runtimerender/rendererimpl/qssglightmapbaker.cpp",
+        "src/runtimerender/rendererimpl/qssglightmapper.cpp",
+        "src/runtimerender/rendererimpl/qssgrenderableobjects.cpp",
+        "src/runtimerender/rendererimpl/qssgrenderdata.cpp",
+        "src/runtimerender/rendererimpl/qssgrenderer.cpp",
+        "src/runtimerender/rendererimpl/qssgrendererimplshaders_rhi.cpp",
+        "src/runtimerender/rendererimpl/qssgrenderhelpers.cpp",
+        "src/runtimerender/rendererimpl/qssgrenderpass.cpp",
+        "src/runtimerender/rendererimpl/qssgshadowmaphelpers.cpp",
+        "src/runtimerender/rendererimpl/qssgvertexpipelineimpl.cpp",
+        "src/runtimerender/resourcemanager/qssgrenderbuffermanager.cpp",
+        "src/runtimerender/resourcemanager/qssgrenderloadedtexture.cpp",
+        "src/runtimerender/resourcemanager/qssgrendershaderlibrarymanager.cpp",
+    ],
+    hdrs = glob(["src/runtimerender/**/*.h"]),
+    copts = common_copts,
+    dynamic_deps = [
+        ":utils_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+        "@qtshadertools//:shadertools_shared",
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@qtbase//:dbus_shared"],
+    }),
+    exports_filter = [
+        ":tinyexr_bundled",
+    ] + select({
+        ":_windows_arm64": [],
+        "//conditions:default": [":embree_bundled"],
+    }),
+    includes = [
+        "src/3rdparty/tinyexr",
+        "src/runtimerender",
+        "src/runtimerender/extensionapi",
+        "src/runtimerender/graphobjects",
+        "src/runtimerender/rendererimpl",
+        "src/runtimerender/resourcemanager",
+    ],
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DRUNTIMERENDER_LIB",
+        "QT_CONCURRENT_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_OPENGL_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QMLMETA_LIB",
+        "QT_QMLMODELS_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_HAS_RUNTIME_SHADERS",
+        "QT_QUICK_LIB",
+        "QT_SHADERTOOLS_LIB",
+    ] + select({
+        ":_windows_arm64": [],
+        "//conditions:default": ["QT_QUICK3D_HAS_LIGHTMAPPER"],
+    }),
+    moc_srcs = [
+        "src/runtimerender/rendererimpl/qssglightmapper.cpp",
+    ],
+    rcc_targets = [
+        ":runtimerender_res",
+        ":res_shaders",
+        ":res_shaders_pertarget",
+        ":res_shaders_es3_pertarget",
+        ":res_shaders_clear_mrt",
+        ":res_shaders_es3_gl3",
+        ":res_shaders_compute",
+        ":res_shaders_lightprobe_rgbe",
+        ":res_shaders_skybox_hdr_none",
+        ":res_shaders_skybox_rgbe_none",
+        ":res_shaders_skybox_hdr_custom",
+        ":res_shaders_skybox_rgbe_custom",
+        ":res_shaders_skybox_hdr_linear",
+        ":res_shaders_skybox_rgbe_linear",
+        ":res_shaders_skybox_hdr_aces",
+        ":res_shaders_skybox_rgbe_aces",
+        ":res_shaders_skybox_hdr_hejldawson",
+        ":res_shaders_skybox_rgbe_hejldawson",
+        ":res_shaders_skybox_hdr_filmic",
+        ":res_shaders_skybox_rgbe_filmic",
+        ":res_shaders_skyboxcube_runtime_tonemapping",
+        ":res_lightmapuvraster_default",
+        ":res_lightmapuvraster_uv",
+        ":res_lightmapuvraster_uv_tangent",
+        ":res_shaders_composite_weightedblended",
+        ":res_shaders_composite_weightedblended_ms",
+    ] + [":" + pname for pname, _, _, _ in _PARTICLE_SHADER_TARGETS],
+    deps = [
+        ":runtimerender_sync_headers",
+        ":tinyexr_bundled",
+        ":utils",
+        "@qtbase//:concurrent",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:quick",
+        "@qtshadertools//:shadertools",
+        "@zlib",
+    ] + select({
+        ":_windows_arm64": [],
+        "//conditions:default": [":embree_bundled"],
+    }),
+)
+
+# =============================================================================
+# 5. Quick3D (src/quick3d) + qquick3dplugin
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3dexports_h",
+    out = "generated_exports/qtquick3dexports.h",
+    module_infix = "QUICK3D",
+)
+
+qt_depends_header(
+    name = "quick3d_depends_h",
+    out = "generated_exports/QtQuick3DDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQml",
+        "QtQuick",
+        "QtQuick3DRuntimeRender",
+    ],
+)
+
+qt_sync_headers(
+    name = "quick3d_sync_headers",
+    hdrs = glob(["src/quick3d/**/*.h"]),
+    generated_private_hdrs = [
+        ":gen_qtquick3d_tracepoints_p_h",
+    ],
+    generated_public_hdrs = [
+        ":qtquick3dexports_h",
+        ":quick3d_depends_h",
+    ],
+    module_name = "QtQuick3D",
+    source_dir = "src/quick3d",
+    ssg_filter = "(^|/)qquick3dextensionhelpers\\.h$",
+    version = QT_VERSION,
+    deps = [
+        ":runtimerender_sync_headers",
+        ":utils_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "quick3d",
+    srcs = [
+        "src/quick3d/extensions/qquick3dextensionhelpers.cpp",
+        "src/quick3d/extensions/qquick3drenderextensions.cpp",
+        "src/quick3d/qquick3d.cpp",
+        "src/quick3d/qquick3dabstractlight.cpp",
+        "src/quick3d/qquick3dbakedlightmap.cpp",
+        "src/quick3d/qquick3dcamera.cpp",
+        "src/quick3d/qquick3dcubemaptexture.cpp",
+        "src/quick3d/qquick3dcustomcamera.cpp",
+        "src/quick3d/qquick3dcustommaterial.cpp",
+        "src/quick3d/qquick3ddebugsettings.cpp",
+        "src/quick3d/qquick3ddefaultmaterial.cpp",
+        "src/quick3d/qquick3ddirectionallight.cpp",
+        "src/quick3d/qquick3deffect.cpp",
+        "src/quick3d/qquick3dfog.cpp",
+        "src/quick3d/qquick3dfrustumcamera.cpp",
+        "src/quick3d/qquick3dgeometry.cpp",
+        "src/quick3d/qquick3dinstancing.cpp",
+        "src/quick3d/qquick3ditem2d.cpp",
+        "src/quick3d/qquick3djoint.cpp",
+        "src/quick3d/qquick3dlightmapbaker.cpp",
+        "src/quick3d/qquick3dlightmapper.cpp",
+        "src/quick3d/qquick3dloader.cpp",
+        "src/quick3d/qquick3dmaterial.cpp",
+        "src/quick3d/qquick3dmodel.cpp",
+        "src/quick3d/qquick3dmorphtarget.cpp",
+        "src/quick3d/qquick3dnode.cpp",
+        "src/quick3d/qquick3dobject.cpp",
+        "src/quick3d/qquick3dorthographiccamera.cpp",
+        "src/quick3d/qquick3dperspectivecamera.cpp",
+        "src/quick3d/qquick3dpickresult.cpp",
+        "src/quick3d/qquick3dpointlight.cpp",
+        "src/quick3d/qquick3dprincipledmaterial.cpp",
+        "src/quick3d/qquick3dquaternionanimation.cpp",
+        "src/quick3d/qquick3dquaternionutils.cpp",
+        "src/quick3d/qquick3dreflectionprobe.cpp",
+        "src/quick3d/qquick3drenderstats.cpp",
+        "src/quick3d/qquick3drepeater.cpp",
+        "src/quick3d/qquick3dresourceloader.cpp",
+        "src/quick3d/qquick3dsceneenvironment.cpp",
+        "src/quick3d/qquick3dscenemanager.cpp",
+        "src/quick3d/qquick3dscenerenderer.cpp",
+        "src/quick3d/qquick3dscenerootnode.cpp",
+        "src/quick3d/qquick3dshaderutils.cpp",
+        "src/quick3d/qquick3dskeleton.cpp",
+        "src/quick3d/qquick3dskin.cpp",
+        "src/quick3d/qquick3dspecularglossymaterial.cpp",
+        "src/quick3d/qquick3dspotlight.cpp",
+        "src/quick3d/qquick3dtexture.cpp",
+        "src/quick3d/qquick3dtexturedata.cpp",
+        "src/quick3d/qquick3dviewport.cpp",
+    ],
+    hdrs = glob(["src/quick3d/**/*.h"]),
+    copts = common_copts,
+    dynamic_deps = [
+        ":runtimerender_shared",
+        ":utils_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+        "@qtshadertools//:shadertools_shared",
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@qtbase//:dbus_shared"],
+    }),
+    includes = [
+        "src/quick3d",
+        "src/quick3d/extensions",
+    ],
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3D_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_OPENGL_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QMLMETA_LIB",
+        "QT_QMLMODELS_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_hdrs = [
+        "src/quick3d/extensions/qquick3drenderextensions.h",
+        "src/quick3d/qquick3dabstractlight_p.h",
+        "src/quick3d/qquick3dbakedlightmap_p.h",
+        "src/quick3d/qquick3dcamera_p.h",
+        "src/quick3d/qquick3dcubemaptexture_p.h",
+        "src/quick3d/qquick3dcustomcamera_p.h",
+        "src/quick3d/qquick3dcustommaterial_p.h",
+        "src/quick3d/qquick3ddebugsettings_p.h",
+        "src/quick3d/qquick3ddefaultmaterial_p.h",
+        "src/quick3d/qquick3ddirectionallight_p.h",
+        "src/quick3d/qquick3deffect_p.h",
+        "src/quick3d/qquick3dfog_p.h",
+        "src/quick3d/qquick3dfrustumcamera_p.h",
+        "src/quick3d/qquick3dgeometry.h",
+        "src/quick3d/qquick3dinstancing.h",
+        "src/quick3d/qquick3dinstancing_p.h",
+        "src/quick3d/qquick3ditem2d_p.h",
+        "src/quick3d/qquick3djoint_p.h",
+        "src/quick3d/qquick3dlightmapbaker_p.h",
+        "src/quick3d/qquick3dlightmapper_p.h",
+        "src/quick3d/qquick3dloader_p.h",
+        "src/quick3d/qquick3dmaterial_p.h",
+        "src/quick3d/qquick3dmodel_p.h",
+        "src/quick3d/qquick3dmorphtarget_p.h",
+        "src/quick3d/qquick3dnode_p.h",
+        "src/quick3d/qquick3dobject.h",
+        "src/quick3d/qquick3dorthographiccamera_p.h",
+        "src/quick3d/qquick3dperspectivecamera_p.h",
+        "src/quick3d/qquick3dpickresult_p.h",
+        "src/quick3d/qquick3dpointlight_p.h",
+        "src/quick3d/qquick3dprincipledmaterial_p.h",
+        "src/quick3d/qquick3dquaternionanimation_p.h",
+        "src/quick3d/qquick3dquaternionutils_p.h",
+        "src/quick3d/qquick3dreflectionprobe_p.h",
+        "src/quick3d/qquick3drenderstats_p.h",
+        "src/quick3d/qquick3drepeater_p.h",
+        "src/quick3d/qquick3dresourceloader_p.h",
+        "src/quick3d/qquick3dsceneenvironment_p.h",
+        "src/quick3d/qquick3dscenemanager_p.h",
+        "src/quick3d/qquick3dscenerenderer_p.h",
+        "src/quick3d/qquick3dscenerootnode_p.h",
+        "src/quick3d/qquick3dshaderutils_p.h",
+        "src/quick3d/qquick3dskeleton_p.h",
+        "src/quick3d/qquick3dskin_p.h",
+        "src/quick3d/qquick3dspecularglossymaterial_p.h",
+        "src/quick3d/qquick3dspotlight_p.h",
+        "src/quick3d/qquick3dtexture_p.h",
+        "src/quick3d/qquick3dtexturedata.h",
+        "src/quick3d/qquick3dviewport_p.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "uri": "QtQuick3D",
+        "major_version": "6",
+        "minor_version": "10",
+        "foreign_types": [
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "qml_files": [
+            "src/quick3d/LightmapperOutputWindow.qml",
+        ],
+        "qml_strip_prefix": "src/quick3d",
+        "qmldir_content": "module QtQuick3D\nlinktarget Qt6::qquick3dplugin\nplugin qquick3dplugin\nclassname QQuick3DPlugin\ndesignersupported\ntypeinfo plugins.qmltypes\ndepends QtQuick auto\nprefer :/qt-project.org/imports/QtQuick3D/\nLightmapperOutputWindow 6.0 LightmapperOutputWindow.qml\n",
+    },
+    deps = [
+        ":quick3d_sync_headers",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_static_plugin(
+    name = "qquick3dplugin",
+    srcs = ["src/quick3d/plugin.cpp"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_opts = ["-Muri=QtQuick3D"],
+    moc_srcs = ["src/quick3d/plugin.cpp"],
+    plugin_class_name = "QQuick3DPlugin",
+    deps = [
+        ":quick3d",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# 6. Quick3DAssetUtils (src/assetutils) + qtquick3dassetutilsplugin
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3dassetutilsexports_h",
+    out = "generated_exports/qtquick3dassetutilsexports.h",
+    module_infix = "QUICK3DASSETUTILS",
+)
+
+qt_depends_header(
+    name = "assetutils_depends_h",
+    out = "generated_exports/QtQuick3DAssetUtilsDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQuick",
+        "QtQuick3DRuntimeRender",
+        "QtQuick3D",
+        "QtQuick3DAssetImport",
+        "QtQuickTimeline",
+    ],
+)
+
+qt_sync_headers(
+    name = "assetutils_sync_headers",
+    hdrs = glob(["src/assetutils/*.h"]),
+    generated_public_hdrs = [
+        ":assetutils_depends_h",
+        ":qtquick3dassetutilsexports_h",
+    ],
+    module_name = "QtQuick3DAssetUtils",
+    source_dir = "src/assetutils",
+    version = QT_VERSION,
+    deps = [
+        ":assetimport_sync_headers",
+        ":quick3d_sync_headers",
+        ":runtimerender_sync_headers",
+        ":utils_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+        "@qtquicktimeline//:quicktimeline_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "assetutils_lib",
+    srcs = [
+        "src/assetutils/qquick3druntimeloader.cpp",
+        "src/assetutils/qssgqmlutilities.cpp",
+        "src/assetutils/qssgrtutilities.cpp",
+        "src/assetutils/qssgscenedesc.cpp",
+        "src/assetutils/qssgsceneedit.cpp",
+    ],
+    hdrs = glob(["src/assetutils/*.h"]),
+    copts = common_copts,
+    dynamic_deps = [
+        ":assetimport_shared",
+        ":quick3d_shared",
+        ":runtimerender_shared",
+        ":utils_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+        "@qtquicktimeline//:quicktimeline_shared",
+        "@qtshadertools//:shadertools_shared",
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@qtbase//:dbus_shared"],
+    }),
+    includes = ["src/assetutils"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DASSETUTILS_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QMLMETA_LIB",
+        "QT_QMLMODELS_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DASSETIMPORT_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_ENABLE_RT_ANIMATIONS",
+        "QT_QUICK3D_LIB",
+        "QT_QUICKTIMELINE_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_hdrs = [
+        "src/assetutils/qquick3druntimeloader_p.h",
+    ],
+    qml_args = {
+        "uri": "QtQuick3D.AssetUtils",
+        "major_version": "6",
+        "minor_version": "10",
+        "foreign_types": [
+            ":quick3d_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "qmldir_content": "module QtQuick3D.AssetUtils\nlinktarget Qt6::qtquick3dassetutilsplugin\nplugin qtquick3dassetutilsplugin\nclassname QtQuick3DAssetUtilsPlugin\ndesignersupported\ntypeinfo plugins.qmltypes\ndepends QtQuick3D auto\nprefer :/qt-project.org/imports/QtQuick3D/AssetUtils/\n",
+    },
+    deps = [
+        ":assetimport",
+        ":assetutils_sync_headers",
+        ":quick3d",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+        "@qtquicktimeline//:quicktimeline",
+    ],
+)
+
+alias(
+    name = "assetutils_shared",
+    actual = ":assetutils_lib_shared",
+)
+
+alias(
+    name = "assetutils_moc_hdrs",
+    actual = ":assetutils_lib_moc_hdrs",
+)
+
+cc_library(
+    name = "assetutils",
+    deps = [
+        ":assetutils_lib",
+        ":assimpimporterplugin",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qtquick3dassetutilsplugin_src",
+    class_name = "QtQuick3DAssetUtilsPlugin",
+    plugin_name = "qtquick3dassetutilsplugin",
+    uri = "QtQuick3D.AssetUtils",
+)
+
+qt_static_plugin(
+    name = "qtquick3dassetutilsplugin",
+    srcs = [":qtquick3dassetutilsplugin_src"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DASSETUTILS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_opts = ["-Muri=QtQuick3D.AssetUtils"],
+    moc_srcs = [":qtquick3dassetutilsplugin_src"],
+    plugin_class_name = "QtQuick3DAssetUtilsPlugin",
+    deps = [
+        ":assetutils",
+        ":assimpimporterplugin",
+        ":qquick3dplugin",
+        ":quick3d",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# 7. Quick3DParticles (src/quick3dparticles) + qtquick3dparticles3dplugin
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3dparticlesexports_h",
+    out = "generated_exports/qtquick3dparticlesexports.h",
+    module_infix = "QUICK3DPARTICLES",
+)
+
+qt_depends_header(
+    name = "quick3dparticles_depends_h",
+    out = "generated_exports/QtQuick3DParticlesDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQml",
+        "QtQuick",
+        "QtQuick3DRuntimeRender",
+        "QtQuick3DAssetImport",
+        "QtQuick3D",
+    ],
+)
+
+qt_sync_headers(
+    name = "quick3dparticles_sync_headers",
+    hdrs = glob(["src/quick3dparticles/*.h"]),
+    generated_private_hdrs = [
+        ":gen_qtquick3d_tracepoints_p_h",
+    ],
+    generated_public_hdrs = [
+        ":qtquick3dparticlesexports_h",
+        ":quick3dparticles_depends_h",
+    ],
+    module_name = "QtQuick3DParticles",
+    source_dir = "src/quick3dparticles",
+    version = QT_VERSION,
+    deps = [
+        ":assetimport_sync_headers",
+        ":quick3d_sync_headers",
+        ":runtimerender_sync_headers",
+        ":utils_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "quick3dparticles",
+    srcs = [
+        "src/quick3dparticles/qquick3dparticle.cpp",
+        "src/quick3dparticles/qquick3dparticleabstractshape.cpp",
+        "src/quick3dparticles/qquick3dparticleaffector.cpp",
+        "src/quick3dparticles/qquick3dparticleattractor.cpp",
+        "src/quick3dparticles/qquick3dparticlecustomshape.cpp",
+        "src/quick3dparticles/qquick3dparticledirection.cpp",
+        "src/quick3dparticles/qquick3dparticledynamicburst.cpp",
+        "src/quick3dparticles/qquick3dparticleemitburst.cpp",
+        "src/quick3dparticles/qquick3dparticleemitter.cpp",
+        "src/quick3dparticles/qquick3dparticlegravity.cpp",
+        "src/quick3dparticles/qquick3dparticlelineparticle.cpp",
+        "src/quick3dparticles/qquick3dparticlemodelblendparticle.cpp",
+        "src/quick3dparticles/qquick3dparticlemodelparticle.cpp",
+        "src/quick3dparticles/qquick3dparticlemodelshape.cpp",
+        "src/quick3dparticles/qquick3dparticlepointrotator.cpp",
+        "src/quick3dparticles/qquick3dparticlerepeller.cpp",
+        "src/quick3dparticles/qquick3dparticlescaleaffector.cpp",
+        "src/quick3dparticles/qquick3dparticleshape.cpp",
+        "src/quick3dparticles/qquick3dparticleshapedatautils.cpp",
+        "src/quick3dparticles/qquick3dparticlespriteparticle.cpp",
+        "src/quick3dparticles/qquick3dparticlespritesequence.cpp",
+        "src/quick3dparticles/qquick3dparticlesystem.cpp",
+        "src/quick3dparticles/qquick3dparticlesystemlogging.cpp",
+        "src/quick3dparticles/qquick3dparticletargetdirection.cpp",
+        "src/quick3dparticles/qquick3dparticletrailemitter.cpp",
+        "src/quick3dparticles/qquick3dparticleutils.cpp",
+        "src/quick3dparticles/qquick3dparticlevectordirection.cpp",
+        "src/quick3dparticles/qquick3dparticlewander.cpp",
+    ],
+    hdrs = glob(["src/quick3dparticles/*.h"]),
+    copts = common_copts,
+    dynamic_deps = [
+        ":assetimport_shared",
+        ":quick3d_shared",
+        ":runtimerender_shared",
+        ":utils_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+        "@qtshadertools//:shadertools_shared",
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@qtbase//:dbus_shared"],
+    }),
+    includes = ["src/quick3dparticles"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DPARTICLES_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QMLMETA_LIB",
+        "QT_QMLMODELS_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DASSETIMPORT_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_hdrs = [
+        "src/quick3dparticles/qquick3dparticle_p.h",
+        "src/quick3dparticles/qquick3dparticleabstractshape_p.h",
+        "src/quick3dparticles/qquick3dparticleaffector_p.h",
+        "src/quick3dparticles/qquick3dparticleattractor_p.h",
+        "src/quick3dparticles/qquick3dparticlecustomshape_p.h",
+        "src/quick3dparticles/qquick3dparticledirection_p.h",
+        "src/quick3dparticles/qquick3dparticledynamicburst_p.h",
+        "src/quick3dparticles/qquick3dparticleemitburst_p.h",
+        "src/quick3dparticles/qquick3dparticleemitter_p.h",
+        "src/quick3dparticles/qquick3dparticlegravity_p.h",
+        "src/quick3dparticles/qquick3dparticlelineparticle_p.h",
+        "src/quick3dparticles/qquick3dparticlemodelblendparticle_p.h",
+        "src/quick3dparticles/qquick3dparticlemodelparticle_p.h",
+        "src/quick3dparticles/qquick3dparticlemodelshape_p.h",
+        "src/quick3dparticles/qquick3dparticlepointrotator_p.h",
+        "src/quick3dparticles/qquick3dparticlerepeller_p.h",
+        "src/quick3dparticles/qquick3dparticlescaleaffector_p.h",
+        "src/quick3dparticles/qquick3dparticleshape_p.h",
+        "src/quick3dparticles/qquick3dparticlespriteparticle_p.h",
+        "src/quick3dparticles/qquick3dparticlespritesequence_p.h",
+        "src/quick3dparticles/qquick3dparticlesystem_p.h",
+        "src/quick3dparticles/qquick3dparticlesystemlogging_p.h",
+        "src/quick3dparticles/qquick3dparticletargetdirection_p.h",
+        "src/quick3dparticles/qquick3dparticletrailemitter_p.h",
+        "src/quick3dparticles/qquick3dparticlevectordirection_p.h",
+        "src/quick3dparticles/qquick3dparticlewander_p.h",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "uri": "QtQuick3D.Particles3D",
+        "major_version": "6",
+        "minor_version": "10",
+        "foreign_types": [
+            ":quick3d_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "qmldir_content": "module QtQuick3D.Particles3D\nlinktarget Qt6::qtquick3dparticles3dplugin\nplugin qtquick3dparticles3dplugin\nclassname QtQuick3DParticles3DPlugin\ndesignersupported\ntypeinfo plugins.qmltypes\ndepends QtQuick3D auto\nprefer :/qt-project.org/imports/QtQuick3D/Particles3D/\n",
+    },
+    deps = [
+        ":assetimport",
+        ":quick3d",
+        ":quick3dparticles_sync_headers",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qtquick3dparticles3dplugin_src",
+    class_name = "QtQuick3DParticles3DPlugin",
+    plugin_name = "qtquick3dparticles3dplugin",
+    uri = "QtQuick3D.Particles3D",
+)
+
+qt_static_plugin(
+    name = "qtquick3dparticles3dplugin",
+    srcs = [":qtquick3dparticles3dplugin_src"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DPARTICLES_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_opts = ["-Muri=QtQuick3D.Particles3D"],
+    moc_srcs = [":qtquick3dparticles3dplugin_src"],
+    plugin_class_name = "QtQuick3DParticles3DPlugin",
+    deps = [
+        ":qquick3dplugin",
+        ":quick3d",
+        ":quick3dparticles",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# 8. Quick3DParticleEffects (src/quick3dparticleeffects) + qtquick3dparticleeffectsplugin
+# =============================================================================
+
+qt_internal_library(
+    name = "quick3dparticleeffects",
+    copts = common_copts,
+    create_shared = False,
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DPARTICLEEFFECTS_LIB",
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DPARTICLES_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    qml_args = {
+        "uri": "QtQuick3D.ParticleEffects",
+        "major_version": "6",
+        "minor_version": "10",
+        "qmldir_content": "module QtQuick3D.ParticleEffects\nlinktarget Qt6::qtquick3dparticleeffectsplugin\nplugin qtquick3dparticleeffectsplugin\nclassname QtQuick3DParticleEffectsPlugin\ndesignersupported\ntypeinfo plugins.qmltypes\ndepends QtQuick3D auto\ndepends QtQuick3D.Particles3D auto\nprefer :/qt-project.org/imports/QtQuick3D/ParticleEffects/\n",
+    },
+    deps = [
+        ":assetimport",
+        ":quick3d",
+        ":quick3dparticles",
+        ":runtimerender",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qtquick3dparticleeffectsplugin_src",
+    class_name = "QtQuick3DParticleEffectsPlugin",
+    plugin_name = "qtquick3dparticleeffectsplugin",
+    uri = "QtQuick3D.ParticleEffects",
+)
+
+qt_static_plugin(
+    name = "qtquick3dparticleeffectsplugin",
+    srcs = [":qtquick3dparticleeffectsplugin_src"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DPARTICLES_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_opts = ["-Muri=QtQuick3D.ParticleEffects"],
+    moc_srcs = [":qtquick3dparticleeffectsplugin_src"],
+    plugin_class_name = "QtQuick3DParticleEffectsPlugin",
+    deps = [
+        ":qquick3dplugin",
+        ":qtquick3dparticles3dplugin",
+        ":quick3d",
+        ":quick3dparticleeffects",
+        ":quick3dparticles",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# 9. Quick3DHelpersImpl (src/helpers/impl) + qtquick3dhelpersimplplugin
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3dhelpersimplexports_h",
+    out = "generated_exports/qtquick3dhelpersimplexports.h",
+    module_infix = "QUICK3DHELPERSIMPL",
+)
+
+qt_depends_header(
+    name = "quick3dhelpersimpl_depends_h",
+    out = "generated_exports/QtQuick3DHelpersImplDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQml",
+        "QtQuick",
+        "QtQuick3D",
+    ],
+)
+
+qt_sync_headers(
+    name = "quick3dhelpersimpl_sync_headers",
+    hdrs = glob(["src/helpers/impl/*.h"]),
+    generated_public_hdrs = [
+        ":qtquick3dhelpersimplexports_h",
+        ":quick3dhelpersimpl_depends_h",
+    ],
+    module_name = "QtQuick3DHelpersImpl",
+    source_dir = "src/helpers/impl",
+    version = QT_VERSION,
+    deps = [
+        ":quick3d_sync_headers",
+        ":runtimerender_sync_headers",
+        ":utils_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+    ],
+)
+
+_HELPERSIMPL_RES_FILES = [
+    "src/helpers/impl/images/gradientTexture.png",
+    "src/helpers/impl/images/lens_dirt_default.jpeg",
+    "src/helpers/impl/images/noiseTexture.png",
+    "src/helpers/impl/luts/identity.png",
+    "src/helpers/impl/shaders/depthoffieldblur.frag",
+    "src/helpers/impl/shaders/depthoffieldblur.vert",
+    "src/helpers/impl/shaders/downsample.frag",
+    "src/helpers/impl/shaders/downsample.vert",
+    "src/helpers/impl/shaders/glowhorizontalblur.frag",
+    "src/helpers/impl/shaders/glowverticalblur.frag",
+    "src/helpers/impl/shaders/lensflareblurhorizontal.vert",
+    "src/helpers/impl/shaders/lensflareblurvertical.vert",
+    "src/helpers/impl/shaders/lensflaredownsample.frag",
+    "src/helpers/impl/shaders/lensflarefeatures.frag",
+    "src/helpers/impl/shaders/lensflaregaussianblur.frag",
+    "src/helpers/impl/shaders/tonemapper.frag",
+]
+
+qt_generate_qrc(
+    name = "helpersimpl_resources_qrc",
+    srcs = _HELPERSIMPL_RES_FILES,
+    out = "helpersimpl_resources.qrc",
+    prefix = "/qtquick3d_helpers",
+    strip_prefix = "src/helpers/impl",
+)
+
+qt_rcc_internal(
+    name = "helpersimpl_resources",
+    data = _HELPERSIMPL_RES_FILES,
+    qrc = ":helpersimpl_resources_qrc",
+    qrc_name = "helpersimpl_resources",
+)
+
+qt_internal_library(
+    name = "quick3dhelpersimpl",
+    srcs = [
+        "src/helpers/impl/qquick3drenderstatsmeshesmodel.cpp",
+        "src/helpers/impl/qquick3drenderstatspassesmodel.cpp",
+        "src/helpers/impl/qquick3drenderstatstexturesmodel.cpp",
+        "src/helpers/impl/sceneeffects.cpp",
+    ],
+    hdrs = glob(["src/helpers/impl/*.h"]),
+    copts = common_copts,
+    dynamic_deps = [
+        ":quick3d_shared",
+        ":runtimerender_shared",
+        ":utils_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+        "@qtshadertools//:shadertools_shared",
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@qtbase//:dbus_shared"],
+    }),
+    includes = ["src/helpers/impl"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DHELPERSIMPL_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QMLMETA_LIB",
+        "QT_QMLMODELS_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_hdrs = [
+        "src/helpers/impl/qquick3drenderstatsmeshesmodel_p.h",
+        "src/helpers/impl/qquick3drenderstatspassesmodel_p.h",
+        "src/helpers/impl/qquick3drenderstatstexturesmodel_p.h",
+        "src/helpers/impl/sceneeffects_p.h",
+    ],
+    qml_args = {
+        "uri": "QtQuick3D.Helpers.impl",
+        "major_version": "6",
+        "minor_version": "10",
+        "foreign_types": [
+            ":quick3d_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "qml_files": [
+            "src/helpers/impl/DepthOfFieldBlur.qml",
+            "src/helpers/impl/SceneEffect.qml",
+        ],
+        "qml_strip_prefix": "src/helpers/impl",
+        "qmldir_content": "module QtQuick3D.Helpers.impl\nlinktarget Qt6::qtquick3dhelpersimplplugin\nplugin qtquick3dhelpersimplplugin\nclassname QtQuick3DHelpersImplPlugin\ntypeinfo plugins.qmltypes\ndepends QtQuick3D auto\nprefer :/qt-project.org/imports/QtQuick3D/Helpers/impl/\nDepthOfFieldBlur 6.0 DepthOfFieldBlur.qml\nSceneEffect 6.0 SceneEffect.qml\n",
+    },
+    rcc_targets = [
+        ":helpersimpl_resources",
+    ],
+    deps = [
+        ":quick3d",
+        ":quick3dhelpersimpl_sync_headers",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qtquick3dhelpersimplplugin_src",
+    class_name = "QtQuick3DHelpersImplPlugin",
+    plugin_name = "qtquick3dhelpersimplplugin",
+    uri = "QtQuick3D.Helpers.impl",
+)
+
+qt_static_plugin(
+    name = "qtquick3dhelpersimplplugin",
+    srcs = [":qtquick3dhelpersimplplugin_src"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DHELPERSIMPL_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_opts = ["-Muri=QtQuick3D.Helpers.impl"],
+    moc_srcs = [":qtquick3dhelpersimplplugin_src"],
+    plugin_class_name = "QtQuick3DHelpersImplPlugin",
+    deps = [
+        ":qquick3dplugin",
+        ":quick3d",
+        ":quick3dhelpersimpl",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# 10. Quick3DHelpers (src/helpers) + qtquick3dhelpersplugin
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3dhelpersexports_h",
+    out = "generated_exports/qtquick3dhelpersexports.h",
+    module_infix = "QUICK3DHELPERS",
+)
+
+qt_depends_header(
+    name = "quick3dhelpers_depends_h",
+    out = "generated_exports/QtQuick3DHelpersDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQml",
+        "QtQuick",
+        "QtQuick3D",
+        "QtConcurrent",
+    ],
+)
+
+qt_sync_headers(
+    name = "quick3dhelpers_sync_headers",
+    hdrs = glob(["src/helpers/*.h"]),
+    generated_public_hdrs = [
+        ":qtquick3dhelpersexports_h",
+        ":quick3dhelpers_depends_h",
+    ],
+    module_name = "QtQuick3DHelpers",
+    source_dir = "src/helpers",
+    version = QT_VERSION,
+    deps = [
+        ":quick3d_sync_headers",
+        ":quick3dhelpersimpl_sync_headers",
+        ":runtimerender_sync_headers",
+        ":utils_sync_headers",
+        "@qtbase//:concurrent_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+    ],
+)
+
+qt_generate_qrc(
+    name = "helpers_meshes_qrc",
+    srcs = ["src/helpers/meshes/axisGrid.mesh"],
+    out = "helpers_meshes.qrc",
+    prefix = "/qt-project.org/imports/QtQuick3D/Helpers",
+    strip_prefix = "src/helpers",
+)
+
+qt_rcc_internal(
+    name = "helpers_meshes",
+    data = ["src/helpers/meshes/axisGrid.mesh"],
+    qrc = ":helpers_meshes_qrc",
+    qrc_name = "Quick3DHelpers_raw_qml_0",
+)
+
+qt_internal_library(
+    name = "quick3dhelpers",
+    srcs = [
+        "src/helpers/capsulegeometry.cpp",
+        "src/helpers/conegeometry.cpp",
+        "src/helpers/cuboidgeometry.cpp",
+        "src/helpers/cylindergeometry.cpp",
+        "src/helpers/extrudedtextgeometry.cpp",
+        "src/helpers/gridgeometry.cpp",
+        "src/helpers/heightfieldgeometry.cpp",
+        "src/helpers/infinitegrid.cpp",
+        "src/helpers/instancerepeater.cpp",
+        "src/helpers/lookatnode.cpp",
+        "src/helpers/planegeometry.cpp",
+        "src/helpers/proceduralmesh.cpp",
+        "src/helpers/proceduralskytexturedata.cpp",
+        "src/helpers/qquick3dtexturedatafrontend.cpp",
+        "src/helpers/randominstancing.cpp",
+        "src/helpers/spheregeometry.cpp",
+        "src/helpers/torusgeometry.cpp",
+    ],
+    hdrs = glob(["src/helpers/*.h"]),
+    copts = common_copts,
+    dynamic_deps = [
+        ":quick3d_shared",
+        ":quick3dhelpersimpl_shared",
+        ":runtimerender_shared",
+        ":utils_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+        "@qtshadertools//:shadertools_shared",
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@qtbase//:dbus_shared"],
+    }),
+    includes = ["src/helpers"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DHELPERS_LIB",
+        "QT_CONCURRENT_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QMLMETA_LIB",
+        "QT_QMLMODELS_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DHELPERSIMPL_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_hdrs = [
+        "src/helpers/capsulegeometry_p.h",
+        "src/helpers/conegeometry_p.h",
+        "src/helpers/cuboidgeometry_p.h",
+        "src/helpers/cylindergeometry_p.h",
+        "src/helpers/extrudedtextgeometry_p.h",
+        "src/helpers/gridgeometry_p.h",
+        "src/helpers/heightfieldgeometry_p.h",
+        "src/helpers/infinitegrid_p.h",
+        "src/helpers/instancerepeater_p.h",
+        "src/helpers/lookatnode_p.h",
+        "src/helpers/planegeometry_p.h",
+        "src/helpers/proceduralmesh_p.h",
+        "src/helpers/proceduralskytexturedata_p.h",
+        "src/helpers/qquick3dtexturedatafrontend_p.h",
+        "src/helpers/randominstancing_p.h",
+        "src/helpers/spheregeometry_p.h",
+        "src/helpers/torusgeometry_p.h",
+    ],
+    qml_args = {
+        "uri": "QtQuick3D.Helpers",
+        "major_version": "6",
+        "minor_version": "10",
+        "past_major_versions": ["1"],
+        "foreign_types": [
+            ":quick3d_moc_hdrs",
+            ":quick3dhelpersimpl_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "qml_files": [
+            "src/helpers/AxisHelper.qml",
+            "src/helpers/DebugView.qml",
+            "src/helpers/ExtendedSceneEnvironment.qml",
+            "src/helpers/LodManager.qml",
+            "src/helpers/OrbitCameraController.qml",
+            "src/helpers/WasdController.qml",
+        ],
+        "qml_strip_prefix": "src/helpers",
+        "qmldir_content": "module QtQuick3D.Helpers\nlinktarget Qt6::qtquick3dhelpersplugin\nplugin qtquick3dhelpersplugin\nclassname QtQuick3DHelpersPlugin\ndesignersupported\ntypeinfo plugins.qmltypes\ndepends QtQuick3D.Helpers.impl auto\ndepends QtQuick3D auto\nprefer :/qt-project.org/imports/QtQuick3D/Helpers/\nAxisHelper 6.0 AxisHelper.qml\nAxisHelper 1.0 AxisHelper.qml\nDebugView 6.0 DebugView.qml\nDebugView 1.0 DebugView.qml\nExtendedSceneEnvironment 6.0 ExtendedSceneEnvironment.qml\nExtendedSceneEnvironment 1.0 ExtendedSceneEnvironment.qml\nLodManager 6.0 LodManager.qml\nLodManager 1.0 LodManager.qml\nOrbitCameraController 6.0 OrbitCameraController.qml\nOrbitCameraController 1.0 OrbitCameraController.qml\nWasdController 6.0 WasdController.qml\nWasdController 1.0 WasdController.qml\n",
+    },
+    rcc_targets = [
+        ":helpers_meshes",
+    ],
+    deps = [
+        ":quick3d",
+        ":quick3dhelpers_sync_headers",
+        ":quick3dhelpersimpl",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:concurrent",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qtquick3dhelpersplugin_src",
+    class_name = "QtQuick3DHelpersPlugin",
+    plugin_name = "qtquick3dhelpersplugin",
+    uri = "QtQuick3D.Helpers",
+)
+
+qt_static_plugin(
+    name = "qtquick3dhelpersplugin",
+    srcs = [":qtquick3dhelpersplugin_src"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DHELPERS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_opts = ["-Muri=QtQuick3D.Helpers"],
+    moc_srcs = [":qtquick3dhelpersplugin_src"],
+    plugin_class_name = "QtQuick3DHelpersPlugin",
+    deps = [
+        ":qquick3dplugin",
+        ":qtquick3dhelpersimplplugin",
+        ":quick3d",
+        ":quick3dhelpers",
+        ":quick3dhelpersimpl",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# 11. Quick3DEffects (src/effects) + qtquick3deffectplugin
+# =============================================================================
+
+_EFFECTS_RES_FILES = [
+    "src/effects/maps/brushnoise.png",
+    "src/effects/maps/white.png",
+    "src/effects/shaders/additivecolorgradient.frag",
+    "src/effects/shaders/blend.frag",
+    "src/effects/shaders/blur.frag",
+    "src/effects/shaders/blurhorizontal.vert",
+    "src/effects/shaders/blurvertical.vert",
+    "src/effects/shaders/brushstrokes.frag",
+    "src/effects/shaders/chromaticaberration.frag",
+    "src/effects/shaders/colormaster.frag",
+    "src/effects/shaders/combiner.frag",
+    "src/effects/shaders/depthoffieldblur.frag",
+    "src/effects/shaders/depthoffieldblur.vert",
+    "src/effects/shaders/desaturate.frag",
+    "src/effects/shaders/distortion.vert",
+    "src/effects/shaders/distortionripple.frag",
+    "src/effects/shaders/distortionsphere.frag",
+    "src/effects/shaders/distortionspiral.frag",
+    "src/effects/shaders/downsample.frag",
+    "src/effects/shaders/downsample.vert",
+    "src/effects/shaders/downsampletiltshift.frag",
+    "src/effects/shaders/edgedetect.frag",
+    "src/effects/shaders/edgedetect.vert",
+    "src/effects/shaders/emboss.frag",
+    "src/effects/shaders/flip.frag",
+    "src/effects/shaders/fxaaBlur.frag",
+    "src/effects/shaders/fxaaRgbl.frag",
+    "src/effects/shaders/gaussianblur.frag",
+    "src/effects/shaders/luminosity.frag",
+    "src/effects/shaders/luminosity.vert",
+    "src/effects/shaders/motionblurhorizontal.frag",
+    "src/effects/shaders/motionblurhorizontal.vert",
+    "src/effects/shaders/motionblurvertical.frag",
+    "src/effects/shaders/motionblurvertical.vert",
+    "src/effects/shaders/poissonblur.frag",
+    "src/effects/shaders/poissonblur.vert",
+    "src/effects/shaders/poissonblurtiltshift.frag",
+    "src/effects/shaders/poissonblurtiltshift.vert",
+    "src/effects/shaders/scatter.frag",
+    "src/effects/shaders/scurvetonemap.frag",
+    "src/effects/shaders/vignette.frag",
+]
+
+qt_generate_qrc(
+    name = "qteffectlibrary_qrc",
+    srcs = _EFFECTS_RES_FILES,
+    out = "qteffectlibrary.qrc",
+    prefix = "/qtquick3deffects",
+    strip_prefix = "src/effects",
+)
+
+qt_rcc_internal(
+    name = "qteffectlibrary",
+    data = _EFFECTS_RES_FILES,
+    qrc = ":qteffectlibrary_qrc",
+    qrc_name = "qteffectlibrary",
+)
+
+qt_internal_library(
+    name = "quick3deffects",
+    copts = common_copts,
+    create_shared = False,
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DEFFECTS_LIB",
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    qml_args = {
+        "uri": "QtQuick3D.Effects",
+        "major_version": "6",
+        "minor_version": "10",
+        "qml_files": [
+            "src/effects/AdditiveColorGradient.qml",
+            "src/effects/Blur.qml",
+            "src/effects/BrushStrokes.qml",
+            "src/effects/ChromaticAberration.qml",
+            "src/effects/ColorMaster.qml",
+            "src/effects/DepthOfFieldHQBlur.qml",
+            "src/effects/Desaturate.qml",
+            "src/effects/DistortionRipple.qml",
+            "src/effects/DistortionSphere.qml",
+            "src/effects/DistortionSpiral.qml",
+            "src/effects/EdgeDetect.qml",
+            "src/effects/Emboss.qml",
+            "src/effects/Flip.qml",
+            "src/effects/Fxaa.qml",
+            "src/effects/GaussianBlur.qml",
+            "src/effects/HDRBloomTonemap.qml",
+            "src/effects/MotionBlur.qml",
+            "src/effects/SCurveTonemap.qml",
+            "src/effects/Scatter.qml",
+            "src/effects/TiltShift.qml",
+            "src/effects/Vignette.qml",
+        ],
+        "qml_strip_prefix": "src/effects",
+        "qmldir_content": "module QtQuick3D.Effects\nlinktarget Qt6::qtquick3deffectplugin\nplugin qtquick3deffectplugin\nclassname QtQuick3DEffectPlugin\ndesignersupported\ntypeinfo plugins.qmltypes\ndepends QtQuick3D auto\ndepends QtQuick.Window auto\nprefer :/qt-project.org/imports/QtQuick3D/Effects/\nAdditiveColorGradient 6.0 AdditiveColorGradient.qml\nBlur 6.0 Blur.qml\nBrushStrokes 6.0 BrushStrokes.qml\nChromaticAberration 6.0 ChromaticAberration.qml\nColorMaster 6.0 ColorMaster.qml\nDepthOfFieldHQBlur 6.0 DepthOfFieldHQBlur.qml\nDesaturate 6.0 Desaturate.qml\nDistortionRipple 6.0 DistortionRipple.qml\nDistortionSphere 6.0 DistortionSphere.qml\nDistortionSpiral 6.0 DistortionSpiral.qml\nEdgeDetect 6.0 EdgeDetect.qml\nEmboss 6.0 Emboss.qml\nFlip 6.0 Flip.qml\nFxaa 6.0 Fxaa.qml\nGaussianBlur 6.0 GaussianBlur.qml\nHDRBloomTonemap 6.0 HDRBloomTonemap.qml\nMotionBlur 6.0 MotionBlur.qml\nSCurveTonemap 6.0 SCurveTonemap.qml\nScatter 6.0 Scatter.qml\nTiltShift 6.0 TiltShift.qml\nVignette 6.0 Vignette.qml\n",
+    },
+    rcc_targets = [
+        ":qteffectlibrary",
+    ],
+    deps = [
+        ":quick3d",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "qtquick3deffectplugin_src",
+    class_name = "QtQuick3DEffectPlugin",
+    plugin_name = "qtquick3deffectplugin",
+    uri = "QtQuick3D.Effects",
+)
+
+qt_static_plugin(
+    name = "qtquick3deffectplugin",
+    srcs = [":qtquick3deffectplugin_src"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_opts = ["-Muri=QtQuick3D.Effects"],
+    moc_srcs = [":qtquick3deffectplugin_src"],
+    plugin_class_name = "QtQuick3DEffectPlugin",
+    deps = [
+        ":qquick3dplugin",
+        ":quick3d",
+        ":quick3deffects",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+        "@qtdeclarative//:quickwindow",
+    ],
+)
+
+# =============================================================================
+# 12. Quick3DIblBaker (src/iblbaker)
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3diblbakerexports_h",
+    out = "generated_exports/qtquick3diblbakerexports.h",
+    module_infix = "QUICK3DIBLBAKER",
+)
+
+qt_depends_header(
+    name = "iblbaker_depends_h",
+    out = "generated_exports/QtQuick3DIblBakerDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQuick",
+        "QtQuick3DRuntimeRender",
+    ],
+)
+
+qt_sync_headers(
+    name = "iblbaker_sync_headers",
+    hdrs = glob(["src/iblbaker/*.h"]),
+    generated_public_hdrs = [
+        ":iblbaker_depends_h",
+        ":qtquick3diblbakerexports_h",
+    ],
+    module_name = "QtQuick3DIblBaker",
+    source_dir = "src/iblbaker",
+    version = QT_VERSION,
+    deps = [
+        ":runtimerender_sync_headers",
+        ":utils_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "iblbaker",
+    srcs = ["src/iblbaker/qssgiblbaker.cpp"],
+    hdrs = glob(["src/iblbaker/*.h"]),
+    copts = common_copts,
+    dynamic_deps = [
+        ":runtimerender_shared",
+        ":utils_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+        "@qtshadertools//:shadertools_shared",
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@qtbase//:dbus_shared"],
+    }),
+    includes = ["src/iblbaker"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DIBLBAKER_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QMLMETA_LIB",
+        "QT_QMLMODELS_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK_LIB",
+    ],
+    deps = [
+        ":iblbaker_sync_headers",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# 13. Plugins: AssimpImporterPlugin (src/plugins/assetimporters/assimp)
+# =============================================================================
+
+qt_generate_qrc(
+    name = "assimp_plugin_qrc",
+    srcs = ["src/plugins/assetimporters/assimp/options.json"],
+    out = "assimp_plugin.qrc",
+    prefix = "/assimpimporter",
+    strip_prefix = "src/plugins/assetimporters/assimp",
+)
+
+qt_rcc_internal(
+    name = "assimp_plugin_res",
+    data = ["src/plugins/assetimporters/assimp/options.json"],
+    qrc = ":assimp_plugin_qrc",
+    qrc_name = "assimp",
+)
+
+qt_static_plugin(
+    name = "assimpimporterplugin",
+    srcs = [
+        "src/plugins/assetimporters/assimp/assimpimporter.cpp",
+        "src/plugins/assetimporters/assimp/assimpimporter_rt.cpp",
+        "src/plugins/assetimporters/assimp/assimpimporterplugin.cpp",
+        "src/plugins/assetimporters/assimp/assimputils.cpp",
+    ],
+    hdrs = [
+        "src/plugins/assetimporters/assimp/assimpimporter.h",
+        "src/plugins/assetimporters/assimp/assimpimporterplugin.h",
+        "src/plugins/assetimporters/assimp/assimputils.h",
+    ],
+    copts = common_copts + ["-fexceptions"],
+    includes = ["src/plugins/assetimporters/assimp"],
+    # QT_ASCII_CAST_WARNINGS only adds deprecation warnings, and this plugin
+    # relies on QString(const char *) (upstream marks it
+    # QT_SKIP_WARNINGS_ARE_ERRORS for the same reason).
+    local_defines = [
+        d
+        for d in common_local_defines
+        if d not in ("QT_ASCII_CAST_WARNINGS", "QT_NO_EXCEPTIONS")
+    ] + [
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DASSETIMPORT_LIB",
+        "QT_QUICK3DASSETUTILS_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+    ],
+    moc_hdrs = [
+        "src/plugins/assetimporters/assimp/assimpimporterplugin.h",
+    ],
+    plugin_class_name = "AssimpImporterPlugin",
+    rcc_targets = [":assimp_plugin_res"],
+    textual_hdrs = ["src/plugins/assetimporters/assimp/assimp.json"],
+    deps = [
+        ":assetimport",
+        ":assetutils_lib",
+        ":quick3d",
+        ":runtimerender",
+        ":utils",
+        "@assimp",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+qt_static_plugin(
+    name = "qmldbg_quick3dprofiler",
+    srcs = [
+        "src/plugins/qmldbg_quick3dprofiler/qquick3dprofileradapter.cpp",
+        "src/plugins/qmldbg_quick3dprofiler/qquick3dprofileradapterfactory.cpp",
+    ],
+    hdrs = [
+        "src/plugins/qmldbg_quick3dprofiler/qquick3dprofileradapter.h",
+        "src/plugins/qmldbg_quick3dprofiler/qquick3dprofileradapterfactory.h",
+    ],
+    copts = common_copts,
+    includes = ["src/plugins/qmldbg_quick3dprofiler"],
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_PACKETPROTOCOL_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_hdrs = [
+        "src/plugins/qmldbg_quick3dprofiler/qquick3dprofileradapter.h",
+        "src/plugins/qmldbg_quick3dprofiler/qquick3dprofileradapterfactory.h",
+    ],
+    plugin_class_name = "QQuick3DProfilerAdapterFactory",
+    textual_hdrs = ["src/plugins/qmldbg_quick3dprofiler/qquick3dprofileradapter.json"],
+    deps = [
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:packetprotocol",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# 13b. Quick3DXr (src/xr/quick3dxr) + quick3dxrplugin
+# =============================================================================
+
+qt_export_header(
+    name = "qtquick3dxrexports_h",
+    out = "generated_exports/qtquick3dxrexports.h",
+    module_infix = "QUICK3DXR",
+)
+
+qt_depends_header(
+    name = "quick3dxr_depends_h",
+    out = "generated_exports/QtQuick3DXrDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtQml",
+        "QtQuick",
+        "QtQuick3D",
+        "QtQuick3DRuntimeRender",
+        "QtQuick3DUtils",
+    ],
+)
+
+qt_sync_headers(
+    name = "quick3dxr_sync_headers",
+    hdrs = glob([
+        "src/xr/quick3dxr/*.h",
+        "src/xr/quick3dxr/openxr/*.h",
+    ]),
+    generated_private_hdrs = [
+        ":gen_qtquick3dxr_config_p_h",
+    ],
+    generated_public_hdrs = [
+        ":gen_qtquick3dxr_config_h",
+        ":qtquick3dxrexports_h",
+        ":quick3dxr_depends_h",
+    ],
+    module_name = "QtQuick3DXr",
+    source_dir = "src/xr/quick3dxr",
+    version = QT_VERSION,
+    deps = [
+        ":quick3d_sync_headers",
+        ":runtimerender_sync_headers",
+        ":utils_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+        "@qtdeclarative//:quick_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "quick3dxr",
+    srcs = [
+        "src/xr/quick3dxr/openxr/qabstractopenxrgraphics.cpp",
+        "src/xr/quick3dxr/openxr/qopenxrhelpers.cpp",
+        "src/xr/quick3dxr/openxr/qopenxrinputmanager.cpp",
+        "src/xr/quick3dxr/openxr/qquick3dxranchormanager_openxr.cpp",
+        "src/xr/quick3dxr/openxr/qquick3dxrmanager_openxr.cpp",
+        "src/xr/quick3dxr/qquick3dxrabstracthapticeffect.cpp",
+        "src/xr/quick3dxr/qquick3dxractionmapper.cpp",
+        "src/xr/quick3dxr/qquick3dxranimationdriver.cpp",
+        "src/xr/quick3dxr/qquick3dxrcamera.cpp",
+        "src/xr/quick3dxr/qquick3dxrcontroller.cpp",
+        "src/xr/quick3dxr/qquick3dxrhandinput.cpp",
+        "src/xr/quick3dxr/qquick3dxrhandmodel.cpp",
+        "src/xr/quick3dxr/qquick3dxrinputmanager.cpp",
+        "src/xr/quick3dxr/qquick3dxritem.cpp",
+        "src/xr/quick3dxr/qquick3dxrmanager.cpp",
+        "src/xr/quick3dxr/qquick3dxrorigin.cpp",
+        "src/xr/quick3dxr/qquick3dxrruntimeinfo.cpp",
+        "src/xr/quick3dxr/qquick3dxrspatialanchor.cpp",
+        "src/xr/quick3dxr/qquick3dxrspatialanchorlistmodel.cpp",
+        "src/xr/quick3dxr/qquick3dxrview.cpp",
+        "src/xr/quick3dxr/qquick3dxrvirtualmouse.cpp",
+    ] + select({
+        "@platforms//os:linux": [
+            "src/xr/quick3dxr/openxr/qopenxrgraphics_opengl.cpp",
+            "src/xr/quick3dxr/openxr/qopenxrgraphics_vulkan.cpp",
+        ],
+        "@platforms//os:macos": [
+            "src/xr/quick3dxr/openxr/qopenxrgraphics_metal.mm",
+            "src/xr/quick3dxr/openxr/qopenxrgraphics_vulkan.cpp",
+        ],
+        "@platforms//os:windows": [
+            "src/xr/quick3dxr/openxr/qopenxrgraphics_d3d11.cpp",
+            "src/xr/quick3dxr/openxr/qopenxrgraphics_d3d12.cpp",
+            "src/xr/quick3dxr/openxr/qopenxrgraphics_opengl.cpp",
+            "src/xr/quick3dxr/openxr/qopenxrgraphics_vulkan.cpp",
+        ],
+        "//conditions:default": [],
+    }),
+    hdrs = glob([
+        "src/xr/quick3dxr/*.h",
+        "src/xr/quick3dxr/openxr/*.h",
+    ]),
+    copts = common_copts + select({
+        "@platforms//os:macos": [
+            "-x",
+            "objective-c++",
+        ],
+        "//conditions:default": [],
+    }),
+    dynamic_deps = [
+        ":quick3d_shared",
+        ":runtimerender_shared",
+        ":utils_shared",
+        "@qtbase//:concurrent_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:opengl_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtdeclarative//:qmlmeta_shared",
+        "@qtdeclarative//:qmlmodels_shared",
+        "@qtdeclarative//:qmlworkerscript_shared",
+        "@qtdeclarative//:quick_shared",
+        "@qtshadertools//:shadertools_shared",
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@qtbase//:dbus_shared"],
+    }),
+    exports_filter = [":BundledOpenXR"],
+    includes = [
+        "src/xr/quick3dxr",
+        "src/xr/quick3dxr/openxr",
+    ],
+    linkopts = select({
+        "@platforms//os:macos": [
+            "-framework",
+            "Foundation",
+            "-framework",
+            "Metal",
+            "-framework",
+            "QuartzCore",
+        ],
+        "@platforms//os:windows": [
+            "-ld3d11",
+            "-ld3d12",
+            "-ldxgi",
+            "-lgdi32",
+            "-luser32",
+        ],
+        "//conditions:default": [],
+    }),
+    local_defines = common_local_defines + [
+        "QT_BUILD_QUICK3DXR_LIB",
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_OPENGL_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QMLMETA_LIB",
+        "QT_QMLMODELS_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ] + select({
+        "@platforms//os:linux": [
+            "XR_USE_GRAPHICS_API_OPENGL",
+            "XR_USE_GRAPHICS_API_VULKAN",
+            "XR_USE_PLATFORM_WAYLAND",
+        ],
+        "@platforms//os:macos": [
+            "XR_USE_GRAPHICS_API_METAL",
+            "XR_USE_GRAPHICS_API_VULKAN",
+        ],
+        "@platforms//os:windows": [
+            "XR_USE_GRAPHICS_API_D3D11",
+            "XR_USE_GRAPHICS_API_D3D12",
+            "XR_USE_GRAPHICS_API_OPENGL",
+            "XR_USE_GRAPHICS_API_VULKAN",
+            "XR_USE_PLATFORM_WIN32",
+        ],
+        "//conditions:default": [],
+    }),
+    moc_hdrs = [
+        "src/xr/quick3dxr/openxr/qopenxrinputmanager_p.h",
+        "src/xr/quick3dxr/openxr/qquick3dxranchormanager_openxr_p.h",
+        "src/xr/quick3dxr/qquick3dxrabstracthapticeffect_p.h",
+        "src/xr/quick3dxr/qquick3dxractionmapper_p.h",
+        "src/xr/quick3dxr/qquick3dxrcamera_p.h",
+        "src/xr/quick3dxr/qquick3dxrcontroller_p.h",
+        "src/xr/quick3dxr/qquick3dxrhandinput_p.h",
+        "src/xr/quick3dxr/qquick3dxrhandmodel_p.h",
+        "src/xr/quick3dxr/qquick3dxrinputmanager_p.h",
+        "src/xr/quick3dxr/qquick3dxritem_p.h",
+        "src/xr/quick3dxr/qquick3dxrmanager_p.h",
+        "src/xr/quick3dxr/qquick3dxrorigin_p.h",
+        "src/xr/quick3dxr/qquick3dxrruntimeinfo_p.h",
+        "src/xr/quick3dxr/qquick3dxrspatialanchor_p.h",
+        "src/xr/quick3dxr/qquick3dxrspatialanchorlistmodel_p.h",
+        "src/xr/quick3dxr/qquick3dxrview_p.h",
+        "src/xr/quick3dxr/qquick3dxrvirtualmouse_p.h",
+    ],
+    moc_srcs = [
+        "src/xr/quick3dxr/openxr/qquick3dxrmanager_openxr.cpp",
+    ],
+    moc_unity = True,
+    qml_args = {
+        "uri": "QtQuick3D.Xr",
+        "major_version": "6",
+        "minor_version": "10",
+        "foreign_types": [
+            ":quick3d_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "qml_files": [
+            "src/xr/quick3dxr/XrErrorDialog.qml",
+        ],
+        "qml_strip_prefix": "src/xr/quick3dxr",
+        "qmldir_content": "module QtQuick3D.Xr\nlinktarget Qt6::quick3dxrplugin\nplugin quick3dxrplugin\nclassname QtQuick3DXrPlugin\ntypeinfo plugins.qmltypes\ndepends QtQuick auto\ndepends QtQuick3D auto\nprefer :/qt-project.org/imports/QtQuick3D/Xr/\nXrErrorDialog 6.8 XrErrorDialog.qml\n",
+    },
+    deps = [
+        ":BundledOpenXR",
+        ":quick3d",
+        ":quick3dxr_sync_headers",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+qt_qml_plugin_gen(
+    name = "quick3dxrplugin_src",
+    class_name = "QtQuick3DXrPlugin",
+    plugin_name = "quick3dxrplugin",
+    uri = "QtQuick3D.Xr",
+)
+
+qt_static_plugin(
+    name = "quick3dxrplugin",
+    srcs = [":quick3dxrplugin_src"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DXR_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_opts = ["-Muri=QtQuick3D.Xr"],
+    moc_srcs = [":quick3dxrplugin_src"],
+    plugin_class_name = "QtQuick3DXrPlugin",
+    deps = [
+        ":qquick3dplugin",
+        ":quick3d",
+        ":quick3dxr",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+)
+
+# =============================================================================
+# 14. Host Tools (tools/)
+# =============================================================================
+
+cc_binary(
+    name = "balsam",
+    srcs = ["tools/balsam/main.cpp"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DASSETIMPORT_LIB",
+        "QT_QUICK3DIBLBAKER_LIB",
+    ],
+    deps = [
+        ":assetimport",
+        ":assimpimporterplugin",
+        ":iblbaker",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+moc_gen(
+    name = "balsamui_moc",
+    hdrs = [
+        "tools/balsamui/converterthread.h",
+        "tools/balsamui/inputtab.h",
+        "tools/balsamui/mainwindow.h",
+        "tools/balsamui/settingstab.h",
+    ],
+    copts = common_copts,
+    defines = common_local_defines + [
+        "QT_CONCURRENT_LIB",
+        "QT_GUI_LIB",
+        "QT_QUICK3DASSETIMPORT_LIB",
+        "QT_WIDGETS_LIB",
+    ],
+    includes = ["tools/balsamui"],
+    other_hdrs = ["tools/balsamui/inputlistview.h"],
+    target_srcs = [
+        "tools/balsamui/converterthread.cpp",
+        "tools/balsamui/inputlistview.cpp",
+        "tools/balsamui/inputtab.cpp",
+        "tools/balsamui/main.cpp",
+        "tools/balsamui/mainwindow.cpp",
+        "tools/balsamui/settingstab.cpp",
+    ],
+    deps = [
+        ":assetimport_sync_headers",
+        "@qtbase//:concurrent_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtbase//:widgets_sync_headers",
+    ],
+)
+
+cc_binary(
+    name = "balsamui",
+    srcs = [
+        "tools/balsamui/converterthread.cpp",
+        "tools/balsamui/converterthread.h",
+        "tools/balsamui/inputlistview.cpp",
+        "tools/balsamui/inputlistview.h",
+        "tools/balsamui/inputtab.cpp",
+        "tools/balsamui/inputtab.h",
+        "tools/balsamui/main.cpp",
+        "tools/balsamui/mainwindow.cpp",
+        "tools/balsamui/mainwindow.h",
+        "tools/balsamui/settingstab.cpp",
+        "tools/balsamui/settingstab.h",
+        ":balsamui_moc",
+    ],
+    copts = common_copts + moc_out_copts("balsamui_moc"),
+    includes = ["tools/balsamui"],
+    local_defines = common_local_defines + [
+        "QT_CONCURRENT_LIB",
+        "QT_GUI_LIB",
+        "QT_QUICK3DASSETIMPORT_LIB",
+        "QT_WIDGETS_LIB",
+    ],
+    deps = [
+        ":assetimport",
+        ":assimpimporterplugin",
+        "@qtbase//:concurrent",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:widgets",
+    ],
+)
+
+cc_binary(
+    name = "shadergen",
+    srcs = [
+        "tools/shadergen/genshaders.cpp",
+        "tools/shadergen/genshaders.h",
+        "tools/shadergen/main.cpp",
+        "tools/shadergen/parser.cpp",
+        "tools/shadergen/parser.h",
+    ],
+    copts = common_copts,
+    includes = ["tools/shadergen"],
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_SHADERTOOLS_LIB",
+    ],
+    deps = [
+        ":quick3d",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtshadertools//:shadertools",
+    ],
+)
+
+cc_binary(
+    name = "meshdebug",
+    srcs = ["tools/meshdebug/main.cpp"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DASSETIMPORT_LIB",
+        "QT_QUICK3DUTILS_LIB",
+    ],
+    deps = [
+        ":assetimport",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+cc_binary(
+    name = "instancer",
+    srcs = ["tools/instancer/main.cpp"],
+    copts = common_copts,
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+    ],
+    deps = [
+        ":quick3d",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+moc_gen(
+    name = "shapegen_moc",
+    hdrs = ["tools/shapegen/shapemanager.h"],
+    copts = common_copts,
+    defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DPARTICLES_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+    ],
+    includes = ["tools/shapegen"],
+    target_srcs = [
+        "tools/shapegen/main.cpp",
+        "tools/shapegen/shapemanager.cpp",
+    ],
+    deps = [
+        ":quick3d_sync_headers",
+        ":quick3dparticles_sync_headers",
+        ":runtimerender_sync_headers",
+        ":utils_sync_headers",
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+        "@qtdeclarative//:qml_sync_headers",
+    ],
+)
+
+cc_binary(
+    name = "shapegen",
+    srcs = [
+        "tools/shapegen/main.cpp",
+        "tools/shapegen/shapemanager.cpp",
+        "tools/shapegen/shapemanager.h",
+        ":shapegen_moc",
+    ],
+    copts = common_copts + moc_out_copts("shapegen_moc"),
+    includes = ["tools/shapegen"],
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DPARTICLES_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+    ],
+    deps = [
+        ":quick3d",
+        ":quick3dparticles",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+    ],
+)
+
+_MATERIALEDITOR_ASSETS = [
+    "tools/materialeditor/assets/icons/lightdirectional.png",
+    "tools/materialeditor/assets/icons/lightdirectional@2x.png",
+    "tools/materialeditor/assets/icons/lightpoint.png",
+    "tools/materialeditor/assets/icons/lightpoint@2x.png",
+    "tools/materialeditor/assets/icons/lightspot.png",
+    "tools/materialeditor/assets/icons/lightspot@2x.png",
+    "tools/materialeditor/assets/icons/texture.png",
+    "tools/materialeditor/assets/icons/texture@2x.png",
+    "tools/materialeditor/assets/images/noise.png",
+    "tools/materialeditor/assets/meshes/suzanne.mesh",
+    "tools/materialeditor/assets/skybox/OpenfootageNET_lowerAustria01-1024.hdr",
+]
+
+qt_generate_qrc(
+    name = "materialeditor_assets_qrc",
+    srcs = _MATERIALEDITOR_ASSETS,
+    out = "materialeditor_assets.qrc",
+    prefix = "/qt-project.org/imports/QtQuick3D/MaterialEditor",
+    strip_prefix = "tools/materialeditor",
+)
+
+qt_rcc_internal(
+    name = "materialeditor_assets",
+    data = _MATERIALEDITOR_ASSETS,
+    qrc = ":materialeditor_assets_qrc",
+    qrc_name = "materialeditor_assets",
+)
+
+qt_generate_qrc(
+    name = "materialeditor_conf_qrc",
+    srcs = ["tools/materialeditor/qtquickcontrols2.conf"],
+    out = "materialeditor_conf.qrc",
+    prefix = "/",
+    strip_prefix = "tools/materialeditor",
+)
+
+qt_rcc_internal(
+    name = "materialeditor_conf",
+    data = ["tools/materialeditor/qtquickcontrols2.conf"],
+    qrc = ":materialeditor_conf_qrc",
+    qrc_name = "materialeditor_conf",
+)
+
+qt_qsb(
+    name = "materialeditor_shaders",
+    srcs = ["tools/materialeditor/assets/shaders/frostedGlass.frag"],
+    prefix = "/qt-project.org/imports/QtQuick3D/MaterialEditor",
+    strip_prefix = "tools/materialeditor",
+)
+
+qt_internal_library(
+    name = "materialeditor_lib",
+    srcs = [
+        "tools/materialeditor/buildmessage.cpp",
+        "tools/materialeditor/custommaterial.cpp",
+        "tools/materialeditor/materialadapter.cpp",
+        "tools/materialeditor/message.cpp",
+        "tools/materialeditor/resourceclient.cpp",
+        "tools/materialeditor/resourceserver.cpp",
+        "tools/materialeditor/syntaxhighlighter.cpp",
+        "tools/materialeditor/uniformmodel.cpp",
+    ],
+    hdrs = [
+        "tools/materialeditor/buildmessage.h",
+        "tools/materialeditor/custommaterial.h",
+        "tools/materialeditor/materialadapter.h",
+        "tools/materialeditor/message.h",
+        "tools/materialeditor/resourceclient.h",
+        "tools/materialeditor/resourceserver.h",
+        "tools/materialeditor/syntaxhighlighter.h",
+        "tools/materialeditor/uniformmodel.h",
+    ],
+    copts = common_copts,
+    create_shared = False,
+    includes = ["tools/materialeditor"],
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DASSETUTILS_LIB",
+        "QT_QUICK3DGLSLPARSER_PRIVATE_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_hdrs = [
+        "tools/materialeditor/buildmessage.h",
+        "tools/materialeditor/materialadapter.h",
+        "tools/materialeditor/resourceclient.h",
+        "tools/materialeditor/resourceserver.h",
+        "tools/materialeditor/syntaxhighlighter.h",
+        "tools/materialeditor/uniformmodel.h",
+    ],
+    qml_args = {
+        "uri": "QtQuick3D.MaterialEditor",
+        "major_version": "1",
+        "minor_version": "0",
+        "foreign_types": [
+            ":quick3d_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "qml_files": [
+            "tools/materialeditor/AboutDialog.qml",
+            "tools/materialeditor/EditorView.qml",
+            "tools/materialeditor/FrostedGlass.qml",
+            "tools/materialeditor/InstancingPropertiesPane.qml",
+            "tools/materialeditor/MaterialPropertiesPane.qml",
+            "tools/materialeditor/Preview.qml",
+            "tools/materialeditor/PreviewControls.qml",
+            "tools/materialeditor/SaveChangesDialog.qml",
+            "tools/materialeditor/ShaderEditor.qml",
+            "tools/materialeditor/UniformManagerPane.qml",
+            "tools/materialeditor/main.qml",
+        ],
+        "qml_strip_prefix": "tools/materialeditor",
+        "qmldir_content": "module QtQuick3D.MaterialEditor\ntypeinfo materialeditor.qmltypes\nprefer :/qt-project.org/imports/QtQuick3D/MaterialEditor/\nAboutDialog 1.0 AboutDialog.qml\nEditorView 1.0 EditorView.qml\nFrostedGlass 1.0 FrostedGlass.qml\nInstancingPropertiesPane 1.0 InstancingPropertiesPane.qml\nMaterialPropertiesPane 1.0 MaterialPropertiesPane.qml\nPreview 1.0 Preview.qml\nPreviewControls 1.0 PreviewControls.qml\nSaveChangesDialog 1.0 SaveChangesDialog.qml\nShaderEditor 1.0 ShaderEditor.qml\nUniformManagerPane 1.0 UniformManagerPane.qml\nmain 1.0 main.qml\n",
+    },
+    rcc_targets = [
+        ":materialeditor_assets",
+        ":materialeditor_conf",
+        ":materialeditor_shaders",
+    ],
+    deps = [
+        ":assetutils",
+        ":glslparser",
+        ":quick3d",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:network",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+    alwayslink = True,
+)
+
+cc_binary(
+    name = "materialeditor",
+    srcs = ["tools/materialeditor/main.cpp"],
+    copts = common_copts,
+    includes = ["tools/materialeditor"],
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_NETWORK_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DASSETUTILS_LIB",
+        "QT_QUICK3DGLSLPARSER_PRIVATE_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    deps = [
+        ":assimpimporterplugin",
+        ":materialeditor_lib",
+        ":qquick3dplugin",
+        ":qtquick3dassetutilsplugin",
+        ":qtquick3dhelpersimplplugin",
+        ":qtquick3dhelpersplugin",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtbase//:network",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:qquicklayoutsplugin",
+        "@qtdeclarative//:qtlabsplatformplugin",
+        "@qtdeclarative//:qtqmlcoreplugin",
+        "@qtdeclarative//:qtquick2plugin",
+        "@qtdeclarative//:qtquickcontrols2basicstyleimplplugin",
+        "@qtdeclarative//:qtquickcontrols2basicstyleplugin",
+        "@qtdeclarative//:qtquickcontrols2implplugin",
+        "@qtdeclarative//:qtquickcontrols2plugin",
+        "@qtdeclarative//:qtquickdialogs2quickimplplugin",
+        "@qtdeclarative//:qtquickdialogsplugin",
+        "@qtdeclarative//:qtquicktemplates2plugin",
+        "@qtdeclarative//:quick",
+        "@qtdeclarative//:quickwindow",
+    ],
+)
+
+qt_generate_qrc(
+    name = "lightmapviewer_assets_qrc",
+    srcs = ["tools/lightmapviewer/grid.png"],
+    out = "lightmapviewer_assets.qrc",
+    prefix = "/qt-project.org/imports/QtQuick3D/lightmapviewer",
+    strip_prefix = "tools/lightmapviewer",
+)
+
+qt_rcc_internal(
+    name = "lightmapviewer_assets",
+    data = ["tools/lightmapviewer/grid.png"],
+    qrc = ":lightmapviewer_assets_qrc",
+    qrc_name = "lightmapviewer_assets",
+)
+
+qt_internal_library(
+    name = "lightmapviewer_lib",
+    srcs = [
+        "tools/lightmapviewer/lightmapfile.cpp",
+        "tools/lightmapviewer/lightmapimageprovider.cpp",
+        "tools/lightmapviewer/lightmapviewerhelpers.cpp",
+    ],
+    hdrs = [
+        "tools/lightmapviewer/lightmapfile.h",
+        "tools/lightmapviewer/lightmapimageprovider.h",
+        "tools/lightmapviewer/lightmapviewerhelpers.h",
+    ],
+    copts = common_copts,
+    create_shared = False,
+    includes = ["tools/lightmapviewer"],
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DASSETIMPORT_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    moc_hdrs = [
+        "tools/lightmapviewer/lightmapfile.h",
+    ],
+    qml_args = {
+        "uri": "QtQuick3D.lightmapviewer",
+        "major_version": "1",
+        "minor_version": "0",
+        "foreign_types": [
+            ":quick3d_moc_hdrs",
+            "@qtbase//:core_moc_hdrs",
+            "@qtbase//:gui_moc_hdrs",
+            "@qtdeclarative//:qml_moc_hdrs",
+            "@qtdeclarative//:quick_moc_hdrs",
+        ],
+        "qml_files": [
+            "tools/lightmapviewer/LightmapViewer.qml",
+        ],
+        "qml_strip_prefix": "tools/lightmapviewer",
+        "qmldir_content": "module QtQuick3D.lightmapviewer\ntypeinfo lightmapviewer.qmltypes\nprefer :/qt-project.org/imports/QtQuick3D/lightmapviewer/\nLightmapViewer 1.0 LightmapViewer.qml\n",
+    },
+    rcc_targets = [
+        ":lightmapviewer_assets",
+    ],
+    deps = [
+        ":assetimport",
+        ":quick3d",
+        ":runtimerender",
+        ":utils",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:quick",
+    ],
+    alwayslink = True,
+)
+
+cc_binary(
+    name = "lightmapviewer",
+    srcs = ["tools/lightmapviewer/lightmapviewer.cpp"],
+    copts = common_copts,
+    includes = ["tools/lightmapviewer"],
+    local_defines = common_local_defines + [
+        "QT_GUI_LIB",
+        "QT_QMLINTEGRATION_LIB",
+        "QT_QML_LIB",
+        "QT_QUICK3DASSETIMPORT_LIB",
+        "QT_QUICK3DRUNTIMERENDER_LIB",
+        "QT_QUICK3DUTILS_LIB",
+        "QT_QUICK3D_LIB",
+        "QT_QUICK_LIB",
+    ],
+    deps = [
+        ":lightmapviewer_lib",
+        ":qquick3dplugin",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+        "@qtdeclarative//:qquicklayoutsplugin",
+        "@qtdeclarative//:qtquick2plugin",
+        "@qtdeclarative//:qtquickcontrols2basicstyleimplplugin",
+        "@qtdeclarative//:qtquickcontrols2basicstyleplugin",
+        "@qtdeclarative//:qtquickcontrols2implplugin",
+        "@qtdeclarative//:qtquickcontrols2plugin",
+        "@qtdeclarative//:qtquickdialogs2quickimplplugin",
+        "@qtdeclarative//:qtquickdialogsplugin",
+        "@qtdeclarative//:qtquicktemplates2plugin",
+        "@qtdeclarative//:quick",
+        "@qtdeclarative//:quickwindow",
+    ],
+)

@@ -1,0 +1,64 @@
+--- a/src/message_conversions.cpp
++++ b/src/message_conversions.cpp
+@@ -538,13 +538,17 @@
+ template<>
+ bool isCompatible<std::string>( const QVariant &variant )
+ {
+-  return variant.canConvert<QString>();
++  return variant.isValid() && !variant.isNull() &&
++         !( variant.typeId() == QMetaType::QString && variant.toString().isNull() ) &&
++         variant.canConvert<QString>();
+ }
+ 
+ template<>
+ bool isCompatible<std::wstring>( const QVariant &variant )
+ {
+-  return variant.canConvert<QString>();
++  return variant.isValid() && !variant.isNull() &&
++         !( variant.typeId() == QMetaType::QString && variant.toString().isNull() ) &&
++         variant.canConvert<QString>();
+ }
+ 
+ template<>
+@@ -778,9 +782,17 @@
+     bool no_error = count == list.rowCount();
+     if constexpr ( SIZE != ArraySize::FIXED_LENGTH )
+       array.clear();
++    int value_role = Qt::DisplayRole;
++    const QHash<int, QByteArray> roleNames = list.roleNames();
++    for ( auto it = roleNames.constBegin(); it != roleNames.constEnd(); ++it ) {
++      if ( it.value() == "value" || it.value() == "display" ) {
++        value_role = it.key();
++        break;
++      }
++    }
+     for ( int i = 0, target_i = 0; i < list.rowCount() && target_i < count; ++i, ++target_i ) {
+       const QModelIndex &index = list.index( i, 0 );
+-      const QVariant &variant = list.data( index );
++      const QVariant &variant = list.data( index, value_role );
+       if ( !isCompatible<T>( variant ) ) {
+         QML_ROS2_PLUGIN_WARN(
+             "Tried to fill array of '%s' with incompatible value! Skipped. (Type: %s)",
+@@ -931,6 +943,10 @@
+                              ex.what() );
+       return false;
+     }
++  } else if ( value.canConvert<QObject *>() && value.value<QAbstractListModel *>() != nullptr ) {
++    return invoke_for_array_message( msg.as<ArrayMessageBase>(),
++                                     QAbstractListModelToMessageConverter{}, fish,
++                                     *value.value<QAbstractListModel *>() );
+   } else if ( value.canConvert<QVariantList>() && msg.type() == MessageTypes::Array ) {
+     try {
+       return invoke_for_array_message( msg.as<ArrayMessageBase>(), QVariantListToMessageConverter{},
+@@ -941,11 +957,6 @@
+       return false;
+     }
+   } else if ( value.canConvert<QObject *>() ) {
+-    const auto *list_model = value.value<QAbstractListModel *>();
+-    if ( list_model != nullptr ) {
+-      return invoke_for_array_message( msg.as<ArrayMessageBase>(),
+-                                       QAbstractListModelToMessageConverter{}, fish, *list_model );
+-    }
+ 
+     if ( msg.type() == MessageTypes::Compound ) {
+       const auto *obj = value.value<QObject *>();

@@ -1,0 +1,205 @@
+--- a/src/decoder.cpp
++++ b/src/decoder.cpp
+@@ -207,18 +207,16 @@
+ bool Decoder::initDecoder(const std::string & encoding, const std::string & decoder)
+ {
+   const AVCodec * codec = avcodec_find_decoder_by_name(decoder.c_str());
+-  if (!codec) {
+-    RCLCPP_WARN_STREAM(logger_, "decoder " << decoder << " cannot decode " << encoding);
+-    return (false);
+-  }
+-  // use the decoder if it either is software, or has working
+-  // hardware support
+-  const AVCodecHWConfig * hwConfig = nullptr;
+-  if (codec->capabilities & AV_CODEC_CAP_HARDWARE) {
+-    hwConfig = avcodec_get_hw_config(codec, 0);
+-    if (!hwConfig) {
+-      RCLCPP_INFO_STREAM(logger_, "ignoring decoder with no hardware config: " << decoder);
+-      return (false);
++  if (codec) {
++    // use the decoder if it either is software, or has working
++    // hardware support
++    const AVCodecHWConfig * hwConfig = nullptr;
++    if (codec->capabilities & AV_CODEC_CAP_HARDWARE) {
++      hwConfig = avcodec_get_hw_config(codec, 0);
++      if (!hwConfig) {
++        RCLCPP_INFO_STREAM(logger_, "ignoring decoder with no hardware config: " << decoder);
++        return (false);
++      }
+     }
+   }
+   if (!doInitDecoder(encoding, decoder)) {
+@@ -232,53 +230,52 @@
+   setEncoding(encoding);
+   try {
+     const AVCodec * codec = avcodec_find_decoder_by_name(decoder.c_str());
+-    if (!codec) {
+-      RCLCPP_ERROR_STREAM(logger_, "cannot find decoder " << decoder);
+-      throw(std::runtime_error("cannot find decoder " + decoder));
+-    }
+     codecContext_ = avcodec_alloc_context3(codec);
+     if (!codecContext_) {
+       RCLCPP_ERROR_STREAM(logger_, "alloc context failed for " + decoder);
+       codec = NULL;
+       throw(std::runtime_error("alloc context failed!"));
+     }
+-    av_opt_set_int(codecContext_, "refcounted_frames", 1, 0);
+-    enum AVHWDeviceType hwDevType = AV_HWDEVICE_TYPE_NONE;
+-    if (codec->capabilities & AV_CODEC_CAP_HARDWARE) {
+-      const AVCodecHWConfig * hwConfig = avcodec_get_hw_config(codec, 0);
+-      if (hwConfig) {
+-        hwDevType = hwConfig->device_type;
+-        RCLCPP_INFO_STREAM(
+-          logger_,
+-          "decoder " << decoder << " has hw accelerator: " << av_hwdevice_get_type_name(hwDevType));
++    if (codec) {
++      av_opt_set_int(codecContext_, "refcounted_frames", 1, 0);
++      enum AVHWDeviceType hwDevType = AV_HWDEVICE_TYPE_NONE;
++      if (codec->capabilities & AV_CODEC_CAP_HARDWARE) {
++        const AVCodecHWConfig * hwConfig = avcodec_get_hw_config(codec, 0);
++        if (hwConfig) {
++          hwDevType = hwConfig->device_type;
++          RCLCPP_INFO_STREAM(
++            logger_, "decoder " << decoder
++                                << " has hw accelerator: " << av_hwdevice_get_type_name(hwDevType));
++        } else {
++          RCLCPP_WARN_STREAM(logger_, "decoder " << decoder << " does not have hw acceleration!");
++        }
+       } else {
+-        RCLCPP_WARN_STREAM(logger_, "decoder " << decoder << " does not have hw acceleration!");
++        RCLCPP_INFO_STREAM(logger_, "decoder " << decoder << " has no hardware acceleration");
+       }
+-    } else {
+-      RCLCPP_INFO_STREAM(logger_, "decoder " << decoder << " has no hardware acceleration");
+-    }
+-    // default
+-    if (hwDevType != AV_HWDEVICE_TYPE_NONE) {
+-      codecContext_->hw_device_ctx = hw_decoder_init(&hwDeviceContext_, hwDevType, logger_);
+-      if (codecContext_->hw_device_ctx != NULL) {
+-        hwPixFormat_ = find_pix_format(hwDevType, codec);
+-        codecContext_->get_format = get_format;
++      // default
++      if (hwDevType != AV_HWDEVICE_TYPE_NONE) {
++        codecContext_->hw_device_ctx = hw_decoder_init(&hwDeviceContext_, hwDevType, logger_);
++        if (codecContext_->hw_device_ctx != NULL) {
++          hwPixFormat_ = find_pix_format(hwDevType, codec);
++          codecContext_->get_format = get_format;
++        }
+       }
+-    }
+-    codecContext_->pkt_timebase = timeBase_;
+-    std::stringstream ss;
+-    for (const auto & kv : avOptions_) {
+-      setAVOption(kv.first, kv.second);
+-      ss << " " << kv.first << "=" << kv.second;
+-    }
+-    RCLCPP_INFO(logger_, "using decoder %10s with options: %s", decoder.c_str(), ss.str().c_str());
+-
+-    if (avcodec_open2(codecContext_, codec, NULL) < 0) {
+-      av_free(codecContext_);
+-      codecContext_ = NULL;
+-      codec = NULL;
+-      hwPixFormat_ = AV_PIX_FMT_NONE;
+-      throw(std::runtime_error("open context failed for " + decoder));
++      codecContext_->pkt_timebase = timeBase_;
++      std::stringstream ss;
++      for (const auto & kv : avOptions_) {
++        setAVOption(kv.first, kv.second);
++        ss << " " << kv.first << "=" << kv.second;
++      }
++      RCLCPP_INFO(
++        logger_, "using decoder %10s with options: %s", decoder.c_str(), ss.str().c_str());
++
++      if (avcodec_open2(codecContext_, codec, NULL) < 0) {
++        av_free(codecContext_);
++        codecContext_ = NULL;
++        codec = NULL;
++        hwPixFormat_ = AV_PIX_FMT_NONE;
++        throw(std::runtime_error("open context failed for " + decoder));
++      }
+     }
+     swFrame_ = av_frame_alloc();
+     cpuFrame_ = (hwPixFormat_ == AV_PIX_FMT_NONE) ? NULL : av_frame_alloc();
+@@ -297,6 +294,9 @@
+   Lock lock(mutex_);
+   if (!codecContext_) {
+     return (false);
++  }
++  if (!codecContext_->codec) {
++    return (true);
+   }
+   int ret = avcodec_send_packet(codecContext_, nullptr);
+   if (ret != 0) {
+@@ -413,6 +413,72 @@
+       logger_, "no on-the fly encoding change from " << packetEncoding_ << " to " << encoding);
+     return (false);
+   }
++  if (!codecContext_->codec) {
++    struct RawFrameHeader {
++      uint32_t magic;
++      int32_t width;
++      int32_t height;
++      int32_t format;
++    };
++    if (size < sizeof(RawFrameHeader)) {
++      return (false);
++    }
++    RawFrameHeader hdr;
++    std::memcpy(&hdr, data, sizeof(RawFrameHeader));
++    if (hdr.magic != 0x4646524Du) {
++      return (false);
++    }
++    const auto srcFmt = static_cast<AVPixelFormat>(hdr.format);
++    AVPixelFormat dstFmt = srcFmt;
++    if (packetEncoding_.rfind("h264", 0) == 0 && srcFmt == AV_PIX_FMT_BGR24) {
++      dstFmt = AV_PIX_FMT_GBRP;
++    }
++    AVFrame * srcFrame = av_frame_alloc();
++    srcFrame->width = hdr.width;
++    srcFrame->height = hdr.height;
++    srcFrame->format = srcFmt;
++    av_image_fill_arrays(
++      srcFrame->data, srcFrame->linesize, data + sizeof(RawFrameHeader), srcFmt, hdr.width,
++      hdr.height, 1);
++
++    AVFrame * decFrame = av_frame_alloc();
++    decFrame->width = hdr.width;
++    decFrame->height = hdr.height;
++    decFrame->format = dstFmt;
++    av_image_alloc(decFrame->data, decFrame->linesize, hdr.width, hdr.height, dstFmt, 64);
++
++    if (srcFmt == dstFmt) {
++      av_image_copy(
++        decFrame->data, decFrame->linesize, const_cast<const uint8_t **>(srcFrame->data),
++        srcFrame->linesize, srcFmt, hdr.width, hdr.height);
++    } else {
++      SwsContext * tmpSws = sws_getContext(
++        hdr.width, hdr.height, srcFmt, hdr.width, hdr.height, dstFmt,
++        SWS_FAST_BILINEAR | SWS_ACCURATE_RND, NULL, NULL, NULL);
++      sws_scale(
++        tmpSws, srcFrame->data, srcFrame->linesize, 0, hdr.height, decFrame->data,
++        decFrame->linesize);
++      sws_freeContext(tmpSws);
++    }
++
++    ImagePtr image(new Image());
++    image->height = decFrame->height;
++    image->width = decFrame->width;
++    image->step = (sensor_msgs::image_encodings::bitDepth(outputMsgEncoding_) / 8) * image->width *
++                  sensor_msgs::image_encodings::numChannels(outputMsgEncoding_);
++    image->encoding = outputMsgEncoding_;
++    const int retc = convertFrameToMessage(decFrame, image);
++    av_freep(&decFrame->data[0]);
++    av_frame_free(&decFrame);
++    av_frame_free(&srcFrame);
++    if (retc != 0) {
++      return (false);
++    }
++    image->header.frame_id = frame_id;
++    image->header.stamp = stamp;
++    callback_(image, true, utils::pix(dstFmt));
++    return (true);
++  }
+   AVCodecContext * ctx = codecContext_;
+   AVPacket * packet = av_packet_alloc();
+   av_new_packet(packet, size);  // will add some padding!

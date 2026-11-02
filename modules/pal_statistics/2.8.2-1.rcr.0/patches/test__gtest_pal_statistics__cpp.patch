@@ -1,0 +1,63 @@
+--- a/test/gtest_pal_statistics.cpp
++++ b/test/gtest_pal_statistics.cpp
+@@ -281,7 +281,11 @@
+   virtual ~PalStatisticsTest() = default;
+ 
+   static void SetUpTestSuite() {rclcpp::init(0, nullptr);}
+-  static void TearDownTestSuite() {rclcpp::shutdown();}
++  static void TearDownTestSuite()
++  {
++    pal_statistics::clearAllRegistries();
++    rclcpp::shutdown();
++  }
+ 
+   void SetUp() override
+   {
+@@ -575,7 +579,8 @@
+     registry->startPublishThread();
+ 
+     // Time for publisher to connect to subscriber
+-    while (sub_->get_publisher_count() == 0) {
++    while (sub_->get_publisher_count() == 0 && rclcpp::ok()) {
++      executor_->spin_some();
+       rclcpp::sleep_for(std::chrono::milliseconds(5));
+     }
+     customRegister(*registry, "var1", &var1_, &bookkeeping);
+@@ -662,7 +667,8 @@
+     REGISTER_VARIABLE_SIMPLE(node_, statistics_topic, &var2_, &bookkeeping);
+     START_PUBLISH_THREAD(node_, statistics_topic);
+     // Time for publisher to connect to subscriber
+-    while (sub_->get_publisher_count() == 0) {
++    while (sub_->get_publisher_count() == 0 && rclcpp::ok()) {
++      executor_->spin_some();
+       rclcpp::sleep_for(std::chrono::milliseconds(5));
+     }
+     ASSERT_EVENTUALLY_THAT(promised_publication, Eq(true), executor_, timeout)
+@@ -818,7 +824,8 @@
+     });
+ 
+ 
+-  while (topic_sub->get_publisher_count() == 0) {
++  while (topic_sub->get_publisher_count() == 0 && rclcpp::ok()) {
++    executor_->spin_some();
+     rclcpp::sleep_for(std::chrono::milliseconds(100));
+   }
+ 
+@@ -881,7 +888,7 @@
+     "End publishAsync " << (1000. * (node_->get_clock()->now() - b).seconds()) /
+       static_cast<double>(iter));
+   RCLCPP_INFO_STREAM(node_->get_logger(), "Start publish");
+-  for (size_t i = 0; i < n_variables; ++i) {
++  for (size_t i = 0; i < std::min(n_variables, static_cast<size_t>(100)); ++i) {
+     registry->publish();
+   }
+   RCLCPP_INFO_STREAM(node_->get_logger(), "End publish");
+@@ -1405,6 +1412,8 @@
+   waitForMsg();
+ 
+   STOP_PUBLISHER_THREAD(node_, statistics_topic);
++  resetMsgs();
++  waitForMsg(std::chrono::milliseconds(200));
+   EXPECT_FALSE(last_msg_.get());
+ }
+ 

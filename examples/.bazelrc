@@ -39,6 +39,7 @@ common --test_env=RMW_IMPLEMENTATION="rmw_fastrtps_cpp"
 common --test_env=LD_LIBRARY_PATH=lib
 common --test_env=DYLD_LIBRARY_PATH=lib
 common --test_env=TMPDIR=/tmp
+common --test_env=QT_QPA_PLATFORM="offscreen"
 
 # Critical ROS environment variables needed at run-time.
 common --run_env=ROS_DISTRO="lyrical"
@@ -54,6 +55,10 @@ common --test_env=DISPLAY
 common --test_env=XAUTHORITY
 common --test_env=WAYLAND_DISPLAY
 
+# Without a console (as under Bazel on Windows) Qt routes qDebug/QTest output
+# to OutputDebugString, leaving test.log empty. Force it to stderr/stdout.
+common --test_env=QT_FORCE_STDERR_LOGGING=1
+
 # Our approach to message generation works on a per-message dependency
 # chain. We need to be able to merge messages into 
 common --incompatible_default_to_explicit_init_py
@@ -62,35 +67,18 @@ common --incompatible_default_to_explicit_init_py
 # keeping the build environment more hermetic.
 common --incompatible_strict_action_env
 
-# Use a shared cache for bazel builds, which speeds up CI builds.
-common --remote_cache=https://storage.googleapis.com/intrinsic-opensource-buildcache
-common --remote_cache_compression=true
-common --remote_upload_local_results=false
+# We don't support any Mac OS before 14.
+common --macos_minimum_os=14.0
 
-# CI specific options for performance/reliability tweaks -- safe to use
-# anywhere, requires no credentials (this is what forks get).
-common:ci --http_timeout_scaling=3.0
-common:ci --experimental_repository_downloader_retries=10
-common:ci --remote_cache_compression=false
-common:ci --nobuild_runfile_links
-common:ci --ui_event_filters=-INFO,-DEBUG
-
-# In CI we must to use the local modules, so that we can update the modules
-# in lock-step with the examples, and avoid two PRs per release.
-common:ci --registry=file:///%workspace%/..             \
-          --registry=file:///%workspace%/../bcr_staging \
-          --registry=https://bcr.bazel.build
-
-# Remote cache writing -- only usable where GCP credentials for the
-# upstream repo's build cache are actually available. See
-# .github/workflows/_check_distribution_examples.yml's "Authenticate to
-# Google Cloud" step, which only adds --config=ci-cache-write when it ran
-# (unlike workspace/.bazelrc, generated per-run by
-# //tools/ci:setup_workspace, this file is static, so the same
-# credentials gate has to be a separate config here rather than a
-# generator flag).
-common:ci-cache-write --remote_upload_local_results=true
-common:ci-cache-write --google_default_credentials
+# We support the following variants of ROS distributions. This allows you
+# to build or test the entire variant with a --config flag.
+common:all --target_pattern_file=ros-all.txt
+common:core --target_pattern_file=ros-core.txt
+common:base --target_pattern_file=ros-base.txt
+common:desktop --target_pattern_file=ros-desktop.txt
+common:desktop_full --target_pattern_file=ros-desktop_full.txt
+common:perception --target_pattern_file=ros-perception.txt
+common:simulation --target_pattern_file=ros-simulation.txt
 
 # Automatically pick configurations for the platform running bazel.
 # For example, macos on macos, linux on linux, etc.
@@ -100,7 +88,24 @@ common --enable_platform_specific_config
 # a resource issue shouldn't take down the whole bazel command.
 common --noexperimental_collect_system_network_usage
 
+# When running GUI tools each platform has a specific rendering engine for Qt.
+common:linux --run_env=QT_QPA_PLATFORM="xcb"
+common:macos --run_env=QT_QPA_PLATFORM="cocoa"
+common:windows --run_env=QT_QPA_PLATFORM="windows"
+
+# The @llvm toolchain enables -Wthread-safety by default; upstream Qt does not.
+# Clang's per-function analysis cannot follow locks returned by Qt's
+# qt_scoped_lock() or taken in VulkanMemoryAllocator's Lock()/Unlock()
+# wrappers, so Qt sources produce only false positives. Exec-config (tool)
+# compiles take --host_per_file_copt, so set both.
+common --per_file_copt=external/qt[^/]*[+]/.*@-Wno-thread-safety-analysis
+common --host_per_file_copt=external/qt[^/]*[+]/.*@-Wno-thread-safety-analysis
+
 ## BUILD OPTIONS
+
+# Just a small amount of compiler optimization leads to signficantly faster
+# simulation speeds. Do not remove this unless you absolutely need to.
+build --@llvm//config:fastbuild_optimization_mode=O1
 
 # Ensure that we always download all outputs, including the shared libraries
 # that are required at runtime for dlopen() calls.
@@ -128,6 +133,53 @@ build --@protobuf//bazel/toolchains:prefer_prebuilt_protoc
 # are used in several places around the ROS Bazel workspace/
 build --@llvm//config:experimental_stub_libgcc_s=True
 
+# The workspace builds all C++ universally as C++23 to guarantee a uniform
+# language standard and prevent C++ standard-level ABI incompatibilities across
+# targets. Set the language standard once for every C++ compile, in both the
+# target and exec (host tool) configurations. NEVER specify `-std=c++*` in
+# per-target `copts` or `cxxopts` inside `BUILD.bazel` files.
+build --cxxopt=-std=c++23
+build --host_cxxopt=-std=c++23
+
+# ==============================================================================
+# GPU / CUDA (opt-in: --config=cuda)
+# ==============================================================================
+# The default distribution build is CPU-only: @libtorch//:torch degrades to its
+# CPU backend and the Linux-only cuda_buffer* packages are skipped as
+# incompatible. --config=cuda compiles CUDA with the hermetic @llvm Clang (not
+# nvcc) against the hash-pinned CUDA redistributables configured in
+# MODULE.bazel (see tools/ci/setup_workspace.py:CUDA_REDIST_VERSION). No GPU or
+# driver is needed to build; binaries dlopen libcuda.so.1 at run time.
+build --repo_env=CUDA_COMPILER_USE_CC_TOOLCHAIN=true
+build --@rules_cuda//cuda:compiler=clang
+build --@rules_cuda//cuda:enable=False
+build:cuda --@rules_cuda//cuda:enable=True
+# The CUDA headers reject libc++ on x86 (crt/host_defines.h) unless this is
+# defined; the whole stack is Clang + libc++, so there is no ABI mix.
+build:cuda --@rules_cuda//cuda:copts=-D_ALLOW_UNSUPPORTED_LIBCPP
+# Clang can't detect the CUDA version from the nvcc redist (no cuda.h there),
+# so pin CUDA 12.8's PTX ISA (8.7). Update together with CUDA_REDIST_VERSION.
+build:cuda --@rules_cuda//cuda:copts=--cuda-feature=+ptx87
+build:cuda --@rules_cuda//cuda:copts=-Wno-unknown-cuda-version
+# Hopper (sm_90) cubins plus sm_90 PTX for newer GPUs to JIT. Override
+# --@rules_cuda//cuda:archs in user.bazelrc for your own GPU (e.g. sm_89), or
+# list several (sm_80;sm_86;sm_89;sm_90) for a portable build.
+build:cuda --@rules_cuda//cuda:archs=sm_90
+build:cuda --@rules_cuda//cuda:copts=--no-cuda-include-ptx=all
+build:cuda --@rules_cuda//cuda:copts=--cuda-include-ptx=sm_90
+build:cuda --@rules_cuda//cuda:copts=-Xcuda-fatbinary
+build:cuda --@rules_cuda//cuda:copts=--compress-all
+# ==============================================================================
+
+# rules_bison and rules_m4 ship a gnulib Windows configuration written for MSVC
+# (#pragma include_alias, mode_t/pid_t/ssize_t/off_t macro overrides, and
+# omitted C99 extern-inline instantiation units). When cross-compiling Linux
+# targets (xkbcommon) from a Windows host, bison and m4 are compiled for the
+# Windows exec platform with MinGW clang; pass the flags needed for gnulib's
+# MSVC config to compile and link under MinGW clang.
+build:windows --host_per_file_copt=external/rules_(bison|m4)[^/]*/.*@-fms-extensions,-D_MODE_T_,-D_PID_T_,-D_SSIZE_T_DEFINED,-D_GL_M4_SYS_TYPES_H,-D_GL_EXTERN_INLINE_STDHEADER_BUG
+build:windows --per_file_copt=external/rules_(bison|m4)[^/]*/.*@-fms-extensions,-D_MODE_T_,-D_PID_T_,-D_SSIZE_T_DEFINED,-D_GL_M4_SYS_TYPES_H,-D_GL_EXTERN_INLINE_STDHEADER_BUG
+
 # ld64's two-level namespace requires every undefined symbol in a .dylib to
 # be resolvable among the libraries passed directly to its link command.
 # Our rosidl-generated cc_shared_library targets commonly need symbols from
@@ -136,6 +188,18 @@ build --@llvm//config:experimental_stub_libgcc_s=True
 # we fall back to flat-namespace symbol lookup at load time instead.
 build:macos --linkopt=-Wl,-undefined,dynamic_lookup
 build:macos --host_linkopt=-Wl,-undefined,dynamic_lookup
+
+# Native Linux builds target glibc 2.34 on the host's CPU (see
+# platforms/BUILD.bazel). An unpinned Linux build carries
+# `libc:unconstrained`, which the @llvm toolchain maps to its 2.28 floor --
+# too old for the from-source Qt modules. macOS and Windows need no pin.
+build:linux --platforms=//platforms:linux
+
+# Tests run on the first execution platform matching *all* of the target
+# platform's constraints (@bazel_tools//tools/test:default_test_toolchain_type).
+# The auto-detected host platform doesn't carry the libc:gnu.2.34 pin, so
+# without this every test fails with "No matching toolchain found".
+build:linux --extra_execution_platforms=//platforms:linux
 
 # Our hermetic macOS toolchain passes clang's SDK header search path via
 # "-isysroot <execroot-relative path>" (see the `llvm` module's
@@ -167,9 +231,6 @@ build:macos --host_copt=-fno-implicit-module-maps
 build:macos --copt=-Wno-elaborated-enum-base
 build:macos --host_copt=-Wno-elaborated-enum-base
 
-# Fix memory pressure in CI workers, which leads to OOM errors.
-build:ci --jobs=4
-
 ## TEST OPTIONS
 
 # This restricts our test sandboxes from accessing the network, which is
@@ -178,11 +239,199 @@ build:ci --jobs=4
 #       in proceswrapper-sandbox and run 1 test at a time.
 test --sandbox_default_allow_network=false
 
-# Don't allow a flaky test to fail the entire run.
+# Every test's nodes run on this host, so restrict DDS discovery to localhost.
+# Both rmw_fastrtps_cpp and rmw_cyclonedds_cpp implement this by disabling
+# multicast and using unicast peer discovery against 127.0.0.1 (rmw_zenoh_cpp
+# ignores it). That is what makes inter-process tests work where multicast is
+# unavailable: inside darwin-sandbox (which only permits localhost traffic),
+# on macOS CI VMs, and on hosts where CycloneDDS would otherwise pick en0 over
+# lo0. On Linux, linux-sandbox already isolates loopback, so this is harmless
+# there and additionally keeps test traffic off the LAN.
+test --test_env=ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+
+# Give every test its own ROS_DOMAIN_ID. Tests run concurrently (as many as
+# the resource budget allows) in the platform's default sandbox, and
+# darwin-sandbox (macOS) and processwrapper-sandbox (Linux without user
+# namespaces, e.g. the GitHub runners and most containers) share the host
+# loopback, so without this concurrently running tests would discover each
+# other's nodes. Under linux-sandbox each test already has a private loopback
+# and the wrapper is harmless. A ROS_DOMAIN_ID set by the test itself wins.
+test --run_under=@rosdistro//python:run_test_isolated
+
+## STATIC compilation
+
+build:portable --@rosdistro//:rmw=rmw_cyclonedds_cpp
+build:portable -c opt
+build:portable --dynamic_mode=off
+build:portable --strip=always
+build:portable --copt=-Oz
+build:portable --copt=-ffunction-sections
+build:portable --copt=-fdata-sections
+build:portable --copt=-fno-asynchronous-unwind-tables
+build:portable --features=no_gdb_index
+build:portable --features=thin_lto
+build:portable --per_file_copt=\.pb\.cc$@-O3
+
+## SANITIZER OPTIONS
+
+# Address sanitizer
+common:asan --strip=never
+common:asan --@llvm//config:asan
+common:asan --copt -O0
+common:asan --copt -g
+common:asan --copt -fno-omit-frame-pointer
+test:asan --test_tag_filters=-noasan
+
+# Memory sanitizer
+common:msan --strip=never
+common:msan --@llvm//config:msan
+common:msan --copt -O0
+common:msan --copt -g
+common:msan --copt -fno-omit-frame-pointer
+test:msan --test_tag_filters=-nomsan
+
+# Thread sanitizer
+common:tsan --strip=never
+common:tsan --@llvm//config:tsan
+common:tsan --copt -O0
+common:tsan --copt -g
+common:tsan --copt -fno-omit-frame-pointer
+test:tsan --test_tag_filters=-notsan
+
+# Undefined Behavior sanitizer
+common:ubsan --strip=never
+common:ubsan --@llvm//config:ubsan
+common:ubsan --copt -O0
+common:ubsan --copt -g
+common:ubsan --copt -fno-omit-frame-pointer
+test:ubsan --test_tag_filters=-noubsan
+
+# Real-time sanitizer
+common:rtsan --strip=never
+common:rtsan --@llvm//config:rtsan
+common:rtsan --copt -O0
+common:rtsan --copt -g
+common:rtsan --copt -fno-omit-frame-pointer
+test:rtsan --test_tag_filters=-nortsan
+
+# Fuzzing
+common:fuzztest --config=asan
+common:fuzztest --config=ubsan
+common:fuzztest --dynamic_mode=off
+common:fuzztest --copt=-fsanitize-coverage=inline-8bit-counters,trace-cmp,pc-table
+common:fuzztest --@llvm//config:sanitizer_strip_foreign_source_paths
+test:fuzztest --test_tag_filters=-nofuzztest
+
+## CI OPTIONS
+
+# Registries in this checkout, so module changes and the examples that use
+# them can land in the same PR without the modules being published first.
+# --registry accumulates, so these are searched after the registries set in
+# the common config above.
+common:ci --registry=file:///%workspace%/..
+common:ci --registry=file:///%workspace%/../bcr_staging
+common:ci --registry=https://bcr.bazel.build
+
+# Triple every HTTP timeout used when downloading external repositories.
+common:ci --http_timeout_scaling=3.0
+
+# Retry a repository download up to 10 times on transient network errors.
+common:ci --experimental_repository_downloader_retries=10
+
+# Disable the unpacked repository contents cache inside --repository_cache
+# so CI caches only store compressed archives.
+common:ci --repo_contents_cache=
+
+# Send blobs to and from the remote cache uncompressed, overriding the
+# common config's --remote_cache_compression=true.
+common:ci --remote_cache_compression=false
+
+# Don't build runfiles symlink trees for every binary; Bazel still creates
+# them when a target is run or tested. Applied everywhere (not just CI):
+# the ament_index-shaped runfiles trees are large, and building one per
+# binary consumes a lot of inodes for no benefit until the target is run.
+common --nobuild_runfile_links
+
+# Hide INFO and DEBUG messages from the console; warnings and errors still
+# print. This includes "Build completed successfully", so check the exit
+# code instead.
+common:ci --ui_event_filters=-INFO,-DEBUG
+
+# Schedule local actions by the runner's actual resources instead of a fixed
+# job count: let Bazel use every core, but cap the memory it hands out to
+# concurrent actions at half of RAM. The other half is for the Bazel server
+# itself, whose JVM heap the CI workflows pin explicitly (-Xmx via
+# setup-bazel's bazelrc input, per runner OS) since startup options can't be
+# made per-platform here.
+build:ci --local_resources=memory=HOST_RAM*.5
+build:ci --local_resources=cpu=HOST_CPUS
+
+# Re-run a failing test up to 3 times; it passes (marked FLAKY) if any
+# attempt passes.
 test:ci --flaky_test_attempts=3
 
-# Limit local test concurrency on CI to prevent resource starvation, as
-# well as destructive interference between tests.
-test:ci --local_test_jobs=1
-test:ci --test_strategy=exclusive
-test:ci --strategy=TestRunner=standalone
+## CI CACHE WRITE OPTIONS
+#
+# Only usable where GCP credentials for the upstream repo's build cache are
+# available. .github/workflows/_check_distribution_examples.yml adds
+# --config=ci-cache-write only after its "Authenticate to Google Cloud" step
+# has run, which it skips on forks. Forks keep the common config's anonymous,
+# read-only cache access instead of failing on a write they can't make.
+# (workspace/.bazelrc is generated per run by //tools/ci:setup_workspace, which
+# takes a --remote-cache-write flag instead; this file is static, so the same
+# gate has to be a separate config.)
+
+# Upload the outputs of locally executed actions to the remote cache.
+common:ci-cache-write --remote_upload_local_results=true
+
+# Authenticate to the remote cache with Google Application Default
+# Credentials (the credentials file the auth step creates).
+common:ci-cache-write --google_default_credentials
+
+# ==============================================================================
+# WARNING: PER-FILE C++ STANDARD EXCEPTIONS
+# ==============================================================================
+# Mixing C++ standards across translation units risks subtle ODR and ABI
+# incompatibilities. Do NOT add entries here unless an upstream or third-party
+# package uses language or standard-library constructs that were hard-removed in
+# C++20/C++23 and cannot be cleanly patched in source. Every exception below
+# MUST document the exact symbol/construct and reason it cannot compile as C++23:
+#
+# 1. @fastdds (eProsima Fast-DDS 3.4.2):
+#    Reason: `include/fastdds/utils/collections/impl/node-sizes/FixedSizeQueue.hpp`
+#    invokes `std::allocator<T>::construct()` and `std::allocator<T>::destroy()`,
+#    which were deprecated in C++17 and removed in C++20 (`libc++` gates them
+#    strictly behind `#if _LIBCPP_STD_VER <= 17`).
+build --per_file_copt=external/.*fastdds.*@-std=c++17
+build --host_per_file_copt=external/.*fastdds.*@-std=c++17
+#
+# 2. @popf (POPF PDDL planner 0.0.20):
+#    Reason: Legacy 2010 C++98/03 codebase (`src/VALfiles/`, `src/popf/`) that
+#    heavily relies on `std::auto_ptr`, `std::unary_function`, `std::binary_function`,
+#    `std::bind1st`, `std::bind2nd`, `std::ptr_fun`, and `std::mem_fun`, which
+#    were removed from `<functional>`/`<memory>` in C++17/C++20.
+build --per_file_copt=external/.*popf.*@-std=c++17
+build --host_per_file_copt=external/.*popf.*@-std=c++17
+#
+# 3. @gz-sim (Gazebo Sim 10.5.0):
+#    Reason: 31 system plugin headers (`src/systems/*/*.hh`) declare inline
+#    `~Plugin() override = default;` while holding `std::unique_ptr<PluginPrivate>`
+#    to an incomplete forward-declared PIMPL class. In C++23 (`P2273R3`),
+#    `std::unique_ptr::~unique_ptr()` became `constexpr`, forcing eager template
+#    instantiation of `std::default_delete<PluginPrivate>` at the class definition
+#    point and failing `static_assert(sizeof(_Tp) >= 0)`.
+build --per_file_copt=external/.*gz-sim.*@-std=c++20
+build --host_per_file_copt=external/.*gz-sim.*@-std=c++20
+
+# Pin the action environment that --incompatible_strict_action_env produces.
+# Bazel 10 changed its defaults (LC_CTYPE=C.UTF-8 on all OSes, plus
+# PATH=/bin:/usr/bin:/sbin:/usr/sbin vs. /bin:/usr/bin:/usr/local/bin on Unix
+# in Bazel 9). The environment is part of every action's cache key, so without
+# this pin the 9.x and last_rc CI jobs cannot share a disk cache. Exec-config
+# (tool) actions take --host_action_env, so pin both.
+common --action_env=LC_CTYPE=C.UTF-8
+common --host_action_env=LC_CTYPE=C.UTF-8
+common:linux --action_env=PATH=/bin:/usr/bin:/usr/local/bin
+common:linux --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin
+common:macos --action_env=PATH=/bin:/usr/bin:/usr/local/bin
+common:macos --host_action_env=PATH=/bin:/usr/bin:/usr/local/bin

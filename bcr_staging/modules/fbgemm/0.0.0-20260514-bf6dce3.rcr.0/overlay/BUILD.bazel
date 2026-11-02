@@ -1,0 +1,212 @@
+# Bazel build of FBGEMM's CPU library (CMakeLists.txt), as PyTorch builds it
+# (static, FBGEMM_STATIC): the generic sources, and per CPU the kernels that
+# FBGEMM picks at runtime: AVX2 and AVX-512 on x86_64, NEON and SVE on
+# AArch64. The source lists come from defs.bzl, which the CMake build reads
+# too. (Replaces the repository's own BUILD.bazel, which only builds on
+# linux-x86_64.)
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load(
+    ":defs.bzl",
+    "get_fbgemm_autovec_srcs",
+    "get_fbgemm_avx2_srcs",
+    "get_fbgemm_avx512_srcs",
+    "get_fbgemm_generic_srcs",
+    "get_fbgemm_inline_avx2_srcs",
+    "get_fbgemm_inline_avx512_srcs",
+    "get_fbgemm_inline_neon_srcs",
+    "get_fbgemm_inline_sve_srcs",
+    "get_fbgemm_public_headers",
+)
+
+package(default_applicable_licenses = [":license"])
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:BSD-3-Clause"],
+    license_text = "LICENSE",
+)
+
+exports_files(["LICENSE"])
+
+config_setting(
+    name = "macos_arm64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+cc_library(
+    name = "fbgemm_headers",
+    hdrs = get_fbgemm_public_headers(),
+    defines = ["FBGEMM_STATIC"],
+    includes = ["include"],
+    visibility = ["//visibility:public"],
+)
+
+# fbgemm_arm_defs: the reference FP16/FP32 kernels instead of x86 assembly,
+# and Arm's KleidiAI kernels (except on macOS).
+_ARM_DEFINES = select({
+    ":macos_arm64": [
+        "FBGEMM_FP16_FALLBACK_TO_REF_KERNEL",
+        "FBGEMM_FP32_FALLBACK_TO_REF_KERNEL",
+    ],
+    "@platforms//cpu:aarch64": [
+        "FBGEMM_ENABLE_KLEIDIAI",
+        "FBGEMM_FP16_FALLBACK_TO_REF_KERNEL",
+        "FBGEMM_FP32_FALLBACK_TO_REF_KERNEL",
+    ],
+    "//conditions:default": [],
+})
+
+_PRIVATE_HDRS = glob([
+    "src/**/*.h",
+    "bench/*.h",
+])
+
+_DEPS = [
+    ":fbgemm_headers",
+    "@asmjit",
+    "@cpuinfo",
+]
+
+# The FP16/FP32 micro-kernels' inline assembly is in Intel syntax.
+_INTEL_ASM_SRCS = [
+    "src/FbgemmFP16UKernelsAvx2.cc",
+    "src/FbgemmFP16UKernelsAvx512.cc",
+    "src/FbgemmFP16UKernelsAvx512_256.cc",
+    "src/fp32/FbgemmFP32UKernelsAvx2.cc",
+    "src/fp32/FbgemmFP32UKernelsAvx512.cc",
+    "src/fp32/FbgemmFP32UKernelsAvx512_256.cc",
+]
+
+# The sources of each target ([] off its CPU), and its compiler flags (the
+# Intel-syntax sources are in fbgemm_<ISA>_intel_asm).
+_TARGETS = {
+    "fbgemm_generic": (
+        get_fbgemm_generic_srcs(with_base = True),
+        select({
+            "@platforms//cpu:x86_64": ["-mf16c"],
+            "//conditions:default": [],
+        }),
+    ),
+    "fbgemm_avx2": (
+        select({
+            "@platforms//cpu:x86_64": [
+                src
+                for src in get_fbgemm_avx2_srcs() + get_fbgemm_inline_avx2_srcs()
+                if src not in _INTEL_ASM_SRCS
+            ],
+            "//conditions:default": [],
+        }),
+        [
+            "-m64",
+            "-mavx2",
+            "-mf16c",
+            "-mfma",
+        ],
+    ),
+    "fbgemm_avx512": (
+        select({
+            "@platforms//cpu:x86_64": [
+                src
+                for src in get_fbgemm_avx512_srcs() + get_fbgemm_inline_avx512_srcs()
+                if src not in _INTEL_ASM_SRCS
+            ],
+            "//conditions:default": [],
+        }),
+        [
+            "-m64",
+            "-mavx2",
+            "-mavx512bf16",
+            "-mavx512bw",
+            "-mavx512dq",
+            "-mavx512f",
+            "-mavx512vl",
+            "-mf16c",
+            "-mfma",
+        ],
+    ),
+    "fbgemm_neon": (
+        select({
+            "@platforms//cpu:aarch64": get_fbgemm_inline_neon_srcs(),
+            "//conditions:default": [],
+        }),
+        ["-march=armv8.2-a+fp16fml"],
+    ),
+    # Clang >= 17 has arm_neon_sve_bridge.h. Not on macOS, as upstream (whose
+    # CMake does not match Apple's "arm64"): Apple CPUs have no SVE, and the
+    # kernels' inline assembly uses ELF local labels.
+    "fbgemm_sve": (
+        select({
+            ":macos_arm64": [],
+            "@platforms//cpu:aarch64": get_fbgemm_inline_sve_srcs(),
+            "//conditions:default": [],
+        }),
+        [
+            "-Wno-asm-operand-widths",
+            "-Wno-inline-asm",
+            "-march=armv8-a+sve2",
+        ],
+    ),
+    "fbgemm_autovec": (
+        get_fbgemm_autovec_srcs(),
+        [],
+    ),
+}
+
+[
+    cc_library(
+        name = name,
+        srcs = srcs + _PRIVATE_HDRS,
+        copts = ["-std=c++20"] + copts,
+        includes = [
+            ".",
+            "bench",
+            "src",
+        ],
+        local_defines = _ARM_DEFINES,
+        deps = _DEPS,
+    )
+    for name, (srcs, copts) in _TARGETS.items()
+]
+
+[
+    cc_library(
+        name = "fbgemm_{}_intel_asm".format(target),
+        srcs = select({
+            "@platforms//cpu:x86_64": [src for src in _INTEL_ASM_SRCS if src in sources],
+            "//conditions:default": [],
+        }) + _PRIVATE_HDRS,
+        copts = ["-std=c++20"] + copts + ["-masm=intel"],
+        includes = [
+            ".",
+            "bench",
+            "src",
+        ],
+        deps = _DEPS,
+    )
+    for target, sources, copts in [
+        (
+            "avx2",
+            get_fbgemm_inline_avx2_srcs(),
+            _TARGETS["fbgemm_avx2"][1],
+        ),
+        (
+            "avx512",
+            get_fbgemm_inline_avx512_srcs(),
+            _TARGETS["fbgemm_avx512"][1],
+        ),
+    ]
+]
+
+cc_library(
+    name = "fbgemm",
+    visibility = ["//visibility:public"],
+    deps = [":" + name for name in _TARGETS] + [
+        ":fbgemm_avx2_intel_asm",
+        ":fbgemm_avx512_intel_asm",
+        ":fbgemm_headers",
+    ],
+)

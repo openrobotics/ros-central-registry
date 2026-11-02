@@ -60,9 +60,25 @@ VARIANT_CHOICES = sorted(VARIANT_KEY_BY_NAME)
 
 
 def declared_module_names(module_dot_bazel: Path, modules_dir: Path) -> set:
+    """Every bazel_dep in the workspace, RCR packages and BCR modules alike."""
     return set(
         scan_module_for_dependencies(
             module_dot_bazel, modules_dir, include_bcr=True, include_rcr=True
+        ).keys()
+    )
+
+
+def declared_rcr_module_names(module_dot_bazel: Path, modules_dir: Path) -> set:
+    """
+    Only the bazel_deps that are RCR packages (i.e. have a modules/<name>/
+    directory in this registry). This is what --all expands to: BCR modules
+    such as `platforms` or `rules_cc` are not something you'd vendor to edit
+    in place, and Bazel doesn't even materialize some of them (e.g.
+    `platforms`) under --vendor_dir.
+    """
+    return set(
+        scan_module_for_dependencies(
+            module_dot_bazel, modules_dir, include_bcr=False, include_rcr=True
         ).keys()
     )
 
@@ -108,7 +124,8 @@ def resolve_modules(
     """
     Combines explicit module names, --variant selections, and/or --all
     into a single deduplicated, order-preserving list of module names to
-    vendor.
+    vendor. For --all, `declared` should be the RCR-only set (see
+    declared_rcr_module_names).
     """
     if vendor_all:
         return sorted(declared)
@@ -116,6 +133,19 @@ def resolve_modules(
     for variant in variants:
         modules += modules_for_variant(target_workspace, variant)
     return list(dict.fromkeys(modules))
+
+
+def vendored_module_dir(target_workspace: Path, module: str) -> Path:
+    return target_workspace / "vendor" / f"{module}+"
+
+
+def was_vendored(target_workspace: Path, module: str) -> bool:
+    """
+    Whether `bazel vendor` actually materialized this module. Bazel quietly
+    skips some repos it won't vendor (built-in modules like `platforms`),
+    and still reports success for the overall command.
+    """
+    return (vendored_module_dir(target_workspace, module) / "MODULE.bazel").is_file()
 
 
 def write_vendor_manifest(target_workspace: Path, module: str) -> None:
@@ -182,6 +212,33 @@ def ensure_vendor_dir_flag(bazelrc: Path) -> None:
         f.write(f"\n{VENDOR_DIR_RC_LINE}\n")
 
 
+def clear_vendored_module(target_workspace: Path, module: str) -> bool:
+    """
+    Removes a previously vendored copy of `module` (its vendor/<module>+/
+    tree and vendor/@<module>+.marker) so the following `bazel vendor`
+    re-extracts it from the registry's *current* content.
+
+    `bazel vendor` keys its "already vendored, nothing to do" check on the
+    marker file, which can stay stale after modules/<module>/<version>/
+    changed on disk (e.g. create_patch amended a branch-only version in
+    place). Bazel then silently ignores the vendored tree and builds from
+    the registry copy instead, so in-place edits appear to have no effect.
+    Re-vendoring is documented as resetting the module anyway, so always
+    start from a clean slate. Returns True if anything was removed.
+    """
+    vendor_dir = target_workspace / "vendor"
+    removed = False
+    module_dir = vendor_dir / f"{module}+"
+    marker = vendor_dir / f"@{module}+.marker"
+    if module_dir.exists():
+        shutil.rmtree(module_dir)
+        removed = True
+    if marker.exists():
+        marker.unlink()
+        removed = True
+    return removed
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Vendor a set of modules into a Bazel workspace for "
@@ -237,10 +294,12 @@ def main():
         sys.exit(1)
 
     declared = declared_module_names(module_dot_bazel, workspace_root / "modules")
+    declared_rcr = declared_rcr_module_names(module_dot_bazel, workspace_root / "modules")
 
     try:
         modules = resolve_modules(
-            args.modules, args.variant, args.all, target_workspace, declared
+            args.modules, args.variant, args.all, target_workspace,
+            declared_rcr if args.all else declared,
         )
     except FileNotFoundError as e:
         print(
@@ -261,19 +320,37 @@ def main():
 
     ensure_vendor_dir_flag(bazelrc)
 
+    for module in modules:
+        if clear_vendored_module(target_workspace, module):
+            print(f"Discarding previously vendored {module} (re-vendoring from current modules/).")
+
     cmd = ["bazel", "vendor", "--vendor_dir=vendor"]
     cmd += [f"--repo=@{m}" for m in modules]
     print(f"Vendoring {', '.join(modules)} into "
           f"{target_workspace / 'vendor'}...")
     subprocess.run(cmd, cwd=target_workspace, check=True)
 
+    skipped = []
     for module in modules:
+        if not was_vendored(target_workspace, module):
+            # `bazel vendor` reports success even for repos it declines to
+            # materialize (e.g. the built-in `platforms` module); don't let
+            # one of those abort the bookkeeping for everything after it.
+            skipped.append(module)
+            continue
         write_vendor_manifest(target_workspace, module)
         version = read_module_version(
-            target_workspace / "vendor" / f"{module}+" / "MODULE.bazel", module
+            vendored_module_dir(target_workspace, module) / "MODULE.bazel", module
         )
         write_package_manifest(target_workspace, workspace_root / "modules", module, version)
         write_vendor_snapshot(target_workspace, module)
+
+    if skipped:
+        print(
+            f"Warning: bazel vendor did not materialize {', '.join(skipped)} "
+            f"under {target_workspace / 'vendor'}; skipped.",
+            file=sys.stderr,
+        )
 
     print(
         "Done. Edit sources under "

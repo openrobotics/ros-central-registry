@@ -1,0 +1,79 @@
+--- a/test/test_transform_listener.cpp
++++ b/test/test_transform_listener.cpp
+@@ -229,6 +229,33 @@
+   custom_node->init_static_tf_listener();
+ }
+ 
++// Keep re-publishing the dynamic transform and spinning until both buffers
++// hold the transforms they are expected to, or `timeout` elapses. Matching
++// between the broadcasters and listeners (even within one process) is
++// asynchronous, and under some RMWs (e.g. rmw_zenoh_cpp, which goes through a
++// router) it can take longer than the fixed 10 x 10 ms these tests used to
++// spin for, so a fixed iteration count is racy. The assertions that follow
++// still decide pass/fail; this only removes the timing assumption.
++template<typename ReadyFn>
++static void publish_and_spin_until(
++  rclcpp::executors::SingleThreadedExecutor & executor,
++  tf2_ros::TransformBroadcaster & broadcaster,
++  geometry_msgs::msg::TransformStamped & dynamic_trans,
++  const rclcpp::Clock::SharedPtr & clock,
++  ReadyFn && ready,
++  std::chrono::seconds timeout = std::chrono::seconds(10))
++{
++  const auto deadline = std::chrono::steady_clock::now() + timeout;
++  // Always do a few iterations so the dynamic buffer has recent data.
++  for (int i = 0; i < 10 || (!ready() && std::chrono::steady_clock::now() < deadline); ++i) {
++    dynamic_trans.header.stamp = clock->now();
++    broadcaster.sendTransform(dynamic_trans);
++
++    executor.spin_some();
++    rclcpp::sleep_for(std::chrono::milliseconds(10));
++  }
++}
++
+ TEST(tf2_test_listeners, static_vs_dynamic_deprecated)
+ {
+   auto node = rclcpp::Node::make_shared("tf2_ros_static_transform_listener");
+@@ -269,14 +296,13 @@
+ 
+   rclcpp::executors::SingleThreadedExecutor executor;
+   executor.add_node(node);
+-
+-  for (int i = 0; i < 10; ++i) {
+-    dynamic_trans.header.stamp = clock->now();
+-    broadcaster.sendTransform(dynamic_trans);
+-
+-    executor.spin_some();
+-    rclcpp::sleep_for(std::chrono::milliseconds(10));
+-  }
++  publish_and_spin_until(
++    executor, broadcaster, dynamic_trans, clock,
++    [&]() {
++      return dynamic_buffer.canTransform("parent_dynamic", "child_dynamic", tf2::TimePointZero) &&
++             dynamic_buffer.canTransform("parent_static", "child_static", tf2::TimePointZero) &&
++             static_buffer.canTransform("parent_static", "child_static", tf2::TimePointZero);
++    });
+ 
+   // Dynamic buffer should have both dynamic and static transforms available
+   EXPECT_NO_THROW(
+@@ -316,13 +342,13 @@
+ 
+   rclcpp::executors::SingleThreadedExecutor executor;
+   executor.add_node(node);
+-  for (int i = 0; i < 10; ++i) {
+-    dynamic_trans.header.stamp = clock->now();
+-    broadcaster.sendTransform(dynamic_trans);
+-
+-    executor.spin_some();
+-    rclcpp::sleep_for(std::chrono::milliseconds(10));
+-  }
++  publish_and_spin_until(
++    executor, broadcaster, dynamic_trans, clock,
++    [&]() {
++      return dynamic_buffer.canTransform("parent_dynamic", "child_dynamic", tf2::TimePointZero) &&
++             dynamic_buffer.canTransform("parent_static", "child_static", tf2::TimePointZero) &&
++             static_buffer.canTransform("parent_static", "child_static", tf2::TimePointZero);
++    });
+ 
+   // Dynamic buffer should have both dynamic and static transforms available
+   EXPECT_NO_THROW(

@@ -1,0 +1,58 @@
+--- a/src/receiver.cpp
++++ b/src/receiver.cpp
+@@ -21,6 +21,18 @@
+ 
+ #include "off_highway_can/helper.hpp"
+ 
++namespace
++{
++// Converting an out-of-range double straight to uint8_t is undefined behaviour:
++// x86 wraps (-1.0 -> 255, which the invalid-temperature encoding relies on)
++// while arm64 saturates (-1.0 -> 0). Go through a wide integer first so the
++// final narrowing is the well-defined modulo conversion on every platform.
++inline uint8_t to_uint8(double value)
++{
++  return static_cast<uint8_t>(static_cast<int64_t>(value));
++}
++}  // namespace
++
+ namespace off_highway_mm7p10
+ {
+ 
+@@ -98,9 +110,9 @@
+       imu_.angular_velocity.z,
+       message.signals["YawRate"].value * DEGREE_TO_RAD_FACTOR);
+     auto_static_cast(imu_.linear_acceleration.y, message.signals["AY"].value * G_TO_MPS2_FACTOR);
+-    info_.yaw_rate_stat = static_cast<uint8_t>(message.signals["YawRate_STAT"].value);
+-    info_.ay_stat = static_cast<uint8_t>(message.signals["AY_STAT"].value);
+-    info_.temp_rate_z = static_cast<uint8_t>(message.signals["TEMP_RATE_Z"].value);
++    info_.yaw_rate_stat = to_uint8(message.signals["YawRate_STAT"].value);
++    info_.ay_stat = to_uint8(message.signals["AY_STAT"].value);
++    info_.temp_rate_z = to_uint8(message.signals["TEMP_RATE_Z"].value);
+   }
+ 
+   if (id == MM7_10_X_AX_ID) {
+@@ -112,8 +124,8 @@
+       auto_static_cast(roll_rate, message.signals["RollRate"].value * DEGREE_TO_RAD_FACTOR);
+       imu_.angular_velocity.x = -roll_rate;
+       auto_static_cast(imu_.linear_acceleration.x, message.signals["AX"].value * G_TO_MPS2_FACTOR);
+-      info_.roll_rate_stat = static_cast<uint8_t>(message.signals["RollRate_STAT"].value);
+-      info_.ax_stat = static_cast<uint8_t>(message.signals["AX_STAT"].value);
++      info_.roll_rate_stat = to_uint8(message.signals["RollRate_STAT"].value);
++      info_.ax_stat = to_uint8(message.signals["AX_STAT"].value);
+       frame_counter_++;
+     } else {
+       RCLCPP_WARN_THROTTLE(
+@@ -135,9 +147,9 @@
+           imu_.linear_acceleration.z,
+           message.signals["AZ"].value * G_TO_MPS2_FACTOR);
+         info_.header = header;
+-        info_.pitch_rate_stat = static_cast<uint8_t>(message.signals["PitchRate_STAT"].value);
+-        info_.az_stat = static_cast<uint8_t>(message.signals["AZ_STAT"].value);
+-        info_.hw_index = static_cast<uint8_t>(message.signals["HW_Index"].value);
++        info_.pitch_rate_stat = to_uint8(message.signals["PitchRate_STAT"].value);
++        info_.az_stat = to_uint8(message.signals["AZ_STAT"].value);
++        info_.hw_index = to_uint8(message.signals["HW_Index"].value);
+         manage_and_publish_imu();
+         force_diag_update();
+       } else {

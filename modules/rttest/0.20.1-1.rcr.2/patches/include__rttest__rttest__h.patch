@@ -1,0 +1,35 @@
+--- a/include/rttest/rttest.h
++++ b/include/rttest/rttest.h
+@@ -20,6 +20,32 @@
+ #include <stddef.h>
+ #include <stdint.h>
+ 
++#ifdef __APPLE__
++#ifndef TIMER_ABSTIME
++#define TIMER_ABSTIME 1
++#endif
++static inline int clock_nanosleep(
++  clockid_t clock_id, int flags, const struct timespec * request, struct timespec * remain)
++{
++  if (flags == TIMER_ABSTIME) {
++    struct timespec now;
++    clock_gettime(clock_id, &now);
++    struct timespec rel;
++    rel.tv_sec = request->tv_sec - now.tv_sec;
++    rel.tv_nsec = request->tv_nsec - now.tv_nsec;
++    if (rel.tv_nsec < 0) {
++      rel.tv_sec -= 1;
++      rel.tv_nsec += 1000000000L;
++    }
++    if (rel.tv_sec < 0) {
++      return 0;
++    }
++    return nanosleep(&rel, remain);
++  }
++  return nanosleep(request, remain);
++}
++#endif
++
+ #ifdef __cplusplus
+ extern "C"
+ {

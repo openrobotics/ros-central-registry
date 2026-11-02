@@ -1,0 +1,289 @@
+load("@qt//:qt_internal_library.bzl", "qt_internal_library", "qt_static_plugin")
+load(
+    "@qt//:qt_tools.bzl",
+    "qt_depends_header",
+    "qt_export_header",
+    "qt_sync_headers",
+)
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+        # qsvghandler.cpp derives arc-handling code from XSVG (see src/svg/qt_attribution.json).
+        "@rules_license//licenses/spdx:HPND-sell-variant",
+    ],
+    license_text = "LICENSES/LGPL-3.0-only.txt",
+)
+
+exports_files([
+    "LICENSES/LGPL-3.0-only.txt",
+    "src/svg/LICENSE.XSVG.txt",
+])
+
+QT_VERSION = "6.10.2"
+
+common_copts = [
+    "-w",
+    "-fPIC",
+    "-O2",
+    "-DNDEBUG",
+    "-DQT_NO_CAST_TO_ASCII",
+    "-DQT_BUILDING_QT",
+]
+
+# From .cmake.conf QT_EXTRA_INTERNAL_TARGET_DEFINES plus the usual Qt module set.
+common_local_defines = [
+    "QT_ASCII_CAST_WARNINGS",
+    "QT_BUILDING_QT",
+    "QT_CORE_LIB",
+    "QT_DEPRECATED_WARNINGS",
+    "QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH",
+    "QT_GUI_LIB",
+    "QT_MOC_COMPAT",
+    "QT_NO_CAST_TO_ASCII",
+    "QT_NO_CONTEXTLESS_CONNECT=1",
+    "QT_NO_DEBUG",
+    "QT_NO_FOREACH=1",
+    "QT_NO_JAVA_STYLE_ITERATORS",
+    "QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+    "QT_NO_QASCONST=1",
+    "QT_NO_QEXCHANGE",
+    "QT_NO_QSNPRINTF",
+    "QT_NO_USING_NAMESPACE",
+    "QT_USE_NODISCARD_FILE_OPEN",
+    "QT_USE_QSTRINGBUILDER",
+    "_GLIBCXX_ASSERTIONS",
+    "_LARGEFILE64_SOURCE",
+    "_LARGEFILE_SOURCE",
+]
+
+# =============================================================================
+# QtSvg (:svg + :svg_shared)
+# =============================================================================
+
+qt_export_header(
+    name = "qtsvgexports_h",
+    out = "generated_exports/qtsvgexports.h",
+    module_infix = "SVG",
+)
+
+qt_depends_header(
+    name = "qtsvg_depends_h",
+    out = "generated_exports/QtSvgDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+    ],
+)
+
+qt_sync_headers(
+    name = "svg_sync_headers",
+    hdrs = glob(["src/svg/**/*.h"]),
+    generated_public_hdrs = [
+        ":qtsvgexports_h",
+        ":qtsvg_depends_h",
+    ],
+    module_name = "QtSvg",
+    source_dir = "src/svg",
+    version = QT_VERSION,
+    deps = [
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "svg",
+    srcs = [
+        "src/svg/animation/qsvgabstractanimation.cpp",
+        "src/svg/animation/qsvganimatedproperty.cpp",
+        "src/svg/animation/qsvganimator.cpp",
+        "src/svg/animation/qsvgcssanimation.cpp",
+        # QT_FEATURE_cssparser is enabled in @qtbase.
+        "src/svg/css/qsvgcsshandler.cpp",
+        "src/svg/css/qsvgcssproperties.cpp",
+        "src/svg/css/qsvgstyleselector.cpp",
+        "src/svg/qsvganimate.cpp",
+        "src/svg/qsvgdebug.cpp",
+        "src/svg/qsvgfilter.cpp",
+        "src/svg/qsvgfont.cpp",
+        "src/svg/qsvggenerator.cpp",
+        "src/svg/qsvggraphics.cpp",
+        "src/svg/qsvghandler.cpp",
+        "src/svg/qsvgnode.cpp",
+        "src/svg/qsvgrenderer.cpp",
+        "src/svg/qsvgstructure.cpp",
+        "src/svg/qsvgstyle.cpp",
+        "src/svg/qsvgtinydocument.cpp",
+        "src/svg/qsvgutils.cpp",
+        "src/svg/qsvgvisitor.cpp",
+    ],
+    hdrs = glob(["src/svg/**/*.h"]),
+    copts = common_copts,
+    cxxopts = ["-std=gnu++20"],
+    defines = ["QT_SVG_LIB"],
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+    ],
+    includes = [
+        "src/svg",
+        "src/svg/animation",
+        "src/svg/css",
+    ],
+    local_defines = common_local_defines + [
+        "QT_BUILD_SVG_LIB",
+        "Svg_EXPORTS",
+    ],
+    moc_hdrs = [
+        "src/svg/qsvgrenderer.h",
+    ],
+    deps = [
+        ":svg_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:core_internal_cfg",
+        "@qtbase//:gui",
+        "@qtbase//:gui_internal_cfg",
+        "@zlib",
+    ],
+)
+
+# =============================================================================
+# QtSvgWidgets (:svgwidgets + :svgwidgets_shared)
+# =============================================================================
+
+qt_export_header(
+    name = "qtsvgwidgetsexports_h",
+    out = "generated_exports/qtsvgwidgetsexports.h",
+    module_infix = "SVGWIDGETS",
+)
+
+qt_depends_header(
+    name = "qtsvgwidgets_depends_h",
+    out = "generated_exports/QtSvgWidgetsDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+        "QtSvg",
+        "QtWidgets",
+    ],
+)
+
+qt_sync_headers(
+    name = "svgwidgets_sync_headers",
+    hdrs = glob(["src/svgwidgets/*.h"]),
+    generated_public_hdrs = [
+        ":qtsvgwidgetsexports_h",
+        ":qtsvgwidgets_depends_h",
+    ],
+    module_name = "QtSvgWidgets",
+    source_dir = "src/svgwidgets",
+    version = QT_VERSION,
+    deps = [
+        ":svg_sync_headers",
+        "@qtbase//:widgets_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "svgwidgets",
+    srcs = [
+        # QT_FEATURE_graphicsview is enabled in @qtbase.
+        "src/svgwidgets/qgraphicssvgitem.cpp",
+        "src/svgwidgets/qsvgwidget.cpp",
+    ],
+    hdrs = glob(["src/svgwidgets/*.h"]),
+    copts = common_copts,
+    cxxopts = ["-std=gnu++20"],
+    defines = ["QT_SVGWIDGETS_LIB"],
+    dynamic_deps = [
+        ":svg_shared",
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:widgets_shared",
+    ],
+    includes = ["src/svgwidgets"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_SVGWIDGETS_LIB",
+        "QT_SVG_LIB",
+        "QT_WIDGETS_LIB",
+        "SvgWidgets_EXPORTS",
+    ],
+    moc_hdrs = [
+        "src/svgwidgets/qgraphicssvgitem.h",
+        "src/svgwidgets/qsvgwidget.h",
+    ],
+    deps = [
+        ":svg",
+        ":svgwidgets_sync_headers",
+        "@qtbase//:core",
+        "@qtbase//:core_internal_cfg",
+        "@qtbase//:gui",
+        "@qtbase//:gui_internal_cfg",
+        "@qtbase//:widgets",
+        "@qtbase//:widgets_internal_cfg",
+    ],
+)
+
+# =============================================================================
+# Plugins (statically linked via Q_IMPORT_PLUGIN)
+# =============================================================================
+
+# imageformats/qsvg: lets QImage/QPixmap load .svg / .svgz.
+qt_static_plugin(
+    name = "qsvg",
+    srcs = [
+        "src/plugins/imageformats/svg/main.cpp",
+        "src/plugins/imageformats/svg/qsvgiohandler.cpp",
+    ],
+    hdrs = ["src/plugins/imageformats/svg/qsvgiohandler.h"],
+    copts = common_copts + ["-std=gnu++20"],
+    includes = ["src/plugins/imageformats/svg"],
+    local_defines = common_local_defines + ["QT_SVG_LIB"],
+    moc_srcs = ["src/plugins/imageformats/svg/main.cpp"],
+    plugin_class_name = "QSvgPlugin",
+    textual_hdrs = [
+        "src/plugins/imageformats/svg/svg.json",
+        "src/plugins/imageformats/svg/svg-nocompress.json",
+    ],
+    deps = [
+        ":svg",
+        "@qtbase//:core",
+        "@qtbase//:core_internal_cfg",
+        "@qtbase//:gui",
+        "@qtbase//:gui_internal_cfg",
+    ],
+)
+
+# iconengines/qsvgicon: lets QIcon render .svg sources.
+qt_static_plugin(
+    name = "qsvgicon",
+    srcs = [
+        "src/plugins/iconengines/svgiconengine/main.cpp",
+        "src/plugins/iconengines/svgiconengine/qsvgiconengine.cpp",
+    ],
+    hdrs = ["src/plugins/iconengines/svgiconengine/qsvgiconengine.h"],
+    copts = common_copts + ["-std=gnu++20"],
+    includes = ["src/plugins/iconengines/svgiconengine"],
+    local_defines = common_local_defines + ["QT_SVG_LIB"],
+    moc_srcs = ["src/plugins/iconengines/svgiconengine/main.cpp"],
+    plugin_class_name = "QSvgIconPlugin",
+    textual_hdrs = [
+        "src/plugins/iconengines/svgiconengine/qsvgiconengine.json",
+        "src/plugins/iconengines/svgiconengine/qsvgiconengine-nocompress.json",
+    ],
+    deps = [
+        ":svg",
+        "@qtbase//:core",
+        "@qtbase//:core_internal_cfg",
+        "@qtbase//:gui",
+        "@qtbase//:gui_internal_cfg",
+    ],
+)

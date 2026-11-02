@@ -1,0 +1,330 @@
+load("@qt//:qt_internal_library.bzl", "qt_internal_library")
+load(
+    "@qt//:qt_tools.bzl",
+    "qt_depends_header",
+    "qt_export_header",
+    "qt_sync_headers",
+)
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+    ],
+    license_text = "LICENSES/LGPL-3.0-only.txt",
+)
+
+# src/3rdparty/glslang/qt_attribution.json: "BSD-3-Clause AND LicenseRef-MIT-Khronos-old
+# AND Apache-2.0 AND GPL-3.0-or-later WITH Bison-exception-2.2 AND AML-glslang".
+# The GPL component is the Bison-generated parser (glslang_tab.cpp), covered by the
+# Bison exception, so it does not propagate to linked code.
+license(
+    name = "glslang_license",
+    package_name = "glslang 15.1.0 (Qt vendored)",
+    license_kinds = [
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+        "@rules_license//licenses/spdx:Apache-2.0",
+        "@rules_license//licenses/spdx:MIT",
+    ],
+    license_text = "src/3rdparty/glslang/LICENSE.txt",
+)
+
+# src/3rdparty/SPIRV-Cross/qt_attribution.json: "Apache-2.0 AND LicenseRef-MIT-Khronos-old".
+license(
+    name = "spirv_cross_license",
+    package_name = "SPIRV-Cross ebe2aa0c (Qt vendored)",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+        "@rules_license//licenses/spdx:MIT",
+    ],
+    license_text = "src/3rdparty/SPIRV-Cross/LICENSE",
+)
+
+exports_files([
+    "LICENSES/LGPL-3.0-only.txt",
+    "src/3rdparty/glslang/LICENSE.txt",
+    "src/3rdparty/SPIRV-Cross/LICENSE",
+])
+
+QT_VERSION = "6.10.2"
+
+common_copts = [
+    "-w",
+    "-fPIC",
+    "-O2",
+    "-DNDEBUG",
+    "-DQT_NO_CAST_TO_ASCII",
+    "-DQT_BUILDING_QT",
+]
+
+# From .cmake.conf QT_EXTRA_INTERNAL_TARGET_DEFINES (this repo *does* opt into
+# QT_LEAN_HEADERS) plus the usual Qt module set.
+common_local_defines = [
+    "QT_ASCII_CAST_WARNINGS",
+    "QT_BUILDING_QT",
+    "QT_CORE_LIB",
+    "QT_DEPRECATED_WARNINGS",
+    "QT_EXPLICIT_QFILE_CONSTRUCTION_FROM_PATH",
+    "QT_GUI_LIB",
+    "QT_LEAN_HEADERS=1",
+    "QT_MOC_COMPAT",
+    "QT_NO_AS_CONST=1",
+    "QT_NO_CAST_TO_ASCII",
+    "QT_NO_DEBUG",
+    "QT_NO_FOREACH=1",
+    "QT_NO_JAVA_STYLE_ITERATORS",
+    "QT_NO_NARROWING_CONVERSIONS_IN_CONNECT",
+    "QT_NO_QEXCHANGE",
+    "QT_NO_QSNPRINTF",
+    "QT_NO_USING_NAMESPACE",
+    "QT_USE_NODISCARD_FILE_OPEN",
+    "QT_USE_QSTRINGBUILDER",
+    "_GLIBCXX_ASSERTIONS",
+    "_LARGEFILE64_SOURCE",
+    "_LARGEFILE_SOURCE",
+]
+
+# Bundled third-party libraries are hidden-visibility static libs (as upstream:
+# qt_set_symbol_visibility_hidden); they only ever link into libshadertools_shared.so.
+third_party_copts = [
+    "-w",
+    "-fPIC",
+    "-O2",
+    "-DNDEBUG",
+    "-fvisibility=hidden",
+    "-fvisibility-inlines-hidden",
+    "-std=gnu++20",
+]
+
+# =============================================================================
+# glslang (src/glslang/CMakeLists.txt: BundledGlslang_{Spirv,Osdependent,Glslang})
+# =============================================================================
+
+GLSLANG_HDRS = glob([
+    "src/3rdparty/glslang/glslang/**/*.h",
+    "src/3rdparty/glslang/SPIRV/**/*.h",
+    "src/3rdparty/glslang/SPIRV/**/*.hpp",
+])
+
+GLSLANG_OS_DEFINES = select({
+    "@platforms//os:windows": ["GLSLANG_OSINCLUDE_WIN32"],
+    "//conditions:default": ["GLSLANG_OSINCLUDE_UNIX"],
+})
+
+cc_library(
+    name = "glslang_osdependent",
+    srcs = select({
+        "@platforms//os:windows": ["src/3rdparty/glslang/glslang/OSDependent/Windows/ossource.cpp"],
+        "//conditions:default": ["src/3rdparty/glslang/glslang/OSDependent/Unix/ossource.cpp"],
+    }),
+    hdrs = GLSLANG_HDRS,
+    applicable_licenses = [":glslang_license"],
+    copts = third_party_copts,
+    includes = ["src/3rdparty/glslang"],
+    linkopts = select({
+        "@platforms//os:linux": ["-lpthread"],
+        "//conditions:default": [],
+    }),
+    local_defines = GLSLANG_OS_DEFINES,
+    visibility = ["//visibility:private"],
+)
+
+cc_library(
+    name = "glslang_glslang",
+    srcs = [
+        "src/3rdparty/glslang/glslang/GenericCodeGen/CodeGen.cpp",
+        "src/3rdparty/glslang/glslang/GenericCodeGen/Link.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/Constant.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/InfoSink.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/Initialize.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/IntermTraverse.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/Intermediate.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/ParseContextBase.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/ParseHelper.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/PoolAlloc.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/RemoveTree.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/Scan.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/ShaderLang.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/SpirvIntrinsics.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/SymbolTable.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/Versions.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/attribute.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/glslang_tab.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/intermOut.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/iomapper.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/limits.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/linkValidate.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/parseConst.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/preprocessor/Pp.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/preprocessor/PpAtom.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/preprocessor/PpContext.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/preprocessor/PpScanner.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/preprocessor/PpTokens.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/propagateNoContraction.cpp",
+        "src/3rdparty/glslang/glslang/MachineIndependent/reflection.cpp",
+        "src/3rdparty/glslang/glslang/ResourceLimits/ResourceLimits.cpp",
+    ],
+    hdrs = GLSLANG_HDRS,
+    applicable_licenses = [":glslang_license"],
+    copts = third_party_copts,
+    includes = ["src/3rdparty/glslang"],
+    local_defines = GLSLANG_OS_DEFINES,
+    visibility = ["//visibility:private"],
+    deps = [":glslang_osdependent"],
+)
+
+cc_library(
+    name = "glslang_spirv",
+    srcs = [
+        "src/3rdparty/glslang/SPIRV/GlslangToSpv.cpp",
+        "src/3rdparty/glslang/SPIRV/InReadableOrder.cpp",
+        "src/3rdparty/glslang/SPIRV/Logger.cpp",
+        "src/3rdparty/glslang/SPIRV/SPVRemapper.cpp",
+        "src/3rdparty/glslang/SPIRV/SpvBuilder.cpp",
+        "src/3rdparty/glslang/SPIRV/SpvPostProcess.cpp",
+        "src/3rdparty/glslang/SPIRV/SpvTools.cpp",
+        "src/3rdparty/glslang/SPIRV/disassemble.cpp",
+        "src/3rdparty/glslang/SPIRV/doc.cpp",
+    ],
+    hdrs = GLSLANG_HDRS,
+    applicable_licenses = [":glslang_license"],
+    copts = third_party_copts,
+    includes = ["src/3rdparty/glslang"],
+    local_defines = GLSLANG_OS_DEFINES,
+    visibility = ["//visibility:private"],
+    deps = [":glslang_glslang"],
+)
+
+# =============================================================================
+# SPIRV-Cross (src/SPIRV-Cross/CMakeLists.txt: BundledSpirv_Cross)
+# =============================================================================
+
+cc_library(
+    name = "spirv_cross",
+    srcs = [
+        "src/3rdparty/SPIRV-Cross/spirv_cfg.cpp",
+        "src/3rdparty/SPIRV-Cross/spirv_cpp.cpp",
+        "src/3rdparty/SPIRV-Cross/spirv_cross.cpp",
+        "src/3rdparty/SPIRV-Cross/spirv_cross_c.cpp",
+        "src/3rdparty/SPIRV-Cross/spirv_cross_parsed_ir.cpp",
+        "src/3rdparty/SPIRV-Cross/spirv_cross_util.cpp",
+        "src/3rdparty/SPIRV-Cross/spirv_glsl.cpp",
+        "src/3rdparty/SPIRV-Cross/spirv_hlsl.cpp",
+        "src/3rdparty/SPIRV-Cross/spirv_msl.cpp",
+        "src/3rdparty/SPIRV-Cross/spirv_parser.cpp",
+        "src/3rdparty/SPIRV-Cross/spirv_reflect.cpp",
+    ],
+    hdrs = glob([
+        "src/3rdparty/SPIRV-Cross/*.h",
+        "src/3rdparty/SPIRV-Cross/*.hpp",
+    ]),
+    applicable_licenses = [":spirv_cross_license"],
+    copts = third_party_copts + ["-fexceptions"],
+    includes = ["src/3rdparty/SPIRV-Cross"],
+    local_defines = [
+        "SPIRV_CROSS_C_API_GLSL=1",
+        "SPIRV_CROSS_C_API_HLSL=1",
+        "SPIRV_CROSS_C_API_MSL=1",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+# =============================================================================
+# QtShaderTools (:shadertools + :shadertools_shared)
+# =============================================================================
+
+qt_export_header(
+    name = "qtshadertoolsexports_h",
+    out = "generated_exports/qtshadertoolsexports.h",
+    module_infix = "SHADERTOOLS",
+)
+
+qt_depends_header(
+    name = "qtshadertools_depends_h",
+    out = "generated_exports/QtShaderToolsDepends",
+    dep_modules = [
+        "QtCore",
+        "QtGui",
+    ],
+)
+
+qt_sync_headers(
+    name = "shadertools_sync_headers",
+    hdrs = glob(["src/shadertools/*.h"]),
+    generated_public_hdrs = [
+        ":qtshadertoolsexports_h",
+        ":qtshadertools_depends_h",
+    ],
+    module_name = "QtShaderTools",
+    # Upstream RHI_HEADER_FILTERS "(^|/)qshaderbaker\\.h$": installed as <rhi/qshaderbaker.h>.
+    rhi_filter = "^qshaderbaker\\.h$",
+    source_dir = "src/shadertools",
+    version = QT_VERSION,
+    deps = [
+        "@qtbase//:core_sync_headers",
+        "@qtbase//:gui_sync_headers",
+    ],
+)
+
+qt_internal_library(
+    name = "shadertools",
+    srcs = [
+        "src/shadertools/qshaderbaker.cpp",
+        "src/shadertools/qshaderrewriter.cpp",
+        "src/shadertools/qspirvcompiler.cpp",
+        "src/shadertools/qspirvshader.cpp",
+        "src/shadertools/qspirvshaderremap.cpp",
+    ],
+    hdrs = glob(["src/shadertools/*.h"]),
+    copts = common_copts + ["-fexceptions"],
+    cxxopts = ["-std=gnu++20"],
+    defines = ["QT_SHADERTOOLS_LIB"],
+    dynamic_deps = [
+        "@qtbase//:core_shared",
+        "@qtbase//:gui_shared",
+    ],
+    includes = ["src/shadertools"],
+    local_defines = common_local_defines + [
+        "QT_BUILD_SHADERTOOLS_LIB",
+        "ShaderTools_EXPORTS",
+    ],
+    deps = [
+        ":glslang_spirv",
+        ":shadertools_sync_headers",
+        ":spirv_cross",
+        "@qtbase//:core",
+        "@qtbase//:core_internal_cfg",
+        "@qtbase//:gui",
+        "@qtbase//:gui_internal_cfg",
+    ],
+)
+
+# =============================================================================
+# qsb (tools/qsb): the Qt Shader Baker host tool
+# =============================================================================
+
+cc_binary(
+    name = "qsb",
+    srcs = ["tools/qsb/qsb.cpp"],
+    copts = common_copts + ["-std=gnu++20"],
+    linkstatic = True,
+    local_defines = common_local_defines + [
+        "QT_NO_VERSION_TAGGING",
+        "QT_SHADERTOOLS_LIB",
+    ],
+    deps = [
+        ":shadertools",
+        "@qtbase//:core",
+        "@qtbase//:core_internal_cfg",
+        "@qtbase//:gui",
+        "@qtbase//:gui_internal_cfg",
+    ],
+)

@@ -1,0 +1,73 @@
+--- a/test/rosbag2_tests/test_rosbag2_play_end_to_end.cpp
++++ b/test/rosbag2_tests/test_rosbag2_play_end_to_end.cpp
+@@ -91,9 +91,15 @@
+     typename Srv::Request::SharedPtr request)
+   {
+     auto future = cli->async_send_request(request);
+-    EXPECT_EQ(future.wait_for(service_call_timeout_), std::future_status::ready);
++    const auto status = future.wait_for(service_call_timeout_);
++    EXPECT_EQ(status, std::future_status::ready);
++    auto result = std::make_shared<typename Srv::Response>();
++    if (status != std::future_status::ready) {
++      // Don't fall through to future.get(): with no response coming it would
++      // block forever and turn a failed assertion into a test timeout.
++      return result;
++    }
+     EXPECT_TRUE(future.valid());
+-    auto result = std::make_shared<typename Srv::Response>();
+     EXPECT_NO_THROW({result = future.get();});
+     EXPECT_TRUE(result);
+     return result;
+@@ -122,8 +128,13 @@
+   sub_->add_subscription<test_msgs::msg::Arrays>("/array_topic", 4, sub_qos_);
+   sub_->add_subscription<test_msgs::msg::BasicTypes>("/test_topic", 3, sub_qos_);
+ 
+-  // Start ros2 bag play in pause mode
+-  auto process_id = start_execution("ros2 bag play -p " + bags_path_ + "/cdr_test");
++  // Start ros2 bag play in pause mode. The bag is only ~150 ms long and its
++  // publishers are reliable + transient_local; without --wait-for-all-acked the
++  // player can exit before a reader that matched late on the writer side has
++  // been sent the history, losing the first message(s) (observed intermittently
++  // with rmw_fastrtps_cpp on macOS).
++  auto process_id = start_execution(
++    "ros2 bag play -p --wait-for-all-acked 5000 " + bags_path_ + "/cdr_test");
+   auto cleanup_process_handle = rcpputils::make_scope_exit(
+     [process_id]() {
+       stop_execution(process_id);
+@@ -211,6 +222,7 @@
+ }
+ 
+ TEST_P(PlayEndToEndTestFixture, play_filters_by_topic) {
++  // See play_end_to_end_test for why the players below use --wait-for-all-acked.
+   const unsigned int num_basic_msgs = 3u;
+   const unsigned int num_array_msgs = 4u;
+ 
+@@ -220,7 +232,9 @@
+ 
+     // Start ros2 bag play in pause mode
+     auto process_id =
+-      start_execution("ros2 bag play -p " + bags_path_ + "/cdr_test --topics /test_topic");
++      start_execution(
++        "ros2 bag play -p --wait-for-all-acked 5000 " + bags_path_ +
++        "/cdr_test --topics /test_topic");
+     auto cleanup_process_handle = rcpputils::make_scope_exit(
+       [process_id]() {
+         stop_execution(process_id);
+@@ -252,7 +266,8 @@
+ 
+     // Start ros2 bag play in pause mode
+     auto process_id = start_execution(
+-      "ros2 bag play -p " + bags_path_ + "/cdr_test --topics /test_topic /array_topic");
++      "ros2 bag play -p --wait-for-all-acked 5000 " + bags_path_ +
++      "/cdr_test --topics /test_topic /array_topic");
+     auto cleanup_process_handle = rcpputils::make_scope_exit(
+       [process_id]() {
+         stop_execution(process_id);
+@@ -290,6 +305,7 @@
+         stop_execution(process_id);
+       });
+ 
++    ASSERT_TRUE(cli_resume_->wait_for_service(service_call_timeout_));
+     EXPECT_FALSE(
+       sub_->spin_and_wait_for_matched(
+         std::vector<std::string>{"/test_topic", "/array_topic"}, std::chrono::seconds(1)));

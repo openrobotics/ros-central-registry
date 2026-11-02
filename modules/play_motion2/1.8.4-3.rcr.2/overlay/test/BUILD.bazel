@@ -1,0 +1,245 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@launch_ros//:defs.bzl", "launch_ros_binary")
+load("@launch_testing_ros//:defs.bzl", "launch_ros_test")
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rosdistro//python:defs.bzl", "py_pytest")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:package_license"],
+    default_visibility = ["//visibility:public"],
+)
+
+exports_files([
+    "controllers/src/passthrough_controller_parameters.yaml",
+])
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@control_msgs//:cc_shared": "@control_msgs//:cc",
+    "@controller_manager_msgs//:cc_shared": "@controller_manager_msgs//:cc",
+    "@lifecycle_msgs//:cc_shared": "@lifecycle_msgs//:cc",
+    "@play_motion2_msgs//:cc_shared": "@play_motion2_msgs//:cc",
+    "@pluginlib//:pluginlib": "@pluginlib//:pluginlib_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rclcpp_action//:rclcpp_action": "@rclcpp_action//:rclcpp_action_library",
+    "@rclcpp_components//:component_manager": "@rclcpp_components//:component_manager_library",
+    "@rclcpp_lifecycle//:rclcpp_lifecycle": "@rclcpp_lifecycle//:rclcpp_lifecycle_library",
+    "@realtime_tools//:realtime_tools": "@realtime_tools//:realtime_tools_library",
+    "@realtime_tools//:thread_priority": "@realtime_tools//:thread_priority_library",
+    "@robot_state_publisher//:robot_state_publisher_node": "@robot_state_publisher//:robot_state_publisher_node_library",
+    "@rosdistro//cc:boringssl": "@rosdistro//cc:boringssl_crypto_library",
+    "@rosdistro//cc:console_bridge": "@rosdistro//cc:console_bridge_library",
+    "@rosdistro//cc:orocos-kdl": "@rosdistro//cc:orocos-kdl_library",
+    "@rosdistro//cc:tinyxml2": "@rosdistro//cc:tinyxml2_library",
+    "@sensor_msgs//:cc_shared": "@sensor_msgs//:cc",
+    "@std_msgs//:cc_shared": "@std_msgs//:cc",
+    "@trajectory_msgs//:cc_shared": "@trajectory_msgs//:cc",
+}
+
+CC_DEPS = [
+    "@backward_ros//:backward_library",
+    "@controller_interface//:controller_interface_library",
+    "@controller_manager//:controller_manager_library",
+    "@hardware_interface//:hardware_interface_library",
+    "@hardware_interface//:mock_components_library",
+    "@joint_trajectory_controller//:joint_trajectory_controller_library",
+    "@moveit_ros_planning_interface//:moveit_common_planning_interface_objects_library",
+    "@moveit_ros_planning_interface//:moveit_move_group_interface_library",
+    "@moveit_ros_planning_interface//:moveit_planning_scene_interface_library",
+    "@rclcpp//:node_wrapper",
+    "@rclcpp//:type_adapter",
+    "@rosdistro//cc:boost.date_time",
+    "@rosdistro//cc:boost.iostreams",
+    "@rosdistro//cc:boost.regex",
+    "@rosdistro//cc:boost.thread",
+    "@rosdistro//cc:boringssl_ssl_library",
+    "@rosdistro//cc:eigen",
+    "@rosdistro//cc:fmt",
+]
+
+cc_library(
+    name = "passthrough_controller_library",
+    srcs = ["controllers/src/passthrough_controller.cpp"],
+    hdrs = [
+        "controllers/src/passthrough_controller.hpp",
+        "motion_loader_test.hpp",
+        "play_motion2_node_test.hpp",
+        "rrbot/rrbot_system.hpp",
+    ] + [
+        "//:passthrough_controller_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = ["."],
+    local_defines = ros_local_defines() + [
+        "HARDWARE_INTERFACE_VERSION_MAJOR=6",
+        "MOVEIT_VERSION_MAJOR=2",
+        "MOVEIT_VERSION_MINOR=15",
+        "RCLCPP_VERSION_MAJOR=32",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + ["//:_test_root_headers"],
+)
+
+cc_shared_library(
+    name = "passthrough_controller",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":passthrough_controller_library"],
+)
+
+cc_library(
+    name = "rrbot_system_library",
+    srcs = ["rrbot/rrbot_system.cpp"],
+    hdrs = [
+        "controllers/src/passthrough_controller.hpp",
+        "motion_loader_test.hpp",
+        "play_motion2_node_test.hpp",
+        "rrbot/rrbot_system.hpp",
+    ] + [
+        "//:passthrough_controller_parameters_gen",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    includes = ["."],
+    local_defines = ros_local_defines() + [
+        "HARDWARE_INTERFACE_VERSION_MAJOR=6",
+        "MOVEIT_VERSION_MAJOR=2",
+        "MOVEIT_VERSION_MINOR=15",
+        "RCLCPP_VERSION_MAJOR=32",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + ["//:client_library"] + ["//:_test_root_headers"],
+)
+
+cc_shared_library(
+    name = "rrbot_system",
+    dynamic_deps = DEPENDENCIES.keys(),
+    exports_filter = ["//:__subpackages__"],
+    deps = [":rrbot_system_library"],
+)
+
+cc_test(
+    name = "motion_loader_test",
+    srcs = [
+        "motion_loader_test.cpp",
+        "motion_loader_test.hpp",
+        "//:src/utils/motion_loader.cpp",
+    ],
+    copts = [
+        "-Wno-missing-template-arg-list-after-template-kw",
+    ],
+    data = [
+        ":passthrough_controller",
+        ":rrbot_system",
+        "//:ament_index",
+        "//:client",
+    ] + [
+        "controllers/passthrough_controller.xml",
+        "controllers/src/passthrough_controller_parameters.yaml",
+        "play_motion2_config.yaml",
+        "play_motion2_node_test.launch.py",
+        "rrbot/controllers.yaml",
+        "rrbot/rrbot.launch.py",
+        "rrbot/rrbot.rviz",
+        "rrbot/rrbot.xacro",
+        "rrbot/rrbot_system.xml",
+        "test_client.py",
+    ],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    includes = ["."],
+    local_defines = ros_local_defines() + [
+        "GTEST_HAS_PTHREAD=1",
+        "HARDWARE_INTERFACE_VERSION_MAJOR=6",
+        "MOVEIT_VERSION_MAJOR=2",
+        "MOVEIT_VERSION_MINOR=15",
+        "RCLCPP_VERSION_MAJOR=32",
+        "_FILE_OFFSET_BITS=64",
+    ],
+    deps = DEPENDENCIES.values() + CC_DEPS + [
+        "//:_test_root_headers",
+        "//:client_library",
+        "@rosdistro//cc:bazel_test_helper",
+        "@rosdistro//cc:googletest",
+    ],
+)
+
+launch_ros_test(
+    name = "test_play_motion2_node_test_launch",
+    src = "play_motion2_node_test.launch.py",
+    data = [
+        "//:ament_index",
+    ],
+    tags = [
+        "manual",
+        "xfail",
+    ],
+    deps = [
+        ":rrbot_rrbot_launch_py",
+        "//:play_motion2_node",
+        "//:play_motion2_py",
+        "//launch:play_motion2_launch",
+        "@action_msgs//:py",
+        "@ament_index_python",
+        "@control_msgs//:py",
+        "@controller_manager//:controller_manager_py",
+        "@controller_manager_msgs//:py",
+        "@launch//:test_support",
+        "@lifecycle_msgs//:py",
+        "@play_motion2_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+py_pytest(
+    name = "test_client",
+    srcs = ["test_client.py"],
+    data = ["//:ament_index"],
+    deps = [
+        "//:play_motion2_py",
+        "@action_msgs//:py",
+        "@control_msgs//:py",
+        "@controller_manager//:controller_manager_py",
+        "@controller_manager_msgs//:py",
+        "@launch",
+        "@launch//:test_support",
+        "@launch_ros",
+        "@lifecycle_msgs//:py",
+        "@play_motion2_msgs//:py",
+        "@rclpy",
+        "@sensor_msgs//:py",
+        "@std_msgs//:py",
+        "@trajectory_msgs//:py",
+    ],
+)
+
+launch_ros_binary(
+    name = "rrbot_rrbot_launch_py",
+    src = "rrbot/rrbot.launch.py",
+    data = [
+        "//:ament_index",
+        "@controller_manager//:ament_index",
+        "@robot_state_publisher//:ament_index",
+        "@rviz2//:ament_index",
+    ],
+    deps = ["@xacro//:xacro_lib"],
+)

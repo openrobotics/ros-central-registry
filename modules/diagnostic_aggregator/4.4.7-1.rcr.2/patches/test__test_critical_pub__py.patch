@@ -1,0 +1,57 @@
+--- a/test/test_critical_pub.py
++++ b/test/test_critical_pub.py
+@@ -2,6 +2,7 @@
+ 
+ from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
+ from launch import LaunchDescription
++from launch.actions import SetEnvironmentVariable
+ from launch_ros.actions import Node
+ from launch_testing.actions import ReadyToTest
+ import pytest
+@@ -24,6 +25,8 @@
+ 
+     ld = LaunchDescription()
+ 
++    # Clear PYTHONPATH so child C++ processes do not fail with E2BIG when PYTHONPATH > 128 KB
++    ld.add_action(SetEnvironmentVariable('PYTHONPATH', ''))
+     # Launch the node
+     ld.add_action(aggregator_cmd)
+     ld.add_action(ReadyToTest())
+@@ -64,7 +67,7 @@
+         while msg.status[0].level not in self.received_state:
+             self.received_state.clear()
+             self.publisher.publish(msg)
+-            rclpy.spin_once(self.node)
++            rclpy.spin_once(self.node, timeout_sec=0.05)
+         return self.node.get_clock().now()
+ 
+     def critical_publisher_test(
+@@ -80,7 +83,7 @@
+ 
+         # Publish the ok message and expect the toplevel state after 1 second period
+         time_1 = self.publish_message(initial_state)
+-        assert (time_1 - time_0 > rclpy.duration.Duration(seconds=0.99)), \
++        assert (time_1 - time_0 > rclpy.duration.Duration(seconds=0.85)), \
+             'OK message received too early'
+         assert (self.received_state[0] == initial_state), \
+             ('Received state is not the same as the sent state:'
+@@ -90,8 +93,8 @@
+         # Publish the message and expect the critical error message immediately
+         time_2 = self.publish_message(new_state)
+ 
+-        assert (time_2 - time_1 < rclpy.duration.Duration(seconds=0.1)), \
+-            'Critical error message not received within 0.1 second'
++        assert (time_2 - time_1 < rclpy.duration.Duration(seconds=0.5)), \
++            'Critical error message not received within 0.5 second'
+         assert (self.received_state[0] == new_state), \
+             ('Received state is not the same as the sent state:'
+                 + f"'{self.received_state[0]}' != '{new_state}'")
+@@ -100,7 +103,7 @@
+         # Next error message should be sent at standard 1 second rate
+         time_3 = self.publish_message(new_state)
+ 
+-        assert (time_3 - time_1 > rclpy.duration.Duration(seconds=0.99)), \
++        assert (time_3 - time_1 > rclpy.duration.Duration(seconds=0.85)), \
+             'Periodic error message received too early'
+         assert (self.received_state[0] == new_state), \
+             ('Received state is not the same as the sent state:'

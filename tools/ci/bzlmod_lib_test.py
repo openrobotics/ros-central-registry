@@ -47,6 +47,24 @@ class TestVersionSortKey(unittest.TestCase):
             ["32.0.0-1", "32.0.0-1.rcr.1", "32.0.0-1.rcr.2", "32.0.0-1.rcr.10"],
         )
 
+    def test_base_version_components_compare_numerically(self):
+        # Regression: these were compared as plain strings, so a lower
+        # upstream version with a higher .rcr.N "won" (e.g. setup_workspace
+        # overrode tf2@0.45.10-1.rcr.0 back to 0.45.7-3.rcr.1).
+        key = bzlmod_lib.version_sort_key
+        self.assertGreater(key("0.45.10-1.rcr.0"), key("0.45.7-3.rcr.1"))
+        self.assertGreater(key("3.12.0-1.rcr.0"), key("3.9.0-1.rcr.1"))
+        self.assertGreater(key("1.0.0-10"), key("1.0.0-9"))
+        self.assertGreater(key("lyrical.2026-10-05"), key("lyrical.2026-06-08.rcr.9"))
+        self.assertEqual(
+            max(["0.0.0", "0.45.7-3", "0.45.7-3.rcr.1", "0.45.10-1", "0.45.10-1.rcr.0"], key=key),
+            "0.45.10-1.rcr.0",
+        )
+        self.assertEqual(
+            sorted(["0.0.0", "6.0.0-1", "6.0.0", "6.0.0-1.rcr.0"], key=key),
+            ["0.0.0", "6.0.0", "6.0.0-1", "6.0.0-1.rcr.0"],
+        )
+
 
 class TestMetadataJson(unittest.TestCase):
 

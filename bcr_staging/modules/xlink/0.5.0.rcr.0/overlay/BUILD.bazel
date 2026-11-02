@@ -1,0 +1,86 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+    license_text = "LICENSE",
+)
+
+cc_library(
+    name = "xlink",
+    srcs = glob([
+        "src/pc/*.c",
+        "src/pc/*.cpp",
+        "src/pc/*.h",
+        "src/pc/protocols/*.c",
+        "src/pc/protocols/*.cpp",
+        "src/pc/protocols/*.h",
+        "src/shared/**/*.c",
+        "src/shared/**/*.cpp",
+    ]) + select({
+        "@platforms//os:macos": [
+            "src/pc/MacOS/pthread_semaphore.c",
+            "src/pc/MacOS/pthread_semaphore.h",
+        ],
+        "@platforms//os:windows": glob([
+            "src/pc/Win/include/*.h",
+            "src/pc/Win/src/*.c",
+            "src/pc/Win/src/*.cpp",
+        ]),
+        "//conditions:default": [],
+    }),
+    hdrs = glob(["include/XLink/*.h"]),
+    copts = [
+        "-I$(BINDIR)/external/xlink+/include/XLink",
+        "-Iexternal/xlink+/include/XLink",
+        "-Iexternal/xlink+/src/pc/protocols",
+    ] + select({
+        "@platforms//os:macos": ["-Iexternal/xlink+/src/pc/MacOS"],
+        "@platforms//os:windows": ["-Iexternal/xlink+/src/pc/Win/include"],
+        "//conditions:default": [],
+    }),
+    includes = [
+        "include",
+        "include/XLink",
+    ],
+    linkopts = select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["-lpthread"],
+    }),
+    local_defines = [
+        "HAVE_STRUCT_TIMESPEC",
+        "_CRT_SECURE_NO_WARNINGS",
+        "USE_USB_VSC",
+        "USE_TCP_IP",
+        "XLINK_ENABLE_LIBUSB",
+        "XLINK_LIBUSB_LOCAL",
+    ] + select({
+        "@platforms//os:linux": ["HAVE_PTHREAD_GETNAME_NP"],
+        "@platforms//os:macos": ["HAVE_PTHREAD_GETNAME_NP"],
+        "@platforms//os:windows": ["WIN32_LEAN_AND_MEAN"],
+        "//conditions:default": [],
+    }),
+    deps = ["@libusb"],
+)

@@ -1,0 +1,80 @@
+--- a/ament_flake8/main.py
++++ b/ament_flake8/main.py
+@@ -34,6 +34,16 @@
+ 
+ 
+ def main_with_errors(argv: list[str] = sys.argv[1:]) -> tuple[Literal[0, 1], list[str]]:
++    default_path = os.curdir
++    target = os.environ.get('TEST_TARGET') or os.environ.get('BAZEL_TARGET')
++    if 'TEST_SRCDIR' in os.environ and target:
++        repo_name = target.split('//')[0].lstrip('@')
++        if not repo_name:
++            repo_name = os.environ.get('TEST_WORKSPACE', '_main')
++        default_path = os.path.relpath(
++            os.path.join(os.environ['TEST_SRCDIR'], repo_name)
++        )
++
+     config_file = os.path.join(
+         os.path.dirname(__file__), 'configuration', 'ament_flake8.ini')
+ 
+@@ -52,7 +62,7 @@
+     parser.add_argument(
+         'paths',
+         nargs='*',
+-        default=[os.curdir],
++        default=[default_path],
+         help='The files or directories to check. For directories files ending '
+              "in '.py' will be considered.")
+     parser.add_argument(
+@@ -72,19 +82,40 @@
+         start_time = time.time()
+ 
+     if not os.path.exists(args.config_file):
+-        print("Could not find config file '%s'" % args.config_file, file=sys.stderr)
+-        return 1
++        cand_cfg = os.path.join(default_path, args.config_file)
++        if os.path.exists(cand_cfg):
++            args.config_file = cand_cfg
++        else:
++            print("Could not find config file '%s'" % args.config_file, file=sys.stderr)
++            return 1, []
++
++    args.paths = [
++        default_path if p == os.curdir else (
++            os.path.join(default_path, p)
++            if not os.path.exists(p) and os.path.exists(os.path.join(default_path, p))
++            else p
++        )
++        for p in args.paths
++    ]
+ 
+     # Filter out folders having AMENT_IGNORE
+-    if args.excludes is None:
+-        args.excludes = []
+-    for dirpath, dirnames, filenames in os.walk(os.getcwd()):
+-        if 'AMENT_IGNORE' in dirnames + filenames:
+-            dirnames[:] = []
+-            args.excludes.append(dirpath)
+-        else:
+-            # ignore folder starting with . or _
+-            args.excludes.extend(d for d in dirnames if d[0] in ['.', '_'])
++    excludes = []
++    for path in args.paths:
++        for subdir in args.excludes or []:
++            excludes.append(os.path.join(path, subdir))
++        for dirpath, dirnames, filenames in os.walk(path):
++            if 'AMENT_IGNORE' in dirnames + filenames:
++                dirnames[:] = []
++                excludes.append(dirpath)
++            else:
++                # ignore folder starting with . or _
++                excludes.extend(os.path.join(dirpath, d) for d in dirnames if d[0] in ['.', '_'])
++                excludes.extend(
++                    os.path.join(dirpath, f)
++                    for f in filenames if f.endswith('_stage2_bootstrap.py')
++                )
++                dirnames[:] = [d for d in dirnames if d[0] not in ['.', '_']]
++    args.excludes = excludes
+ 
+     report = generate_flake8_report(
+         args.config_file, args.paths, args.excludes,

@@ -1,0 +1,39 @@
+Keep sdformat's vendored urdf_parser private via implementation_deps and
+hidden symbol visibility so its ancient urdf_model headers (where
+sizeof(urdf::JointLimits) == 32) and urdf::* symbols do not leak into
+downstream consumers that also link ROS 2's urdfdom / urdfdom_headers
+(where sizeof(urdf::JointLimits) == 56).
+
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -89,7 +89,12 @@ cc_library(
+     hdrs = glob(
+         ["src/urdf/**/*.h"],
+     ),
+-    copts = ["-Wno-unknown-pragmas"],
++    copts = [
++        "-Wno-unknown-pragmas",
++        "-fvisibility=hidden",
++        "-fvisibility-inlines-hidden",
++    ],
++    defines = ["URDFDOM_STATIC"],
+     includes = ["src/urdf"],
+     visibility = ["//visibility:public"],
+     deps = [
+@@ -121,13 +126,15 @@ cc_library(
+         'SDF_SHARE_PATH=\\".\\"',
+         'SDF_VERSION_PATH=\\"sdformat\\"',
+     ],
++    implementation_deps = [
++        ":urdf_parser",
++    ],
+     includes = [
+         "include",
+         "src",
+     ],
+     visibility = ["//visibility:public"],
+     deps = [
+         ":Export",
+-        ":urdf_parser",
+         "@gz-math",
+         "@gz-utils//:Environment",

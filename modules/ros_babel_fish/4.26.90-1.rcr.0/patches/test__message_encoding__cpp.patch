@@ -1,0 +1,88 @@
+--- a/test/message_encoding.cpp
++++ b/test/message_encoding.cpp
+@@ -11,6 +11,7 @@
+ 
+ #include <chrono>
+ #include <map>
++#include <mutex>
+ #include <random>
+ #include <thread>
+ 
+@@ -21,16 +22,23 @@
+ template<typename Message>
+ std::shared_ptr<Message> waitForMessage( const std::string &topic )
+ {
++  std::mutex mutex;
+   std::shared_ptr<Message> result;
+   auto cond = std::make_shared<rclcpp::GuardCondition>();
+-  auto sub = node->create_subscription<Message>( topic, rclcpp::QoS( 1 ).transient_local(),
+-                                                 [&result, cond]( std::shared_ptr<Message> msg ) {
+-                                                   result = std::move( msg );
+-                                                   cond->trigger();
+-                                                 } );
++  auto sub = node->create_subscription<Message>(
++      topic, rclcpp::QoS( 1 ).transient_local(), [&mutex, &result, cond]( std::shared_ptr<Message> msg ) {
++        std::lock_guard<std::mutex> lock( mutex );
++        if ( !result ) {
++          result = std::move( msg );
++          cond->trigger();
++        }
++      } );
+   rclcpp::WaitSet wait_set;
+   wait_set.add_guard_condition( cond );
+-  if ( wait_set.wait( std::chrono::seconds( 10 ) ).kind() != rclcpp::WaitResultKind::Ready )
++  auto wait_result = wait_set.wait( std::chrono::seconds( 10 ) ).kind();
++  sub.reset();
++  std::lock_guard<std::mutex> lock( mutex );
++  if ( wait_result != rclcpp::WaitResultKind::Ready )
+     return nullptr;
+   return result;
+ }
+@@ -80,7 +88,8 @@
+   if constexpr ( SIZE == ArraySize::FIXED_LENGTH ) {
+     for ( size_t i = 0; i < msg.size(); ++i ) { msg.assign( i, sampler() ); }
+   } else {
+-    std::uniform_int_distribution<size_t> length_distribution( 10, 1000 );
++    const size_t max_len = ( SIZE == ArraySize::BOUNDED && msg.maxSize() > 0 ) ? msg.maxSize() : 1000;
++    std::uniform_int_distribution<size_t> length_distribution( std::min<size_t>( 10, max_len ), max_len );
+     size_t length = length_distribution( sampler.generator );
+     msg.resize( length );
+     for ( size_t i = 0; i < length; ++i ) { msg.at( i ) = sampler(); }
+@@ -193,11 +202,11 @@
+       compound["b"] = false;
+       compound["ui8"] = 255;
+       compound["ui16"] = 65535;
+-      compound["ui32"] = 4294967295;
++      compound["ui32"] = 4294967295U;
+       compound["ui64"] = std::numeric_limits<uint64_t>::max();
+       compound["i8"] = -128;
+       compound["i16"] = -32768;
+-      compound["i32"] = -2147483648;
++      compound["i32"] = std::numeric_limits<int32_t>::min();
+       compound["i64"] = std::numeric_limits<int64_t>::min();
+       compound["f32"] = 42.0f;
+       compound["f64"] = 1337.0;
+@@ -251,10 +260,23 @@
+     publish( "/test_message_encoding/sub_test_array", sub_test_array );
+ 
+     publish_timer_ = node->create_wall_timer( std::chrono::milliseconds( 50 ), [this]() {
++      std::lock_guard<std::mutex> lock( publish_mutex_ );
+       for ( const auto &[topic, pub] : publishers_ ) pub->publish( *messages_[topic] );
+     } );
+   }
+ 
++  void TearDown() override
++  {
++    if ( publish_timer_ ) {
++      publish_timer_->cancel();
++    }
++    std::lock_guard<std::mutex> lock( publish_mutex_ );
++    publish_timer_.reset();
++    publishers_.clear();
++    messages_.clear();
++  }
++
++  std::mutex publish_mutex_;
+   std::map<std::string, BabelFishPublisher::SharedPtr> publishers_;
+   std::map<std::string, CompoundMessage::SharedPtr> messages_;
+   rclcpp::TimerBase::SharedPtr publish_timer_;

@@ -1,0 +1,77 @@
+--- a/src/image_transport_manager.cpp
++++ b/src/image_transport_manager.cpp
+@@ -139,7 +139,7 @@
+   void imageCallback( const sensor_msgs::msg::Image::ConstSharedPtr &image )
+   {
+     rclcpp::Time received_stamp = clock_.now();
+-    QList<QVideoFrame::PixelFormat> formats;
++    QList<PixelFormat> formats;
+     {
+       std::lock_guard subscription_lock( subscriptions_mutex_ );
+       if ( subscription_handles_.empty() )
+@@ -159,19 +159,26 @@
+ 
+   Q_INVOKABLE void imageDelivery()
+   {
+-    ImageBuffer *buffer;
++    std::unique_ptr<ImageBuffer> buffer;
+     sensor_msgs::msg::Image::ConstSharedPtr image;
+     rclcpp::Time received;
+     {
+       std::lock_guard image_lock( image_mutex_ );
+       if ( last_buffer_ == nullptr || last_image_ == nullptr )
+         return;
+-      buffer = last_buffer_.release();
++      buffer = std::move( last_buffer_ );
+       image = last_image_;
+       received = last_received_stamp_;
+       last_buffer_ = nullptr;
+     }
+-    QVideoFrame frame( buffer, QSize( image->width, image->height ), buffer->format() );
++#if QT_VERSION >= QT_VERSION_CHECK( 6, 0, 0 )
++    QVideoFrame frame = buffer->pixelFormat() != QVideoFrameFormat::Format_Invalid
++                            ? QVideoFrame( std::unique_ptr<QAbstractVideoBuffer>( buffer.release() ) )
++                            : QVideoFrame();
++#else
++    ImageBuffer *raw_buffer = buffer.release();
++    QVideoFrame frame( raw_buffer, QSize( image->width, image->height ), raw_buffer->format() );
++#endif
+     std::vector<std::shared_ptr<ImageTransportSubscriptionHandle>> subscribers;
+     {
+       // This nested lock makes sure that our destruction of the subscription pointer will not lead to a deadlock
+@@ -218,7 +225,7 @@
+       std::shared_ptr<ImageTransportSubscriptionHandle> sub = sub_weak.lock();
+       if ( sub == nullptr )
+         continue;
+-      const QList<QVideoFrame::PixelFormat> &surface_formats = sub->supported_pixel_formats;
++      const QList<PixelFormat> &surface_formats = sub->supported_pixel_formats;
+       if ( first ) {
+         supported_formats_ = surface_formats;
+         first = false;
+@@ -238,7 +245,7 @@
+   image_transport::Subscriber subscriber_;
+   std::vector<ImageTransportSubscriptionHandle *> subscriptions_;
+   std::vector<std::weak_ptr<ImageTransportSubscriptionHandle>> subscription_handles_;
+-  QList<QVideoFrame::PixelFormat> supported_formats_;
++  QList<PixelFormat> supported_formats_;
+   RingBuffer<rclcpp::Time, 10> image_interval_average_;
+   RollingAverage<int, 10> network_latency_average_;
+   RollingAverage<int, 10> processing_latency_average_;
+@@ -281,7 +288,7 @@
+ std::shared_ptr<ImageTransportSubscriptionHandle> ImageTransportManager::subscribe(
+     const rclcpp::Node::SharedPtr &node, const QString &qtopic, quint32 queue_size,
+     const image_transport::TransportHints &transport_hints, const ImageCallback &callback,
+-    const QList<QVideoFrame::PixelFormat> &supported_pixel_formats )
++    const QList<PixelFormat> &supported_pixel_formats )
+ {
+   if ( subscription_manager_ == nullptr ) {
+     subscription_manager_ = std::make_shared<SubscriptionManager>( node );
+@@ -317,7 +324,7 @@
+                                   quint32 queue_size,
+                                   const image_transport::TransportHints &transport_hints,
+                                   const std::function<void( const QVideoFrame & )> &callback,
+-                                  const QList<QVideoFrame::PixelFormat> &supported_pixel_formats )
++                                  const QList<PixelFormat> &supported_pixel_formats )
+ {
+   return subscribe(
+       node, qtopic, queue_size, transport_hints,

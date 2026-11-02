@@ -1,0 +1,88 @@
+--- a/src/get_search_paths.cpp
++++ b/src/get_search_paths.cpp
+@@ -14,15 +14,53 @@
+ 
+ #include "ament_index_cpp/get_search_paths.hpp"
+ 
++#include <unistd.h> // For readlink
++#include <limits.h> // For PATH_MAX
++
++#if defined(__APPLE__)
++#include <mach-o/dyld.h> // For _NSGetExecutablePath
++#endif
++
++#if defined(_WIN32)
++#include <windows.h> // For GetModuleFileNameA, MAX_PATH
++#endif
++
+ #include <cstdlib>
+ #include <filesystem>
+ #include <list>
++#include <optional>
+ #include <sstream>
+ #include <stdexcept>
+ #include <string>
+ 
+ namespace ament_index_cpp
+ {
++
++// Cross-platform way of obtaining the full path to the current executable. Returns
++// std::nullopt if we can't determine the path. We need this to determine if a
++// .runfiles/MANIFEST file exists in the current directory.
++static std::optional<std::string>
++get_executable_path()
++{
++#if defined(_WIN32)
++  char result[MAX_PATH + 1] = {'\0'};
++  auto path_len = GetModuleFileNameA(NULL, result, MAX_PATH);
++#elif defined(__APPLE__)
++  char result[PATH_MAX + 1] = {'\0'};
++  uint32_t path_len = PATH_MAX;
++  if (_NSGetExecutablePath(result, &path_len) != 0) {
++    return std::nullopt;
++  }
++  path_len = std::string(result).length();
++#else
++  char result[PATH_MAX + 1] = {'\0'};
++  ssize_t path_len = readlink("/proc/self/exe", result, PATH_MAX);
++#endif
++  if (path_len > 0) {
++    return result;
++  }
++  return std::nullopt;
++}
+ 
+ std::list<std::filesystem::path>
+ get_searcheable_paths()
+@@ -38,6 +76,31 @@
+   _dupenv_s(&ament_prefix_path, &ament_prefix_path_size, env_var);
+ #endif
+   if (!ament_prefix_path || std::string(ament_prefix_path).empty()) {
++    // If we get here, then we have no AMENT_PREFIX_PATH, so we set the search path to the
++    // runfiles directory and rely on a symlink tree to replicate the ament index.
++    char * runfiles_dir = getenv("RUNFILES_DIR");
++    char * test_workspace = getenv("TEST_WORKSPACE");
++    if (runfiles_dir && test_workspace) {
++      const std::filesystem::path runfiles_path(runfiles_dir);
++      return std::list<std::filesystem::path>{runfiles_path / std::string(test_workspace)};
++    }
++    const std::optional<std::string> executable_path = get_executable_path();
++    if (executable_path) {
++      const std::filesystem::path runfiles_path(*executable_path + ".runfiles");
++      if (std::filesystem::exists(runfiles_path / "MANIFEST")) {
++        // test_workspace is the canonical repo name of the target under test
++        // (e.g. "_main" when the package is the root module, or
++        // "image_transport+" when it's pulled in as a bzlmod dependency of a
++        // different root module, as happens in CI's aggregated workspace).
++        // Fall back to "_main" only if it's unavailable.
++        return std::list<std::filesystem::path>{
++          runfiles_path / (test_workspace ? std::string(test_workspace) : "_main")};
++      }
++    }
++    const std::filesystem::path cwd = std::filesystem::current_path();
++    if (std::filesystem::exists(cwd / ".." / "MANIFEST")) {
++      return std::list<std::filesystem::path>{cwd};
++    }
+     throw std::runtime_error("Environment variable 'AMENT_PREFIX_PATH' is not set or empty");
+   }
+ 

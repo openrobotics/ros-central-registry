@@ -1,0 +1,32 @@
+--- a/test/rcl_action/test_action_server.cpp
++++ b/test/rcl_action/test_action_server.cpp
+@@ -280,12 +280,23 @@
+         return publisher_count;
+       };
+ 
+-    EXPECT_TRUE(
+-      get_publisher_count(send_goal_service_event_topic_name) == expect_publisher_count);
+-    EXPECT_TRUE(
+-      get_publisher_count(cancel_goal_service_event_topic_name) == expect_publisher_count);
+-    EXPECT_TRUE(
+-      get_publisher_count(get_result_service_event_topic_name) == expect_publisher_count);
++    // The graph is updated asynchronously (rmw_cyclonedds_cpp, for one, feeds
++    // it from a discovery thread even for this node's own publishers), so poll,
++    // bounded, until the expected count is visible rather than asserting on the
++    // first query.
++    auto wait_for_publisher_count = [&](const std::string & topic_name) -> size_t {
++        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
++        size_t count = get_publisher_count(topic_name);
++        while (count != expect_publisher_count && std::chrono::steady_clock::now() < deadline) {
++          std::this_thread::sleep_for(std::chrono::milliseconds(10));
++          count = get_publisher_count(topic_name);
++        }
++        return count;
++      };
++
++    EXPECT_EQ(wait_for_publisher_count(send_goal_service_event_topic_name), expect_publisher_count);
++    EXPECT_EQ(wait_for_publisher_count(cancel_goal_service_event_topic_name), expect_publisher_count);
++    EXPECT_EQ(wait_for_publisher_count(get_result_service_event_topic_name), expect_publisher_count);
+   }
+ 
+   rcl_action_server_t action_server;

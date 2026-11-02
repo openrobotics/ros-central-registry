@@ -1,0 +1,155 @@
+# Bazel build of glslang (CMakeLists.txt, glslang/CMakeLists.txt,
+# SPIRV/CMakeLists.txt, StandAlone/CMakeLists.txt), of its standalone GLSL to
+# SPIR-V compiler, `glslang` (glslangValidator), and of a glslc-compatible
+# front end to it, `glslc`. Without the deprecated
+# HLSL front end and without SPIR-V optimization (ENABLE_OPT=0), which would
+# need SPIRV-Tools.
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load(":glslang.bzl", "glsl_intrinsic_header")
+
+package(default_applicable_licenses = [":license"])
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+        "@rules_license//licenses/spdx:BSD-2-Clause",
+        "@rules_license//licenses/spdx:BSD-3-Clause",
+        "@rules_license//licenses/spdx:MIT",
+    ],
+    license_text = "LICENSE.txt",
+)
+
+exports_files([
+    "LICENSE.txt",
+    "gen_extension_headers.py",
+])
+
+# build_info.py's output for this version.
+expand_template(
+    name = "build_info",
+    out = "glslang/build_info.h",
+    substitutions = {
+        "@flavor@": "",
+        "@major@": "16",
+        "@minor@": "6",
+        "@patch@": "0",
+    },
+    template = "build_info.h.tmpl",
+)
+
+glsl_intrinsic_header(
+    name = "glsl_intrinsic_header",
+    srcs = glob(["glslang/ExtensionHeaders/*.glsl"]),
+    out = "glslang/glsl_intrinsic_header.h",
+)
+
+# CMakeLists.txt's add_compile_definitions(): SPIR-V generation on, the
+# SPIRV-Tools optimizer off.
+_DEFINES = [
+    "ENABLE_OPT=0",
+    "ENABLE_SPIRV=1",
+]
+
+# The glslang, SPIRV, GenericCodeGen, MachineIndependent, OSDependent and
+# glslang-default-resource-limits libraries.
+cc_library(
+    name = "glslang_lib",
+    srcs = glob([
+        "SPIRV/*.cpp",
+        "SPIRV/CInterface/*.cpp",
+        "glslang/CInterface/*.cpp",
+        "glslang/GenericCodeGen/*.cpp",
+        "glslang/MachineIndependent/*.cpp",
+        "glslang/MachineIndependent/preprocessor/*.cpp",
+        "glslang/ResourceLimits/*.cpp",
+    ]) + glob(
+        ["glslang/MachineIndependent/**/*.h"],
+        exclude = [
+            "glslang/MachineIndependent/Versions.h",
+            "glslang/MachineIndependent/iomapper.h",
+            "glslang/MachineIndependent/localintermediate.h",
+        ],
+    ) + select({
+        "@platforms//os:windows": ["glslang/OSDependent/Windows/ossource.cpp"],
+        "//conditions:default": ["glslang/OSDependent/Unix/ossource.cpp"],
+    }),
+    hdrs = glob([
+        # glslang/CInterface/glslang_c_interface.cpp includes it.
+        "StandAlone/DirStackFileIncluder.h",
+        "SPIRV/*.h",
+        "SPIRV/*.hpp11",
+        "glslang/Include/*.h",
+        "glslang/OSDependent/*.h",
+        "glslang/Public/*.h",
+    ]) + [
+        "glslang/MachineIndependent/Versions.h",
+        "glslang/MachineIndependent/iomapper.h",
+        "glslang/MachineIndependent/localintermediate.h",
+        ":build_info",
+    ],
+    copts = ["-std=c++17"],
+    defines = _DEFINES + select({
+        "@platforms//os:windows": ["GLSLANG_OSINCLUDE_WIN32"],
+        "//conditions:default": ["GLSLANG_OSINCLUDE_UNIX"],
+    }),
+    includes = ["."],
+    linkopts = select({
+        "@platforms//os:linux": ["-lpthread"],
+        "@platforms//os:windows": ["-lpsapi"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+)
+
+# The standalone compiler (installed as glslang and glslangValidator). Not
+# named `glslang`, whose output would clash with the glslang/ directory of the
+# generated headers.
+cc_binary(
+    name = "glslang_standalone",
+    srcs = [
+        "StandAlone/StandAlone.cpp",
+        "StandAlone/Worklist.h",
+        ":glsl_intrinsic_header",
+    ],
+    copts = ["-std=c++17"],
+    visibility = ["//visibility:public"],
+    deps = [":glslang_lib"],
+)
+
+[
+    alias(
+        name = name,
+        actual = ":glslang_standalone",
+        visibility = ["//visibility:public"],
+    )
+    for name in [
+        "glslang",
+        "glslangValidator",
+    ]
+]
+
+cc_library(
+    name = "standalone_main",
+    srcs = [
+        "StandAlone/StandAlone.cpp",
+        "StandAlone/Worklist.h",
+        ":glsl_intrinsic_header",
+    ],
+    copts = ["-std=c++17"],
+    # Called by bazel/glslc.cpp.
+    local_defines = ["main=glslang_standalone_main"],
+    visibility = ["//bazel:__pkg__"],
+    deps = [":glslang_lib"],
+)
+
+# A glslc-compatible front end (the subset of shaderc's options that build
+# tools such as PyTorch's tools/gen_vulkan_spv.py use; see bazel/glslc.cpp).
+alias(
+    name = "glslc",
+    actual = "//bazel:glslc",
+    visibility = ["//visibility:public"],
+)

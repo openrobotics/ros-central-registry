@@ -1,0 +1,66 @@
+--- a/src/publisher_subscriber_base.cpp
++++ b/src/publisher_subscriber_base.cpp
+@@ -36,16 +36,32 @@
+ class PublisherBase::Monitor
+ {
+ public:
+-    ~Monitor() {}
++    ~Monitor()
++    {
++        shutdown_flag_.store(true);
++        node_graph_interface_->notify_graph_change();
++        if (thread_.joinable())
++            thread_.join();
++    }
+ 
+     void detach(PublisherBase* publisher)
+     {
+-        std::lock_guard<std::mutex> lock{mutex_};
+-        publishers_.erase(publisher);
+-        if (publishers_.empty())
++        bool empty = false;
+         {
+-            shutdown_flag_.store(true);
+-            node_graph_interface_->notify_graph_change();
++            std::lock_guard<std::mutex> lock{mutex_};
++            publishers_.erase(publisher);
++            empty = publishers_.empty();
++            if (empty)
++            {
++                shutdown_flag_.store(true);
++                node_graph_interface_->notify_graph_change();
++            }
++        }
++        if (empty)
++        {
++            std::lock_guard<std::mutex> lock{singleton_mutex_};
++            if (singleton_.get() == this)
++                singleton_.reset();
+         }
+     }
+ 
+@@ -59,7 +75,7 @@
+     instance(const rclcpp::node_interfaces::NodeGraphInterface::SharedPtr& node_graph_interface)
+     {
+         std::lock_guard<std::mutex> lock{singleton_mutex_};
+-        if (!singleton_)
++        if (!singleton_ || singleton_->shutdown_flag_.load())
+             singleton_ = std::shared_ptr<Monitor>(new Monitor(node_graph_interface));
+         return singleton_;
+     }
+@@ -69,7 +85,6 @@
+         : node_graph_interface_(node_graph_interface), graph_event_(node_graph_interface_->get_graph_event()),
+           shutdown_flag_(false), thread_(std::bind(&Monitor::run, this))
+     {
+-        thread_.detach();
+     }
+ 
+     void run()
+@@ -87,7 +102,6 @@
+                 }
+             }
+         }
+-        singleton_.reset();
+     }
+ 
+     rclcpp::node_interfaces::NodeGraphInterface::SharedPtr node_graph_interface_;

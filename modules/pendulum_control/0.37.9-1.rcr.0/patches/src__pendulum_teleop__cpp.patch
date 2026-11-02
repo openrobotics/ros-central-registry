@@ -1,0 +1,26 @@
+--- a/src/pendulum_teleop.cpp
++++ b/src/pendulum_teleop.cpp
+@@ -54,7 +54,22 @@
+   rclcpp::executors::SingleThreadedExecutor executor;
+   executor.add_node(teleop_node);
+ 
+-  rclcpp::sleep_for(500ms);
++  // This node exits about a second after publishing, so a setpoint sent before
++  // the demo's subscription has been matched is simply lost (the demo subscribes
++  // with volatile durability, so transient-local history doesn't help it either).
++  // Rather than relying on a fixed start delay, wait -- bounded -- for a
++  // subscriber to show up before publishing. Spin while waiting so RMWs that
++  // need the executor to process discovery (e.g. CycloneDDS) can match.
++  const auto deadline = std::chrono::steady_clock::now() + 10s;
++  while (rclcpp::ok() && pub->get_subscription_count() == 0 &&
++    std::chrono::steady_clock::now() < deadline)
++  {
++    executor.spin_some();
++    rclcpp::sleep_for(50ms);
++  }
++  if (pub->get_subscription_count() == 0) {
++    fprintf(stderr, "No subscriber found for pendulum_setpoint; publishing anyway.\n");
++  }
+   pub->publish(std::move(msg));
+   executor.spin_some();
+   printf("Teleop message published.\n");

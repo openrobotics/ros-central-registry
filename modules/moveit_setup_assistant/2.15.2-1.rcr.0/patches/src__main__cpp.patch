@@ -1,0 +1,44 @@
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -38,14 +38,9 @@
+ #include <rviz_common/ros_integration/ros_client_abstraction.hpp>
+ #include <QApplication>
+ #include <QMessageBox>
++#include <QTimer>
+ #include <boost/program_options.hpp>
+-#include <signal.h>
+ #include <locale.h>
+-
+-static void siginthandler(int /*param*/)
+-{
+-  QApplication::quit();
+-}
+ 
+ void usage(boost::program_options::options_description& desc, int exit_code)
+ {
+@@ -106,13 +101,23 @@
+ 
+   saw.show();
+ 
+-  signal(SIGINT, siginthandler);
++  QTimer sigint_timer;
++  QObject::connect(&sigint_timer, &QTimer::timeout, [&client]() {
++    if (!client->ok())
++    {
++      QApplication::quit();
++    }
++  });
++  sigint_timer.start(100);
+ 
+   // Wait here until Qt App is finished
+   const int result = qt_app.exec();
+ 
+   // Shutdown ROS
+-  rclcpp::shutdown();
++  if (rclcpp::ok())
++  {
++    rclcpp::shutdown();
++  }
+ 
+   return result;
+ }

@@ -1,0 +1,192 @@
+--- a/src/rclcpp/typesupport_helpers.cpp
++++ b/src/rclcpp/typesupport_helpers.cpp
+@@ -16,6 +16,7 @@
+ #include "rclcpp/typesupport_helpers.hpp"
+ 
+ #include <algorithm>
++#include <filesystem>
+ #include <functional>
+ #include <memory>
+ #include <sstream>
+@@ -24,6 +25,22 @@
+ #include <tuple>
+ #include <utility>
+ 
++#include <unistd.h>  // For readlink
++#include <limits.h>  // For PATH_MAX
++
++#if defined(__APPLE__)
++#include <mach-o/dyld.h>  // For _NSGetExecutablePath
++#endif
++
++#if defined(_WIN32)
++#include <windows.h>  // For GetModuleFileNameA, MAX_PATH
++#endif
++
++#include <optional>
++#include "rules_cc/cc/runfiles/runfiles.h"
++
++using rules_cc::cc::runfiles::Runfiles;
++
+ #include "ament_index_cpp/get_package_prefix.hpp"
+ #include "ament_index_cpp/get_resources.hpp"
+ #include "rcpputils/shared_library.hpp"
+@@ -35,6 +52,55 @@
+ 
+ namespace
+ {
++
++// Cross-platform way of obtaining the full path to the current executable.
++// Runfiles::Create()'s argv0 parameter is only consulted as a fallback when
++// neither RUNFILES_DIR nor RUNFILES_MANIFEST_FILE are set in the environment
++// -- which is exactly the case under `bazel run` (its runner script
++// explicitly unsets both, unlike `bazel test`, which populates them). The
++// fallback derives the runfiles directory as "<argv0>.runfiles", so argv0
++// needs to be a real, usable path here, not a placeholder. Mirrors
++// ament_index_cpp's own get_executable_path() in get_search_paths.cpp.
++static std::string
++get_executable_path()
++{
++#if defined(_WIN32)
++  char result[MAX_PATH + 1] = {'\0'};
++  auto path_len = GetModuleFileNameA(NULL, result, MAX_PATH);
++#elif defined(__APPLE__)
++  char result[PATH_MAX + 1] = {'\0'};
++  uint32_t path_len = PATH_MAX;
++  if (_NSGetExecutablePath(result, &path_len) != 0) {
++    return "ignore-argv[0]";
++  }
++  path_len = std::string(result).length();
++#else
++  char result[PATH_MAX + 1] = {'\0'};
++  ssize_t path_len = readlink("/proc/self/exe", result, PATH_MAX);
++#endif
++  if (path_len > 0) {
++    return std::string(result, path_len);
++  }
++  return "ignore-argv[0]";
++}
++
++// Try to get the value of an environment variable, and optionally return the result.
++static std::optional<std::string>
++get_env_variable(const char * env_var)
++{
++  char * ament_prefix_path = nullptr;
++#ifndef _WIN32
++  ament_prefix_path = getenv(env_var);
++#else
++  size_t ament_prefix_path_size;
++  _dupenv_s(&ament_prefix_path, &ament_prefix_path_size, env_var);
++#endif
++  if (!ament_prefix_path || std::string(ament_prefix_path).empty())
++  {
++      return {};
++  }
++  return std::string(ament_prefix_path);
++}
+ 
+ const void * get_typesupport_handle_impl(
+   const std::string & type,
+@@ -121,39 +187,75 @@
+ std::string get_typesupport_library_path(
+   const std::string & package_name, const std::string & typesupport_identifier)
+ {
+-  const char * dynamic_library_folder;
+-#ifdef _WIN32
+-  dynamic_library_folder = "bin";
+-#elif __APPLE__
+-  dynamic_library_folder = "lib";
++  const std::optional<std::string> test_workspace = get_env_variable("TEST_WORKSPACE");
++  std::string error;
++  auto runfiles = test_workspace
++    ? Runfiles::CreateForTest(BAZEL_CURRENT_REPOSITORY, &error)
++    : Runfiles::Create(get_executable_path(), BAZEL_CURRENT_REPOSITORY, &error);
++
++  if (!runfiles) {
++    throw std::runtime_error("Failed to create Runfiles: " + error);
++  }
++
++  std::string target_library = package_name + "__" + typesupport_identifier;
++
++#if defined(__APPLE__)
++  const std::string ext = ".dylib";
++#elif defined(_WIN32)
++  const std::string ext = ".dll";
+ #else
+-  dynamic_library_folder = "lib";
+-#endif
+-
+-  std::filesystem::path package_prefix;
+-  try {
+-    ament_index_cpp::get_package_prefix(package_name, package_prefix);
+-  } catch (ament_index_cpp::PackageNotFoundError & e) {
+-    throw std::runtime_error(e.what());
+-  }
+-
+-  const std::string library_path = rcpputils::path_for_library(
+-    (package_prefix / dynamic_library_folder).string(),
+-    package_name + "__" + typesupport_identifier);
+-  if (library_path.empty()) {
+-    throw std::runtime_error(
+-      "Typesupport library for " + package_name + " does not exist in '" +
+-        package_prefix.string() + "'.");
+-  }
+-  return library_path;
++  const std::string ext = ".so";
++#endif
++  for (const std::string & rlocation_path : {
++    package_name + "+/lib" + target_library + ext,
++    "_main/lib/lib" + target_library + ext,
++  }) {
++    std::string candidate = runfiles->Rlocation(rlocation_path);
++    if (!candidate.empty() && std::filesystem::exists(candidate)) {
++      return candidate;
++    }
++  }
++
++  throw std::runtime_error(
++    "Typesupport library for " + target_library + " does not exist in runfiles.");
+ }
+ 
+ std::shared_ptr<rcpputils::SharedLibrary>
+ get_typesupport_library(const std::string & type, const std::string & typesupport_identifier)
+ {
+-  auto package_name = std::get<0>(extract_type_identifier(type));
+-  auto library_path = get_typesupport_library_path(package_name, typesupport_identifier);
+-  return std::make_shared<rcpputils::SharedLibrary>(library_path);
++  std::string package_name;
++  std::string middle_module;
++  std::string type_name;
++  std::tie(package_name, middle_module, type_name) = extract_type_identifier(type);
++
++  try {
++    auto library_path = get_typesupport_library_path(package_name, typesupport_identifier);
++    return std::make_shared<rcpputils::SharedLibrary>(library_path);
++  } catch (const std::runtime_error &) {
++    // Fallback for statically linked binaries (--dynamic_mode=off) where
++    // individual interfaces are linked directly into the executable with
++    // --export-dynamic and no typesupport .so exists in runfiles.
++    auto exe_path = get_executable_path();
++    if (exe_path != "ignore-argv[0]" && std::filesystem::exists(exe_path)) {
++      try {
++        auto exe_lib = std::make_shared<rcpputils::SharedLibrary>(exe_path);
++        const std::pair<std::string, std::string> candidates[] = {
++          {"__get_message_type_support_handle__", middle_module.empty() ? "msg" : middle_module},
++          {"__get_service_type_support_handle__", middle_module.empty() ? "srv" : middle_module},
++          {"__get_action_type_support_handle__", middle_module.empty() ? "action" : middle_module},
++        };
++        for (const auto & [symbol_part, mod] : candidates) {
++          std::string symbol_name =
++            typesupport_identifier + symbol_part + package_name + "__" + mod + "__" + type_name;
++          if (exe_lib->has_symbol(symbol_name)) {
++            return exe_lib;
++          }
++        }
++      } catch (const std::exception &) {
++      }
++    }
++    throw;
++  }
+ }
+ 
+ const rosidl_message_type_support_t * get_message_typesupport_handle(

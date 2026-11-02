@@ -1,0 +1,44 @@
+--- a/test/test_view_ur_launch.py
++++ b/test/test_view_ur_launch.py
+@@ -31,6 +31,32 @@
+ import os
+ import pytest
+ 
++# Ensure Bazel runfiles are on PATH and AMENT_PREFIX_PATH is set
++runfiles_dir = os.environ.get("RUNFILES_DIR") or os.environ.get("TEST_SRCDIR")
++if runfiles_dir:
++    ament_dirs = [
++        os.path.join(runfiles_dir, d)
++        for d in os.listdir(runfiles_dir)
++        if os.path.isdir(os.path.join(runfiles_dir, d, "share", "ament_index"))
++    ]
++    if os.environ.get("AMENT_PREFIX_PATH"):
++        ament_dirs.append(os.environ["AMENT_PREFIX_PATH"])
++    os.environ["AMENT_PREFIX_PATH"] = os.pathsep.join(ament_dirs)
++    extra_paths = set()
++    for root, dirs, files in os.walk(runfiles_dir):
++        # The ament index also contains an (empty) marker file named after
++        # each package, e.g. share/ament_index/resource_index/packages/xacro;
++        # only pick up real, non-empty executables.
++        if "ament_index" in root.split(os.sep):
++            continue
++        for file in files:
++            if file in ("xacro", "check_urdf"):
++                path = os.path.join(root, file)
++                if os.access(path, os.X_OK) and os.path.getsize(path) > 0:
++                    extra_paths.add(root)
++    if extra_paths:
++        os.environ["PATH"] = os.pathsep.join(list(extra_paths)) + os.pathsep + os.environ.get("PATH", "")
++
+ from ament_index_python.packages import get_package_share_directory
+ from launch import LaunchDescription
+ from launch.actions import IncludeLaunchDescription
+@@ -49,3 +75,8 @@
+     )
+ 
+     return LaunchDescription([launch_include, ReadyToTest()])
++
++
++def test_view_ur_launch():
++    assert generate_test_description() is not None
++

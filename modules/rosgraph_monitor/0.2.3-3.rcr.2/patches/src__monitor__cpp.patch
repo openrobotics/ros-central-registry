@@ -1,0 +1,149 @@
+--- a/src/monitor.cpp
++++ b/src/monitor.cpp
+@@ -187,9 +187,9 @@
+   node_graph_->notify_shutdown();
+   update_event_.set();
+ 
++  watch_thread_.join();
++
+   params_futures.clear();
+-
+-  watch_thread_.join();
+ }
+ 
+ void RosGraphMonitor::update_graph()
+@@ -198,6 +198,7 @@
+   track_node_updates(node_names);
+ 
+   const auto topics_and_types = node_graph_->get_topic_names_and_types();
++  std::lock_guard<std::recursive_mutex> lock(graph_mutex_);
+   track_endpoint_updates(topics_and_types);
+ }
+ 
+@@ -219,46 +220,54 @@
+ void RosGraphMonitor::track_node_updates(
+   const std::vector<std::string> & observed_node_names)
+ {
+-  // Mark all stale as base state
+-  for (auto & [node_name, tracking] : nodes_) {
+-    tracking.stale = true;
+-  }
+-  // Look at current node list, detect new and returned
+-  for (const auto & node_name : observed_node_names) {
+-    if (ignore_node(node_name)) {
+-      continue;
+-    }
+-
+-    NodeTracking tracking{node_name};
+-    auto [it, inserted] = nodes_.emplace(
+-      node_name, tracking);
+-
+-    if (inserted) {
+-      RCLCPP_DEBUG(logger_, "New node: %s", node_name.c_str());
+-      query_node_parameters(node_name);
+-    } else {
+-      NodeTracking & tracking = it->second;
+-      tracking.stale = false;
+-      if (tracking.missing) {
+-        RCLCPP_INFO(logger_, "Node %s came back", node_name.c_str());
+-        tracking.missing = false;
+-        returned_nodes_.insert(node_name);
+-        query_node_parameters(node_name);
+-      }
+-    }
+-  }
+-  // Check which nodes are still stale - they weren't observed
+-  for (auto & [node_name, tracking] : nodes_) {
+-    if (tracking.stale && !tracking.missing) {
+-      RCLCPP_WARN(logger_, "Node %s went missing", node_name.c_str());
+-      tracking.missing = true;
+-      returned_nodes_.erase(node_name);
+-    }
+-  }
+-
+-  // Call graph change callback if set
+-  if (graph_change_callback_) {
+-    graph_change_callback_();
++  std::vector<std::string> nodes_to_query;
++  {
++    std::lock_guard<std::recursive_mutex> lock(graph_mutex_);
++    // Mark all stale as base state
++    for (auto & [node_name, tracking] : nodes_) {
++      tracking.stale = true;
++    }
++    // Look at current node list, detect new and returned
++    for (const auto & node_name : observed_node_names) {
++      if (ignore_node(node_name)) {
++        continue;
++      }
++
++      NodeTracking tracking{node_name};
++      auto [it, inserted] = nodes_.emplace(
++        node_name, tracking);
++
++      if (inserted) {
++        RCLCPP_DEBUG(logger_, "New node: %s", node_name.c_str());
++        nodes_to_query.push_back(node_name);
++      } else {
++        NodeTracking & tracking = it->second;
++        tracking.stale = false;
++        if (tracking.missing) {
++          RCLCPP_INFO(logger_, "Node %s came back", node_name.c_str());
++          tracking.missing = false;
++          returned_nodes_.insert(node_name);
++          nodes_to_query.push_back(node_name);
++        }
++      }
++    }
++    // Check which nodes are still stale - they weren't observed
++    for (auto & [node_name, tracking] : nodes_) {
++      if (tracking.stale && !tracking.missing) {
++        RCLCPP_WARN(logger_, "Node %s went missing", node_name.c_str());
++        tracking.missing = true;
++        returned_nodes_.erase(node_name);
++      }
++    }
++
++    // Call graph change callback if set
++    if (graph_change_callback_) {
++      graph_change_callback_();
++    }
++  }
++
++  for (const auto & node_name : nodes_to_query) {
++    query_node_parameters(node_name);
+   }
+ }
+ 
+@@ -431,6 +440,7 @@
+ 
+ void RosGraphMonitor::evaluate(std::vector<diagnostic_msgs::msg::DiagnosticStatus> & status)
+ {
++  std::lock_guard<std::recursive_mutex> lock(graph_mutex_);
+   using diagnostic_msgs::msg::DiagnosticStatus;
+ 
+   auto now = now_fn_();
+@@ -622,6 +632,7 @@
+ 
+ void RosGraphMonitor::on_topic_statistics(const rosgraph_monitor_msgs::msg::TopicStatistics & msg)
+ {
++  std::lock_guard<std::recursive_mutex> lock(graph_mutex_);
+   for (const auto & stat : msg.statistics) {
+     std::optional<RosRmwGid> maybe_gid;
+     EndpointTrackingMap * endpoints = nullptr;
+@@ -665,6 +676,7 @@
+ 
+ void RosGraphMonitor::fill_rosgraph_msg(rosgraph_monitor_msgs::msg::Graph & msg)
+ {
++  std::lock_guard<std::recursive_mutex> lock(graph_mutex_);
+   msg.timestamp = now_fn_();
+   msg.nodes.clear();
+ 
+@@ -718,6 +730,7 @@
+     node_name,
+     [this, node_name_copy = std::string(node_name)](
+       const rcl_interfaces::msg::ListParametersResult & result) {
++      std::lock_guard<std::recursive_mutex> lock(graph_mutex_);
+       RCLCPP_INFO(
+         logger_, "Got parameters for node %s: %zu", node_name_copy.c_str(),
+         result.names.size());

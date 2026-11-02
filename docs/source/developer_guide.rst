@@ -73,7 +73,7 @@ Firstly, generate a throwaway Bazel workspace for the release you want to patch:
 
 .. code-block:: text
 
-   bazel run //tools/ci:setup_workspace -- --release=rolling.2026-01-21.rcr.1
+   bazel run //tools/ci:setup_workspace -- --release=lyrical.2026-10-05.rcr.0
 
 This creates a ``workspace/`` directory (gitignored, safe to regenerate at any time) with a ``MODULE.bazel`` that pins every package in the release, plus a ``.bazelrc`` already configured with ``--vendor_dir=vendor``.
 

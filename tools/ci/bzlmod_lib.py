@@ -106,17 +106,30 @@ def increment_version(version: str) -> str:
     return f"{version}.rcr.0"
 
 
-def version_sort_key(version: str) -> Tuple[str, int, int]:
+def _numeric_aware_key(text: str) -> Tuple:
     """
-    Numeric-aware sort key for RCR version strings, so that e.g.
-    "32.0.0-1.rcr.10" sorts after "32.0.0-1.rcr.2" (plain lexicographic
-    sort would put "rcr.10" before "rcr.2"). Versions without a .rcr.N
-    suffix sort before any .rcr.N variant of the same base version.
+    Splits text into alternating (non-digit, digit, non-digit, ...) runs,
+    with digit runs as ints, so "0.45.10" > "0.45.7" and "3.12.0" > "3.9.0".
+    re.split with a capturing group always yields a str at even indices and
+    a digit run at odd indices, so tuples from two different strings never
+    compare str against int.
+    """
+    return tuple(int(p) if i % 2 else p for i, p in enumerate(re.split(r"(\d+)", text)))
+
+
+def version_sort_key(version: str) -> Tuple[Tuple, int, int]:
+    """
+    Numeric-aware sort key for RCR version strings, both for the .rcr.N
+    patch suffix ("32.0.0-1.rcr.10" sorts after "32.0.0-1.rcr.2") and for
+    every numeric component of the base version ("0.45.10-1" sorts after
+    "0.45.7-3", "lyrical.2026-10-05" after "lyrical.2026-06-08") -- plain
+    lexicographic sort gets both wrong. Versions without a .rcr.N suffix
+    sort before any .rcr.N variant of the same base version.
     """
     parts = version.split(".")
     if len(parts) >= 2 and parts[-2] == "rcr" and parts[-1].isdigit():
-        return (".".join(parts[:-2]), 1, int(parts[-1]))
-    return (version, 0, -1)
+        return (_numeric_aware_key(".".join(parts[:-2])), 1, int(parts[-1]))
+    return (_numeric_aware_key(version), 0, -1)
 
 
 def read_metadata_json(metadata_json_path: Path) -> dict:
@@ -242,7 +255,8 @@ def regenerate_integrity_hashes(module_dir: Path) -> None:
                         has_patches = True
 
     if has_patches:
-        source["patch_strip"] = 1
+        if "patch_strip" not in source:
+            source["patch_strip"] = 1
     else:
         source.pop("patch_strip", None)
 

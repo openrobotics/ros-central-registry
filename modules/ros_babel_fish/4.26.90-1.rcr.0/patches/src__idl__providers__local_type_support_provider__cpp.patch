@@ -1,0 +1,76 @@
+--- a/src/idl/providers/local_type_support_provider.cpp
++++ b/src/idl/providers/local_type_support_provider.cpp
+@@ -5,6 +5,7 @@
+ #include "ros_babel_fish/idl/exceptions.hpp"
+ 
+ #include <ament_index_cpp/get_package_prefix.hpp>
++#include <rclcpp/typesupport_helpers.hpp>
+ #include <rcpputils/shared_library.hpp>
+ #include <rcutils/error_handling.h>
+ #include <rosidl_typesupport_cpp/identifier.hpp>
+@@ -33,38 +34,6 @@
+ // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+-std::string get_typesupport_library_path( const std::string &package_name,
+-                                          const std::string &typesupport_identifier )
+-{
+-  const char *filename_prefix;
+-  const char *filename_extension;
+-  const char *dynamic_library_folder;
+-#ifdef _WIN32
+-  filename_prefix = "";
+-  filename_extension = ".dll";
+-  dynamic_library_folder = "/bin/";
+-#elif __APPLE__
+-  filename_prefix = "lib";
+-  filename_extension = ".dylib";
+-  dynamic_library_folder = "/lib/";
+-#else
+-  filename_prefix = "lib";
+-  filename_extension = ".so";
+-  dynamic_library_folder = "/lib/";
+-#endif
+-
+-  std::filesystem::path package_prefix;
+-  try {
+-    ament_index_cpp::get_package_prefix( package_name, package_prefix );
+-  } catch ( std::exception &e ) {
+-    throw TypeSupportException( e.what() );
+-  }
+-
+-  auto library_path = package_prefix.string() + dynamic_library_folder + filename_prefix +
+-                      package_name + "__" + typesupport_identifier + filename_extension;
+-  return library_path;
+-}
+-
+ std::tuple<std::string, std::string, std::string> extract_type_identifier( const std::string &full_type )
+ {
+   char type_separator = '/';
+@@ -91,21 +60,16 @@
+ get_typesupport_library( const std::string &type, const std::string &typesupport_identifier )
+ {
+   try {
+-    auto package_name = std::get<0>( extract_type_identifier( type ) );
+-    auto library_path = get_typesupport_library_path( package_name, typesupport_identifier );
+-    // Type-support libraries are cached process-globally and never unloaded for the lifetime of the
+-    // process: the middleware (e.g. rmw_zenoh) may dereference the static type-support data they
+-    // contain while it is being torn down, after the owning BabelFish/entity is already gone.
+-    // Unloading on BabelFish destruction leaves those references dangling.
+     static std::mutex mutex;
+     static std::unordered_map<std::string, std::shared_ptr<rcpputils::SharedLibrary>> cache;
++    std::string key = type + "::" + typesupport_identifier;
+     std::lock_guard<std::mutex> lock( mutex );
+-    if ( auto it = cache.find( library_path ); it != cache.end() )
++    if ( auto it = cache.find( key ); it != cache.end() )
+       return it->second;
+-    auto library = std::make_shared<rcpputils::SharedLibrary>( library_path );
+-    cache.emplace( library_path, library );
++    auto library = rclcpp::get_typesupport_library( type, typesupport_identifier );
++    cache.emplace( key, library );
+     return library;
+-  } catch ( TypeSupportException &e ) {
++  } catch ( std::exception &e ) {
+     throw TypeSupportException( "Failed to get typesupport library for message type '" + type +
+                                 "': " + e.what() );
+   }

@@ -1,0 +1,30 @@
+--- a/qt_internal_library.bzl
++++ b/qt_internal_library.bzl
+@@ -106,6 +106,14 @@ _qt_library_target = rule(
+     provides = [CcInfo, QtSharedLibraryInfo],
+ )
+ 
++def _has_static_library(linker_input):
++    for lib in linker_input.libraries:
++        if lib.static_library != None or lib.pic_static_library != None:
++            return True
++        if lib.objects or lib.pic_objects:
++            return True
++    return False
++
+ def _qt_linkable_more_than_once_hint_impl(ctx):
+     owners = []
+     seen = {}
+@@ -115,6 +123,11 @@ def _qt_linkable_more_than_once_hint_impl(ctx):
+             owners.append(d.label)
+         if CcInfo in d:
+             for li in d[CcInfo].linking_context.linker_inputs.to_list():
++                # Dynamic-only inputs and inputs from other repositories (e.g.
++                # the toolchain's C++ runtime, present in every CcInfo) must
++                # not be claimed here, as that would clash across hints.
++                if not _has_static_library(li) or li.owner.repo_name != d.label.repo_name:
++                    continue
+                 if str(li.owner) not in seen:
+                     seen[str(li.owner)] = True
+                     owners.append(li.owner)
+

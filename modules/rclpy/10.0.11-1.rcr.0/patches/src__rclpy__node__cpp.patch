@@ -1,0 +1,39 @@
+--- a/src/rclpy/node.cpp
++++ b/src/rclpy/node.cpp
+@@ -468,22 +468,26 @@
+     new rcl_node_t,
+     [enable_rosout](rcl_node_t * node)
+     {
+-      rcl_ret_t ret;
++      rcl_ret_t ret = RCL_RET_OK;
+       {
+         rclpy::LoggingGuard scoped_logging_guard;
+         if (rcl_logging_rosout_enabled() && enable_rosout) {
++          py::gil_scoped_release gil_release;
+           ret = rcl_logging_rosout_fini_publisher_for_node(node);
+-          if (ret != RCL_RET_OK) {
+-            // Warning should use line number of the current stack frame
+-            int stack_level = 1;
+-            PyErr_WarnFormat(
+-              PyExc_RuntimeWarning, stack_level, "Failed to fini rosout publisher: %s",
+-              rcl_get_error_string().str);
+-            rcl_reset_error();
+-          }
+         }
+       }
+-      ret = rcl_node_fini(node);
++      if (ret != RCL_RET_OK) {
++        // Warning should use line number of the current stack frame
++        int stack_level = 1;
++        PyErr_WarnFormat(
++          PyExc_RuntimeWarning, stack_level, "Failed to fini rosout publisher: %s",
++          rcl_get_error_string().str);
++        rcl_reset_error();
++      }
++      {
++        py::gil_scoped_release gil_release;
++        ret = rcl_node_fini(node);
++      }
+       if (RCL_RET_OK != ret) {
+         // Warning should use line number of the current stack frame
+         int stack_level = 1;

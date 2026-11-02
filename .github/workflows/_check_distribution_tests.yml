@@ -49,7 +49,7 @@ jobs:
       id-token: write
     name: test_${{ matrix.ros }}_${{ matrix.variant }}_${{ matrix.bazel }}_${{ matrix.os }}_${{ inputs.rmw }}
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ contains(fromJSON('["macos-26-intel", "macos-26"]'), matrix.os) }}
+    continue-on-error: ${{ contains(fromJSON('["macos-26"]'), matrix.os) }}
     defaults:
       run:
         working-directory: workspace
@@ -59,12 +59,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        bazel: ${{ github.event_name == 'pull_request' && fromJSON('["9.x"]') || fromJSON('["8.x", "9.x"]') }}
+        bazel: ${{ github.event_name == 'pull_request' && fromJSON('["9.x"]') || fromJSON('["9.x", "last_rc"]') }}
         ros:
-        - lyrical.2026-06-08.rcr.2
+        - lyrical.2026-10-05.rcr.0
         variant:
-        - perception
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm"]') || fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm"]') }}
+        - desktop_full
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm", "macos-26"]') || fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm"]') }}
     steps:
 
     # Pin Xcode explicitly on macOS runners.
@@ -73,6 +73,26 @@ jobs:
       uses: maxim-lobanov/setup-xcode@v1.7.0
       with:
         xcode-version: '26.3'
+
+    # The stock GitHub Actions Ubuntu image preinstalls ~30+ GB of toolchains
+    # (.NET, Android, Haskell, CodeQL, etc.) that our hermetic Bazel build
+    # never uses, leaving too little room for a full desktop_full build.
+    - name: Free disk space (Linux)
+      if: runner.os == 'Linux'
+      uses: jlumbroso/free-disk-space@v2.0.0
+
+    # Like upstream libQt6Gui, QtGui links the glvnd dispatch libraries
+    # (libGL, libGLX, libOpenGL, libEGL), so every Linux binary using it,
+    # including host tools such as qsb, needs them at runtime. The x86_64
+    # runner image ships them; the arm64 one does not.
+    - name: Install GL runtime libraries (Linux)
+      if: runner.os == 'Linux'
+      # Runs before checkout, so the job's default working-directory
+      # (workspace/) doesn't exist yet.
+      working-directory: .
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends libegl1 libgl1 libglx0 libopengl0
 
     # Setup bazel with controlled caching
     - name: Checkout repository
@@ -101,6 +121,17 @@ jobs:
         bazelisk-cache: true
         disk-cache: false
         repository-cache: true
+        # Pin the Bazel server heap for the free GitHub-hosted runners: 16 GB
+        # on ubuntu-26.04 / ubuntu-26.04-arm, 7 GB on the 3-core M1 macos-26
+        # image. Half of RAM each way; the other half is what the workspace
+        # .bazelrc's `build:ci --local_resources=memory=HOST_RAM*.5` hands out
+        # to concurrently running compiler/test actions. This is the only
+        # place the heap is set (startup options can't be made per-OS inside
+        # .bazelrc); without it the JVM would default to 25% of RAM, which is
+        # too small to analyze the distribution.
+        bazelrc: |
+          common --repo_contents_cache=
+          startup --host_jvm_args=-Xmx${{ runner.os == 'macOS' && '3g' || '8g' }}
 
     # Prepare the bazel workspace
     - name: Prepare workspace
@@ -110,83 +141,135 @@ jobs:
         bazel run //tools/ci:setup_workspace -- --release=${{ matrix.ros }} --tmpdir "$RUNNER_TEMP" \
             ${{ (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry' && '--remote-cache-write' || '' }}
 
-    # Run the distribution test for the implementation.
+    # Zenoh needs a router for the tests to discover each other. Start it in
+    # its own step so it stays up across the analyze/build/test steps below;
+    # it is stopped explicitly in the last step (a shell `trap ... EXIT` would
+    # only live for the duration of a single step).
+    - name: Start rmw_zenohd router
+      id: zenohd
+      if: inputs.rmw == 'rmw_zenoh_cpp'
+      run: |
+        # `bazel run` and `bazel test` can't run concurrently against the
+        # same output base -- they serialize on Bazel's single command
+        # lock. Simply backgrounding `bazel run @rmw_zenoh_cpp//:rmw_zenohd &`
+        # right before `bazel test` races the two for that lock: whenever
+        # `bazel test` won (common under CI load), the router's `bazel
+        # run` client sat blocked for the entire test run and was killed
+        # before ever starting rmw_zenohd -- silently leaving every zenoh
+        # session routerless (each rmw_zenoh_cpp context logs a warning and
+        # carries on without discovery) rather than failing loudly. Resolve
+        # the router to a plain script up front via `--script_path` (which
+        # only builds and writes the script, then returns -- it never leaves
+        # a command holding the lock) and launch that directly, so it no
+        # longer contends with `bazel test` for the lock at all.
+        bazel build --config ci @rmw_zenoh_cpp//:rmw_zenohd
+        bazel run --config ci @rmw_zenoh_cpp//:rmw_zenohd --script_path="$PWD/run_zenohd.sh"
+        nohup ./run_zenohd.sh >zenohd-stdout.log 2>zenohd-stderr.log &
+        ZENOHD_PID=$!
+        echo "$ZENOHD_PID" > "$RUNNER_TEMP/zenohd.pid"
+        router_ready=false
+        for i in $(seq 1 30); do
+          if nc -z 127.0.0.1 7447 2>/dev/null; then
+            router_ready=true
+            break
+          fi
+          if ! kill -0 $ZENOHD_PID 2>/dev/null; then
+            break
+          fi
+          sleep 1
+        done
+        if [ "$router_ready" != "true" ]; then
+          echo "rmw_zenohd never started listening on 7447; see zenohd-stderr.log" >&2
+          cat zenohd-stderr.log >&2
+          exit 1
+        fi
+
+    # macOS runners coalesce kernel timers aggressively: measured on the CI VMs,
+    # a 10 ms sleep takes ~55 ms and a 100 ms sleep ~150-250 ms, which fails
+    # every timing-sensitive test (rcl test_wait/test_timer, rclcpp test_rate,
+    # rclpy test_rate/test_timer, diagnostic_updater, tf2_ros test_buffer, ...)
+    # even though tests run one at a time. Process priority / QoS make no
+    # difference; disabling coalescing brings sleeps back to within ~1% of
+    # their requested duration. Print a quick before/after so a regression on
+    # the runner image shows up in the log.
+    - name: Disable kernel timer coalescing (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        probe='import time; s=sorted((lambda t0: (time.sleep(0.01), (time.perf_counter()-t0)*1000)[1])(time.perf_counter()) for _ in range(20)); print(f"10 ms sleep: median {s[10]:.2f} ms, max {s[-1]:.2f} ms")'
+        echo "kern.timer.coalescing_enabled=$(sysctl -n kern.timer.coalescing_enabled); $(python3 -c "$probe")"
+        sudo sysctl -w kern.timer.coalescing_enabled=0
+        echo "kern.timer.coalescing_enabled=$(sysctl -n kern.timer.coalescing_enabled); $(python3 -c "$probe")"
+
+    # Analyze first (loading + analysis only) so module-resolution, BUILD-file
+    # and dependency errors fail in their own step, separately from compile
+    # failures (build step) and test failures (test step).
+    - name: Analyze
+      id: analyze
+      run: |
+        bazel build --nobuild --config ci --build_tests_only --config=${{ matrix.variant }} 2>&1 | tee ${{ inputs.rmw }}.analyze.log
+
+    # Build before testing: the compilation load causes time-based tests to
+    # flake nondeterministically, creating lots of result noise.
+    - name: Build
+      id: build
+      run: |
+        bazel build --config ci --build_tests_only --config=${{ matrix.variant }} 2>&1 | tee ${{ inputs.rmw }}.build.log
+
+    # Run the distribution tests for the implementation. --build_tests_only
+    # matches the build step above: without it `bazel test` first builds every
+    # non-test target in the variant too (Qt/ICU/Bullet/... that no test needs),
+    # which showed up as hundreds of compile actions inside the test step.
     - name: Test (${{ inputs.rmw }})
       id: test
       run: |
-        if [ "${{ inputs.rmw }}" = "rmw_zenoh_cpp" ]; then
-          # `bazel run` and `bazel test` can't run concurrently against the
-          # same output base -- they serialize on Bazel's single command
-          # lock. Simply backgrounding `bazel run @rmw_zenoh_cpp//:rmw_zenohd &`
-          # right before `bazel test` races the two for that lock: whenever
-          # `bazel test` won (common under CI load), the router's `bazel
-          # run` client sat blocked for the entire test run and was killed
-          # by the EXIT trap before ever starting rmw_zenohd -- silently
-          # leaving every zenoh session in this step routerless (each
-          # rmw_zenoh_cpp context logs a warning and carries on without
-          # discovery) rather than failing loudly. Resolve the router to a
-          # plain script up front via `--script_path` (which only builds
-          # and writes the script, then returns -- it never leaves a
-          # command holding the lock) and launch that directly, so it no
-          # longer contends with `bazel test` for the lock at all.
-          bazel build --config ci @rmw_zenoh_cpp//:rmw_zenohd
-          bazel run --config ci @rmw_zenoh_cpp//:rmw_zenohd --script_path="$PWD/run_zenohd.sh"
-          ./run_zenohd.sh >zenohd-stdout.log 2>zenohd-stderr.log &
-          ZENOHD_PID=$!
-          trap "kill $ZENOHD_PID 2>/dev/null || true" EXIT
-          router_ready=false
-          for i in $(seq 1 30); do
-            if nc -z 127.0.0.1 7447 2>/dev/null; then
-              router_ready=true
-              break
-            fi
-            if ! kill -0 $ZENOHD_PID 2>/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          if [ "$router_ready" != "true" ]; then
-            echo "rmw_zenohd never started listening on 7447; see zenohd-stderr.log" >&2
-            cat zenohd-stderr.log >&2
-            exit 1
-          fi
-        fi
-        # We do a build before the test, as the compilation load causes time-based
-        # tests to flake nondeterminstically, creating lots of result noise.
-        bazel build --config ci --build_tests_only --config=${{ matrix.variant }}
-        bazel test --config ci --config=${{ matrix.variant }} --test_env=RMW_IMPLEMENTATION=${{ inputs.rmw }} 2>&1 | tee ${{ inputs.rmw }}.test.log || test_status=$?
+        bazel test --config ci --build_tests_only --config=${{ matrix.variant }} --test_env=RMW_IMPLEMENTATION=${{ inputs.rmw }} 2>&1 | tee ${{ inputs.rmw }}.test.log
 
-        # Also build/test whatever package(s) this PR actually touches, in
-        # case they aren't part of the variant above -- see
-        # changed_packages' input docs in _check_distribution_compiles.yml.
-        if [ -n "${{ inputs.changed_packages }}" ]; then
-          TARGETS=""
-          for pkg in ${{ inputs.changed_packages }}; do
-            if bazel query "@${pkg}//..." >/dev/null 2>&1; then
-              TARGETS="$TARGETS @${pkg}//..."
-            else
-              echo "Skipping @${pkg}//... (no targets found)"
-            fi
-          done
-          if [ -n "$TARGETS" ]; then
-            if ! bazel build --config ci --build_tests_only $TARGETS 2>&1 | tee ${{ inputs.rmw }}.changed_packages.build.log; then
-              echo "::warning title=Build changed packages failed::Building changed packages ($TARGETS) tests failed, but will not block CI as some modules may be outside the supported collection."
-            elif ! bazel test --config ci --test_env=RMW_IMPLEMENTATION=${{ inputs.rmw }} $TARGETS 2>&1 | tee ${{ inputs.rmw }}.changed_packages.test.log; then
-              rc=${PIPESTATUS[0]}
-              # Bazel exits with 4 when no test targets match the pattern,
-              # which is expected for packages that don't declare any tests.
-              if [ "$rc" -ne 4 ]; then
-                echo "::warning title=Test changed packages failed::Testing changed packages ($TARGETS) failed, but will not block CI as some modules may be outside the supported collection."
-              fi
+    # Also build/test whatever package(s) this PR actually touches, in case
+    # they aren't part of the variant above -- see changed_packages' input
+    # docs in _check_distribution_compiles.yml. Runs whenever the test step
+    # ran (pass or fail); failures here only warn.
+    - name: Build and test changed packages
+      id: changed_packages
+      if: always() && inputs.changed_packages != '' && (steps.test.outcome == 'success' || steps.test.outcome == 'failure')
+      run: |
+        TARGETS=""
+        for pkg in ${{ inputs.changed_packages }}; do
+          if grep -qxF "@${pkg}//..." "ros-${{ matrix.variant }}.txt"; then
+            continue
+          fi
+          if bazel query "@${pkg}//..." >/dev/null 2>&1; then
+            TARGETS="$TARGETS @${pkg}//..."
+          else
+            echo "Skipping @${pkg}//... (no targets found)"
+          fi
+        done
+        if [ -n "$TARGETS" ]; then
+          if ! bazel build --config ci --build_tests_only $TARGETS 2>&1 | tee ${{ inputs.rmw }}.changed_packages.build.log; then
+            echo "::warning title=Build changed packages failed::Building changed packages ($TARGETS) tests failed, but will not block CI as some modules may be outside the supported collection."
+          elif ! bazel test --config ci --build_tests_only --test_env=RMW_IMPLEMENTATION=${{ inputs.rmw }} $TARGETS 2>&1 | tee ${{ inputs.rmw }}.changed_packages.test.log; then
+            rc=${PIPESTATUS[0]}
+            # Bazel exits with 4 when no test targets match the pattern,
+            # which is expected for packages that don't declare any tests.
+            if [ "$rc" -ne 4 ]; then
+              echo "::warning title=Test changed packages failed::Testing changed packages ($TARGETS) failed, but will not block CI as some modules may be outside the supported collection."
             fi
           fi
         fi
 
+    - name: Collect test logs
+      if: always()
+      run: |
         if [ -d bazel-testlogs ]; then
           find -L bazel-testlogs -name "*.xml" -print0 | tar -czf ${{ matrix.ros }}_${{ matrix.variant }}_${{ matrix.bazel }}_${{ matrix.os }}_${{ inputs.rmw }}.xml.tar.gz --null -T - || true
           find -L bazel-testlogs -name "*.log" -print0 | tar -czf ${{ matrix.ros }}_${{ matrix.variant }}_${{ matrix.bazel }}_${{ matrix.os }}_${{ inputs.rmw }}.log.tar.gz --null -T - || true
         fi
-        exit ${test_status:-0}
+
+    - name: Stop rmw_zenohd router
+      if: always() && inputs.rmw == 'rmw_zenoh_cpp'
+      run: |
+        if [ -f "$RUNNER_TEMP/zenohd.pid" ]; then
+          kill "$(cat "$RUNNER_TEMP/zenohd.pid")" 2>/dev/null || true
+        fi
     - name: Update status badge (${{ inputs.rmw }})
       uses: Schneegans/dynamic-badges-action@v1.8.0
       with:

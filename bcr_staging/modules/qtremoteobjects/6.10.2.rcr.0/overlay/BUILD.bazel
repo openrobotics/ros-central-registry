@@ -1,0 +1,237 @@
+load(
+    "@qt//:qt.bzl",
+    "qt_cc_library",
+    "qt_export_header",
+    "qt_lalr",
+    "qt_module_headers",
+    "qt_qml_module",
+)
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:LGPL-3.0-only",
+        "@rules_license//licenses/spdx:GPL-2.0-only",
+        "@rules_license//licenses/spdx:GPL-3.0-only",
+    ],
+    license_text = "LICENSES/LGPL-3.0-only.txt",
+)
+
+# ============================================================================
+# RepParser + qlalr grammar + repc tool
+# ============================================================================
+
+qt_lalr(
+    name = "repparser_grammar",
+    outs = [
+        "rep_lalr/rep_grammar.cpp",
+        "rep_lalr/rep_grammar_p.h",
+        "rep_lalr/repparser.cpp",
+        "rep_lalr/repparser.h",
+    ],
+    # Upstream runs qlalr without --no-debug: parser.g's consumeRule() debug
+    # path references the rule_info/rule_index tables.
+    flags = ["--exit-on-warn"],
+    grammar = "src/repparser/parser.g",
+)
+
+qt_module_headers(
+    name = "repparser_headers",
+    hdrs = [
+        "src/repparser/qregexparser.h",
+    ],
+    extra_hdrs = [":repparser_grammar"],
+    module_name = "RepParser",
+    source_dir = "src/repparser",
+)
+
+cc_binary(
+    name = "repc",
+    srcs = [
+        "tools/repc/cppcodegenerator.cpp",
+        "tools/repc/cppcodegenerator.h",
+        "tools/repc/main.cpp",
+        "tools/repc/repcodegenerator.cpp",
+        "tools/repc/repcodegenerator.h",
+        "tools/repc/utils.cpp",
+        "tools/repc/utils.h",
+        ":repparser_grammar",
+    ],
+    includes = [
+        "rep_lalr",
+        "src/repparser",
+        "tools/repc",
+    ],
+    local_defines = [
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_FROM_BYTEARRAY",
+        "QT_NO_CAST_TO_ASCII",
+        "QT_NO_URL_CAST_FROM_STRING",
+        "RO_INSTALL_HEADERS=\\\"\\\" ",
+    ],
+    deps = [
+        ":repparser_headers",
+        "@qtbase//:core",
+    ],
+)
+
+# ============================================================================
+# Qt6RemoteObjects
+# ============================================================================
+
+qt_export_header(
+    name = "remoteobjects_export",
+    module_Header = "RemoteObjects",
+    module_name = "remoteobjects",
+)
+
+REMOTEOBJECTS_HEADERS = [
+    "src/remoteobjects/qconnection_local_backend_p.h",
+    "src/remoteobjects/qconnection_tcpip_backend_p.h",
+    "src/remoteobjects/qconnectionfactories.h",
+    "src/remoteobjects/qconnectionfactories_p.h",
+    "src/remoteobjects/qremoteobjectabstractitemmodeladapter_p.h",
+    "src/remoteobjects/qremoteobjectabstractitemmodelreplica.h",
+    "src/remoteobjects/qremoteobjectabstractitemmodelreplica_p.h",
+    "src/remoteobjects/qremoteobjectabstractitemmodeltypes_p.h",
+    "src/remoteobjects/qremoteobjectcontainers_p.h",
+    "src/remoteobjects/qremoteobjectdynamicreplica.h",
+    "src/remoteobjects/qremoteobjectnode.h",
+    "src/remoteobjects/qremoteobjectnode_p.h",
+    "src/remoteobjects/qremoteobjectpacket_p.h",
+    "src/remoteobjects/qremoteobjectpendingcall.h",
+    "src/remoteobjects/qremoteobjectpendingcall_p.h",
+    "src/remoteobjects/qremoteobjectregistry.h",
+    "src/remoteobjects/qremoteobjectregistrysource_p.h",
+    "src/remoteobjects/qremoteobjectreplica.h",
+    "src/remoteobjects/qremoteobjectreplica_p.h",
+    "src/remoteobjects/qremoteobjectrepparser_p.h",
+    "src/remoteobjects/qremoteobjectsettingsstore.h",
+    "src/remoteobjects/qremoteobjectsource.h",
+    "src/remoteobjects/qremoteobjectsource_p.h",
+    "src/remoteobjects/qremoteobjectsourceio_p.h",
+    "src/remoteobjects/qremoteobjectstructs_p.h",
+    "src/remoteobjects/qtremoteobjectglobal.h",
+]
+
+qt_module_headers(
+    name = "remoteobjects_headers",
+    hdrs = REMOTEOBJECTS_HEADERS,
+    extra_deps = [":remoteobjects_export"],
+    module_name = "RemoteObjects",
+)
+
+qt_cc_library(
+    name = "remoteobjects",
+    srcs = [
+        "src/remoteobjects/qconnection_local_backend.cpp",
+        "src/remoteobjects/qconnection_tcpip_backend.cpp",
+        "src/remoteobjects/qconnectionfactories.cpp",
+        "src/remoteobjects/qremoteobjectabstractitemmodeladapter.cpp",
+        "src/remoteobjects/qremoteobjectabstractitemmodelreplica.cpp",
+        "src/remoteobjects/qremoteobjectcontainers.cpp",
+        "src/remoteobjects/qremoteobjectdynamicreplica.cpp",
+        "src/remoteobjects/qremoteobjectnode.cpp",
+        "src/remoteobjects/qremoteobjectpacket.cpp",
+        "src/remoteobjects/qremoteobjectpendingcall.cpp",
+        "src/remoteobjects/qremoteobjectregistry.cpp",
+        "src/remoteobjects/qremoteobjectregistrysource.cpp",
+        "src/remoteobjects/qremoteobjectreplica.cpp",
+        "src/remoteobjects/qremoteobjectrepparser.cpp",
+        "src/remoteobjects/qremoteobjectsettingsstore.cpp",
+        "src/remoteobjects/qremoteobjectsource.cpp",
+        "src/remoteobjects/qremoteobjectsourceio.cpp",
+        "src/remoteobjects/qtremoteobjectglobal.cpp",
+        ":repparser_grammar",
+    ],
+    hdrs = REMOTEOBJECTS_HEADERS,
+    copts = ["-w"],
+    create_shared = True,
+    dynamic_deps = [
+        "@qtbase//:network_shared",
+        "@qtbase//:core_shared",
+    ],
+    included_moc_hdrs = [
+        "src/remoteobjects/qremoteobjectnode.h",
+        "src/remoteobjects/qremoteobjectpendingcall.h",
+    ],
+    includes = [
+        "rep_lalr",
+        "src/remoteobjects",
+        "src/repparser",
+    ],
+    local_defines = [
+        "QT_BUILDING_QT",
+        "QT_BUILD_REMOTEOBJECTS_LIB",
+        "QT_NO_CAST_FROM_ASCII",
+        "QT_NO_CAST_FROM_BYTEARRAY",
+        "QT_NO_CAST_TO_ASCII",
+        "QT_NO_URL_CAST_FROM_STRING",
+        "QT_NO_USE_HAM=1",
+    ],
+    deps = [
+        ":remoteobjects_export",
+        ":remoteobjects_headers",
+        ":repparser_headers",
+        "@qtbase//:core",
+        "@qtbase//:network",
+    ],
+)
+
+# ============================================================================
+# Qt6RemoteObjectsQml + declarative_remoteobjects
+# ============================================================================
+
+qt_export_header(
+    name = "remoteobjectsqml_export",
+    module_Header = "RemoteObjectsQml",
+    module_name = "remoteobjectsqml",
+)
+
+REMOTEOBJECTSQML_HEADERS = [
+    "src/remoteobjectsqml/qremoteobjectsqml_p.h",
+]
+
+qt_module_headers(
+    name = "remoteobjectsqml_headers",
+    hdrs = REMOTEOBJECTSQML_HEADERS,
+    extra_deps = [":remoteobjectsqml_export"],
+    module_name = "RemoteObjectsQml",
+)
+
+qt_qml_module(
+    name = "remoteobjectsqml",
+    hdrs = REMOTEOBJECTSQML_HEADERS,
+    create_shared = True,
+    dynamic_deps = [
+        ":remoteobjects_shared",
+        "@qtdeclarative//:qml_shared",
+        "@qtbase//:gui_shared",
+        "@qtbase//:dbus_shared",
+        "@qtbase//:network_shared",
+        "@qtbase//:core_shared",
+    ],
+    import_name = "QtRemoteObjects",
+    import_version = "6.10",
+    includes = ["src/remoteobjectsqml"],
+    local_defines = [
+        "QT_BUILD_REMOTEOBJECTSQML_LIB",
+    ],
+    plugin_class_name = "QtRemoteObjectsPlugin",
+    plugin_target = "declarative_remoteobjects",
+    deps = [
+        ":remoteobjects",
+        ":remoteobjectsqml_export",
+        ":remoteobjectsqml_headers",
+        "@qtbase//:core",
+        "@qtbase//:gui",
+        "@qtdeclarative//:qml",
+    ],
+)

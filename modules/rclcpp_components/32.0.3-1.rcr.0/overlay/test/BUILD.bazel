@@ -1,0 +1,78 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library", "cc_test")
+load("//:defs.bzl", "rclcpp_components_register_nodes")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {
+    "@ament_index_cpp//:ament_index_cpp": "@ament_index_cpp//:ament_index_cpp_library",
+    "@class_loader//:class_loader": "@class_loader//:class_loader_library",
+    "@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library",
+    "@rcpputils//:rcpputils": "@rcpputils//:rcpputils_library",
+    "@rmw//:rmw": "@rmw//:rmw_library",
+}
+
+cc_library(
+    name = "test_component_library",
+    srcs = ["components/test_component.cpp"],
+    deps = ["@rclcpp_components//:rclcpp_components_library"],
+)
+
+cc_shared_library(
+    name = "test_component",
+    dynamic_deps = ["@rclcpp_components"],
+    exports_filter = [":test_component_library"],
+    deps = [":test_component_library"],
+)
+
+rclcpp_components_register_nodes(
+    name = "component_nodes",
+    component = ":test_component",
+    plugins = [
+        "test_rclcpp_components::TestComponentFoo",
+        "test_rclcpp_components::TestComponentBar",
+        "test_rclcpp_components::TestComponentNoNode",
+    ],
+)
+
+[cc_test(
+    name = test.removesuffix(".py"),
+    srcs = ["{0}.cpp".format(test)],
+    data = ["//:ament_index"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        "//:component_manager_library",
+        "@rosdistro//cc:googletest",
+    ],
+) for test in [
+    "test_component_manager",
+    "test_component_manager_api",
+]]
+
+[cc_test(
+    name = name,
+    timeout = "moderate",
+    srcs = ["benchmark/{}.cpp".format(name)],
+    data = ["//:ament_index"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    tags = ["manual"],
+    deps = DEPENDENCIES.values() + ["@google_benchmark//:benchmark_main"],
+) for name in ["benchmark_components"]]

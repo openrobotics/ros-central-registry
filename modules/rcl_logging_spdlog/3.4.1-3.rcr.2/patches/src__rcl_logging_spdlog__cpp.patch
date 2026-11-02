@@ -1,0 +1,23 @@
+--- a/src/rcl_logging_spdlog.cpp
++++ b/src/rcl_logging_spdlog.cpp
+@@ -168,6 +168,20 @@
+   // the tests do this implicitly by calling rclcpp::init more than once).
+   // If the logger is already setup, don't do anything.
+   if (g_root_logger != nullptr) {
++    return RCL_LOGGING_RET_OK;
++  }
++
++  // It is also possible for more than one copy of this library to be loaded
++  // into a single process (e.g. a Python process that imports rclpy, which
++  // statically bundles rcl and this backend, alongside a pybind11 module built
++  // against the shared rclcpp/rcl libraries). Each copy has its own
++  // g_root_logger, but spdlog is header-only and on macOS dyld coalesces its
++  // weak symbols across images, so all copies share a single spdlog registry.
++  // If another copy already registered a "root" logger, adopt it instead of
++  // trying to register a second one (which throws spdlog_ex).
++  if (auto existing_root_logger = spdlog::get("root")) {
++    g_root_logger = std::move(existing_root_logger);
++    g_root_logger->set_pattern("%v");
+     return RCL_LOGGING_RET_OK;
+   }
+ 

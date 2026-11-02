@@ -1,0 +1,15 @@
+--- a/src/system_modes/mode_inference.cpp
++++ b/src/system_modes/mode_inference.cpp
+@@ -721,7 +721,11 @@
+   }
+ 
+   {
+-    std::unique_lock<shared_mutex> slock(this->systems_mutex_);
++    // systems_ is only read here, and infer_system() re-acquires
++    // systems_mutex_ (shared) through get_or_infer()/infer(): holding it
++    // exclusively would self-deadlock on std::shared_mutex implementations
++    // that do not report EDEADLK (e.g. libc++).
++    std::shared_lock<shared_mutex> slock(this->systems_mutex_);
+     std::unique_lock<shared_mutex> sclock(this->systems_cache_mutex_);
+     StatesMap::iterator it;
+     for (it = systems_.begin(); it != systems_.end(); it++) {

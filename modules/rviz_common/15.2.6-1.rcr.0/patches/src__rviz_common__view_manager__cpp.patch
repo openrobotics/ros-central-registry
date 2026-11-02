@@ -1,0 +1,34 @@
+--- a/src/rviz_common/view_manager.cpp
++++ b/src/rviz_common/view_manager.cpp
+@@ -62,7 +62,12 @@
+   {}
+ 
+   ~ViewManagerImpl()
+-  {}
++  {
++    // Destroy the view controllers (owned by the property model) before the
++    // plugin factory that loaded their libraries.
++    property_model.reset();
++    factory.reset();
++  }
+ 
+   DisplayContext * context;
+   ViewControllerContainer * root_property;
+@@ -80,7 +85,16 @@
+ }
+ 
+ ViewManager::~ViewManager()
+-{}
++{
++  // The current view controller is owned by the property tree and is deleted
++  // when impl_ is destroyed; make sure its destroyed() signal can no longer
++  // reach onCurrentDestroyed(), which would dereference impl_ mid-destruction.
++  if (impl_ && impl_->current) {
++    disconnect(
++      impl_->current, SIGNAL(destroyed(QObject*)), this, SLOT(onCurrentDestroyed(QObject*)));
++    impl_->current = nullptr;
++  }
++}
+ 
+ void ViewManager::initialize()
+ {

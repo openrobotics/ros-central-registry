@@ -10,6 +10,10 @@ Install Bazel
 
 The easiest way to get started is to download and install ``bazelisk``, which you can get from `this page <https://bazel.build/install>`__. If you are uncomfortable with a tool that downloads and runs arbitrary code from the internet, you can install Bazel using your system's package manager. Before doing so, please consult the `official documentation <https://docs.bazel.build/versions/stable/install.html>`__ to ensure you install a version that is compatible with this registry.
 
+.. note::
+
+   This registry requires Bazel 9.x or newer. Bazel 8.x and older are not supported. Our continuous integration tests against the latest Bazel 9.x release and the latest Bazel release candidate (``last_rc``). Run ``bazel --version`` to check which version you have.
+
 Configure your workspace
 ++++++++++++++++++++++++
 
@@ -35,7 +39,7 @@ Your ``MODULE.bazel`` then declares which packages you want, pinned to a specifi
 
    module(name = "example_ros_workspace")
 
-   bazel_dep(name = "perception", version = "lyrical.2026-06-08.rcr.2")
+   bazel_dep(name = "desktop_full", version = "lyrical.2026-10-05.rcr.0")
 
 One of the transitive dependencies you get this way is the ``llvm`` toolchain, which is essentially a C++ toolchain that is used to build the ROS packages. The advantage of using our toolchain over a default provided by your operating system is that it ensures consistent build results across different platforms.
 

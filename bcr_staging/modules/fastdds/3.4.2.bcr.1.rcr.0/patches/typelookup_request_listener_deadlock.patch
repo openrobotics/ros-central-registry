@@ -1,0 +1,29 @@
+--- a/src/cpp/fastdds/builtin/type_lookup_service/TypeLookupRequestListener.cpp
++++ b/src/cpp/fastdds/builtin/type_lookup_service/TypeLookupRequestListener.cpp
+@@ -152,7 +152,14 @@
+ 
+         if (!requests_queue_.empty())
+         {
+-            std::pair<TypeLookup_Request, rtps::VendorId_t>& request = requests_queue_.front();
++            // Take the request out of the queue and process it without holding
++            // request_processor_cv_mutex_: answering sends a reply through the
++            // writer, which can deadlock against a reception thread blocked in
++            // on_new_cache_change_added() waiting for this mutex while holding
++            // a reader mutex that the writer's intraprocess delivery needs.
++            std::pair<TypeLookup_Request, rtps::VendorId_t> request = std::move(requests_queue_.front());
++            requests_queue_.pop();
++            guard.unlock();
+             {
+                 // Process the TypeLookup_Request based on its type
+                 switch (request.first.data()._d())
+@@ -178,8 +185,8 @@
+                         break;
+                 }
+             }
+-            // Remove the requests from the queue
+-            requests_queue_.pop();
++
++            guard.lock();
+         }
+     }
+ }

@@ -1,0 +1,368 @@
+diff --git a/cuda/extensions.bzl b/cuda/extensions.bzl
+index 4eb5211..b14743f 100644
+--- a/cuda/extensions.bzl
++++ b/cuda/extensions.bzl
+@@ -93,19 +93,33 @@ def _module_tag_to_dict(t):
+     return {attr: getattr(t, attr) for attr in dir(t)}
+ 
+ def _redist_json_impl(module_ctx, attr):
++    """Instantiates cuda_component repos for every redist platform.
++
++    The repos are fetched lazily, so only the components of the platforms that
++    a build actually targets (plus the host's tools) are downloaded.
++
++    Returns:
++        (redist_version, host components mapping, per-platform components mapping), where the
++        per-platform mapping is keyed by "<platform>:<component>".
++    """
+     url, json_object = redist_json_helper.get(module_ctx, attr)
+     redist_ver = redist_json_helper.get_redist_version(module_ctx, attr, json_object)
+-    component_specs = redist_json_helper.collect_specs(module_ctx, attr, json_object, url)
++    host_platform = redist_json_helper.get_host_platform(module_ctx)
+ 
+     mapping = {}
+-    for spec in component_specs:
+-        repo_name = redist_json_helper.get_repo_name(module_ctx, spec)
+-        mapping[spec["component_name"]] = "@" + repo_name
+-
+-        attr = {key: value for key, value in spec.items()}
+-        attr["name"] = repo_name
+-        cuda_component(**attr)
+-    return redist_ver, mapping
++    platform_mapping = {}
++    for platform in redist_json_helper.redist_platforms:
++        component_specs = redist_json_helper.collect_specs(module_ctx, attr, json_object, url, platform)
++        for spec in component_specs:
++            repo_name = redist_json_helper.get_repo_name(module_ctx, spec, platform)
++            platform_mapping[platform + ":" + spec["component_name"]] = "@" + repo_name
++            if platform == host_platform:
++                mapping[spec["component_name"]] = "@" + repo_name
++
++            spec_attr = {key: value for key, value in spec.items()}
++            spec_attr["name"] = repo_name
++            cuda_component(**spec_attr)
++    return redist_ver, mapping, platform_mapping
+ 
+ def _impl(module_ctx):
+     # Toolchain configuration is only allowed in the root module, or in rules_cuda.
+@@ -130,8 +144,9 @@ def _impl(module_ctx):
+ 
+     redist_version = None
+     components_mapping = None
++    platform_components_mapping = None
+     for redist_json in redist_jsons:
+-        redist_version, components_mapping = _redist_json_impl(module_ctx, redist_json)
++        redist_version, components_mapping, platform_components_mapping = _redist_json_impl(module_ctx, redist_json)
+ 
+     registrations = {}
+     for toolkit in toolkits:
+@@ -148,7 +163,12 @@ def _impl(module_ctx):
+ 
+     for _, toolkit in registrations.items():
+         if components_mapping != None:
+-            cuda_toolkit(name = toolkit.name, components_mapping = components_mapping, version = redist_version)
++            cuda_toolkit(
++                name = toolkit.name,
++                components_mapping = components_mapping,
++                platform_components_mapping = platform_components_mapping,
++                version = redist_version,
++            )
+         else:
+             cuda_toolkit(**_module_tag_to_dict(toolkit))
+ 
+diff --git a/cuda/private/redist_json_helper.bzl b/cuda/private/redist_json_helper.bzl
+index 7a1a14e..a7e8836 100644
+--- a/cuda/private/redist_json_helper.bzl
++++ b/cuda/private/redist_json_helper.bzl
+@@ -6,6 +6,25 @@ def _is_linux(ctx):
+ def _is_windows(ctx):
+     return ctx.os.name.lower().startswith("windows")
+ 
++# The redistrib_<version>.json platforms that cuda_component repos are created
++# for, so that CUDA targets can be cross-compiled between them.
++_REDIST_PLATFORMS = ["linux-x86_64", "linux-sbsa", "windows-x86_64"]
++
++def _get_host_platform(ctx):
++    """Returns the redistrib_<version>.json platform of the host, or None.
++
++    NVIDIA does not publish host tools for macOS, so there is no platform for
++    darwin hosts. Windows on Arm hosts run the windows-x86_64 tools under
++    emulation.
++    """
++    if _is_linux(ctx):
++        if ctx.os.arch in ("aarch64", "arm64"):
++            return "linux-sbsa"
++        return "linux-x86_64"
++    if _is_windows(ctx):
++        return "windows-x86_64"
++    return None
++
+ def _get_attr_maybe_override(ctx, attr, name):
+     # NOTE: these overrides are mainly for CI testing purpose.
+     # CUDA_REDIST_INTEGRITY_OVERRIDE, CUDA_REDIST_SHA256_OVERRIDE and CUDA_REDIST_VERSION_OVERRIDE are supported
+@@ -68,7 +87,7 @@ def _get_redist_version(ctx, attr, redist):
+ 
+     return redist_ver
+ 
+-def _collect_specs(ctx, attr, redist, the_url):
++def _collect_specs(ctx, attr, redist, the_url, platform = None):
+     """Convert redistrib_<version>.json content to the specs for instantiating cuda_component repos.
+ 
+     List of specs, aka, list of dicts with cuda_component attrs.
+@@ -78,19 +97,18 @@ def _collect_specs(ctx, attr, redist, the_url):
+         attr: cuda_component repo attr or cuda_redist_json_tag
+         redist: json object, read from the redistrib_<version>.json file.
+         the_url: string, the very unique url from which we get the redistrib_<version>.json file.
++        platform: string, the redistrib_<version>.json platform (e.g. linux-sbsa) to collect the
++            specs for. Defaults to the host platform.
+     """
+ 
+     specs = []
+-    os = None
+-    if _is_linux(ctx):
+-        os = "linux"
+-    elif _is_windows(ctx):
+-        os = "windows"
++    if platform == None:
++        platform = _get_host_platform(ctx)
++    if platform == None:
++        return specs
+ 
+-    arch = "x86_64"  # TODO: support cross compiling
+-    platform = "{os}-{arch}".format(os = os, arch = arch)
+     all_components_on_platform = [k for k, v in FULL_COMPONENT_NAME.items() if v in redist and platform in redist[v]]
+-    components = attr.components if attr.components else all_components_on_platform
++    components = [c for c in attr.components if c in all_components_on_platform] if attr.components else all_components_on_platform
+ 
+     for c in components:
+         c_full = FULL_COMPONENT_NAME[c]
+@@ -112,15 +130,19 @@ def _collect_specs(ctx, attr, redist, the_url):
+ 
+     return specs
+ 
+-def _get_repo_name(ctx, spec):
++def _get_repo_name(ctx, spec, platform = None):
+     """Get canonical repo name when using redistrib_<version>.json file.
+ 
+     Args:
+         ctx: repository_ctx | module_ctx
+         spec: cuda_component attrs
++        platform: string, the redistrib_<version>.json platform of the spec, if the repo name
++            should be platform-specific.
+     """
+ 
+     repo_name = "cuda_" + spec["component_name"]
++    if platform != None:
++        repo_name = repo_name + "_" + platform.replace("-", "_")
+     version = spec.get("version", None)
+     if version != None:
+         repo_name = repo_name + "_v" + version
+@@ -128,6 +150,8 @@ def _get_repo_name(ctx, spec):
+     return repo_name
+ 
+ redist_json_helper = struct(
++    redist_platforms = _REDIST_PLATFORMS,
++    get_host_platform = _get_host_platform,
+     get = _get,
+     get_redist_version = _get_redist_version,
+     collect_specs = _collect_specs,
+diff --git a/cuda/private/repositories.bzl b/cuda/private/repositories.bzl
+index 42849fb..ba0966f 100644
+--- a/cuda/private/repositories.bzl
++++ b/cuda/private/repositories.bzl
+@@ -204,6 +204,7 @@ def config_cuda_toolkit_and_nvcc(repository_ctx, cuda):
+             components = repository_ctx.attr.components_mapping,
+             is_cuda_repo = True,
+             is_deliverable = True,
++            platform_components = repository_ctx.attr.platform_components_mapping,
+         )
+ 
+     # Generate @cuda//defs.bzl
+@@ -212,6 +213,8 @@ def config_cuda_toolkit_and_nvcc(repository_ctx, cuda):
+     # Generate @cuda//toolchain/BUILD
+     template_helper.generate_toolchain_build(repository_ctx, cuda)
+ 
++    return is_local_ctk != None
++
+ def detect_clang(repository_ctx):
+     """Detect local clang installation.
+ 
+@@ -271,17 +274,31 @@ def config_clang(repository_ctx, cuda, clang_path_or_label):
+     # Generate @cuda//toolchain/clang/BUILD
+     template_helper.generate_toolchain_clang_build(repository_ctx, cuda, clang_path_or_label)
+ 
+-def config_disabled(repository_ctx):
+-    repository_ctx.symlink(Label("//cuda/private:templates/BUILD.toolchain_disabled"), "toolchain/disabled/BUILD")
++def config_disabled(repository_ctx, valid_toolchain_found = True):
++    """Generate `@cuda//toolchain/disabled/BUILD`
++
++    Args:
++        repository_ctx: repository_ctx
++        valid_toolchain_found: Whether a CUDA toolkit was found. If not, the disabled toolchain is
++            selected unconditionally, since the other toolchains require a valid toolkit.
++    """
++    repository_ctx.template(
++        "toolchain/disabled/BUILD",
++        Label("//cuda/private:templates/BUILD.toolchain_disabled"),
++        substitutions = {
++            "%{target_settings}": repr([":cuda_is_disabled"] if valid_toolchain_found else []),
++        },
++        executable = False,
++    )
+ 
+ def _cuda_toolkit_impl(repository_ctx):
+     cuda = detect_cuda_toolkit(repository_ctx)
+-    config_cuda_toolkit_and_nvcc(repository_ctx, cuda)
++    valid_toolchain_found = config_cuda_toolkit_and_nvcc(repository_ctx, cuda)
+ 
+     clang_path_or_label = detect_clang(repository_ctx)
+     config_clang(repository_ctx, cuda, clang_path_or_label)
+ 
+-    config_disabled(repository_ctx)
++    config_disabled(repository_ctx, valid_toolchain_found)
+ 
+ cuda_toolkit = repository_rule(
+     implementation = _cuda_toolkit_impl,
+@@ -291,6 +308,11 @@ cuda_toolkit = repository_rule(
+             doc = "A mapping from component names to component repos of a deliverable CUDA Toolkit. " +
+                   "Only the repo part of the label is useful",
+         ),
++        "platform_components_mapping": attr.string_dict(
++            doc = "A mapping from \"<platform>:<component name>\" (e.g. \"linux-sbsa:cudart\") to the " +
++                  "component repos of a deliverable CUDA Toolkit for every redist platform. Target " +
++                  "libraries in `@cuda//BUILD` select() between them by target platform.",
++        ),
+         "version": attr.string(doc = "cuda toolkit version. Required for deliverable toolkit only."),
+         "nvcc_version": attr.string(
+             doc = "nvcc version. Required for deliverable toolkit only. Fallback to version if omitted.",
+diff --git a/cuda/private/template_helper.bzl b/cuda/private/template_helper.bzl
+index 62cdb73..7be5e5e 100644
+--- a/cuda/private/template_helper.bzl
++++ b/cuda/private/template_helper.bzl
+@@ -51,7 +51,57 @@ def _expand_dctk_component(repository_ctx, component):
+     }
+     return _expand_template(repository_ctx, tpl_label, substitutions = substitutions)
+ 
+-def _generate_build_impl(repository_ctx, libpath, components, is_cuda_repo, is_deliverable):
++# Components whose targets are host tools (nvcc, ptxas, cicc, libdevice, ...) or
++# their headers. `@cuda//BUILD` always points them at the host's repos.
++_HOST_TOOL_COMPONENTS = ["crt", "nvcc", "nvvm"]
++
++# (os, cpu) constraints of the redistrib_<version>.json platforms.
++_REDIST_PLATFORM_CONSTRAINTS = {
++    "linux-sbsa": ("linux", "aarch64"),
++    "linux-x86_64": ("linux", "x86_64"),
++    "windows-x86_64": ("windows", "x86_64"),
++}
++
++def _redist_platform_settings(platform_components):
++    """config_settings for the target platforms that have component repos."""
++    platforms = sorted({key.split(":")[0]: None for key in platform_components}.keys())
++    lines = []
++    for platform in platforms:
++        os, cpu = _REDIST_PLATFORM_CONSTRAINTS[platform]
++        lines.append(
++            'config_setting(name = "_target_{platform}", constraint_values = ["@platforms//os:{os}", "@platforms//cpu:{cpu}"], visibility = ["//visibility:private"])'.format(
++                platform = platform,
++                os = os,
++                cpu = cpu,
++            ),
++        )
++
++    # Selected when the target platform has no CUDA redistributables (e.g. macOS).
++    lines.append('cc_library(name = "_target_unavailable", visibility = ["//visibility:private"])')
++    lines.append("")
++    return lines
++
++def _target_alias(target, comp, host_repo, platform_components):
++    """An alias of a target that select()s the component repo of the target platform."""
++    if comp in _HOST_TOOL_COMPONENTS or not platform_components:
++        return 'alias(name = "{target}", actual = "{repo}//:{target}")'.format(target = target, repo = host_repo)
++
++    branches = []
++    for key in sorted(platform_components.keys()):
++        platform, component = key.split(":")
++        if component == comp:
++            branches.append('        ":_target_{platform}": "{repo}//:{target}",'.format(
++                platform = platform,
++                repo = platform_components[key],
++                target = target,
++            ))
++    branches.append('        "//conditions:default": ":_target_unavailable",')
++    return 'alias(name = "{target}", actual = select({{\n{branches}\n    }}))'.format(
++        target = target,
++        branches = "\n".join(branches),
++    )
++
++def _generate_build_impl(repository_ctx, libpath, components, is_cuda_repo, is_deliverable, platform_components = {}):
+     # stitch template fragment
+     fragments = [
+         Label("//cuda/private:templates/BUILD.cuda_shared"),
+@@ -80,10 +130,12 @@ def _generate_build_impl(repository_ctx, libpath, components, is_cuda_repo, is_d
+             template_content.append(repository_ctx.read(frag))
+ 
+     if is_cuda_repo and is_deliverable:  # generate `@cuda//BUILD` for CTK with deliverables
++        if platform_components:
++            template_content.extend(_redist_platform_settings(platform_components))
+         for comp in components:
+             for target in REGISTRY[comp]:
+                 repo = components[comp]
+-                line = 'alias(name = "{target}", actual = "{repo}//:{target}")'.format(target = target, repo = repo)
++                line = _target_alias(target, comp, repo, platform_components)
+                 template_content.append(line)
+ 
+             # add an empty line to separate aliased targets from different components
+@@ -100,7 +152,7 @@ def _generate_build_impl(repository_ctx, libpath, components, is_cuda_repo, is_d
+     }
+     repository_ctx.template("BUILD", template_path, substitutions = substitutions, executable = False)
+ 
+-def _generate_build(repository_ctx, libpath, components = None, is_cuda_repo = True, is_deliverable = False):
++def _generate_build(repository_ctx, libpath, components = None, is_cuda_repo = True, is_deliverable = False, platform_components = None):
+     """Generate `@cuda//BUILD` or `@cuda_<component>//BUILD`
+ 
+     Notes:
+@@ -115,6 +167,9 @@ def _generate_build(repository_ctx, libpath, components = None, is_cuda_repo = T
+         components: dict[str, str], the components of CTK to be included, mapped to the repo names for the components
+         is_cuda_repo: See Notes, True for @cuda generation, False for @cuda_<component> generation.
+         is_deliverable: See Notes
++        platform_components: dict[str, str], for `@cuda//BUILD` with deliverables, the component repos
++            of every redist platform keyed by "<platform>:<component>". Target libraries then
++            select() the repo of the target platform, while host tools keep using `components`.
+     """
+ 
+     if is_cuda_repo and not is_deliverable:
+@@ -125,7 +180,7 @@ def _generate_build(repository_ctx, libpath, components = None, is_cuda_repo = T
+                 if c not in REGISTRY:
+                     fail("{} is not a valid component")
+ 
+-    _generate_build_impl(repository_ctx, libpath, components, is_cuda_repo, is_deliverable)
++    _generate_build_impl(repository_ctx, libpath, components, is_cuda_repo, is_deliverable, platform_components or {})
+ 
+ def _generate_defs_bzl(repository_ctx, version_major, version_minor, is_local_ctk):
+     tpl_label = Label("//cuda/private:templates/defs.bzl.tpl")
+diff --git a/cuda/private/templates/BUILD.toolchain_clang b/cuda/private/templates/BUILD.toolchain_clang
+index d715279..13a1f65 100644
+--- a/cuda/private/templates/BUILD.toolchain_clang
++++ b/cuda/private/templates/BUILD.toolchain_clang
+@@ -38,6 +38,7 @@ toolchain(
+     name = "clang-local-toolchain",
+     target_settings = [
+         "@rules_cuda//cuda:is_enabled",
++        "@rules_cuda//cuda:is_valid_toolchain_found",
+         "@rules_cuda//cuda:compiler_is_clang",
+     ],
+     toolchain = ":clang-local",
+diff --git a/cuda/private/templates/BUILD.toolchain_disabled b/cuda/private/templates/BUILD.toolchain_disabled
+index 3f169ca..10f6c8a 100644
+--- a/cuda/private/templates/BUILD.toolchain_disabled
++++ b/cuda/private/templates/BUILD.toolchain_disabled
+@@ -9,7 +9,8 @@ cuda_toolchain_config_disabled(name = "disabled-local")
+ 
+ toolchain(
+     name = "disabled-local-toolchain",
+-    target_settings = [":cuda_is_disabled"],
++    # [":cuda_is_disabled"], or [] when no valid CUDA toolkit was found.
++    target_settings = %{target_settings},
+     toolchain = ":disabled-local",
+     toolchain_type = "@rules_cuda//cuda:toolchain_type",
+     visibility = ["//visibility:public"],

@@ -1,0 +1,56 @@
+--- a/rmf_demos_fleet_adapter/fleet_adapter.py
++++ b/rmf_demos_fleet_adapter/fleet_adapter.py
+@@ -16,6 +16,7 @@
+ import asyncio
+ import faulthandler
+ import math
++import signal
+ import sys
+ import threading
+ import time
+@@ -165,7 +166,7 @@
+                 last_task_replan = now
+ 
+             next_wakeup = now + Duration(nanoseconds=update_period * 1e9)
+-            while node.get_clock().now() < next_wakeup:
++            while rclpy.ok() and node.get_clock().now() < next_wakeup:
+                 time.sleep(0.001)
+ 
+     update_thread = threading.Thread(target=update_loop, args=())
+@@ -180,12 +181,33 @@
+     rclpy_executor.add_node(node)
+ 
+     # Start the fleet adapter
+-    rclpy_executor.spin()
++    try:
++        rclpy_executor.spin()
++    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
++        pass
++    except Exception:
++        # The SIGINT handler installed by rmf_adapter.init_rclcpp() may shut
++        # the rclpy context down underneath the executor, which surfaces as an
++        # RCLError about an invalid context rather than a clean shutdown.
++        if rclpy.ok():
++            raise
+ 
+     # Shutdown
++    # Launch forwards SIGINT on top of the terminal's; don't let a second one
++    # interrupt the teardown below.
++    signal.signal(signal.SIGINT, signal.SIG_IGN)
++    rclpy.try_shutdown()
++    update_thread.join()
++    for robot in robots.values():
++        robot.cancel_cmd_attempt()
++        robot.update_handle = None
++    robots.clear()
++    connections.clear()
++    fleet_handle = None
++    adapter.stop()
++    adapter = None
++    rclpy_executor.shutdown()
+     node.destroy_node()
+-    rclpy_executor.shutdown()
+-    rclpy.shutdown()
+ 
+ 
+ class RobotAdapter:

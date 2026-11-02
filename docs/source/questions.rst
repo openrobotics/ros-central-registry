@@ -56,3 +56,24 @@ However, packaging remains an open problem. Currently, we think that a (yet to b
    )
 
 If you have any ideas or suggestions about how we might improve this workflow, please reach out to us.
+
+How do I use LibTorch or CUDA?
+++++++++++++++++++++++++++++++
+
+LibTorch (PyTorch's C++ library, 2.14.1) is built from source with the same hermetic Clang/libc++ toolchain as everything else, rather than downloaded as the prebuilt archive that upstream's ``libtorch_vendor`` fetches. ROS packages link it through ``@rosdistro//cc:torch`` (also aliased as ``@libtorch_vendor//:torch``), a single shared ``libtorch.so``.
+
+The default build is **CPU-only**: ``torch_conversions`` and its tests build and run everywhere, while the CUDA packages (``cuda_buffer``, ``cuda_buffer_backend``) are skipped as incompatible. Opt into CUDA on Linux with ``--config=cuda``:
+
+.. code-block:: shell
+
+   bazel build --config=cuda @cuda_buffer_backend//... @torch_conversions//...
+
+This compiles CUDA with Clang (not ``nvcc``) against a hash-pinned CUDA 12.8.1 redistribution downloaded by Bazel, so no CUDA installation, GPU or driver is needed to *build*. Binaries load ``libcuda.so.1`` from the host's NVIDIA driver at run time. Device code targets Hopper (``sm_90``) plus ``sm_90`` PTX by default; build for your own GPU by overriding the architecture list in your ``user.bazelrc``:
+
+.. code-block:: shell
+
+   build:cuda --@rules_cuda//cuda:archs=sm_89
+
+Tests that move data through GPU memory (``test_cuda_buffer`` and the ``cuda_image_*`` launch tests) are tagged ``manual`` and ``requires-gpu``; run them explicitly on a machine with an NVIDIA GPU.
+
+Some differences from upstream's prebuilt LibTorch are worth knowing about: there is no MKL/LAPACK (CPU ``linalg`` operations raise at run time) and no cuDNN or FlashAttention. The MPS (Apple), Vulkan, ROCm and Intel XPU backends are present but switched off; see the comments at the top of the staged ``libtorch`` module's ``overlay/BUILD.bazel`` for the flags that enable them.

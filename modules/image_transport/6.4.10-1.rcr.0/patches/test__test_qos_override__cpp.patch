@@ -1,0 +1,138 @@
+--- a/test/test_qos_override.cpp
++++ b/test/test_qos_override.cpp
+@@ -30,12 +30,61 @@
+ 
+ #include <string>
+ #include <memory>
++#include <chrono>
++#include <stdexcept>
++#include <thread>
++#include <vector>
+ 
+ #include "rclcpp/rclcpp.hpp"
+ 
+ #include "image_transport/image_transport.hpp"
+ 
+ #include "utils.hpp"
++
++// Endpoint discovery -- including a node's own publishers/subscriptions -- is
++// asynchronous in the RMW graph (rmw_cyclonedds_cpp, for one, feeds it from a
++// discovery thread reading the DDS builtin topics), so querying the graph right
++// after create_publisher()/create_subscription() can observe an empty or stale
++// list. The unchecked `[0]` accesses in these tests then dereference past the
++// end (observed as a segfault on the macOS CI runners under CycloneDDS). Poll,
++// bounded, until exactly `expected` endpoints are visible before returning.
++template<typename NodeT>
++std::vector<rclcpp::TopicEndpointInfo> wait_for_publishers_info(
++  NodeT & node, const std::string & topic, size_t expected = 1,
++  std::chrono::seconds timeout = std::chrono::seconds(10))
++{
++  const auto deadline = std::chrono::steady_clock::now() + timeout;
++  auto info = node.get_publishers_info_by_topic(topic);
++  while (info.size() != expected && std::chrono::steady_clock::now() < deadline) {
++    std::this_thread::sleep_for(std::chrono::milliseconds(10));
++    info = node.get_publishers_info_by_topic(topic);
++  }
++  if (info.size() != expected) {
++    throw std::runtime_error(
++            "expected " + std::to_string(expected) + " publisher(s) on '" + topic +
++            "' in the graph, found " + std::to_string(info.size()));
++  }
++  return info;
++}
++
++template<typename NodeT>
++std::vector<rclcpp::TopicEndpointInfo> wait_for_subscriptions_info(
++  NodeT & node, const std::string & topic, size_t expected = 1,
++  std::chrono::seconds timeout = std::chrono::seconds(10))
++{
++  const auto deadline = std::chrono::steady_clock::now() + timeout;
++  auto info = node.get_subscriptions_info_by_topic(topic);
++  while (info.size() != expected && std::chrono::steady_clock::now() < deadline) {
++    std::this_thread::sleep_for(std::chrono::milliseconds(10));
++    info = node.get_subscriptions_info_by_topic(topic);
++  }
++  if (info.size() != expected) {
++    throw std::runtime_error(
++            "expected " + std::to_string(expected) + " subscription(s) on '" + topic +
++            "' in the graph, found " + std::to_string(info.size()));
++  }
++  return info;
++}
+ 
+ class TestQosOverride : public ::testing::Test
+ {
+@@ -67,7 +116,7 @@
+ TEST_F(TestQosOverride, qos_override_publisher_without_options) {
+   auto pub =
+     image_transport::create_publisher(*pub_node_, "camera/image", rclcpp::SystemDefaultsQoS());
+-  auto endpoint_info_vec = pub_node_->get_publishers_info_by_topic("camera/image");
++  auto endpoint_info_vec = wait_for_publishers_info(*pub_node_, "camera/image");
+   EXPECT_EQ(endpoint_info_vec[0].qos_profile().reliability(), rclcpp::ReliabilityPolicy::Reliable);
+   pub.shutdown();
+ 
+@@ -75,7 +124,7 @@
+     *qos_override_pub_node_, "camera/image", rclcpp::SystemDefaultsQoS());
+ 
+   endpoint_info_vec =
+-    qos_override_pub_node_->get_node_graph_interface()->get_publishers_info_by_topic(
++    wait_for_publishers_info(*qos_override_pub_node_,
+     "camera/image");
+   EXPECT_EQ(
+     endpoint_info_vec[0].qos_profile().reliability(),
+@@ -94,7 +143,7 @@
+   });
+   auto pub = image_transport::create_publisher(
+     *pub_node_, "camera/image", rclcpp::SystemDefaultsQoS(), options);
+-  auto endpoint_info_vec = pub_node_->get_publishers_info_by_topic("camera/image");
++  auto endpoint_info_vec = wait_for_publishers_info(*pub_node_, "camera/image");
+   EXPECT_EQ(endpoint_info_vec[0].qos_profile().reliability(), rclcpp::ReliabilityPolicy::Reliable);
+   pub.shutdown();
+ 
+@@ -102,7 +151,7 @@
+     *qos_override_pub_node_, "camera/image", rclcpp::SystemDefaultsQoS(), options);
+ 
+   endpoint_info_vec =
+-    qos_override_pub_node_->get_node_graph_interface()->get_publishers_info_by_topic(
++    wait_for_publishers_info(*qos_override_pub_node_,
+     "camera/image");
+   EXPECT_EQ(
+     endpoint_info_vec[0].qos_profile().reliability(),
+@@ -116,7 +165,7 @@
+ 
+   auto sub = image_transport::create_subscription(
+     *sub_node_, "camera/image", fcn, "raw", rclcpp::SystemDefaultsQoS());
+-  auto endpoint_info_vec = sub_node_->get_subscriptions_info_by_topic("camera/image");
++  auto endpoint_info_vec = wait_for_subscriptions_info(*sub_node_, "camera/image");
+   EXPECT_NE(endpoint_info_vec[0].qos_profile().reliability(),
+     rclcpp::ReliabilityPolicy::Unknown);
+   sub.shutdown();
+@@ -125,8 +174,7 @@
+     *qos_override_sub_node_, "camera/image", fcn, "raw", rclcpp::SystemDefaultsQoS());
+ 
+   endpoint_info_vec =
+-    qos_override_pub_node_->get_node_graph_interface()->
+-    get_subscriptions_info_by_topic("camera/image");
++    wait_for_subscriptions_info(*qos_override_pub_node_, "camera/image");
+   EXPECT_NE(
+     endpoint_info_vec[0].qos_profile().reliability(),
+     rclcpp::ReliabilityPolicy::Unknown);
+@@ -147,7 +195,7 @@
+ 
+   auto sub = image_transport::create_subscription(
+     *sub_node_, "camera/image", fcn, "raw", rclcpp::SystemDefaultsQoS(), options);
+-  auto endpoint_info_vec = sub_node_->get_subscriptions_info_by_topic("camera/image");
++  auto endpoint_info_vec = wait_for_subscriptions_info(*sub_node_, "camera/image");
+   EXPECT_NE(endpoint_info_vec[0].qos_profile().reliability(),
+     rclcpp::ReliabilityPolicy::Unknown);
+   sub.shutdown();
+@@ -156,8 +204,7 @@
+     *qos_override_sub_node_, "camera/image", fcn, "raw", rclcpp::SystemDefaultsQoS(), options);
+ 
+   endpoint_info_vec =
+-    qos_override_sub_node_->get_node_graph_interface()->
+-    get_subscriptions_info_by_topic("camera/image");
++    wait_for_subscriptions_info(*qos_override_sub_node_, "camera/image");
+ 
+   std::cout << "endpoint_info_vec[0].node_name() " << endpoint_info_vec[0].node_name() << std::endl;
+   EXPECT_EQ(

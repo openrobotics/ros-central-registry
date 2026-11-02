@@ -1,0 +1,27 @@
+--- a/src/geometry/alt_geometry.cpp
++++ b/src/geometry/alt_geometry.cpp
+@@ -190,6 +190,13 @@
+ 
+       alt::Points2d subset1, subset2;
+       for (const auto & point : points) {
++        // Never re-partition the farthest point itself. Relying on is_above() returning exactly
++        // false for it would require (farthest - p1).cross(farthest - p1) to be exactly 0, which
++        // is not guaranteed when the compiler contracts the cross product into a fused
++        // multiply-add (e.g. AArch64), and would otherwise recurse infinitely.
++        if (&point == &farthest) {
++          continue;
++        }
+         if (is_above(point, p1, farthest)) {
+           subset1.push_back(point);
+         } else if (is_above(point, farthest, p2)) {
+@@ -204,6 +211,10 @@
+ 
+     alt::Points2d above_points, below_points;
+     for (const auto & point : points) {
++      // Same as above: the segment endpoints must not be partitioned onto either side.
++      if (&point == &p_min || &point == &p_max) {
++        continue;
++      }
+       if (is_above(point, p_min, p_max)) {
+         above_points.push_back(point);
+       } else if (is_above(point, p_max, p_min)) {

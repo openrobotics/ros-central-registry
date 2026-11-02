@@ -1,0 +1,211 @@
+--- a/test/rcl/test_security.cpp
++++ b/test/rcl/test_security.cpp
+@@ -30,6 +30,7 @@
+ 
+ #include "osrf_testing_tools_cpp/scope_exit.hpp"
+ 
++#include "locate_test_assets.h"
+ #include "./allocator_testing_utils.h"
+ #include "../mocking_utils/patch.hpp"
+ 
+@@ -89,6 +90,12 @@
+     root_path = nullptr;
+     secure_root = nullptr;
+     base_lookup_dir_fqn = nullptr;
++
++    // Get the path to the test asset.
++    char test_asset_dir[1024];
++    get_test_asset_dir(test_asset_dir, 1024);
++    char * test_path = rcutils_join_path(test_asset_dir, "test", allocator);
++    resources_path = rcutils_join_path(test_path, "resources", allocator);
+   }
+ 
+   void TearDown() final
+@@ -123,6 +130,7 @@
+   char * root_path;
+   char * secure_root;
+   char * base_lookup_dir_fqn;
++  char * resources_path;
+ };
+ 
+ TEST_F(TestGetSecureRoot, failureScenarios) {
+@@ -136,7 +144,9 @@
+     (char *) NULL);
+   rcl_reset_error();
+ 
+-  putenv_wrapper(ROS_SECURITY_KEYSTORE_VAR_NAME "=" TEST_RESOURCES_DIRECTORY);
++  char env_val[1024];
++  snprintf(env_val, 1024, "%s=%s", ROS_SECURITY_KEYSTORE_VAR_NAME, resources_path);
++  putenv_wrapper(env_val);
+ 
+   /* Security directory is set, but there's no matching directory */
+   /// Wrong enclave
+@@ -147,21 +157,20 @@
+ }
+ 
+ TEST_F(TestGetSecureRoot, successScenarios_local_root_enclave) {
+-  putenv_wrapper(
+-    ROS_SECURITY_KEYSTORE_VAR_NAME "="
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  char tmp_val[1024];
++  snprintf(tmp_val, 1024, "%s=%s%s", ROS_SECURITY_KEYSTORE_VAR_NAME, resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  putenv_wrapper(tmp_val);
+ 
+   secure_root = rcl_get_secure_root("/", &allocator);
+   ASSERT_NE(nullptr, secure_root);
+-  ASSERT_STREQ(
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME PATH_SEPARATOR "enclaves",
+-    secure_root);
++  snprintf(tmp_val, 1024, "%s%s/%s", resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME, "enclaves");
++  ASSERT_STREQ(tmp_val, secure_root);
+ }
+ 
+ TEST_F(TestGetSecureRoot, successScenarios_local_exactMatch) {
+-  putenv_wrapper(
+-    ROS_SECURITY_KEYSTORE_VAR_NAME "="
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  char tmp_val[1024];
++  snprintf(tmp_val, 1024, "%s=%s%s", ROS_SECURITY_KEYSTORE_VAR_NAME, resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  putenv_wrapper(tmp_val);
+ 
+   secure_root = rcl_get_secure_root(TEST_ENCLAVE_ABSOLUTE, &allocator);
+   ASSERT_NE(nullptr, secure_root);
+@@ -172,9 +181,9 @@
+ }
+ 
+ TEST_F(TestGetSecureRoot, successScenarios_local_exactMatch_multipleTokensName) {
+-  putenv_wrapper(
+-    ROS_SECURITY_KEYSTORE_VAR_NAME "="
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  char tmp_val[1024];
++  snprintf(tmp_val, 1024, "%s=%s%s", ROS_SECURITY_KEYSTORE_VAR_NAME, resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  putenv_wrapper(tmp_val);
+ 
+   secure_root = rcl_get_secure_root(
+     TEST_ENCLAVE_MULTIPLE_TOKENS_ABSOLUTE, &allocator);
+@@ -186,24 +195,22 @@
+ }
+ 
+ TEST_F(TestGetSecureRoot, nodeSecurityEnclaveOverride_validEnclave) {
+-  putenv_wrapper(
+-    ROS_SECURITY_KEYSTORE_VAR_NAME "="
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  char tmp_val[1024];
++  snprintf(tmp_val, 1024, "%s=%s%s", ROS_SECURITY_KEYSTORE_VAR_NAME, resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  putenv_wrapper(tmp_val);
+ 
+   /* Specify a valid enclave */
+   putenv_wrapper(ROS_SECURITY_ENCLAVE_OVERRIDE "=" TEST_ENCLAVE_ABSOLUTE);
+   root_path = rcl_get_secure_root(
+     "name shouldn't matter", &allocator);
+-  ASSERT_STREQ(
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME
+-    PATH_SEPARATOR "enclaves" PATH_SEPARATOR TEST_ENCLAVE,
+-    root_path);
++  snprintf(tmp_val, 1024, "%s%s/%s/%s", resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME, "enclaves", TEST_ENCLAVE);
++  ASSERT_STREQ(tmp_val, root_path);
+ }
+ 
+ TEST_F(TestGetSecureRoot, nodeSecurityEnclaveOverride_invalidEnclave) {
+-  putenv_wrapper(
+-    ROS_SECURITY_KEYSTORE_VAR_NAME "="
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  char tmp_val[1024];
++  snprintf(tmp_val, 1024, "%s=%s%s", ROS_SECURITY_KEYSTORE_VAR_NAME, resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  putenv_wrapper(tmp_val);
+ 
+   /* The override provided should exist. Providing correct node/namespace/root dir won't help
+    * if the node override is invalid. */
+@@ -216,6 +223,8 @@
+ }
+ 
+ TEST_F(TestGetSecureRoot, test_get_security_options) {
++  char tmp_val[1024];
++
+   /* The override provided should exist. Providing correct enclave name/root dir
+    * won't help if the node override is invalid. */
+   rmw_security_options_t options = rmw_get_zero_initialized_security_options();
+@@ -228,38 +237,33 @@
+ 
+   putenv_wrapper(ROS_SECURITY_ENABLE_VAR_NAME "=true");
+   putenv_wrapper(ROS_SECURITY_STRATEGY_VAR_NAME "=Enforce");
+-  putenv_wrapper(
+-    ROS_SECURITY_KEYSTORE_VAR_NAME "="
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
+-
++  snprintf(tmp_val, 1024, "%s=%s%s", ROS_SECURITY_KEYSTORE_VAR_NAME, resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  putenv_wrapper(tmp_val);
+   putenv_wrapper(
+     ROS_SECURITY_ENCLAVE_OVERRIDE "=" TEST_ENCLAVE_MULTIPLE_TOKENS_ABSOLUTE);
+   ret = rcl_get_security_options_from_environment(
+     "doesn't matter at all", &allocator, &options);
+   ASSERT_EQ(RMW_RET_OK, ret) << rmw_get_error_string().str;
+   EXPECT_EQ(RMW_SECURITY_ENFORCEMENT_ENFORCE, options.enforce_security);
+-  EXPECT_STREQ(
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME
+-    PATH_SEPARATOR "enclaves" PATH_SEPARATOR TEST_ENCLAVE_MULTIPLE_TOKENS_DIR,
+-    options.security_root_path);
++  snprintf(tmp_val, 1024, "%s%s/%s/%s", resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME, "enclaves", TEST_ENCLAVE_MULTIPLE_TOKENS_DIR);
++  EXPECT_STREQ(tmp_val, options.security_root_path);
+   EXPECT_EQ(RMW_RET_OK, rmw_security_options_fini(&options, &allocator));
+ 
+   options = rmw_get_zero_initialized_security_options();
+   unsetenv_wrapper(ROS_SECURITY_ENCLAVE_OVERRIDE);
+-  putenv_wrapper(
+-    ROS_SECURITY_KEYSTORE_VAR_NAME "="
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++
++  snprintf(tmp_val, 1024, "%s=%s%s", ROS_SECURITY_KEYSTORE_VAR_NAME, resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME);
++  putenv_wrapper(tmp_val);
+   ret = rcl_get_security_options_from_environment(
+     TEST_ENCLAVE_ABSOLUTE, &allocator, &options);
+   ASSERT_EQ(RMW_RET_OK, ret) << rmw_get_error_string().str;
+   EXPECT_EQ(RMW_SECURITY_ENFORCEMENT_ENFORCE, options.enforce_security);
+-  EXPECT_STREQ(
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME
+-    PATH_SEPARATOR "enclaves" PATH_SEPARATOR TEST_ENCLAVE,
+-    options.security_root_path);
++  snprintf(tmp_val, 1024, "%s%s/%s/%s", resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME, "enclaves", TEST_ENCLAVE);
++  EXPECT_STREQ(tmp_val, options.security_root_path);
+   EXPECT_EQ(RMW_RET_OK, rmw_security_options_fini(&options, &allocator));
+ }
+ 
++// TODO(asymingt) enable once mocking works in Bazel.
+ TEST_F(TestGetSecureRoot, test_rcl_security_enabled) {
+   EXPECT_EQ(RCL_RET_INVALID_ARGUMENT, rcl_security_enabled(nullptr));
+   rcl_reset_error();
+@@ -303,6 +307,7 @@
+   }
+ }
+ 
++// TODO(asymingt) enable once mocking works in Bazel.
+ TEST_F(TestGetSecureRoot, test_rcl_get_enforcement_policy) {
+   EXPECT_EQ(RCL_RET_INVALID_ARGUMENT, rcl_get_enforcement_policy(nullptr));
+   rcl_reset_error();
+@@ -346,6 +351,7 @@
+   }
+ }
+ 
++// TODO(asymingt) enable once mocking works in Bazel.
+ TEST_F(TestGetSecureRoot, test_rcl_get_secure_root_with_bad_arguments) {
+   rcl_allocator_t allocator = rcl_get_default_allocator();
+   EXPECT_EQ(nullptr, rcl_get_secure_root(nullptr, &allocator));
+@@ -362,6 +368,7 @@
+   rcl_reset_error();
+ }
+ 
++// TODO(asymingt) enable once mocking works in Bazel.
+ TEST_F(TestGetSecureRoot, test_rcl_get_secure_root_with_internal_errors) {
+   rcl_allocator_t allocator = rcl_get_default_allocator();
+   rcl_allocator_t failing_allocator = get_time_bombed_allocator();
+@@ -382,8 +389,8 @@
+   EXPECT_TRUE(rcl_error_is_set());
+   rcl_reset_error();
+ 
+-  env[ROS_SECURITY_KEYSTORE_VAR_NAME] =
+-    TEST_RESOURCES_DIRECTORY TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME;
++  env[ROS_SECURITY_KEYSTORE_VAR_NAME] = rcutils_join_path(
++    resources_path, TEST_SECURITY_DIRECTORY_RESOURCES_DIR_NAME, allocator);
+ 
+   // fail to copy ROS_SECURITY_KEYSTORE_VAR_NAME value
+   set_time_bombed_allocator_count(failing_allocator, 0);

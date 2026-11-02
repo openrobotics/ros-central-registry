@@ -1,0 +1,43 @@
+--- a/src/buffer.cpp
++++ b/src/buffer.cpp
+@@ -247,9 +247,16 @@
+       }
+ 
+       if (result == tf2::TransformAvailable) {
+-        geometry_msgs::msg::TransformStamped msg_stamped = this->lookupTransform(
+-          target_frame, source_frame, time);
+-        promise->set_value(msg_stamped);
++        // The buffer can be cleared between the availability check and this
++        // lookup (e.g. on a sim-time jump back), so the lookup may still throw;
++        // deliver that through the future like any other failure.
++        try {
++          geometry_msgs::msg::TransformStamped msg_stamped = this->lookupTransform(
++            target_frame, source_frame, time);
++          promise->set_value(msg_stamped);
++        } catch (const tf2::TransformException &) {
++          promise->set_exception(std::current_exception());
++        }
+       } else {
+         promise->set_exception(
+           std::make_exception_ptr(
+@@ -268,10 +275,16 @@
+     auto handle = addTransformableRequest(cb, target_frame, source_frame, time);
+     future.setHandle(handle);
+     if (0 == handle) {
+-      // Immediately transformable
+-      geometry_msgs::msg::TransformStamped msg_stamped = lookupTransform(
+-        target_frame, source_frame, time);
+-      promise->set_value(msg_stamped);
++      // Immediately transformable -- but the buffer can be cleared concurrently
++      // (e.g. on a sim-time jump back) before the lookup, so it may still throw;
++      // deliver that through the future instead of out of waitForTransform().
++      try {
++        geometry_msgs::msg::TransformStamped msg_stamped = lookupTransform(
++          target_frame, source_frame, time);
++        promise->set_value(msg_stamped);
++      } catch (const tf2::TransformException &) {
++        promise->set_exception(std::current_exception());
++      }
+       call_callback = true;
+     } else if (0xffffffffffffffffULL == handle) {
+       // Never transformable

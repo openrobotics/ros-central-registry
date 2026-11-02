@@ -1,0 +1,190 @@
+diff --git a/src/Application.cc b/src/Application.cc
+index 90feb89..7e4f85a 100644
+--- a/src/Application.cc
++++ b/src/Application.cc
+@@ -865,7 +865,12 @@ std::vector<std::pair<std::string, std::vector<std::string>>>
+ 
+       if (plugin.find(SHARED_LIBRARY_PREFIX) == 0 &&
+           plugin.rfind(SHARED_LIBRARY_SUFFIX) == suffixPos)
+-        ps.push_back(plugin);
++      {
++        if (plugin != "libgz-gui.so" && plugin != "libgz-gui-shared.so")
++        {
++          ps.push_back(plugin);
++        }
++      }
+     }
+ 
+     plugins.emplace_back(path, ps);
+diff --git a/src/Conversions.cc b/src/Conversions.cc
+index 6fbd794..d3ded47 100644
+--- a/src/Conversions.cc
++++ b/src/Conversions.cc
+@@ -176,3 +176,8 @@ gz::common::KeyEvent convert(const QKeyEvent &_e)
+   return event;
+ }
+ }  // namespace gz::gui
++
++std::string QByteArray::toStdString() const
++{
++  return std::string(constData(), size());
++}
+diff --git a/src/cmd/cmdgui.rb.in b/src/cmd/cmdgui.rb.in
+index 53fd5b3..2d11c36 100644
+--- a/src/cmd/cmdgui.rb.in
++++ b/src/cmd/cmdgui.rb.in
+@@ -146,6 +146,9 @@ class Cmd
+     conf_version = LIBRARY_VERSION
+ 
+     begin
++      if defined?(Fiddle)
++        Fiddle.dlopen(plugin, Fiddle::RTLD_GLOBAL) rescue nil
++      end
+       Importer.dlload plugin
+     rescue DLError
+       puts "Library error: [#{plugin}] not found."
+diff --git a/src/gz.cc b/src/gz.cc
+index d146c3e..264d18b 100644
+--- a/src/gz.cc
++++ b/src/gz.cc
+@@ -19,7 +19,11 @@
+ 
+ #include <iostream>
+ 
++#include <chrono>
++#include <thread>
+ #include <gz/common/Console.hh>
++#include <gz/msgs/stringmsg_v.pb.h>
++#include <gz/transport/Node.hh>
+ 
+ #include "gz/gui/Application.hh"
+ #include "gz/gui/config.hh"
+@@ -93,16 +97,41 @@ extern "C" GZ_GUI_VISIBLE void cmdStandalone(const char *_filename)
+ }
+ 
+ //////////////////////////////////////////////////
++
++static void discoverWorldNames(gz::gui::MainWindow *_mainWin)
++{
++  if (!_mainWin)
++    return;
++  gz::transport::Node node;
++  gz::msgs::StringMsg_V worldsMsg;
++  bool result = false;
++  for (int i = 0; i < 50; ++i)
++  {
++    if (node.Request("/gazebo/worlds", 200u, worldsMsg, result) && result &&
++        worldsMsg.data_size() > 0)
++    {
++      QStringList names;
++      for (int w = 0; w < worldsMsg.data_size(); ++w)
++        names.append(QString::fromStdString(worldsMsg.data(w)));
++      _mainWin->setProperty("worldNames", names);
++      break;
++    }
++    std::this_thread::sleep_for(std::chrono::milliseconds(100));
++  }
++}
++
+ extern "C" GZ_GUI_VISIBLE void cmdConfig(const char *_config)
+ {
+   startConsoleLog();
+ 
+   gz::gui::Application app(g_argc, g_argv);
+ 
+-  if (!app.findChild<gz::gui::MainWindow *>())
++  auto *mainWin = app.findChild<gz::gui::MainWindow *>();
++  if (!mainWin)
+   {
+     return;
+   }
++  discoverWorldNames(mainWin);
+ 
+   if (!app.LoadConfig(std::string(_config)))
+   {
+diff --git a/src/plugins/minimal_scene/EngineToQtInterface.cc b/src/plugins/minimal_scene/EngineToQtInterface.cc
+index 380f881..d61879b 100644
+--- a/src/plugins/minimal_scene/EngineToQtInterface.cc
++++ b/src/plugins/minimal_scene/EngineToQtInterface.cc
+@@ -122,6 +122,10 @@ void EngineToQtInterface::DestroyFallbackTexture()
+ bool EngineToQtInterface::NeedsFallback(gz::rendering::CameraPtr &_camera)
+ {
+   auto *renderEngine = _camera->Scene()->Engine();
++  if (renderEngine->Headless())
++  {
++    return true;
++  }
+   if (renderEngine->GraphicsAPI() != gz::rendering::GraphicsAPI::OPENGL &&
+       renderEngine->GraphicsAPI() != gz::rendering::GraphicsAPI::METAL)
+   {
+@@ -159,6 +163,7 @@ GLuint EngineToQtInterface::TextureId(gz::rendering::CameraPtr &_camera)
+     }
+ 
+     _camera->Copy(*this->dataPtr->fallbackImage);
++    this->dataPtr->glContext->makeCurrent(this->dataPtr->glContext->surface());
+ 
+     QOpenGLFunctions *glFuncs = this->dataPtr->glContext->functions();
+ 
+diff --git a/src/plugins/minimal_scene/MinimalScene.cc b/src/plugins/minimal_scene/MinimalScene.cc
+index d3394b9..ba320da 100644
+--- a/src/plugins/minimal_scene/MinimalScene.cc
++++ b/src/plugins/minimal_scene/MinimalScene.cc
+@@ -724,6 +724,10 @@ std::string GzRenderer::Initialize(RenderThreadRhi &_rhi)
+     }
+ #endif
+ 
++#if defined(__linux__)
++    this->dataPtr->rhiParams["headless"] = "1";
++    this->dataPtr->rhiParams["useCurrentGLContext"] = "0";
++#endif
+     engine = rendering::engine(this->engineName, this->dataPtr->rhiParams);
+   }
+   else
+@@ -1133,11 +1137,13 @@ void RenderWindowItem::StopRendering()
+     QObject::disconnect(conn);
+ 
+   this->dataPtr->renderSync.Shutdown();
+-  QMetaObject::invokeMethod(this->dataPtr->renderThread,
+-                            "ShutDown",
+-                            Qt::QueuedConnection);
+-
+-  this->dataPtr->renderThread->wait();
++  if (this->dataPtr->renderThread->isRunning())
++  {
++    QMetaObject::invokeMethod(this->dataPtr->renderThread,
++                              "ShutDown",
++                              Qt::QueuedConnection);
++    this->dataPtr->renderThread->wait();
++  }
+ }
+ 
+ /////////////////////////////////////////////////
+diff --git a/src/plugins/transport_scene_manager/TransportSceneManager.cc b/src/plugins/transport_scene_manager/TransportSceneManager.cc
+index caa7b77..1d6adb2 100644
+--- a/src/plugins/transport_scene_manager/TransportSceneManager.cc
++++ b/src/plugins/transport_scene_manager/TransportSceneManager.cc
+@@ -51,6 +51,7 @@
+ #include "gz/gui/Application.hh"
+ #include "gz/gui/Conversions.hh"
+ #include "gz/gui/GuiEvents.hh"
++#include "gz/gui/Helpers.hh"
+ #include "gz/gui/MainWindow.hh"
+ 
+ #include "TransportSceneManager.hh"
+@@ -194,6 +195,16 @@ void TransportSceneManager::LoadConfig(const tinyxml2::XMLElement *_pluginElem)
+   if (this->title.empty())
+     this->title = "Transport Scene Manager";
+ 
++  auto worldNames = gui::worldNames();
++  if (!worldNames.empty())
++  {
++    std::string w = worldNames[0].toStdString();
++    this->dataPtr->service = transport::TopicUtils::AsValidTopic("/world/" + w + "/scene/info");
++    this->dataPtr->poseTopic = transport::TopicUtils::AsValidTopic("/world/" + w + "/dynamic_pose/info");
++    this->dataPtr->deletionTopic = transport::TopicUtils::AsValidTopic("/world/" + w + "/scene/deletion");
++    this->dataPtr->sceneTopic = transport::TopicUtils::AsValidTopic("/world/" + w + "/scene/info");
++  }
++
+   // Custom parameters
+   if (_pluginElem)
+   {

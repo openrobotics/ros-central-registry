@@ -1,0 +1,222 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+# GraphicsMagick is distributed under the MIT license (every source file
+# carries "SPDX-License-Identifier: MIT"); Copyright.txt additionally lists
+# the notices of the bundled third-party components that are not compiled
+# here (e.g. the ImageMagick-derived code is covered by the same terms).
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+    license_text = "Copyright.txt",
+)
+
+exports_files(["Copyright.txt"])
+
+_LINKOPTS = select({
+    "@platforms//os:linux": [
+        "-lm",
+        "-lpthread",
+    ],
+    "//conditions:default": [],
+})
+
+# Coders that are only compiled by upstream's configure when an optional
+# delegate library or platform facility is present. None of these are
+# enabled here (magick/static.c only references them under the matching
+# Has* guard, which magick/magick_config.h leaves undefined).
+_DISABLED_CODERS = [
+    "coders/clipboard.c",  # HasWINGDI32
+    "coders/emf.c",  # HasWINGDI32
+    "coders/fpx.c",  # HasFPX
+    "coders/heif.c",  # HasHEIF
+    "coders/jbig.c",  # HasJBIG
+    "coders/jp2.c",  # HasJP2
+    "coders/jxl.c",  # HasJXL
+    "coders/ora.c",  # HasLIBZIP
+    "coders/psd.c",  # EnableBrokenCoders
+    "coders/webp.c",  # HasWEBP
+    "coders/x.c",  # HasX11
+    "coders/xwd.c",  # HasX11
+]
+
+# Library sources that upstream only builds for X11 or native Windows.
+_DISABLED_CORE_SRCS = [
+    "magick/animate.c",
+    "magick/display.c",
+    "magick/nt_base.c",
+    "magick/nt_feature.c",
+    "magick/PreRvIcccm.c",
+    "magick/widget.c",
+    "magick/xwindow.c",
+]
+
+# Core C library (libGraphicsMagick) built the way upstream's
+# "--without-modules" configuration does: every coder and filter is linked
+# in and registered via the static table in magick/static.c, so there is no
+# dynamic module loading. magick/magick_config.h is a static overlay file;
+# see the comment at its top for how the values were chosen.
+cc_library(
+    name = "magick",
+    srcs = glob(
+        [
+            "coders/*.c",
+            "magick/*.c",
+        ],
+        exclude = _DISABLED_CODERS + _DISABLED_CORE_SRCS,
+    ) + [
+        "filters/analyze.c",
+    ],
+    hdrs = glob(["magick/*.h"]),
+    includes = ["."],
+    linkopts = _LINKOPTS,
+    deps = [
+        "@libjpeg_turbo//:jpeg",
+        "@libpng",
+        "@libtiff//:tiff",
+        "@zlib",
+    ],
+)
+
+# Magick++ headers that upstream installs; the remaining ones under
+# Magick++/lib/Magick++/ are private to the implementation.
+_MAGICKPP_PRIVATE_HDRS = [
+    "Magick++/lib/Magick++/BlobRef.h",
+    "Magick++/lib/Magick++/Functions.h",
+    "Magick++/lib/Magick++/ImageRef.h",
+    "Magick++/lib/Magick++/Thread.h",
+]
+
+# Magick++ C++ API (libGraphicsMagick++), consumed as #include <Magick++.h>.
+cc_library(
+    name = "magick++",
+    srcs = glob(["Magick++/lib/*.cpp"]) + _MAGICKPP_PRIVATE_HDRS,
+    hdrs = ["Magick++/lib/Magick++.h"] + glob(
+        ["Magick++/lib/Magick++/*.h"],
+        exclude = _MAGICKPP_PRIVATE_HDRS,
+    ),
+    includes = ["Magick++/lib"],
+    linkopts = _LINKOPTS,
+    deps = [":magick"],
+)
+
+# Upstream tests.
+#
+# Both suites are driven by TAP shell scripts upstream (Magick++/tests/tests.tap
+# and tests/rwfile.tap) that run each program from inside the source tree.
+# The small wrappers under bazel/ reproduce that environment (SRCDIR pointing
+# at the bundled sample images, output written to $TEST_TMPDIR).
+
+# Overlay files are not guaranteed to keep an executable bit when fetched
+# from a registry, so make executable copies of the test drivers.
+[
+    genrule(
+        name = "%s_sh" % script,
+        testonly = True,
+        srcs = ["bazel/%s.sh" % script],
+        outs = ["%s_exec.sh" % script],
+        cmd = "cp $< $@ && chmod +x $@",
+        executable = True,
+        visibility = ["//visibility:private"],
+    )
+    for script in [
+        "run_in_srcdir",
+        "rwfile_test",
+    ]
+]
+
+# Magick++/tests: every program listed in Magick++/tests/tests.tap.
+_MAGICKPP_TESTS = [
+    "appendImages",
+    "attributes",
+    "averageImages",
+    "coalesceImages",
+    "coderInfo",
+    "color",
+    "colorHistogram",
+    "exceptions",
+    "montageImages",
+    "morphImages",
+    "readWriteBlob",
+    "readWriteImages",
+]
+
+[
+    cc_binary(
+        name = "magickpp_%s" % name,
+        testonly = True,
+        srcs = ["Magick++/tests/%s.cpp" % name],
+        visibility = ["//visibility:private"],
+        deps = [":magick++"],
+    )
+    for name in _MAGICKPP_TESTS
+]
+
+[
+    sh_test(
+        name = "magickpp_%s_test" % name,
+        size = "small",
+        srcs = [":run_in_srcdir_sh"],
+        args = [
+            "$(rootpath Magick++/tests/test_image.miff)",
+            "$(rootpath :magickpp_%s)" % name,
+        ],
+        data = [
+            "Magick++/tests/test_image.miff",
+            "Magick++/tests/test_image_anim.miff",
+            ":magickpp_%s" % name,
+        ],
+    )
+    for name in _MAGICKPP_TESTS
+]
+
+# tests/rwfile: read/write round-trip of the bundled sample images, run with
+# the exact invocations from tests/rwfile.tap for the formats ROS packages
+# rely on (PNM family, PNG, JPEG, BMP) plus the other enabled delegates.
+cc_binary(
+    name = "rwfile",
+    testonly = True,
+    srcs = ["tests/rwfile.c"],
+    visibility = ["//visibility:private"],
+    deps = [":magick"],
+)
+
+_RWFILE_FORMATS = [
+    "BMP",
+    "GIF",
+    "JPEG",
+    "MIFF",
+    "PBM",
+    "PGM",
+    "PNG",
+    "PNM",
+    "PPM",
+    "TIFF",
+]
+
+[
+    sh_test(
+        name = "rwfile_%s_test" % fmt.lower(),
+        size = "small",
+        srcs = [":rwfile_test_sh"],
+        args = [
+            "$(rootpath :rwfile)",
+            "$(rootpath tests/rwfile.tap)",
+            "$(rootpath scripts/tap-functions.shi)",
+            fmt,
+        ],
+        data = [
+            "scripts/tap-functions.shi",
+            "tests/rwfile.tap",
+            ":rwfile",
+        ] + glob(["tests/input_*.miff"]),
+    )
+    for fmt in _RWFILE_FORMATS
+]

@@ -1,0 +1,54 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rosdistro//cc:defs.bzl", "ros_local_defines")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(
+    default_applicable_licenses = ["//:license"],
+    default_visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = {"@rclcpp//:rclcpp": "@rclcpp//:rclcpp_library"}
+
+genrule(
+    name = "lookup_tables_h",
+    srcs = [
+        "lookup_tables.h.in",
+        "test_lookup_table.yaml",
+    ],
+    outs = ["generated/micro_ros_diagnostic_bridge/lookup_tables.h"],
+    cmd = "sed -e 's|@LOOKUP_TABLE_PATH@|$(rootpath test_lookup_table.yaml)|' $(location lookup_tables.h.in) > $@",
+)
+
+cc_library(
+    name = "lookup_tables",
+    hdrs = [":lookup_tables_h"],
+    includes = ["generated"],
+    visibility = ["//visibility:private"],
+)
+
+cc_test(
+    name = "test_diagnostic_bridge",
+    timeout = "moderate",
+    srcs = ["test_diagnostic_bridge.cpp"],
+    data = ["test_lookup_table.yaml"] + ["//:ament_index"],
+    dynamic_deps = ["//:transitive_dynamic_deps"],
+    local_defines = ros_local_defines(),
+    deps = DEPENDENCIES.values() + [
+        ":lookup_tables",
+        "//:micro_ros_diagnostic_bridge_library",
+        "@rosdistro//cc:googletest",
+    ],
+)

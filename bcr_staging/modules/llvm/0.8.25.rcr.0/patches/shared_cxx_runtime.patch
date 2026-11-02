@@ -1,0 +1,218 @@
+diff --git a/runtimes/cxxstdlib/BUILD.bazel b/runtimes/cxxstdlib/BUILD.bazel
+index 25a94c5..a8c8781 100644
+--- a/runtimes/cxxstdlib/BUILD.bazel
++++ b/runtimes/cxxstdlib/BUILD.bazel
+@@ -1,4 +1,6 @@
+ load("@bazel_skylib//lib:selects.bzl", "selects")
++load("@rules_cc//cc:cc_library.bzl", "cc_library")
++load(":cc_runtimes_toolchain.bzl", "cc_runtimes_toolchain", "cc_shared_runtime")
+ 
+ package(default_visibility = ["//visibility:public"])
+ 
+@@ -96,17 +98,83 @@ genrule(
+     cmd = "echo 'libstdc++ is currently supported only for Linux targets; Windows/MinGW libstdc++ is intentionally unsupported.' >&2; exit 1",
+ )
+ 
++# One libc++ per process on Linux.
++#
++# Bazel links `static_runtime_lib` into every link whose dependencies are
++# linked statically, which includes every cc_shared_library (those absorb
++# their `deps`) and every default `cc_binary`/`cc_test`. With the static
++# archives there, each shared library in a process carries its own libc++
++# (locale/facet registry, exception globals, iostream state, ...), and which
++# copy wins a symbol lookup is decided by ELF load order. Mismatches surface
++# as std::bad_cast out of use_facet, or double frees in stream destructors,
++# and move around whenever the dependency graph (hence load order) changes.
++#
++# So on Linux the C++ runtime is not provided through the runtime-lib
++# attributes at all; instead the (optional) rules_cc runtimes toolchain
++# (@bazel_tools//tools/cpp:cc_runtimes_toolchain_type, registered by
++# //toolchain:cc_runtimes) makes libc++/libc++abi/libunwind ordinary
++# shared-library dependencies of every binary, library and shared library,
++# so Bazel handles _solib symlinks, rpaths and runfiles the standard way --
++# the same single-shared-runtime model macOS gets from the SDK's
++# libc++.dylib. Fully static links (--dynamic_mode=off) keep the archives:
++# there is a single link, and the portable-executable use case wants no
++# runtime dependencies.
++config_setting(
++    name = "libcxx_linux_static_link",
++    constraint_values = [
++        "//constraints/cxxstdlib:libcxx",
++        "@platforms//os:linux",
++    ],
++    values = {"dynamic_mode": "off"},
++)
++
++# Registered as @bazel_tools//tools/cpp:cc_runtimes_toolchain_type by
++# //toolchain:cc_runtimes; rules_cc adds this to every cc_binary, cc_test,
++# cc_library and cc_shared_library link. libc++.so.1 and libc++abi.so.1 have
++# undefined _Unwind_* references, so libunwind.so.1 comes along.
++cc_shared_runtime(
++    name = "cxx_runtime",
++    shared_libraries = select({
++        ":libcxx_linux_static_link": [],
++        ":libcxx_linux": [
++            "@llvm-project//libcxx:libcxx.shared",
++            "@llvm-project//libcxxabi:libcxxabi.shared",
++            "@llvm-project//libunwind:libunwind.shared",
++        ],
++        "//conditions:default": [],
++    }),
++    static_libraries = select({
++        ":libcxx_linux_static_link": [],
++        ":libcxx_linux": [
++            "@llvm-project//libcxx:libcxx.static",
++            "@llvm-project//libcxxabi:libcxxabi.static",
++            "@llvm-project//libunwind:libunwind.static",
++        ],
++        "//conditions:default": [],
++    }),
++    tags = ["LINKABLE_MORE_THAN_ONCE"],
++)
++
++cc_runtimes_toolchain(
++    name = "cc_runtimes",
++    runtimes = [":cxx_runtime"],
++)
++
+ filegroup(
+     name = "static_runtime_lib",
+     srcs = select({
+         ":libstdcxx_linux": [":libstdcxx_static_runtime_lib"],
+         ":libstdcxx_windows": [":libstdcxx_windows_unsupported"],
+         ":libcxx_windows_msvc_vcruntime": ["//runtimes/libcxx:libcxx.static"],
+-        ":libcxx_linux": [
++        ":libcxx_linux_static_link": [
+             "@llvm-project//libcxx:libcxx.static",
+             "@llvm-project//libcxxabi:libcxxabi.static",
+             "@llvm-project//libunwind:libunwind.static",
+         ],
++        # A static libunwind stays here for rules that only consult the
++        # runtime-lib attributes (rules_rust); C++ links resolve the unwinder
++        # from libunwind.so.1 first and never pull these archive members.
++        ":libcxx_linux": ["@llvm-project//libunwind:libunwind.static"],
+         ":libcxx_windows": [
+             "@llvm-project//libcxx:libcxx.static",
+             "@llvm-project//libcxxabi:libcxxabi.static",
+diff --git a/runtimes/cxxstdlib/cc_runtimes_toolchain.bzl b/runtimes/cxxstdlib/cc_runtimes_toolchain.bzl
+new file mode 100644
+index 0000000..bc70167
+--- /dev/null
++++ b/runtimes/cxxstdlib/cc_runtimes_toolchain.bzl
+@@ -0,0 +1,95 @@
++"""A @bazel_tools//tools/cpp:cc_runtimes_toolchain_type implementation.
++
++rules_cc consults this (optional) toolchain in every cc rule and links the
++listed `runtimes` targets like ordinary dependencies, which is how the C++
++runtime is made a single shared library per process instead of an archive
++copied into every binary and shared library.
++"""
++
++load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
++load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
++load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
++
++CcRuntimesInfo = provider(
++    "C++ runtime dependencies rules_cc adds to every link.",
++    fields = {
++        "runtimes": "list of Targets providing CcInfo",
++        "copts": "list of extra compiler options",
++    },
++)
++
++def _cc_runtimes_toolchain_impl(ctx):
++    return [platform_common.ToolchainInfo(
++        cc_runtimes_info = CcRuntimesInfo(
++            runtimes = ctx.attr.runtimes,
++            copts = ctx.attr.copts,
++        ),
++    )]
++
++cc_runtimes_toolchain = rule(
++    implementation = _cc_runtimes_toolchain_impl,
++    attrs = {
++        "runtimes": attr.label_list(providers = [CcInfo]),
++        "copts": attr.string_list(),
++    },
++)
++
++def _cc_shared_runtime_impl(ctx):
++    # Equivalent of cc_import(shared_library = ...) for each file, written
++    # out by hand because every rules_cc rule (cc_import included) itself
++    # consults the cc_runtimes toolchain, which would make the toolchain's
++    # own runtimes a dependency cycle.
++    cc_toolchain = find_cc_toolchain(ctx)
++    feature_configuration = cc_common.configure_features(
++        ctx = ctx,
++        cc_toolchain = cc_toolchain,
++        requested_features = ctx.features,
++        unsupported_features = ctx.disabled_features,
++    )
++    if ctx.configuration.is_tool_configuration():
++        # Exec-configuration tools (e.g. genrule tools that get copied out of
++        # bazel-out/... into the working directory before running) link the
++        # static archives so they are self-contained and do not depend on
++        # $ORIGIN-relative _solib paths.
++        libraries = [
++            cc_common.create_library_to_link(
++                actions = ctx.actions,
++                feature_configuration = feature_configuration,
++                cc_toolchain = cc_toolchain,
++                static_library = f,
++            )
++            for f in ctx.files.static_libraries
++        ]
++        files = ctx.files.static_libraries
++    else:
++        libraries = [
++            cc_common.create_library_to_link(
++                actions = ctx.actions,
++                feature_configuration = feature_configuration,
++                cc_toolchain = cc_toolchain,
++                dynamic_library = f,
++            )
++            for f in ctx.files.shared_libraries
++        ]
++        files = ctx.files.shared_libraries
++    linker_input = cc_common.create_linker_input(
++        owner = ctx.label,
++        libraries = depset(libraries),
++    )
++    return [
++        DefaultInfo(files = depset(files)),
++        CcInfo(linking_context = cc_common.create_linking_context(
++            linker_inputs = depset([linker_input]),
++        )),
++    ]
++
++cc_shared_runtime = rule(
++    implementation = _cc_shared_runtime_impl,
++    doc = "Exposes prebuilt shared runtime libraries as a CcInfo, like cc_import.",
++    attrs = {
++        "shared_libraries": attr.label_list(allow_files = True),
++        "static_libraries": attr.label_list(allow_files = True),
++    },
++    fragments = ["cpp"],
++    toolchains = use_cc_toolchain(),
++)
+diff --git a/toolchain/BUILD.bazel b/toolchain/BUILD.bazel
+index 1b70ba7..00afbff 100644
+--- a/toolchain/BUILD.bazel
++++ b/toolchain/BUILD.bazel
+@@ -591,3 +591,16 @@ bzl_library(
+     srcs = ["bootstrap_stages.bzl"],
+     visibility = ["//visibility:public"],
+ )
++
++# The C++ runtime as ordinary (shared) dependencies of every cc rule, see
++# //runtimes/cxxstdlib:cxx_runtime. Registered together with the C++
++# toolchains above via //toolchain:all.
++toolchain(
++    name = "cc_runtimes",
++    # Only for user programs (runtime_stage == complete) on Linux: the
++    # runtimes themselves are built with cc rules in stage0/stage1 and must
++    # not depend on the toolchain that delivers them (dependency cycle).
++    target_settings = [":linux_complete"],
++    toolchain = "//runtimes/cxxstdlib:cc_runtimes",
++    toolchain_type = "@bazel_tools//tools/cpp:cc_runtimes_toolchain_type",
++)

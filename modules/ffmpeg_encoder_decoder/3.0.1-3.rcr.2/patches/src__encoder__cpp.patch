@@ -1,0 +1,94 @@
+--- a/src/encoder.cpp
++++ b/src/encoder.cpp
+@@ -212,9 +212,6 @@
+   }
+   // find codec
+   const AVCodec * codec = avcodec_find_encoder_by_name(encoder_.c_str());
+-  if (!codec) {
+-    throw(std::runtime_error("cannot find encoder: " + encoder_));
+-  }
+ 
+   // allocate codec context
+   codecContext_ = avcodec_alloc_context3(codec);
+@@ -223,6 +220,13 @@
+   }
+ 
+   auto pixFmts = utils::get_encoder_formats(codecContext_, codec);
++  if (pixFmts.empty()) {
++    if (encoder_ == "libx264rgb") {
++      pixFmts = {AV_PIX_FMT_BGR24, AV_PIX_FMT_RGB24, AV_PIX_FMT_BGR0};
++    } else {
++      pixFmts = {AV_PIX_FMT_YUV420P, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NV12};
++    }
++  }
+ 
+   codecContext_->width = width;
+   codecContext_->height = height;
+@@ -233,7 +237,7 @@
+   codecContext_->gop_size = GOPSize_;
+   codecContext_->max_b_frames = maxBFrames_;  // nvenc can only handle zero!
+ 
+-  const enum AVHWDeviceType hwDevType = utils::find_hw_device_type(codec);
++  const enum AVHWDeviceType hwDevType = codec ? utils::find_hw_device_type(codec) : AV_HWDEVICE_TYPE_NONE;
+   if (hwDevType != AV_HWDEVICE_TYPE_NONE) {
+     RCLCPP_INFO_STREAM(
+       logger_, encoder_ << " uses hw device: " << av_hwdevice_get_type_name(hwDevType));
+@@ -269,8 +273,10 @@
+   RCLCPP_INFO_STREAM(logger_, "av_source_pixel_format: " << utils::pix(codecContext_->sw_pix_fmt));
+   RCLCPP_INFO_STREAM(logger_, "encoder (hw) format:    " << utils::pix(codecContext_->pix_fmt));
+ 
+-  err = avcodec_open2(codecContext_, codec, NULL);
+-  utils::check_for_err("cannot open codec " + encoder_, err);
++  if (codec) {
++    err = avcodec_open2(codecContext_, codec, NULL);
++    utils::check_for_err("cannot open codec " + encoder_, err);
++  }
+ 
+   RCLCPP_INFO_STREAM(logger_, "opened codec: " << encoder_);
+   frame_ = av_frame_alloc();
+@@ -397,6 +403,36 @@
+   frame_->pts = pts_++;  //
+   ptsToStamp_.insert(PTSMap::value_type(frame_->pts, {header.stamp, header.frame_id}));
+ 
++  if (!codecContext_->codec) {
++    const auto fmt = static_cast<AVPixelFormat>(frame_->format);
++    const int img_buf_size = av_image_get_buffer_size(fmt, frame_->width, frame_->height, 1);
++    if (img_buf_size < 0) {
++      utils::throw_err("cannot get image buffer size", img_buf_size);
++    }
++    struct RawFrameHeader {
++      uint32_t magic;
++      int32_t width;
++      int32_t height;
++      int32_t format;
++    };
++    RawFrameHeader hdr{0x4646524Du, frame_->width, frame_->height, frame_->format};
++    std::vector<uint8_t> buf(sizeof(RawFrameHeader) + img_buf_size);
++    std::memcpy(buf.data(), &hdr, sizeof(RawFrameHeader));
++    av_image_copy_to_buffer(
++      buf.data() + sizeof(RawFrameHeader), img_buf_size,
++      const_cast<const uint8_t * const *>(frame_->data), frame_->linesize, fmt, frame_->width,
++      frame_->height, 1);
++    auto it = ptsToStamp_.find(frame_->pts);
++    if (it != ptsToStamp_.end()) {
++      const auto & pe = it->second;
++      callback_(
++        pe.frame_id, pe.time, encoding_, frame_->width, frame_->height, frame_->pts,
++        AV_PKT_FLAG_KEY, buf.data(), buf.size());
++      ptsToStamp_.erase(it);
++    }
++    return;
++  }
++
+   int ret;
+   if (usesHardwareFrames_) {
+     ret = av_hwframe_transfer_data(hw_frame_, frame_, 0);  // from software -> hardware frame
+@@ -421,7 +457,7 @@
+ 
+ void Encoder::flush()
+ {
+-  if (!frame_) {
++  if (!frame_ || !codecContext_ || !codecContext_->codec) {
+     return;
+   }
+   int ret = avcodec_send_frame(codecContext_, nullptr);

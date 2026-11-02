@@ -1,0 +1,103 @@
+--- a/src/idl/type_support_provider.cpp
++++ b/src/idl/type_support_provider.cpp
+@@ -4,12 +4,63 @@
+ #include "ros_babel_fish/idl/type_support_provider.hpp"
+ #include "ros_babel_fish/messages/message_types.hpp"
+ 
++#include <mutex>
+ #include <regex>
+ #include <rosidl_typesupport_c/type_support_map.h>
+ #include <rosidl_typesupport_introspection_cpp/service_introspection.hpp>
++#include <vector>
+ 
+ namespace ros_babel_fish
+ {
++
++namespace
++{
++// The type support handles stored in Message-/ServiceTypeSupport are passed by pointer to rcl and
++// the middleware when creating entities. The middleware (e.g. rmw_fastrtps) keeps that pointer for
++// as long as the type stays registered with the participant, which can outlive both the entity and
++// the BabelFish instance that created it (e.g. another entity of the same type is still alive or
++// is being torn down asynchronously by an executor). To keep those pointers valid, type supports
++// are cached process-wide and shared between provider instances instead of being freed with them.
++bool same_type_support( const MessageTypeSupport &a, const MessageTypeSupport &b )
++{
++  return a.type_support_handle.data == b.type_support_handle.data &&
++         a.introspection_type_support_handle.data == b.introspection_type_support_handle.data;
++}
++
++bool same_type_support( const ServiceTypeSupport &a, const ServiceTypeSupport &b )
++{
++  return a.type_support_handle.data == b.type_support_handle.data &&
++         a.introspection_type_support_handle.data == b.introspection_type_support_handle.data;
++}
++
++bool same_type_support( const ActionTypeSupport &a, const ActionTypeSupport &b )
++{
++  return a.type_support_handle.goal_service_type_support ==
++             b.type_support_handle.goal_service_type_support &&
++         a.introspection_type_support_handle.goal_service_type_support ==
++             b.introspection_type_support_handle.goal_service_type_support;
++}
++
++template<typename T>
++std::shared_ptr<const T> get_or_insert_global_type_support( const std::string &name,
++                                                            const std::shared_ptr<const T> &candidate )
++{
++  static std::mutex mutex;
++  static std::unordered_map<std::string, std::shared_ptr<const T>> cache;
++  // Type supports replaced in the cache (same name, different handles) are retained as well since
++  // the middleware may still reference them.
++  static std::vector<std::shared_ptr<const T>> replaced;
++  std::lock_guard<std::mutex> lock( mutex );
++  auto it = cache.find( name );
++  if ( it != cache.end() ) {
++    if ( same_type_support( *it->second, *candidate ) )
++      return it->second;
++    replaced.push_back( it->second );
++  }
++  cache[name] = candidate;
++  return candidate;
++}
++} // namespace
+ 
+ TypeSupportProvider::TypeSupportProvider() = default;
+ 
+@@ -58,8 +109,10 @@
+   result->type_support_handle = type_support;
+   result->introspection_type_support_library = introspection_type_support_library;
+   result->introspection_type_support_handle = introspection_type_support;
+-  message_type_supports_.insert( { name, result } );
+-  return result;
++  MessageTypeSupport::ConstSharedPtr shared =
++      get_or_insert_global_type_support<MessageTypeSupport>( name, result );
++  message_type_supports_.insert( { name, shared } );
++  return shared;
+ }
+ 
+ ServiceTypeSupport::ConstSharedPtr TypeSupportProvider::registerService(
+@@ -74,15 +127,19 @@
+   result->type_support_handle = type_support;
+   result->introspection_type_support_library = introspection_type_support_library;
+   result->introspection_type_support_handle = introspection_type_support;
+-  service_type_supports_.insert( { name, result } );
+-  return result;
++  ServiceTypeSupport::ConstSharedPtr shared =
++      get_or_insert_global_type_support<ServiceTypeSupport>( name, result );
++  service_type_supports_.insert( { name, shared } );
++  return shared;
+ }
+ 
+ ActionTypeSupport::ConstSharedPtr
+ TypeSupportProvider::registerAction( const std::string &name,
+                                      ActionTypeSupport::ConstSharedPtr type_support ) const
+ {
+-  action_type_supports_.insert( { name, type_support } );
+-  return type_support;
++  ActionTypeSupport::ConstSharedPtr shared =
++      get_or_insert_global_type_support<ActionTypeSupport>( name, type_support );
++  action_type_supports_.insert( { name, shared } );
++  return shared;
+ }
+ } // namespace ros_babel_fish

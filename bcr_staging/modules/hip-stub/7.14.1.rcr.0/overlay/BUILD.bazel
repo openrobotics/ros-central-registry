@@ -1,0 +1,181 @@
+# The HIP runtime of ROCm (projects/hip, projects/clr/hipamd) as needed to
+# compile and link HIP programs without a ROCm installation: its headers, shims
+# of libamdhip64 and libhiprtc that load the real libraries at runtime when
+# ROCm is installed and otherwise report that there is no device (see
+# bazel/gen_shim.py), and a ROCm directory for Clang's HIP driver (:hip_sdk).
+# Also the AMD SMI headers (projects/amdsmi), whose library PyTorch loads at
+# runtime, rocm-core's version header and roctracer's roctx (projects/
+# rocm-core, projects/roctracer).
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_license//rules:license.bzl", "license")
+load("//bazel:hip_sdk.bzl", "hip_sdk")
+load("//bazel:rocm_shim.bzl", "rocm_shim_library")
+
+package(default_applicable_licenses = [":license"])
+
+license(
+    name = "license",
+    license_kinds = ["@rules_license//licenses/spdx:MIT"],
+    license_text = "hip/LICENSE.md",
+)
+
+exports_files(["hip/LICENSE.md"])
+
+# The HIP version: projects/hip/VERSION (7.14.60850).
+HIP_VERSION_MAJOR = 7
+
+HIP_VERSION_MINOR = 14
+
+HIP_VERSION_PATCH = 60850
+
+# hipamd/CMakeLists.txt generates hip/hip_version.h.
+write_file(
+    name = "hip_version_h",
+    out = "include/hip/hip_version.h",
+    content = [
+        "// Generated from projects/hip/VERSION (hipamd/CMakeLists.txt).",
+        "#ifndef HIP_VERSION_H",
+        "#define HIP_VERSION_H",
+        "#define HIP_VERSION_MAJOR {}".format(HIP_VERSION_MAJOR),
+        "#define HIP_VERSION_MINOR {}".format(HIP_VERSION_MINOR),
+        "#define HIP_VERSION_PATCH {}".format(HIP_VERSION_PATCH),
+        "#define HIP_VERSION_GITHASH \"therock-7.14.1\"",
+        "#define HIP_VERSION_BUILD_ID 0",
+        "#define HIP_VERSION_BUILD_NAME \"\"",
+        "#define HIP_VERSION (HIP_VERSION_MAJOR * 10000000 + HIP_VERSION_MINOR * 100000 + HIP_VERSION_PATCH)",
+        "#define __HIP_HAS_GET_PCH 0",
+        "#endif",
+        "",
+    ],
+)
+
+cc_library(
+    name = "hip_headers",
+    hdrs = glob([
+        "clr/hipamd/include/hip/**/*.h",
+        "clr/hipamd/include/hip/**/*.hpp",
+        "hip/include/hip/**/*.h",
+    ]) + [":hip_version_h"],
+    defines = ["__HIP_PLATFORM_AMD__=1"],
+    includes = [
+        "clr/hipamd/include",
+        "hip/include",
+        "include",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# For HIP compilation with Clang: --rocm-path=$(execpath @hip-stub//:hip_sdk)
+# -B$(execpath @hip-stub//:hip_sdk)/bin (see bazel/hip_sdk.bzl).
+hip_sdk(
+    name = "hip_sdk",
+    hdrs = [
+        ":hip_version_h",
+    ] + glob([
+        "clr/hipamd/include/hip/**/*.h",
+        "clr/hipamd/include/hip/**/*.hpp",
+        "hip/include/hip/**/*.h",
+    ]),
+    bitcode = ["@rocm-device-libs//:bitcode"],
+    include_prefixes = [
+        "clr/hipamd/include",
+        "hip/include",
+        "include",
+    ],
+    linker_wrapper = "@llvm-project//clang:clang-linker-wrapper",
+    lld = "@llvm-project//lld:lld",
+    offload_binary = "@llvm-project//llvm:llvm-offload-binary",
+    offload_bundler = "@llvm-project//clang:clang-offload-bundler",
+    version_major = HIP_VERSION_MAJOR,
+    version_minor = HIP_VERSION_MINOR,
+    version_patch = HIP_VERSION_PATCH,
+    visibility = ["//visibility:public"],
+)
+
+rocm_shim_library(
+    name = "amdhip64",
+    error = "100",  # hipErrorNoDevice
+    fallbacks = [
+        "__hipRegisterFatBinary",
+        "__hipRegisterFunction",
+        "__hipRegisterManagedVar",
+        "__hipRegisterSurface",
+        "__hipRegisterTexture",
+        "__hipRegisterVar",
+        "__hipUnregisterFatBinary",
+        "hipApiName",
+        "hipDriverGetVersion",
+        "hipGetDeviceCount",
+        "hipGetErrorName",
+        "hipGetErrorString",
+        "hipRuntimeGetVersion",
+    ],
+    fallbacks_src = "//bazel:amdhip64_fallbacks.c",
+    maps = ["clr/hipamd/src/hip_hcc.map.in"],
+    soname = "libamdhip64.so.{}".format(HIP_VERSION_MAJOR),
+    visibility = ["//visibility:public"],
+    deps = [":hip_headers"],
+)
+
+rocm_shim_library(
+    name = "hiprtc",
+    error = "11",  # HIPRTC_ERROR_INTERNAL_ERROR
+    fallbacks = [
+        "hiprtcGetErrorString",
+        "hiprtcVersion",
+    ],
+    fallbacks_src = "//bazel:hiprtc_fallbacks.c",
+    maps = ["clr/hipamd/src/hiprtc/hiprtc.map.in"],
+    soname = "libhiprtc.so.{}".format(HIP_VERSION_MAJOR),
+    visibility = ["//visibility:public"],
+    deps = [":hip_headers"],
+)
+
+cc_library(
+    name = "amd_smi_headers",
+    hdrs = ["amdsmi/include/amd_smi/amdsmi.h"],
+    includes = ["amdsmi/include"],
+    visibility = ["//visibility:public"],
+)
+
+# rocm-core/rocm_version.h: the ROCm release (rocm-core/CMakeLists.txt).
+expand_template(
+    name = "rocm_version_h",
+    out = "rocm-core/include/rocm-core/rocm_version.h",
+    substitutions = {
+        "@PACKAGE_BUILD_INFO@": "7.14.1",
+        "@VERSION_MAJOR@": "7",
+        "@VERSION_MINOR@": "14",
+        "@VERSION_PATCH@": "1",
+    },
+    template = "rocm-core/rocm_version.h.in",
+)
+
+cc_library(
+    name = "rocm_core_headers",
+    hdrs = [":rocm_version_h"],
+    includes = ["rocm-core/include"],
+    visibility = ["//visibility:public"],
+)
+
+# roctx, roctracer's code annotation API (include/roctracer/roctx.h).
+cc_library(
+    name = "roctx_headers",
+    hdrs = ["roctracer/inc/roctx.h"],
+    include_prefix = "roctracer",
+    strip_include_prefix = "roctracer/inc",
+)
+
+rocm_shim_library(
+    name = "roctx64",
+    # Without ROCm, there is nothing to annotate: roctxRangePushA() and
+    # roctxRangePop() return a nesting level of 0.
+    error = "0",
+    maps = ["roctracer/src/roctx/exportmap"],
+    # roctracer/CMakeLists.txt's project(VERSION 4.1.0).
+    soname = "libroctx64.so.4",
+    visibility = ["//visibility:public"],
+    deps = [":roctx_headers"],
+)

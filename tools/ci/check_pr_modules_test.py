@@ -62,12 +62,23 @@ class TestCheckPrModules(unittest.TestCase):
         self.assertEqual(violations, [])
 
     def test_deleted_file_forbidden(self):
-        # Deleting existing files under modules/ is forbidden
+        # Deleting existing files under modules/ is forbidden by default
         diffs = [
             ("D", "modules/existing_module/1.0.0/MODULE.bazel")
         ]
         violations = check_violations(diffs, self.old_dir, self.work_dir, "modules")
         self.assertIn("Deleted file in modules/: modules/existing_module/1.0.0/MODULE.bazel", violations)
+
+    def test_deleted_file_permitted_when_flag_set(self):
+        # Deleting existing files under modules/ is allowed when permit_module_deletion is True
+        diffs = [
+            ("D", "modules/existing_module/1.0.0/MODULE.bazel"),
+            ("D", "modules/existing_module/1.0.0/source.json"),
+        ]
+        violations = check_violations(
+            diffs, self.old_dir, self.work_dir, "modules", permit_module_deletion=True
+        )
+        self.assertEqual(violations, [])
 
     def test_renamed_file_forbidden(self):
         # Renaming existing files under modules/ is forbidden
@@ -110,6 +121,19 @@ class TestCheckPrModules(unittest.TestCase):
         diffs = [("M", rel_path)]
         violations = check_violations(diffs, self.old_dir, self.work_dir, "modules")
         self.assertIn("Version '1.0.0' was removed from 'versions' in modules/existing_module/metadata.json but was not added to 'yanked_versions'.", violations)
+
+    def test_modified_metadata_removed_version_permitted_when_flag_set(self):
+        # Removing a version from metadata.json is allowed when permit_module_deletion is True
+        rel_path = "modules/existing_module/metadata.json"
+
+        self.write_json(self.old_dir, rel_path, {"versions": ["1.0.0", "1.1.0"], "yanked_versions": {}})
+        self.write_json(self.work_dir, rel_path, {"versions": ["1.1.0"], "yanked_versions": {}})
+
+        diffs = [("M", rel_path)]
+        violations = check_violations(
+            diffs, self.old_dir, self.work_dir, "modules", permit_module_deletion=True
+        )
+        self.assertEqual(violations, [])
 
     def test_modified_metadata_yanked_version_allowed(self):
         # Modifying metadata.json and moving a version to yanked_versions is allowed
@@ -379,6 +403,41 @@ bazel_dep(name = "new_dep", version = "2.0.0")
         violations = check_violations(diffs, self.old_dir, self.work_dir, "modules")
         self.assertEqual(violations, [])
 
+    def test_inter_module_dependency_mismatch_skipped_when_requested(self):
+        # Same mismatch as test_inter_module_dependency_mismatch_fails, but in
+        # bcr_staging/modules with the consistency check disabled.
+        pkg_a_module = (
+            'module(\n'
+            '    name = "pkg_a",\n'
+            '    version = "1.0.0.rcr.2",\n'
+            ')\n'
+            'bazel_dep(name = "pkg_b", version = "2.0.0")\n'
+        )
+        pkg_b_module = (
+            'module(\n'
+            '    name = "pkg_b",\n'
+            '    version = "2.0.0.rcr.1",\n'
+            ')\n'
+        )
+        self.write_text(self.work_dir, "bcr_staging/modules/pkg_a/1.0.0.rcr.2/MODULE.bazel", pkg_a_module)
+        self.write_text(self.work_dir, "bcr_staging/modules/pkg_b/2.0.0.rcr.1/MODULE.bazel", pkg_b_module)
+
+        diffs = [
+            ("A", "bcr_staging/modules/pkg_a/1.0.0.rcr.2/MODULE.bazel"),
+            ("A", "bcr_staging/modules/pkg_b/2.0.0.rcr.1/MODULE.bazel"),
+        ]
+        self.assertTrue(any(
+            "bumped consistently" in v
+            for v in check_violations(diffs, self.old_dir, self.work_dir, "bcr_staging/modules")
+        ))
+        self.assertEqual(
+            check_violations(
+                diffs, self.old_dir, self.work_dir, "bcr_staging/modules",
+                skip_dependency_consistency=True,
+            ),
+            [],
+        )
+
 
 class TestMain(unittest.TestCase):
     """
@@ -419,13 +478,15 @@ class TestMain(unittest.TestCase):
         with open(path, "w") as f:
             json.dump(data, f)
 
-    def run_main(self) -> int:
+    def run_main(self, extra_args: list[str] | None = None) -> int:
         sys.argv = [
             "check_pr_modules.py",
             "--diff-status", str(self.diff_status_path),
             "--old-metadata-dir", str(self.old_metadata_dir),
             "--directory", "modules",
         ]
+        if extra_args:
+            sys.argv.extend(extra_args)
         with self.assertRaises(SystemExit) as cm:
             check_pr_modules.main()
         return cm.exception.code
@@ -483,6 +544,7 @@ class TestMain(unittest.TestCase):
         os.environ["BUILD_WORKSPACE_DIRECTORY"] = str(self.workspace_root)
 
         self.assertEqual(self.run_main(), 1)
+        self.assertEqual(self.run_main(["--permit-module-deletion"]), 0)
 
 
 if __name__ == "__main__":

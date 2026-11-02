@@ -58,12 +58,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        bazel: ${{ github.event_name == 'pull_request' && fromJSON('["9.x"]') || fromJSON('["8.x", "9.x"]') }}
+        bazel: ${{ github.event_name == 'pull_request' && fromJSON('["9.x"]') || fromJSON('["9.x", "last_rc"]') }}
         ros:
-        - lyrical.2026-06-08.rcr.2
+        - lyrical.2026-10-05.rcr.0
         variant:
-        - perception
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm"]') || fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm", "macos-26-intel", "macos-26"]') }}
+        - desktop_full
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm", "macos-26"]') || fromJSON('["ubuntu-26.04", "ubuntu-26.04-arm", "macos-26"]') }}
     steps:
 
     # Pin Xcode explicitly on macOS runners.
@@ -72,6 +72,26 @@ jobs:
       uses: maxim-lobanov/setup-xcode@v1.7.0
       with:
         xcode-version: '26.3'
+
+    # The stock GitHub Actions Ubuntu image preinstalls ~30+ GB of toolchains
+    # (.NET, Android, Haskell, CodeQL, etc.) that our hermetic Bazel build
+    # never uses, leaving too little room for a full desktop_full build.
+    - name: Free disk space (Linux)
+      if: runner.os == 'Linux'
+      uses: jlumbroso/free-disk-space@v2.0.0
+
+    # Like upstream libQt6Gui, QtGui links the glvnd dispatch libraries
+    # (libGL, libGLX, libOpenGL, libEGL), so every Linux binary using it,
+    # including host tools such as qsb, needs them at runtime. The x86_64
+    # runner image ships them; the arm64 one does not.
+    - name: Install GL runtime libraries (Linux)
+      if: runner.os == 'Linux'
+      # Runs before checkout, so the job's default working-directory
+      # (workspace/) doesn't exist yet.
+      working-directory: .
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends libegl1 libgl1 libglx0 libopengl0
 
     # Setup bazel with controlled caching that is invariant to RMW implementation.
     - name: Checkout repository
@@ -100,6 +120,17 @@ jobs:
         bazelisk-cache: true
         disk-cache: false
         repository-cache: true
+        # Pin the Bazel server heap for the free GitHub-hosted runners: 16 GB
+        # on ubuntu-26.04 / ubuntu-26.04-arm, 7 GB on the 3-core M1 macos-26
+        # image. Half of RAM each way; the other half is what the workspace
+        # .bazelrc's `build:ci --local_resources=memory=HOST_RAM*.5` hands out
+        # to concurrently running compiler/test actions. This is the only
+        # place the heap is set (startup options can't be made per-OS inside
+        # .bazelrc); without it the JVM would default to 25% of RAM, which is
+        # too small to analyze the distribution.
+        bazelrc: |
+          common --repo_contents_cache=
+          startup --host_jvm_args=-Xmx${{ runner.os == 'macOS' && '3g' || '8g' }}
 
     # Prepare the bazel workspace
     - name: Prepare workspace
@@ -109,6 +140,20 @@ jobs:
         bazel run //tools/ci:setup_workspace -- --release=${{ matrix.ros }} --tmpdir "$RUNNER_TEMP" \
             ${{ (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry' && '--remote-cache-write' || '' }}
 
+    # Analyze first (loading + analysis only, no actions executed) so that
+    # module-resolution, BUILD-file and dependency errors fail in their own
+    # step, separately from compile/link failures in the build step below.
+    - name: Analyze
+      id: analyze
+      run: |
+        bazel build --nobuild --config ci --config=${{ matrix.variant }} 2>&1 | tee analyze.log
+
+    # Build the ros 2 distribution
+    - name: Build
+      id: build
+      run: |
+        bazel build --config ci --config=${{ matrix.variant }} 2>&1 | tee build.log
+
     # Build whatever package(s) this PR actually touches, in case they
     # aren't part of the variant above -- see changed_packages' input docs.
     - name: Build changed packages
@@ -117,6 +162,9 @@ jobs:
       run: |
         TARGETS=""
         for pkg in ${{ inputs.changed_packages }}; do
+          if grep -qxF "@${pkg}//..." "ros-${{ matrix.variant }}.txt"; then
+            continue
+          fi
           if bazel query "@${pkg}//..." >/dev/null 2>&1; then
             TARGETS="$TARGETS @${pkg}//..."
           else
@@ -128,12 +176,6 @@ jobs:
             echo "::warning title=Build changed packages failed::Building changed packages ($TARGETS) failed, but will not block CI as some modules may be outside the supported collection."
           fi
         fi
-
-    # Build the ros 2 distribution
-    - name: Build
-      id: build
-      run: |
-        bazel build --config ci --config=${{ matrix.variant }} 2>&1 | tee build.log
     - name: Update status badge (build)
       uses: Schneegans/dynamic-badges-action@v1.8.0
       with:

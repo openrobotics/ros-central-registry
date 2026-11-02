@@ -1,0 +1,32 @@
+--- a/test/test_helpers.hpp
++++ b/test/test_helpers.hpp
+@@ -30,6 +30,18 @@
+ namespace ros_babel_fish_tools_test
+ {
+ 
++inline int make_cloexec_pipe( int fds[2] )
++{
++#if defined(__APPLE__)
++  if ( pipe( fds ) != 0 ) return -1;
++  fcntl( fds[0], F_SETFD, FD_CLOEXEC );
++  fcntl( fds[1], F_SETFD, FD_CLOEXEC );
++  return 0;
++#else
++  return pipe2( fds, O_CLOEXEC );
++#endif
++}
++
+ class ToolProcess
+ {
+ public:
+@@ -52,8 +64,8 @@
+     // Close-on-exec so the child does not inherit descriptors of other test processes (the parent
+     // is multi-threaded). dup2 clears the flag on the three standard descriptors.
+     int out_pipe[2] = { -1, -1 }, err_pipe[2] = { -1, -1 }, in_pipe[2] = { -1, -1 };
+-    if ( pipe2( out_pipe, O_CLOEXEC ) != 0 || pipe2( err_pipe, O_CLOEXEC ) != 0 ||
+-         pipe2( in_pipe, O_CLOEXEC ) != 0 ) {
++    if ( make_cloexec_pipe( out_pipe ) != 0 || make_cloexec_pipe( err_pipe ) != 0 ||
++         make_cloexec_pipe( in_pipe ) != 0 ) {
+       close_all( { out_pipe[0], out_pipe[1], err_pipe[0], err_pipe[1], in_pipe[0], in_pipe[1] } );
+       return false;
+     }

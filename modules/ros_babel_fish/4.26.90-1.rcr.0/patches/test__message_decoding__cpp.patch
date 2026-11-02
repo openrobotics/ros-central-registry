@@ -1,0 +1,62 @@
+--- a/test/message_decoding.cpp
++++ b/test/message_decoding.cpp
+@@ -106,8 +106,30 @@
+     publish_timer_ = node->create_wall_timer( 50ms, [this] { publish(); } );
+   }
+ 
++  void TearDown() override
++  {
++    if ( publish_timer_ ) {
++      publish_timer_->cancel();
++    }
++    std::lock_guard<std::mutex> lock( publish_mutex_ );
++    publish_timer_.reset();
++    header_pub_.reset();
++    point_pub_.reset();
++    quaternion_pub_.reset();
++    pose_pub_.reset();
++    pose_stamped_pub_.reset();
++    test_message_pub_.reset();
++    test_sub_array_pub_.reset();
++    test_array_pub_.reset();
++    namespace_test_pub_.reset();
++  }
++
+   void publish()
+   {
++    std::lock_guard<std::mutex> lock( publish_mutex_ );
++    if ( !publish_timer_ || publish_timer_->is_canceled() ) {
++      return;
++    }
+     header_pub_->publish( std_msgs_header );
+     point_pub_->publish( geometry_msgs_point );
+     quaternion_pub_->publish( geometry_msgs_quaternion );
+@@ -139,6 +161,7 @@
+   rclcpp::Publisher<geometry_msgs::msg::Point>::SharedPtr namespace_test_pub_;
+ 
+   rclcpp::TimerBase::SharedPtr publish_timer_;
++  std::mutex publish_mutex_;
+ };
+ 
+ TEST_F( MessageDecodingTest, tests )
+@@ -285,8 +308,10 @@
+       *node, "/test_message_decoding/test_message", 1,
+       std::function<void( std::shared_ptr<rclcpp::SerializedMessage> )>(
+           [&serialized_message, &cond]( std::shared_ptr<rclcpp::SerializedMessage> msg ) {
+-            serialized_message = std::move( msg );
+-            cond->trigger();
++            if ( !serialized_message ) {
++              serialized_message = std::move( msg );
++              cond->trigger();
++            }
+           } ) );
+   ASSERT_NE( subscription, nullptr );
+   ASSERT_EQ( set.wait( 5s ).kind(), rclcpp::WaitResultKind::Ready );
+@@ -294,6 +319,7 @@
+ 
+   CompoundMessage result;
+   ASSERT_TRUE( subscription->deserialize( *serialized_message, result ) );
++  subscription.reset();
+ 
+   ASSERT_TRUE( result.isValid() );
+   ASSERT_EQ( result.name(), "ros_babel_fish_test_msgs/msg/TestMessage" );

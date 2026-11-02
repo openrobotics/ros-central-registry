@@ -1,0 +1,546 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc_autoconf//autoconf:autoconf.bzl", "autoconf")
+load("@rules_cc_autoconf//autoconf:autoconf_hdr.bzl", "autoconf_hdr")
+load("@rules_cc_autoconf//autoconf:checks.bzl", "checks", "macros")
+load("@rules_license//rules:license.bzl", "license")
+
+package(
+    default_applicable_licenses = [":license"],
+    default_visibility = ["//visibility:public"],
+)
+
+# GPL-2.0-or-later overall; lib/ and rpmio/ may alternatively be used under
+# LGPL-2.0-or-later (see COPYING).
+license(
+    name = "license",
+    license_kinds = [
+        "@rules_license//licenses/spdx:GPL-2.0-or-later",
+        "@rules_license//licenses/spdx:LGPL-2.0-or-later",
+    ],
+    license_text = "COPYING",
+)
+
+# Mirrors the probes in upstream CMakeLists.txt (OPTFUNCS/REQFUNCS, OPTINCS,
+# check_symbol_exists), evaluated against Bazel's configured cc_toolchain.
+# Features that are compiled out of this build (WITH_*, ENABLE_PLUGINS, NLS,
+# OpenMP, readline, libelf/libdw, ...) are intentionally left undefined.
+autoconf(
+    name = "config_checks",
+    checks = [
+        checks.AC_DEFINE("_GNU_SOURCE", 1),
+
+        # project(rpm VERSION 6.1.0 HOMEPAGE_URL "http://rpm.org")
+        checks.AC_DEFINE("PACKAGE", '"rpm"'),
+        checks.AC_DEFINE("VERSION", '"6.1.0"'),
+        checks.AC_DEFINE("PACKAGE_BUGREPORT", '"http://rpm.org"'),
+        checks.AC_DEFINE("RPM_VENDOR", '"vendor"'),
+        checks.AC_DEFINE("RUNDIR", "/run"),
+
+        # id0name() falls back to "root"; ENABLE_CUTF8 defaults ON.
+        checks.AC_DEFINE("UID_0_USER", '"root"'),
+        checks.AC_DEFINE("GID_0_GROUP", '"root"'),
+        checks.AC_DEFINE("C_LOCALE", '"C.UTF-8"'),
+
+        # Database backends built here.
+        checks.AC_DEFINE("ENABLE_NDB", 1),
+        checks.AC_DEFINE("ENABLE_SQLITE", 1),
+
+        # Set by CMake from find_package() results; the matching libraries
+        # are unconditional bazel_deps of this module.
+        checks.AC_DEFINE("HAVE_BZLIB_H", 1),
+        checks.AC_DEFINE("HAVE_ICONV", 1),
+        checks.AC_DEFINE("HAVE_LZMA_H", 1),
+        checks.AC_DEFINE("HAVE_ZSTD", 1),
+
+        # check_symbol_exists(GLOB_ONLYDIR "glob.h" ...) and
+        # check_symbol_exists(major "sys/sysmacros.h" ...).
+        # rpm tests these with #ifdef, so a failed probe must leave them
+        # undefined (AC_CHECK_DECL would emit "#define X 0" instead).
+        checks.AC_TRY_COMPILE(
+            name = "rpm_cv_glob_onlydir",
+            code = "#include <glob.h>\nint main(void) { int x = GLOB_ONLYDIR; (void)x; return 0; }\n",
+            compile_defines = ["_GNU_SOURCE"],
+            define = "HAVE_GLOB_ONLYDIR",
+        ),
+        checks.AC_TRY_COMPILE(
+            name = "rpm_cv_major_in_sysmacros",
+            code = "#include <sys/sysmacros.h>\nint main(void) { return (int) major(0); }\n",
+            compile_defines = ["_GNU_SOURCE"],
+            define = "MAJOR_IN_SYSMACROS",
+        ),
+    ] + macros.AC_CHECK_HEADERS([
+        # OPTINCS
+        "getopt.h",
+        "limits.h",
+        "sys/auxv.h",
+        "sys/param.h",
+        "sys/systemcfg.h",
+        "sys/utsname.h",
+        "unistd.h",
+    ]) + macros.AC_CHECK_FUNCS([
+        # OPTFUNCS
+        "__progname",
+        "__secure_getenv",
+        "close_range",
+        "fdatasync",
+        "getauxval",
+        "lutimes",
+        "mempcpy",
+        "mergesort",
+        "mremap",
+        "putenv",
+        "sched_getaffinity",
+        "secure_getenv",
+        "setprogname",
+        "strchrnul",
+        "syncfs",
+        "unshare",
+        # REQFUNCS (stpcpy/stpncpy appear in both lists upstream)
+        "basename",
+        "dirname",
+        "fchmodat",
+        "fchownat",
+        "fstatat",
+        "getaddrinfo",
+        "getcwd",
+        "getline",
+        "linkat",
+        "localtime_r",
+        "mkdirat",
+        "mkfifoat",
+        "mknodat",
+        "mkstemp",
+        "openat",
+        "realpath",
+        "regcomp",
+        "renameat",
+        "setenv",
+        "statvfs",
+        "stpcpy",
+        "stpncpy",
+        "symlinkat",
+        "unlinkat",
+        "unsetenv",
+        "utimensat",
+        "utimes",
+    ]),
+)
+
+# Upstream's config.h.in uses #cmakedefine, which rules_cc_autoconf cannot
+# consume, so the overlay carries an equivalent autoheader-style template.
+autoconf_hdr(
+    name = "config_h",
+    out = "misc/config.h",
+    template = "config.h.in",
+    deps = [":config_checks"],
+)
+
+genrule(
+    name = "tagtbl_inc",
+    srcs = [
+        "include/rpm/rpmtag.h",
+        "lib/gentagtbl.sh",
+    ],
+    outs = ["lib/tagtbl.inc"],
+    cmd = "AWK=awk $(location lib/gentagtbl.sh) $(location include/rpm/rpmtag.h) > $@",
+)
+
+COMMON_COPTS = [
+    "-Wall",
+    "-Wpointer-arith",
+    "-Wempty-body",
+    "-Wformat-security",
+    "-fno-strict-overflow",
+    "-fno-delete-null-pointer-checks",
+]
+
+CXX_COPTS = COMMON_COPTS + [
+    "-std=gnu++20",
+]
+
+C_COPTS = COMMON_COPTS + [
+    "-std=gnu99",
+]
+
+COMMON_DEFINES = [
+    "_GNU_SOURCE",
+    "_FILE_OFFSET_BITS=64",
+    "HAVE_CONFIG_H",
+]
+
+cc_library(
+    name = "rpm_headers",
+    hdrs = glob([
+        "include/rpm/*.h",
+        "misc/*.h",
+    ]) + [":misc/config.h"],
+    defines = COMMON_DEFINES,
+    includes = [
+        "include",
+        "misc",
+    ],
+)
+
+cc_library(
+    name = "libmisc",
+    srcs = ["misc/fts.c"],
+    hdrs = ["misc/rpmfts.h"],
+    copts = C_COPTS,
+    deps = [":rpm_headers"],
+)
+
+cc_library(
+    name = "librpmio",
+    srcs = [
+        "rpmio/argv.cc",
+        "rpmio/base64.cc",
+        "rpmio/digest.cc",
+        "rpmio/digest_openssl.cc",
+        "rpmio/expression.cc",
+        "rpmio/lposix.cc",
+        "rpmio/macro.cc",
+        "rpmio/progname.cc",
+        "rpmio/rgetopt.cc",
+        "rpmio/rpmfileutil.cc",
+        "rpmio/rpmglob.cc",
+        "rpmio/rpmhook.cc",
+        "rpmio/rpmio.cc",
+        "rpmio/rpmkeyring.cc",
+        "rpmio/rpmlog.cc",
+        "rpmio/rpmlua.cc",
+        "rpmio/rpmmalloc.cc",
+        "rpmio/rpmpgp.cc",
+        "rpmio/rpmpgp_dummy.cc",
+        "rpmio/rpmsq.cc",
+        "rpmio/rpmstring.cc",
+        "rpmio/rpmstrpool.cc",
+        "rpmio/rpmsw.cc",
+        "rpmio/rpmver.cc",
+        "rpmio/rpmvercmp.cc",
+        "rpmio/url.cc",
+    ],
+    hdrs = glob(["rpmio/*.hh"]),
+    copts = CXX_COPTS,
+    includes = ["rpmio"],
+    local_defines = [
+        "RPM_CONFIGDIR=\\\"/usr/lib/rpm\\\"",
+    ],
+    textual_hdrs = ["rpmio/modemuncher.cc"],
+    deps = [
+        ":rpm_headers",
+        "@bzip2//:bz2",
+        "@lua",
+        "@openssl//:crypto",
+        "@popt",
+        "@xz//:lzma",
+        "@zlib",
+        "@zstd",
+    ],
+)
+
+cc_library(
+    name = "librpm_ndb",
+    srcs = [
+        "lib/backend/ndb/rpmidx.c",
+        "lib/backend/ndb/rpmpkg.c",
+        "lib/backend/ndb/rpmxdb.c",
+    ],
+    hdrs = [
+        "lib/backend/ndb/rpmidx.h",
+        "lib/backend/ndb/rpmpkg.h",
+        "lib/backend/ndb/rpmxdb.h",
+    ],
+    copts = C_COPTS,
+    includes = ["lib"],
+    deps = [":rpm_headers"],
+)
+
+cc_library(
+    name = "librpm",
+    srcs = [
+        "lib/backend/dbi.cc",
+        "lib/backend/dbiset.cc",
+        "lib/backend/dummydb.cc",
+        "lib/backend/ndb/glue.cc",
+        "lib/backend/sqlite.cc",
+        "lib/cpio.cc",
+        "lib/depends.cc",
+        "lib/formats.cc",
+        "lib/fprint.cc",
+        "lib/fsm.cc",
+        "lib/header.cc",
+        "lib/headerfmt.cc",
+        "lib/headerutil.cc",
+        "lib/keystore.cc",
+        "lib/manifest.cc",
+        "lib/order.cc",
+        "lib/package.cc",
+        "lib/poptALL.cc",
+        "lib/poptI.cc",
+        "lib/poptQV.cc",
+        "lib/psm.cc",
+        "lib/query.cc",
+        "lib/relocation.cc",
+        "lib/rpmal.cc",
+        "lib/rpmchecksig.cc",
+        "lib/rpmchroot.cc",
+        "lib/rpmdb.cc",
+        "lib/rpmds.cc",
+        "lib/rpmfi.cc",
+        "lib/rpmfs.cc",
+        "lib/rpmgi.cc",
+        "lib/rpminstall.cc",
+        "lib/rpmlead.cc",
+        "lib/rpmlock.cc",
+        "lib/rpmplugins.cc",
+        "lib/rpmprob.cc",
+        "lib/rpmps.cc",
+        "lib/rpmrc.cc",
+        "lib/rpmscript.cc",
+        "lib/rpmtd.cc",
+        "lib/rpmte.cc",
+        "lib/rpmtriggers.cc",
+        "lib/rpmts.cc",
+        "lib/rpmug.cc",
+        "lib/rpmvs.cc",
+        "lib/signature.cc",
+        "lib/tagexts.cc",
+        "lib/tagname.cc",
+        "lib/transaction.cc",
+        "lib/verify.cc",
+        ":tagtbl_inc",
+    ],
+    hdrs = glob([
+        "lib/*.hh",
+        "lib/backend/*.hh",
+    ]),
+    copts = CXX_COPTS + ["-Wno-sign-compare"],
+    includes = ["lib"],
+    local_defines = [
+        "LOCALEDIR=\\\"/usr/share/locale\\\"",
+        "LOCALSTATEDIR=\\\"/var\\\"",
+        "SYSCONFDIR=\\\"/etc\\\"",
+        "LIBRPMALIAS_FILENAME=\\\"rpmpopt-6.1.0\\\"",
+        "LIBRPMALIAS_EXECPATH=\\\"/usr/bin\\\"",
+    ],
+    deps = [
+        ":librpm_ndb",
+        ":librpmio",
+        ":rpm_headers",
+        "@lua",
+        "@popt",
+        "@sqlite3",
+    ],
+)
+
+cc_library(
+    name = "librpmsign",
+    srcs = ["sign/rpmgensig.cc"],
+    copts = CXX_COPTS,
+    includes = ["sign"],
+    deps = [
+        ":librpm",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)
+
+cc_library(
+    name = "librpmbuild",
+    srcs = [
+        "build/build.cc",
+        "build/files.cc",
+        "build/misc.cc",
+        "build/pack.cc",
+        "build/parseChangelog.cc",
+        "build/parseDescription.cc",
+        "build/parseFiles.cc",
+        "build/parseList.cc",
+        "build/parsePolicies.cc",
+        "build/parsePreamble.cc",
+        "build/parsePrep.cc",
+        "build/parseReqs.cc",
+        "build/parseScript.cc",
+        "build/parseSimpleScript.cc",
+        "build/parseSpec.cc",
+        "build/policies.cc",
+        "build/reqprov.cc",
+        "build/rpmfc.cc",
+        "build/spec.cc",
+        "build/speclua.cc",
+    ],
+    hdrs = glob(["build/*.hh"]),
+    copts = CXX_COPTS,
+    includes = ["build"],
+    deps = [
+        ":libmisc",
+        ":librpm",
+        ":librpmio",
+        ":librpmsign",
+        ":rpm_headers",
+        "@libmagic//:lib",
+        "@lua",
+        "@popt",
+    ],
+)
+
+cc_library(
+    name = "cliutils",
+    srcs = ["tools/cliutils.cc"],
+    hdrs = ["tools/cliutils.hh"],
+    copts = CXX_COPTS,
+    includes = ["tools"],
+    deps = [
+        ":librpm",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)
+
+cc_binary(
+    name = "rpmbuild",
+    srcs = ["tools/rpmbuild.cc"],
+    copts = CXX_COPTS,
+    deps = [
+        ":cliutils",
+        ":librpm",
+        ":librpmbuild",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)
+
+cc_binary(
+    name = "rpm",
+    srcs = ["tools/rpm.cc"],
+    copts = CXX_COPTS,
+    deps = [
+        ":cliutils",
+        ":librpm",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)
+
+cc_binary(
+    name = "rpmdb",
+    srcs = ["tools/rpmdb.cc"],
+    copts = CXX_COPTS,
+    deps = [
+        ":cliutils",
+        ":librpm",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)
+
+cc_binary(
+    name = "rpmkeys",
+    srcs = ["tools/rpmkeys.cc"],
+    copts = CXX_COPTS,
+    deps = [
+        ":cliutils",
+        ":librpm",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)
+
+cc_binary(
+    name = "rpmspec",
+    srcs = ["tools/rpmspec.cc"],
+    copts = CXX_COPTS,
+    deps = [
+        ":cliutils",
+        ":librpm",
+        ":librpmbuild",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)
+
+cc_binary(
+    name = "rpmdump",
+    srcs = ["tools/rpmdump.cc"],
+    copts = CXX_COPTS,
+    deps = [
+        ":librpm",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)
+
+cc_binary(
+    name = "rpmgraph",
+    srcs = ["tools/rpmgraph.cc"],
+    copts = CXX_COPTS,
+    deps = [
+        ":librpm",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)
+
+cc_binary(
+    name = "rpmdeps",
+    srcs = ["tools/rpmdeps.cc"],
+    copts = CXX_COPTS,
+    deps = [
+        ":librpm",
+        ":librpmbuild",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)
+
+cc_binary(
+    name = "rpmlua",
+    srcs = ["tools/rpmlua.cc"],
+    copts = CXX_COPTS,
+    deps = [
+        ":librpm",
+        ":librpmio",
+        ":rpm_headers",
+        "@lua",
+        "@popt",
+    ],
+)
+
+cc_binary(
+    name = "rpmsort",
+    srcs = ["tools/rpmsort.cc"],
+    copts = CXX_COPTS,
+    # Upstream only builds rpmsort when strchrnul() exists (glibc).
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":librpm",
+        ":librpmio",
+        ":rpm_headers",
+        "@popt",
+    ],
+)

@@ -1,0 +1,35 @@
+--- a/test/test_task_executors.cpp
++++ b/test/test_task_executors.cpp
+@@ -109,7 +109,7 @@
+   rclcpp::executors::SingleThreadedExecutor executor;
+   std::condition_variable cv;
+   std::mutex mtx;
+-  std::unique_lock<std::mutex> lck(mtx, std::defer_lock);
++  std::unique_lock<std::mutex> lck(mtx);
+   bool data_published = false;
+   auto publish_message =
+     [&]() -> void
+@@ -129,10 +129,11 @@
+       }
+       pub->publish(std::move(msg));
+       executor.spin_some();
+-      lck.lock();
+-      data_published = true;
++      {
++        std::lock_guard<std::mutex> lock(mtx);
++        data_published = true;
++      }
+       cv.notify_one();
+-      lck.unlock();
+     };
+ 
+   std::unique_ptr<nav2_waypoint_follower::PhotoAtWaypoint> paw(
+@@ -146,7 +147,7 @@
+   EXPECT_FALSE(paw->processAtWaypoint(pose, 0));
+ 
+   std::thread t1(publish_message);
+-  cv.wait(lck);
++  cv.wait(lck, [&]() { return data_published; });
+   // has image now, since we force waiting until image is published
+   EXPECT_TRUE(paw->processAtWaypoint(pose, 0));
+   t1.join();

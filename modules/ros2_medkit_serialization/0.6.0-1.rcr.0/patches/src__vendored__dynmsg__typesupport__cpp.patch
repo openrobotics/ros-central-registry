@@ -1,0 +1,69 @@
+--- a/src/vendored/dynmsg/typesupport.cpp
++++ b/src/vendored/dynmsg/typesupport.cpp
+@@ -24,6 +24,35 @@
+ #include "ros2_medkit_serialization/vendored/dynmsg/types.h"
+ #include "ros2_medkit_serialization/vendored/dynmsg/typesupport.hpp"
+ 
++namespace
++{
++// Platform-specific shared library suffix for the rosidl typesupport libraries
++// (lib<pkg>__rosidl_typesupport_introspection_<lang>.<suffix>).
++#if defined(__APPLE__)
++constexpr const char * kSharedLibrarySuffix = ".dylib";
++#elif defined(_WIN32)
++constexpr const char * kSharedLibrarySuffix = ".dll";
++#else
++constexpr const char * kSharedLibrarySuffix = ".so";
++#endif
++
++// dlopen() the typesupport library by bare file name first (resolved through
++// the dynamic loader's search path / already-loaded images), then fall back to
++// `lib/<name>` relative to the working directory. The fallback covers
++// interface packages that are only present as data (e.g. via the ament index)
++// rather than linked in: on Linux LD_LIBRARY_PATH=lib handles that, but macOS
++// strips DYLD_LIBRARY_PATH when the test runner shells through /bin/bash.
++void * dlopen_typesupport_library(const std::string & lib_name)
++{
++  void * lib = dlopen(lib_name.c_str(), RTLD_LAZY);
++  if (lib == nullptr) {
++    const std::string in_lib_dir = "lib/" + lib_name;
++    lib = dlopen(in_lib_dir.c_str(), RTLD_LAZY);
++  }
++  return lib;
++}
++}  // namespace
++
+ namespace dynmsg
+ {
+ 
+@@ -44,12 +73,12 @@
+ 
+   // Load the introspection library for the package containing the requested type
+   std::stringstream ts_lib_name;
+-  ts_lib_name << "lib" << pkg_name << "__rosidl_typesupport_introspection_c.so";
++  ts_lib_name << "lib" << pkg_name << "__rosidl_typesupport_introspection_c" << kSharedLibrarySuffix;
+   RCUTILS_LOG_DEBUG_NAMED(
+     "dynmsg",
+     "Loading introspection type support library %s",
+     ts_lib_name.str().c_str());
+-  void * introspection_type_support_lib = dlopen(ts_lib_name.str().c_str(), RTLD_LAZY);
++  void * introspection_type_support_lib = dlopen_typesupport_library(ts_lib_name.str());
+   if (introspection_type_support_lib == nullptr) {
+     RCUTILS_LOG_ERROR_NAMED(
+       "dynmsg", "failed to load introspection type support library: %s", dlerror());
+@@ -155,12 +184,13 @@
+   const std::string & type_name = std::get<2>(interface_type);
+ 
+   // Load the introspection library for the package containing the requested type
+-  std::string ts_lib_name = "lib" + pkg_name + "__rosidl_typesupport_introspection_cpp.so";
++  std::string ts_lib_name =
++    "lib" + pkg_name + "__rosidl_typesupport_introspection_cpp" + kSharedLibrarySuffix;
+   RCUTILS_LOG_DEBUG_NAMED(
+     "dynmsg",
+     "Loading C++ introspection type support library %s",
+     ts_lib_name.c_str());
+-  void * introspection_type_support_lib = dlopen(ts_lib_name.c_str(), RTLD_LAZY);
++  void * introspection_type_support_lib = dlopen_typesupport_library(ts_lib_name);
+   if (nullptr == introspection_type_support_lib) {
+     RCUTILS_LOG_ERROR_NAMED(
+       "dynmsg", "failed to load C++ introspection type support library: %s", dlerror());

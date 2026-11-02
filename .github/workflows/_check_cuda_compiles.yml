@@ -1,0 +1,157 @@
+# Copyright 2026 Open Source Robotics Foundation, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Reusable workflow: build the opt-in CUDA variant (--config=cuda) of LibTorch
+# and the packages that use it. The default distribution build is CPU-only,
+# so nothing else compiles CUDA code. GitHub-hosted runners have no GPU, so
+# this only builds (and runs the GPU-free tests); the `requires-gpu` tests are
+# tagged manual. CUDA redistributables only exist for linux-x86_64 and
+# linux-sbsa (arm64); macOS has no CUDA.
+
+name: _check_cuda_compiles
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Branch or ref to check out.'
+        required: true
+        type: string
+
+env:
+  ANDROID_HOME: ""
+
+jobs:
+  checkout-setup-build-test:
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+      id-token: write
+    name: build_cuda_${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: workspace
+        shell: bash
+    env:
+      USE_BAZEL_VERSION: ${{ matrix.bazel }}
+    strategy:
+      fail-fast: false
+      matrix:
+        bazel:
+        - 9.x
+        ros:
+        - lyrical.2026-10-05.rcr.0
+        os:
+        - ubuntu-26.04
+    steps:
+
+    - name: Free disk space (Linux)
+      uses: jlumbroso/free-disk-space@v2.0.0
+
+    # Everything linked against the libglvnd stubs (which, via @rosdistro//cc,
+    # includes the RMW shared libraries the torch_conversions tests dlopen)
+    # needs the real libGL/libEGL/libOpenGL at runtime. The x86_64 runner image
+    # doesn't reliably ship them, so the tests failed with
+    # "libOpenGL.so.0: cannot open shared object file".
+    - name: Install GL runtime libraries (Linux)
+      if: runner.os == 'Linux'
+      working-directory: .
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends libegl1 libgl1 libglx0 libopengl0
+
+    - name: Checkout repository
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 1
+        ref: ${{ inputs.branch }}
+
+    - name: Authenticate to Google Cloud
+      if: (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry'
+      uses: "google-github-actions/auth@v3"
+      with:
+        workload_identity_provider: projects/367706864683/locations/global/workloadIdentityPools/github-automation/providers/build-dev
+        service_account: github-automation-bot@gha-openrobotics-rcr.iam.gserviceaccount.com
+        create_credentials_file: true
+
+    - name: Setup Bazel
+      uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: false
+        repository-cache: true
+        # Pin the Bazel server heap for the free GitHub-hosted runners: 16 GB
+        # on ubuntu-26.04 / ubuntu-26.04-arm, 7 GB on the 3-core M1 macos-26
+        # image. Half of RAM each way; the other half is what the workspace
+        # .bazelrc's `build:ci --local_resources=memory=HOST_RAM*.5` hands out
+        # to concurrently running compiler/test actions. This is the only
+        # place the heap is set (startup options can't be made per-OS inside
+        # .bazelrc); without it the JVM would default to 25% of RAM, which is
+        # too small to analyze the distribution.
+        bazelrc: |
+          common --repo_contents_cache=
+          startup --host_jvm_args=-Xmx${{ runner.os == 'macOS' && '3g' || '8g' }}
+
+    - name: Prepare workspace
+      working-directory: .
+      run: |
+        bazel run //tools/ci:setup_workspace -- --release=${{ matrix.ros }} --tmpdir "$RUNNER_TEMP" \
+            ${{ (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry' && '--remote-cache-write' || '' }}
+
+    - name: Analyze (--config=cuda)
+      id: analyze
+      run: |
+        bazel build --nobuild --config ci --config=cuda \
+            @rosdistro//cc:torch \
+            @cuda_buffer//... \
+            @cuda_buffer_backend//... \
+            @torch_conversions//... 2>&1 | tee analyze.log
+
+    - name: Build (--config=cuda)
+      id: build
+      run: |
+        bazel build --config ci --config=cuda \
+            @rosdistro//cc:torch \
+            @cuda_buffer//... \
+            @cuda_buffer_backend//... \
+            @torch_conversions//... 2>&1 | tee build.log
+
+    - name: Test GPU-free targets (--config=cuda)
+      id: test
+      run: |
+        bazel test --config ci --config=cuda --test_output=errors \
+            @torch_conversions//... 2>&1 | tee test.log
+
+    - name: Collect test logs
+      if: always()
+      run: |
+        if [ -d bazel-testlogs ]; then
+          find -L bazel-testlogs -name "*.xml" -print0 | tar -czf cuda_${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}.xml.tar.gz --null -T - || true
+          find -L bazel-testlogs -name "*.log" -print0 | tar -czf cuda_${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}.log.tar.gz --null -T - || true
+        fi
+
+    - name: Test logs
+      uses: actions/upload-artifact@v7
+      with:
+        name: CUDA logs ${{ matrix.ros }}_${{ matrix.bazel }}_${{ matrix.os }}
+        path: |
+          workspace/MODULE.bazel
+          workspace/.bazelrc
+          workspace/*.xml.tar.gz
+          workspace/*.log.tar.gz
+          workspace/*.log
+      if: always()
+
