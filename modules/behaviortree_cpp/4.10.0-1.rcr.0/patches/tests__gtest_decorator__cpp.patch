@@ -1,0 +1,48 @@
+--- a/tests/gtest_decorator.cpp
++++ b/tests/gtest_decorator.cpp
+@@ -434,6 +434,45 @@
+   ASSERT_EQ(status, NodeStatus::SUCCESS);
+ }
+ 
++// Regression test: Sleep, Delay and Timeout own a TimerQueue whose worker
++// thread locks a mutex belonging to the node. The TimerQueue member must be
++// destroyed (joining that thread) before the mutex, otherwise destroying a
++// tree with a pending timer lets the handler lock an already-destroyed mutex.
++// On libc++ this aborts with "mutex lock failed: Invalid argument".
++TEST(Decorator, DestroyTreeWhileTimerIsPending)
++{
++  BT::BehaviorTreeFactory factory;
++
++  const std::string xml_text = R"(
++    <root BTCPP_format="4">
++       <BehaviorTree ID="PendingTimers">
++          <Parallel success_count="6" failure_count="1">
++            <Sleep msec="500"/>
++            <Sleep msec="500"/>
++            <Sleep msec="500"/>
++            <Sleep msec="500"/>
++            <Delay delay_msec="500">
++              <AlwaysSuccess/>
++            </Delay>
++            <Timeout msec="500">
++              <Sleep msec="500"/>
++            </Timeout>
++          </Parallel>
++       </BehaviorTree>
++    </root>)";
++
++  factory.registerBehaviorTreeFromText(xml_text);
++
++  for(int i = 0; i < 1000; i++)
++  {
++    auto tree = factory.createTree("PendingTimers");
++    ASSERT_EQ(tree.tickOnce(), NodeStatus::RUNNING);
++    // The tree is destroyed here while all the timers are still pending:
++    // each canceled handler runs on its TimerQueue worker thread, racing
++    // with the destruction of the node members.
++  }
++}
++
+ // Test KeepRunningUntilFailure decorator
+ TEST(Decorator, KeepRunningUntilFailure)
+ {

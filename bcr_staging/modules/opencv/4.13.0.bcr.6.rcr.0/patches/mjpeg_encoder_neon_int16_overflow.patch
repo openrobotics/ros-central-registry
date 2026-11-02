@@ -1,0 +1,102 @@
+--- a/modules/videoio/src/cap_mjpeg_encoder.cpp
++++ b/modules/videoio/src/cap_mjpeg_encoder.cpp
+@@ -836,49 +836,54 @@
+     int16x8_t transp_res6 =  vreinterpretq_s16_s32(vcombine_s32(vget_low_s32(tres1.val[1]), vget_low_s32(tres2.val[1])));
+     int16x8_t transp_res7 =  vreinterpretq_s16_s32(vcombine_s32(vget_high_s32(tres1.val[1]), vget_high_s32(tres2.val[1])));
+ 
+-    //special hack for vqdmulhq_s16 command that is producing -1 instead of 0
++    // Multiply in 32 bits and descale with a rounding shift, matching the
++    // scalar DCT_DESCALE(x*postscale, postshift). The coefficients of a
++    // chroma block can reach +-512*64 here (4:2:0 chroma inputs are sums of
++    // four pixels), so the saturating 16-bit doubling the previous
++    // vqdmulhq_s16-based version relied on clipped them and washed out
++    // strongly saturated colours.
+ #define STORE_DESCALED(addr, reg, mul_addr)            postscale_line = vld1q_s16((mul_addr)); \
+-mask = vreinterpretq_s16_u16(vcltq_s16((reg), z)); \
+-reg = vabsq_s16(reg); \
+-reg = vqdmulhq_s16(vqaddq_s16((reg), (reg)), postscale_line); \
+-reg = vsubq_s16(veorq_s16(reg, mask), mask); \
+-vst1q_s16((addr), reg);
++vst1q_s16((addr), vcombine_s16( \
++    vrshrn_n_s32(vmull_s16(vget_low_s16(reg), vget_low_s16(postscale_line)), postshift), \
++    vrshrn_n_s32(vmull_s16(vget_high_s16(reg), vget_high_s16(postscale_line)), postshift)));
+ 
+-    int16x8_t z = vdupq_n_s16(0), postscale_line, mask;
++    int16x8_t postscale_line;
+ 
+-    // pass 2: process columns
++    // pass 2: process columns. Use saturating arithmetic: a block of fully
++    // saturated 4:2:0 chroma (input +-512 per entry) sums to +-32768 here,
++    // which wraps around in plain 16-bit adds.
+     x0 = transp_res0;    x1 = transp_res7;
+     x2 = transp_res3;    x3 = transp_res4;
+ 
+-    x4 = vaddq_s16(x0, x1);   x0 = vsubq_s16(x0, x1);
+-    x1 = vaddq_s16(x2, x3);    x2 = vsubq_s16(x2, x3);
++    x4 = vqaddq_s16(x0, x1);   x0 = vqsubq_s16(x0, x1);
++    x1 = vqaddq_s16(x2, x3);    x2 = vqsubq_s16(x2, x3);
+ 
+     t1 = x0; t2 = x2;
+ 
+-    x2 = vaddq_s16(x4, x1);    x4 = vsubq_s16(x4, x1);
++    x2 = vqaddq_s16(x4, x1);    x4 = vqsubq_s16(x4, x1);
+ 
+     x0 = transp_res1;
+     x3 = transp_res6;
+ 
+-    x1 = vaddq_s16(x0, x3);    x0 = vsubq_s16(x0, x3);
++    x1 = vqaddq_s16(x0, x3);    x0 = vqsubq_s16(x0, x3);
+ 
+     t3 = x0;
+ 
+     x0 = transp_res2; x3 = transp_res5;
+ 
+-    t4 = vsubq_s16(x0, x3);
+-
+-    x0 = vaddq_s16(x0, x3);
++    t4 = vqsubq_s16(x0, x3);
+ 
+-    x3 = vaddq_s16(x0, x1);    x0 = vsubq_s16(x0, x1);
+-    x1 = vaddq_s16(x2, x3);    x2 = vsubq_s16(x2, x3);
++    x0 = vqaddq_s16(x0, x3);
+ 
++    x3 = vqaddq_s16(x0, x1);    x0 = vqsubq_s16(x0, x1);
++    x1 = vqaddq_s16(x2, x3);    x2 = vqsubq_s16(x2, x3);
++
+     STORE_DESCALED(dst, x1, postscale);
+     STORE_DESCALED(dst + 4*8, x2, postscale + 4*8);
+ 
+-    x0 = vqdmulhq_n_s16(vsubq_s16(x0, x4), (short)(C0_707*2));
++    x0 = vqdmulhq_n_s16(vqsubq_s16(x0, x4), (short)(C0_707*2));
+ 
+-    x1 = vaddq_s16(x4, x0);    x4 = vsubq_s16(x4, x0);
++    x1 = vqaddq_s16(x4, x0);    x4 = vqsubq_s16(x4, x0);
+ 
+     STORE_DESCALED(dst + 2*8, x4,postscale + 2*8);
+     STORE_DESCALED(dst + 6*8, x1,postscale + 6*8);
+@@ -886,18 +891,18 @@
+     x0 = t2; x1 = t4;
+     x2 = t3; x3 = t1;
+ 
+-    x0 = vaddq_s16(x0, x1);    x1 = vaddq_s16(x1, x2);    x2 = vaddq_s16(x2, x3);
++    x0 = vqaddq_s16(x0, x1);    x1 = vqaddq_s16(x1, x2);    x2 = vqaddq_s16(x2, x3);
+ 
+     x1 =vqdmulhq_n_s16(x1, (short)(C0_707*2));
+ 
+-    x4 = vaddq_s16(x1, x3);    x3 = vsubq_s16(x3, x1);
++    x4 = vqaddq_s16(x1, x3);    x3 = vqsubq_s16(x3, x1);
+ 
+-    x1 = vqdmulhq_n_s16(vsubq_s16(x0, x2), (short)(C0_382*2));
+-    x0 = vaddq_s16(vqdmulhq_n_s16(x0, (short)(C0_541*2)), x1);
+-    x2 = vaddq_s16(vshlq_n_s16(vqdmulhq_n_s16(x2, (short)C1_306), 1), x1);
++    x1 = vqdmulhq_n_s16(vqsubq_s16(x0, x2), (short)(C0_382*2));
++    x0 = vqaddq_s16(vqdmulhq_n_s16(x0, (short)(C0_541*2)), x1);
++    x2 = vqaddq_s16(vshlq_n_s16(vqdmulhq_n_s16(x2, (short)C1_306), 1), x1);
+ 
+-    x1 = vaddq_s16(x0, x3);    x3 = vsubq_s16(x3, x0);
+-    x0 = vaddq_s16(x4, x2);    x4 = vsubq_s16(x4, x2);
++    x1 = vqaddq_s16(x0, x3);    x3 = vqsubq_s16(x3, x0);
++    x0 = vqaddq_s16(x4, x2);    x4 = vqsubq_s16(x4, x2);
+ 
+     STORE_DESCALED(dst + 5*8, x1,postscale + 5*8);
+     STORE_DESCALED(dst + 1*8, x0,postscale + 1*8);

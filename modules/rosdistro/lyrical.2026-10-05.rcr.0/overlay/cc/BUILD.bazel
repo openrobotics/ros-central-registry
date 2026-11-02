@@ -2337,6 +2337,17 @@ cc_library(
 # libX11/libxcb/libXau by Qt's x11_shared on Linux (as for :vtk); take them
 # from there so a process loading both cairo and Qt/VTK (e.g. through PCL)
 # has a single copy, and so cc_shared_library doesn't see two exporters.
+#
+# Off Linux, Qt's gui_shared doesn't link fontconfig/expat at all (it uses the
+# platform font stack), so cairo and :vtk would each embed their own copy of
+# expat and cc_shared_library would refuse to link both into one binary (e.g.
+# cartographer_ros). Share a single :libexpat there instead.
+cc_shared_library(
+    name = "libexpat",
+    exports_filter = ["@libexpat//:__subpackages__"],
+    deps = ["@libexpat"],
+)
+
 cc_shared_library(
     name = "cairo",
     dynamic_deps = [
@@ -2345,7 +2356,7 @@ cc_shared_library(
         "@qtbase//:gui_shared",
     ] + select({
         "@platforms//os:linux": ["@qtbase//:x11_shared"],
-        "//conditions:default": [],
+        "//conditions:default": [":libexpat"],
     }),
     exports_filter = [
         ":cairo_library",
@@ -3601,7 +3612,8 @@ cc_shared_library(
         # libX11/libxcb/libXau are linked (and exported) once by Qt's
         # x11_shared; take them from there instead of embedding another copy.
         "@platforms//os:linux": ["@qtbase//:x11_shared"],
-        "//conditions:default": [],
+        # Off Linux, share expat with :cairo (see the comment there).
+        "//conditions:default": [":libexpat"],
     }),
     exports_filter = [
         "@freetype//:__subpackages__",

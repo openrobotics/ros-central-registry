@@ -1,0 +1,19 @@
+--- a/src/cpp/utils/threading/threading_osx.ipp
++++ b/src/cpp/utils/threading/threading_osx.ipp
+@@ -72,6 +72,16 @@
+     int result = 0;
+     bool change_priority = (std::numeric_limits<int32_t>::min() != sched_priority);
+ 
++    // Nothing was requested: leave the thread's scheduling alone. On Darwin,
++    // pthread_setschedparam(SCHED_OTHER, {sched_priority = 0}) below is not a
++    // no-op like on Linux: it lowers the thread's Mach base priority from the
++    // default (31) to 0, so the thread only runs when a core is otherwise idle
++    // and can starve indefinitely on a loaded host.
++    if (-1 == sched_class && !change_priority)
++    {
++        return;
++    }
++
+     // Get current scheduling parameters
+     memset(&current_param, 0, sizeof(current_param));
+     pthread_getschedparam(self_tid, &current_class, &current_param);

@@ -1,0 +1,72 @@
+--- a/test/unit/bt_action_test.cpp
++++ b/test/unit/bt_action_test.cpp
+@@ -12,7 +12,9 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+ 
++#include <atomic>
+ #include <string>
++#include <thread>
+ #include <vector>
+ #include <memory>
+ #include <iostream>
+@@ -52,6 +54,14 @@
+ public:
+   MoveServer()
+   : Node("move_server") {}
++
++  ~MoveServer() override
++  {
++    stop_ = true;
++    if (execution_thread_.joinable()) {
++      execution_thread_.join();
++    }
++  }
+ 
+   void start_server()
+   {
+@@ -84,7 +94,13 @@
+   void handle_accepted(const std::shared_ptr<GoalHandleFibonacci> goal_handle)
+   {
+     RCLCPP_DEBUG(get_logger(), "handle_accepted");
+-    std::thread{std::bind(&MoveServer::execute, this, _1), goal_handle}.detach();
++    stop_ = true;
++    if (execution_thread_.joinable()) {
++      execution_thread_.join();
++    }
++    stop_ = false;
++    cancelled_ = false;
++    execution_thread_ = std::thread{std::bind(&MoveServer::execute, this, _1), goal_handle};
+   }
+ 
+   void execute(const std::shared_ptr<GoalHandleFibonacci> goal_handle)
+@@ -93,21 +109,24 @@
+ 
+     int counter = 0;
+     rclcpp::Rate rate(10);
+-    while (rclcpp::ok() && counter++ < 50 && !cancelled_) {  // 5 secs
++    while (rclcpp::ok() && counter++ < 50 && !cancelled_ && !stop_) {  // 5 secs
+       RCLCPP_DEBUG(get_logger(), "execute");
+       goal_handle->publish_feedback(feedback);
+       rate.sleep();
+     }
+ 
+-    if (!cancelled_) {
+-      auto result = std::make_shared<Fibonacci::Result>();
+-
++    auto result = std::make_shared<Fibonacci::Result>();
++    if (goal_handle->is_canceling()) {
++      goal_handle->canceled(result);
++    } else if (!cancelled_ && !stop_ && goal_handle->is_executing()) {
+       result->sequence.push_back(4);
+       goal_handle->succeed(result);
+     }
+   }
+ 
+-  bool cancelled_ {false};
++  std::atomic<bool> cancelled_ {false};
++  std::atomic<bool> stop_ {false};
++  std::thread execution_thread_;
+ };
+ 
+ 
