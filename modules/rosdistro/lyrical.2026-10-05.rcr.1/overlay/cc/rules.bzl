@@ -20,9 +20,10 @@ load(":aspects.bzl", "collect_transitive_dynamic_deps_aspect")
 load(":types.bzl", "CollectedCcSharedLibraryInfo")
 
 def _collect_transitive_dynamic_deps_impl(ctx):
+    dynamic_deps = [] if ctx.fragments.cpp.dynamic_mode() == "OFF" else ctx.attr.dynamic_deps
     transitive_cc_shared_library_infos = []
     transitive_runfiles_depsets = []
-    for dep in ctx.attr.dynamic_deps:
+    for dep in dynamic_deps:
         if CollectedCcSharedLibraryInfo in dep:
             transitive_cc_shared_library_infos.append(dep[CollectedCcSharedLibraryInfo].cc_shared_library_info)
             transitive_runfiles_depsets.append(dep[CollectedCcSharedLibraryInfo].runfiles)
@@ -60,7 +61,7 @@ def _collect_transitive_dynamic_deps_impl(ctx):
 
     user_link_flags = []
     additional_inputs = []
-    if ctx.attr.dynamic_deps:
+    if dynamic_deps:
         extra_lib_paths = []
         for dep in ctx.attr.extra_link_deps:
             if CcInfo in dep:
@@ -128,6 +129,11 @@ _collect_transitive_dynamic_deps_rule = rule(
 )
 
 def collect_transitive_dynamic_deps(name, dynamic_deps = [], **kwargs):
+    if type(dynamic_deps) == "list":
+        dynamic_deps = select({
+            Label("//:dynamic_mode_off"): [],
+            "//conditions:default": dynamic_deps,
+        })
     _collect_transitive_dynamic_deps_rule(
         name = name,
         dynamic_deps = dynamic_deps,
