@@ -1,0 +1,48 @@
+--- a/src/class_loader.cpp
++++ b/src/class_loader.cpp
+@@ -34,6 +34,16 @@
+ namespace class_loader
+ {
+ 
++static bool g_is_exiting = false;
++
++void set_exiting() {
++  g_is_exiting = true;
++}
++
++bool is_exiting() {
++  return g_is_exiting;
++}
++
+ bool ClassLoader::has_unmanaged_instance_been_created_ = false;
+ 
+ bool ClassLoader::hasUnmanagedInstanceBeenCreated()
+@@ -68,6 +78,9 @@
+ 
+ ClassLoader::~ClassLoader()
+ {
++  if (is_exiting()) {
++    return;
++  }
+   CONSOLE_BRIDGE_logDebug(
+     "%s",
+     "class_loader.ClassLoader: Destroying class loader, "
+@@ -82,7 +95,7 @@
+ 
+ bool ClassLoader::isLibraryLoaded() const
+ {
+-  return class_loader::impl::isLibraryLoaded(getLibraryPath(), this);
++  return load_ref_count_ > 0;
+ }
+ 
+ bool ClassLoader::isLibraryLoadedByAnyClassloader() const
+@@ -117,6 +130,9 @@
+ 
+ int ClassLoader::unloadLibraryInternal(bool lock_plugin_ref_count)
+ {
++  if (is_exiting()) {
++    return 0;
++  }
+   if (lock_plugin_ref_count) {
+     plugin_ref_count_mutex_.lock();
+   }

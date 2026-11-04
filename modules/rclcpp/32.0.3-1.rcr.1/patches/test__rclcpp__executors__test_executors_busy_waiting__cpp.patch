@@ -1,0 +1,37 @@
+--- a/test/rclcpp/executors/test_executors_busy_waiting.cpp
++++ b/test/rclcpp/executors/test_executors_busy_waiting.cpp
+@@ -157,9 +157,9 @@
+   bool first_check_passed = false;
+ 
+   this->set_up_and_trigger_waitable([&cv, &cv_m, &first_check_passed]() {
++      std::unique_lock<std::mutex> lk(cv_m);
+       cv.notify_one();
+       if (!first_check_passed) {
+-        std::unique_lock<std::mutex> lk(cv_m);
+         cv.wait_for(lk, 1s, [&]() {return first_check_passed;});
+       }
+   });
+@@ -172,17 +172,20 @@
+   // wait until thread has started (first execute of waitable)
+   {
+     std::unique_lock<std::mutex> lk(cv_m);
+-    cv.wait_for(lk, 10s);
++    cv.wait_for(lk, 10s, [this]() {return this->waitable->get_count() > 0u;});
+   }
+   EXPECT_GT(this->waitable->get_count(), 0u);
+ 
+-  first_check_passed = true;
++  {
++    std::lock_guard<std::mutex> lk(cv_m);
++    first_check_passed = true;
++  }
+   cv.notify_one();
+ 
+   // wait until the executor has finished (second execute of waitable)
+   {
+     std::unique_lock<std::mutex> lk(cv_m);
+-    cv.wait_for(lk, 10s);
++    cv.wait_for(lk, 10s, [this]() {return this->waitable->get_count() >= 2u;});
+   }
+   EXPECT_EQ(this->waitable->get_count(), 2u);
+ 

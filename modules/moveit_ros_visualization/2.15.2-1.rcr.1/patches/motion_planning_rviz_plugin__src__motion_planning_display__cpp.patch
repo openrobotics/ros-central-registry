@@ -1,0 +1,128 @@
+--- a/motion_planning_rviz_plugin/src/motion_planning_display.cpp
++++ b/motion_planning_rviz_plugin/src/motion_planning_display.cpp
+@@ -922,6 +922,9 @@
+ {
+   if (!planning_scene_monitor_)
+     return;
++  // Only interactive-marker edits reach this callback (InteractionHandler::setState
++  // does not fire it), so this is a user edit of the active group's start state.
++  markCurrentGroupModified(/*start_state=*/true);
+   addBackgroundJob([this, pose_update = !error_state_changed] { publishInteractiveMarkers(pose_update); },
+                    "publishInteractiveMarkers");
+   updateQueryStartState();
+@@ -932,6 +935,7 @@
+ {
+   if (!planning_scene_monitor_)
+     return;
++  markCurrentGroupModified(/*start_state=*/false);
+   addBackgroundJob([this, pose_update = !error_state_changed] { publishInteractiveMarkers(pose_update); },
+                    "publishInteractiveMarkers");
+   updateQueryGoalState();
+@@ -958,14 +962,25 @@
+   *previous_state_ = *query_start_state_->getState();
+ }
+ 
+-void MotionPlanningDisplay::setQueryStartState(const moveit::core::RobotState& start)
+-{
++void MotionPlanningDisplay::markCurrentGroupModified(bool start_state)
++{
++  const std::string group = planning_group_property_->getStdString();
++  if (!group.empty())
++    (start_state ? modified_start_groups_ : modified_goal_groups_).insert(group);
++}
++
++void MotionPlanningDisplay::setQueryStartState(const moveit::core::RobotState& start, bool mark_modified)
++{
++  if (mark_modified)
++    markCurrentGroupModified(/*start_state=*/true);
+   query_start_state_->setState(start);
+   updateQueryStartState();
+ }
+ 
+-void MotionPlanningDisplay::setQueryGoalState(const moveit::core::RobotState& goal)
+-{
++void MotionPlanningDisplay::setQueryGoalState(const moveit::core::RobotState& goal, bool mark_modified)
++{
++  if (mark_modified)
++    markCurrentGroupModified(/*start_state=*/false);
+   query_goal_state_->setState(goal);
+   updateQueryGoalState();
+ }
+@@ -1066,7 +1081,12 @@
+     planning_group_property_->setStdString("");
+     return;
+   }
+-  modified_groups_.insert(planning_group_property_->getStdString());
++  // Note: selecting a group does not mark it as modified. Until the user edits a
++  // query state (interactive marker, or an explicit set from the panel), the
++  // start/goal states keep following the robot's current state via
++  // updateQueryStates(). Marking here used to freeze them at whatever the scene
++  // held when the display loaded -- usually the model's default pose, if the
++  // robot's joint states had not arrived yet.
+ 
+   robot_interaction_->decideActiveComponents(planning_group_property_->getStdString());
+ 
+@@ -1228,7 +1248,8 @@
+   if (!groups.empty() && planning_group_property_->getStdString().empty())
+     planning_group_property_->setStdString(groups[0]);
+ 
+-  modified_groups_.clear();
++  modified_start_groups_.clear();
++  modified_goal_groups_.clear();
+   kinematics_metrics_ = std::make_shared<kinematics_metrics::KinematicsMetrics>(getRobotModel());
+ 
+   geometry_msgs::msg::Vector3 gravity_vector;
+@@ -1256,10 +1277,11 @@
+ }
+ 
+ void MotionPlanningDisplay::updateStateExceptModified(moveit::core::RobotState& dest,
+-                                                      const moveit::core::RobotState& src)
++                                                      const moveit::core::RobotState& src,
++                                                      const std::set<std::string>& modified_groups)
+ {
+   moveit::core::RobotState src_copy = src;
+-  for (const std::string& modified_group : modified_groups_)
++  for (const std::string& modified_group : modified_groups)
+   {
+     const moveit::core::JointModelGroup* jmg = dest.getJointModelGroup(modified_group);
+     if (jmg)
+@@ -1277,19 +1299,30 @@
+ void MotionPlanningDisplay::updateQueryStates(const moveit::core::RobotState& current_state)
+ {
+   std::string group = planning_group_property_->getStdString();
+-
+-  if (query_start_state_ && query_start_state_property_->getBool() && !group.empty())
++  if (group.empty())
++    return;
++
++  // The start state is what "Plan" plans from (see MotionPlanningFrame::configureForPlanning),
++  // so keep it current even while its display is hidden (the default). Skip the
++  // drawing/metrics work in that case; it's redone when the display is enabled.
++  if (query_start_state_)
+   {
+     moveit::core::RobotState start = *getQueryStartState();
+-    updateStateExceptModified(start, current_state);
+-    setQueryStartState(start);
+-  }
+-
+-  if (query_goal_state_ && query_goal_state_property_->getBool() && !group.empty())
++    updateStateExceptModified(start, current_state, modified_start_groups_);
++    if (query_start_state_property_->getBool())
++      setQueryStartState(start, /*mark_modified=*/false);
++    else
++      query_start_state_->setState(start);
++  }
++
++  if (query_goal_state_)
+   {
+     moveit::core::RobotState goal = *getQueryGoalState();
+-    updateStateExceptModified(goal, current_state);
+-    setQueryGoalState(goal);
++    updateStateExceptModified(goal, current_state, modified_goal_groups_);
++    if (query_goal_state_property_->getBool())
++      setQueryGoalState(goal, /*mark_modified=*/false);
++    else
++      query_goal_state_->setState(goal);
+   }
+ }
+ 
