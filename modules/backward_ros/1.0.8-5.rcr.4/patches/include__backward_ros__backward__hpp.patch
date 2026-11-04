@@ -1,0 +1,18 @@
+--- a/include/backward_ros/backward.hpp
++++ b/include/backward_ros/backward.hpp
+@@ -4256,6 +4256,15 @@
+   sig_handler(int signo, siginfo_t *info, void *_ctx) {
+     handleSignal(signo, info, _ctx);
+ 
++    // Explicitly restore the default disposition before forwarding. Some
++    // kernels (e.g. macOS for SIGILL/SIGTRAP) do not honour SA_RESETHAND,
++    // which would otherwise re-enter this handler forever.
++    struct sigaction default_action;
++    memset(&default_action, 0, sizeof(default_action));
++    default_action.sa_handler = SIG_DFL;
++    sigemptyset(&default_action.sa_mask);
++    sigaction(info->si_signo, &default_action, nullptr);
++
+     // try to forward the signal.
+     raise(info->si_signo);
+ 

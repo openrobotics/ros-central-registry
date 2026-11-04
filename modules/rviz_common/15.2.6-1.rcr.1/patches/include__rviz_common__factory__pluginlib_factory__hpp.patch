@@ -1,0 +1,19 @@
+--- a/include/rviz_common/factory/pluginlib_factory.hpp
++++ b/include/rviz_common/factory/pluginlib_factory.hpp
+@@ -73,7 +73,15 @@
+ 
+   virtual ~PluginlibFactory()
+   {
+-    delete class_loader_;
++    // Intentionally leak the class loader so plugin libraries are never
++    // dlclose()d. Objects created by plugins (e.g. rclcpp subscriptions made
++    // with std::make_shared) can leave control blocks whose vtables live in the
++    // plugin library and are still referenced by weak_ptrs held in the node's
++    // callback groups; unloading the library before the node is destroyed
++    // makes the node's destructor jump into unmapped memory. GCC-built
++    // plugins are implicitly non-unloadable (STB_GNU_UNIQUE symbols), which
++    // is why this only shows up with other toolchains.
++    class_loader_ = nullptr;
+   }
+ 
+   std::vector<PluginInfo> getDeclaredPlugins() override
