@@ -1,0 +1,20 @@
+diff -ru a/src/xcb_ext.c b/src/xcb_ext.c
+--- a/src/xcb_ext.c
++++ b/src/xcb_ext.c
+@@ -62,7 +62,15 @@
+ static lazyreply *get_lazyreply(xcb_connection_t *c, xcb_extension_t *ext)
+ {
+     static pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
+-    static int next_global_id;
++    /* Extension ids index the per-connection c->ext.extensions cache, but the
++     * counter is private to this copy of libxcb.  A process can contain two
++     * copies that share one connection (e.g. a toolkit statically linking
++     * libxcb hands its connection to the system GL driver, which uses the
++     * system libxcb).  Both counters would start at 1, so their extensions
++     * would alias each other's cache slots and receive the wrong query
++     * reply/major opcode.  Start well above the ids any other copy assigns
++     * (libxcb knows a few dozen extensions) so the slots stay disjoint. */
++    static int next_global_id = 1024;
+ 
+     lazyreply *data;
+ 

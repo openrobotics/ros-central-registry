@@ -1,0 +1,89 @@
+--- a/ogre2/src/media/materials/programs/Metal/gaussian_noise_depth_fs.metal
++++ b/ogre2/src/media/materials/programs/Metal/gaussian_noise_depth_fs.metal
+@@ -14,9 +14,15 @@
+  * limitations under the License.
+  *
+  */
+- 
+-// For details and documentation see: gaussian_noise_fs.glsl
+ 
++// This fragment shader adds Gaussian noise to a depth camera image.
++// It is the Metal port of gaussian_noise_depth_fs.glsl: the input texture is
++// the depth camera's PFG_RGBA32_UINT target, holding the float bit patterns
++// of [x, y, z] in .xyz and an RGBA8 colour packed into .w.  It must therefore
++// read a uint texture and write uint4 -- a float4 output is rejected by the
++// Metal pipeline validation ("output of type float4 is not compatible with
++// MTLPixelFormatRGBA32Uint").
++
+ #include <metal_stdlib>
+ using namespace metal;
+ 
+@@ -76,32 +82,53 @@
+   // Apply the stddev and mean.
+   Z = Z * stddev + mean;
+ 
+-  // Return it as a vec4, to be added to the input ("true") color.
++  // Return it as a float4, to be added to the input ("true") values.
+   return float4(Z, Z, Z, 0.0);
+ }
+ 
+-fragment float4 main_metal
++uint pack(float4 color)
++{
++  int rgba = (int(color.x * 255.0) << 24) +
++             (int(color.y * 255.0) << 16) +
++             (int(color.z * 255.0) << 8) +
++             int(color.w * 255.0);
++  return as_type<uint>(rgba);
++}
++
++float4 unpack(uint packed)
++{
++  int rgba = as_type<int>(packed);
++  int r = rgba >> 24 & 0xFF;
++  int g = rgba >> 16 & 0xFF;
++  int b = rgba >> 8 & 0xFF;
++  int a = rgba & 0xFF;
++  return float4(r/255.0, g/255.0, b/255.0, a/255.0);
++}
++
++fragment uint4 main_metal
+ (
+   PS_INPUT inPs [[stage_in]],
+-  texture2d<float> RT [[texture(0)]],
+-  sampler rtSampler [[sampler(0)]],
+-  // constant float3 &offsets	[[buffer(PARAMETER_SLOT)]],
+-  // constant float &mean	[[buffer(PARAMETER_SLOT)]],
+-  // constant float &stddev	[[buffer(PARAMETER_SLOT)]]
++  texture2d<uint> RT [[texture(0)]],
+   constant Params &p [[buffer(PARAMETER_SLOT)]]
+ )
+ {
+-  // Add the sampled noise to the input color and clamp the result to a valid
+-  // range.
+-  // note that an exponent is added to sampled noise, i.e. pow(noise, x),
+-  // which produces more consistent result with ogre1.x
++  // original value: xyz as float bit patterns, rgba8 colour packed in w
++  uint2 texel = uint2(inPs.uv0 * float2(RT.get_width(), RT.get_height()));
++  uint4 pix = RT.read(texel, 0);
++  float3 xyz = as_type<float3>(pix.xyz);
++
++  // gaussian noise
+   float z = gaussrand(inPs.uv0.xy, p.offsets, p.mean, p.stddev).x;
++
++  // apply noise to xyz
++  xyz = xyz + float3(z, z, z);
++
++  // apply noise to color
+   float n = pow(abs(z), 2.1);
+   if (z < 0)
+     n = -n;
++  float4 color = unpack(pix.w);
++  color = clamp(color + float4(n, n, n, 0.0), 0.0, 1.0);
+ 
+-  float4 texColor = RT.sample(rtSampler, inPs.uv0.xy);
+-  float4 fragColor = clamp(texColor + float4(n, n, n, 0.0), 0.0, 1.0);
+-
+-  return fragColor;
++  return uint4(as_type<uint3>(xyz), pack(color));
+ }

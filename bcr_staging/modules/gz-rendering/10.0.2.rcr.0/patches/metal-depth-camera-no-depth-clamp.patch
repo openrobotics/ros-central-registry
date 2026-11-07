@@ -1,0 +1,26 @@
+--- a/ogre2/src/Ogre2DepthCamera.cc
++++ b/ogre2/src/Ogre2DepthCamera.cc
+@@ -1035,7 +1035,22 @@
+   // and something is wrong. We should not need depth clamp. Depth clamp is
+   // just masking a bug
+   const bool bOldDepthClamp = this->ogreCamera->getNeedsDepthClamp();
+-  this->ogreCamera->_setNeedsDepthClamp(true);
++  //
++  // Not at all: depth clamp (MTLDepthClipModeClamp / GL_DEPTH_CLAMP) ...
++  // which disables near-plane clipping altogether.  Geometry that encloses
++  // the camera's optical centre -- typically the sensor's own body mesh, as in
++  // every RealSense model -- then has triangles crossing the camera plane, and
++  // from some viewpoints such a near-degenerate triangle is rasterized across
++  // the whole target at the clamped near depth.  The depth shader turns every
++  // pixel nearer than the near clip into "no return" with the background
++  // colour, so the sensor outputs an all-background colour image and an
++  // all-invalid depth image for those poses.  With regular clipping the near
++  // plane (0.9 x near) removes that geometry exactly as for Ogre2Camera; the
++  // only difference is that surfaces closer than 0.9 x near read as "no
++  // return" (+max) instead of "too close" (min).
++  // (seen on Metal and on Linux / OpenGL alike)
++  const bool depthClamp = false;
++  this->ogreCamera->_setNeedsDepthClamp(depthClamp);
+ 
+   this->scene->StartRendering(this->ogreCamera);
+ 
