@@ -107,9 +107,13 @@ common --host_per_file_copt=external/qt[^/]*[+]/.*@-Wno-thread-safety-analysis
 # simulation speeds. Do not remove this unless you absolutely need to.
 build --@llvm//config:fastbuild_optimization_mode=O1
 
-# Ensure that we always download all outputs, including the shared libraries
-# that are required at runtime for dlopen() calls.
-build --remote_download_outputs=all
+# Download outputs of requested top-level targets (and their runfiles, such as
+# shared libraries needed at runtime), without pulling down intermediate .o/.a
+# files whose downstream link actions are already remote cache hits. CI
+# overrides this to `minimal` below so build/test jobs only download inputs for
+# cache-miss actions that actually execute locally.
+build --remote_download_outputs=toplevel
+build:ci --remote_download_outputs=minimal
 
 # Some packages bake a scratch-directory path into compiled test binaries via
 # local_defines (e.g. rcutils' BUILD_DIR), which --test_env/--run_env can't
@@ -338,13 +342,10 @@ common:ci --http_timeout_scaling=3.0
 # Retry a repository download up to 10 times on transient network errors.
 common:ci --experimental_repository_downloader_retries=10
 
-# Disable the unpacked repository contents cache inside --repository_cache
-# so CI caches only store compressed archives.
-common:ci --repo_contents_cache=
-
-# Send blobs to and from the remote cache uncompressed, overriding the
-# common config's --remote_cache_compression=true.
-common:ci --remote_cache_compression=false
+# Store the unpacked repository contents cache outside --repository_cache
+# so CI caches only archive compressed tarballs while still reusing unpacked
+# repos across Bazel invocations within the same job.
+common:ci --repo_contents_cache=/tmp/repo_contents_cache
 
 # Don't build runfiles symlink trees for every binary; Bazel still creates
 # them when a target is run or tested. Applied everywhere (not just CI):
