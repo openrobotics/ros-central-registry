@@ -258,9 +258,13 @@ common --noexperimental_collect_system_network_usage
 # simulation speeds. Do not remove this unless you absolutely need to.
 build --@llvm//config:fastbuild_optimization_mode=O1
 
-# Ensure that we always download all outputs, including the shared libraries
-# that are required at runtime for dlopen() calls.
-build --remote_download_outputs=all
+# Download outputs of requested top-level targets (and their runfiles, such as
+# shared libraries needed at runtime), without pulling down intermediate .o/.a
+# files whose downstream link actions are already remote cache hits. CI
+# overrides this to `minimal` below so build/test jobs only download inputs for
+# cache-miss actions that actually execute locally.
+build --remote_download_outputs=toplevel
+build:ci --remote_download_outputs=minimal
 
 # Some packages bake a scratch-directory path into compiled test binaries via
 # local_defines (e.g. rcutils' BUILD_DIR), which --test_env/--run_env can't

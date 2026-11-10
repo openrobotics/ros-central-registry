@@ -98,6 +98,9 @@ class TestRenderBazelrc(unittest.TestCase):
         self.assertIn("build:ci --local_resources=memory=HOST_RAM*.5\n", content)
         self.assertIn("build:ci --local_resources=cpu=HOST_CPUS\n", content)
         self.assertNotIn("build:ci --discard_analysis_cache", content)
+        self.assertIn("build --remote_download_outputs=toplevel\n", content)
+        self.assertIn("build:ci --remote_download_outputs=minimal\n", content)
+        self.assertNotIn("--remote_download_outputs=all", content)
 
     def test_tests_run_concurrently_in_sandbox_with_isolated_domains(self):
         content = setup_workspace.render_bazelrc("lyrical", "", "/tmp")
