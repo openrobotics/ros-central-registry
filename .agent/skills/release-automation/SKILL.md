@@ -64,8 +64,8 @@ same tool the workflow uses, never by hand-editing `modules/ros/`:
 ```shell
 # 1. Preview, then write. --release is the <distro>.<date> row, NOT the full
 #    .rcr.N version -- the script picks the next free .rcr.N itself.
-bazel run //tools/ci:rollup_patches -- --release=<distro>.<date> --dry-run
-bazel run //tools/ci:rollup_patches -- --release=<distro>.<date>
+bazel run //tools/ci:rollup_patches -- --release=lyrical.2026-10-05 --dry-run
+bazel run //tools/ci:rollup_patches -- --release=lyrical.2026-10-05
 ```
 
 The last line of output is `Rolled up to ros version <NEW>.` It mints a new
@@ -126,14 +126,12 @@ files and revert any `rosdistro` pin the `sed` changed (or exclude that line
 up front). A `ros`/variant release pin and a `rosdistro` pin are different
 things even when the strings match.
 
-Then buildifier the tracked Bazel files you touched (`buildifier -mode check
--r examples`; don't run `-r .` from the repo root, it descends into the
-gitignored `release/` and `workspace/` trees) and commit everything --
-`modules/`, `.github/workflows/`, docs, examples -- together, signed off
-(`setup-pull-request` skill). Note the `weekly_rollup.yml`
-`workflow_dispatch` default is the `<distro>.<date>` row, not a `.rcr.N`, so
-it only needs updating when a new *dated* release is bootstrapped, not after
-a patch rollup.
+Then re-run `buildifier -mode check -r .` (the `examples/MODULE.bazel` edit)
+and commit everything -- `modules/`, `.github/workflows/`, docs, examples --
+together, signed off (`setup-pull-request` skill). Note the
+`weekly_rollup.yml` `workflow_dispatch` default is the `<distro>.<date>` row,
+not a `.rcr.N`, so it only needs updating when a new *dated* release is
+bootstrapped, not after a patch rollup.
 
 ## Package scope — upstream `rosdistro` only
 
