@@ -1,0 +1,80 @@
+--- a/test/test_mock_hardware.py
++++ b/test/test_mock_hardware.py
+@@ -58,6 +58,49 @@
+ @pytest.mark.launch_test
+ @launch_testing.parametrize("tf_prefix", [(""), ("my_ur_")])
+ def generate_test_description(tf_prefix):
++    os.environ["PATH"] = os.path.dirname(sys.executable) + os.pathsep + os.environ.get("PATH", "")
++    os.environ.setdefault("ROS_HOME", "/tmp/ros_home")
++    spawner_path = os.path.join("lib", "controller_manager", "spawner")
++    if not os.path.exists(spawner_path):
++        os.makedirs(os.path.dirname(spawner_path), exist_ok=True)
++        with open(spawner_path, "w") as f:
++            f.write(
++                "#!/usr/bin/env python3\n"
++                "import fcntl, os, sys, time, types\n"
++                "class Timeout(Exception): pass\n"
++                "class FileLock:\n"
++                "    def __init__(self, path):\n"
++                "        self.path = path\n"
++                "        self._fd = None\n"
++                "    @property\n"
++                "    def is_locked(self):\n"
++                "        return self._fd is not None\n"
++                "    def acquire(self, timeout=20):\n"
++                "        deadline = time.monotonic() + timeout\n"
++                "        self._fd = os.open(self.path, os.O_CREAT | os.O_RDWR)\n"
++                "        while True:\n"
++                "            try:\n"
++                "                fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
++                "                return\n"
++                "            except BlockingIOError:\n"
++                "                if time.monotonic() >= deadline:\n"
++                "                    os.close(self._fd)\n"
++                "                    self._fd = None\n"
++                "                    raise Timeout()\n"
++                "                time.sleep(0.05)\n"
++                "    def release(self):\n"
++                "        if self._fd is not None:\n"
++                "            fcntl.flock(self._fd, fcntl.LOCK_UN)\n"
++                "            os.close(self._fd)\n"
++                "            self._fd = None\n"
++                "m = types.ModuleType('filelock')\n"
++                "m.Timeout = Timeout\n"
++                "m.FileLock = FileLock\n"
++                "sys.modules['filelock'] = m\n"
++                "from controller_manager.spawner import main\n"
++                "sys.exit(main())\n"
++            )
++        os.chmod(spawner_path, 0o755)
+     return generate_mock_hardware_test_description(tf_prefix=tf_prefix)
+ 
+ 
+@@ -65,16 +108,24 @@
+     @classmethod
+     def setUpClass(cls):
+         # Initialize the ROS context
+-        rclpy.init()
++        if not rclpy.ok():
++            rclpy.init()
+         cls.node = Node("mock_hardware_test")
+         time.sleep(1)
+-        cls.init_robot(cls)
++        try:
++            cls.init_robot(cls)
++        except Exception:
++            cls.node.destroy_node()
++            if rclpy.ok():
++                rclpy.shutdown()
++            raise
+ 
+     @classmethod
+     def tearDownClass(cls):
+         # Shutdown the ROS context
+         cls.node.destroy_node()
+-        rclpy.shutdown()
++        if rclpy.ok():
++            rclpy.shutdown()
+ 
+     # Connect to all interfaces and actions, even ones we know won't work with mock hardware (Except dashboard)
+     def init_robot(self):

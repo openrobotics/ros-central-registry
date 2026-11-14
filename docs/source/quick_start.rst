@@ -39,7 +39,7 @@ Your ``MODULE.bazel`` then declares which packages you want, pinned to a specifi
 
    module(name = "example_ros_workspace")
 
-   bazel_dep(name = "desktop_full", version = "lyrical.2026-10-05.rcr.0")
+   bazel_dep(name = "desktop_full", version = "lyrical.2026-10-05.rcr.1")
 
 One of the transitive dependencies you get this way is the ``llvm`` toolchain, which is essentially a C++ toolchain that is used to build the ROS packages. The advantage of using our toolchain over a default provided by your operating system is that it ensures consistent build results across different platforms.
 

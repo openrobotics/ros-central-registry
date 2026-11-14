@@ -1,0 +1,29 @@
+--- a/test/test_integration.cpp
++++ b/test/test_integration.cpp
+@@ -62,7 +62,7 @@
+   sub_node->configure();
+   sub_node->activate();
+   // Create a subscriber for the segments
+-  bool msg_received = false;
++  std::atomic<bool> msg_received{false};
+   auto seg_sub = sub_node->create_subscription<slg_msgs::msg::SegmentArray>(
+     "segments", 1,
+     [&](const slg_msgs::msg::SegmentArray msg) {
+@@ -72,11 +72,12 @@
+     });
+   auto sub_thread = std::thread([&]() {rclcpp::spin(sub_node->get_node_base_interface());});
+ 
+-  // Publish the message
+-  scan_pub->publish(scan);
+-
+-  // Spin the laser_segmentation node
+-  rclcpp::spin_some(seg_node->get_node_base_interface());
++  // Wait for discovery and message delivery across nodes
++  for (int i = 0; i < 50 && !msg_received; ++i) {
++    scan_pub->publish(scan);
++    std::this_thread::sleep_for(std::chrono::milliseconds(10));
++    rclcpp::spin_some(seg_node->get_node_base_interface());
++  }
+ 
+   // Check the results: now, the scan should have a subscription
+   // and the segment should have a publisher

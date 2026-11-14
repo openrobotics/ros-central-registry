@@ -219,11 +219,6 @@ common --incompatible_default_to_explicit_init_py
 # keeping the build environment more hermetic.
 common --incompatible_strict_action_env
 
-# Use a shared cache for bazel builds, which speeds up CI builds.
-common --remote_cache=https://storage.googleapis.com/intrinsic-opensource-buildcache
-common --remote_cache_compression=true
-common --remote_upload_local_results=false
-
 # Don't build runfiles symlink trees for every binary; Bazel still creates
 # them when a target is run or tested. Applied everywhere (not just CI):
 # the ament_index-shaped runfiles trees are large, and building one per
@@ -232,11 +227,13 @@ common --nobuild_runfile_links
 
 # CI specific performance/reliability tweaks -- safe to use anywhere,
 # require no credentials (this is what forks get; see cache_write_config
-# below for the part that isn't safe on a fork).
+# below for the part that isn't safe on a fork). Keep repo_contents_cache
+# outside --repository_cache so setup-bazel's actions/cache archive only
+# stores compressed tarballs while still caching unpacked repos across
+# Bazel invocations within the same CI job.
 common:ci --http_timeout_scaling=3.0
 common:ci --experimental_repository_downloader_retries=10
-common:ci --repo_contents_cache=
-common:ci --remote_cache_compression=false
+common:ci --repo_contents_cache={tmpdir}/repo_contents_cache
 common:ci --ui_event_filters=-INFO,-DEBUG
 {cache_write_config}
 
@@ -258,9 +255,13 @@ common --noexperimental_collect_system_network_usage
 # simulation speeds. Do not remove this unless you absolutely need to.
 build --@llvm//config:fastbuild_optimization_mode=O1
 
-# Ensure that we always download all outputs, including the shared libraries
-# that are required at runtime for dlopen() calls.
-build --remote_download_outputs=all
+# Download outputs of requested top-level targets (and their runfiles, such as
+# shared libraries needed at runtime), without pulling down intermediate .o/.a
+# files whose downstream link actions are already remote cache hits. CI
+# overrides this to `minimal` below so build/test jobs only download inputs for
+# cache-miss actions that actually execute locally.
+build --remote_download_outputs=toplevel
+build:ci --remote_download_outputs=minimal
 
 # Some packages bake a scratch-directory path into compiled test binaries via
 # local_defines (e.g. rcutils' BUILD_DIR), which --test_env/--run_env can't

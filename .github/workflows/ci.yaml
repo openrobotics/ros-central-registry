@@ -93,7 +93,7 @@ jobs:
         bazelisk-cache: true
         disk-cache: false
         repository-cache: true
-        bazelrc: common --repo_contents_cache=
+        bazelrc: common --repo_contents_cache=${{ runner.temp }}/repo_contents_cache
     - name: Compute changed packages
       id: diff
       run: |
@@ -146,6 +146,27 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/_check_distribution_examples.yml
+    with:
+      branch: ${{ inputs.branch || github.ref }}
+    secrets: inherit
+
+  # Build-only check that the distribution links with --dynamic_mode=off
+  # (every binary statically linked). Tests are not run in this mode: plugin
+  # loading relies on dlopen() resolving against the host process, which a
+  # statically linked host does not export. See the workflow for what this
+  # catches that the dynamic build above does not.
+  distribution_static:
+    name: Check static build
+    needs: [distribution_compiles]
+    if: |
+      !cancelled() &&
+      needs.distribution_compiles.result == 'success'
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_check_distribution_static.yml
     with:
       branch: ${{ inputs.branch || github.ref }}
     secrets: inherit
