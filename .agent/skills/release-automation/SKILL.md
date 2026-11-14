@@ -56,6 +56,85 @@ new `.rcr.N` distribution release.** Land your fix as an ordinary
 single-package patch (`create-patch` skill) and let the weekly rollup pick it
 up. If nothing was patched that week, the rollup is simply a no-op.
 
+### Running a rollup by hand (only when a human explicitly asks)
+
+If a human asks you to cut the next `.rcr.N` release manually, do it with the
+same tool the workflow uses, never by hand-editing `modules/ros/`:
+
+```shell
+# 1. Preview, then write. --release is the <distro>.<date> row, NOT the full
+#    .rcr.N version -- the script picks the next free .rcr.N itself.
+bazel run //tools/ci:rollup_patches -- --release=<distro>.<date> --dry-run
+bazel run //tools/ci:rollup_patches -- --release=<distro>.<date>
+```
+
+The last line of output is `Rolled up to ros version <NEW>.` It mints a new
+version directory for `ros` and every variant (`ros_core`, `ros_base`,
+`perception`, `simulation`, `desktop`, `desktop_full`), plus pure
+version-pin-bump directories for any package that transitively depends on
+something patched that week, and appends to each one's `metadata.json`.
+Verify the result the same way CI will (`setup-pull-request` skill has the
+full `check_pr_modules` invocation; buildifier the touched dirs).
+
+#### Post-rollup: point everything at the new release
+
+`rollup_patches` only touches `modules/`. The rest of the repo still names
+the *previous* release and must be moved forward in the same branch/PR, or
+CI keeps testing the old release and users keep getting it by default. With
+`OLD`/`NEW` as the previous and new full versions (`<distro>.<date>.rcr.N`
+-> `<distro>.<date>.rcr.N+1`):
+
+1. **CI workflows** -- every `_check_distribution_*.yml` and
+   `_check_cuda_compiles.yml` under `.github/workflows/` has a
+   `matrix.ros:` list entry naming the release under test. Replace `OLD`
+   with `NEW` so this branch's CI exercises the release it just created.
+2. **README build-status matrix** -- the `## <release>` heading under
+   `# Releases` and every shields.io badge in the table beneath it embed the
+   release in the gist filename (`.../raw/<release>_<bazel>_<os>_<job>.json`).
+   Replace the previous release with the new one (don't add a second
+   section -- the front page shows only the current release).
+3. **Docs and markdown** -- `README.md`, `CONTRIBUTING.md`,
+   `docs/source/*.rst`, and the sibling skills under `.agent/skills/` all
+   quote `--release=OLD` / `bazel_dep(..., version = "OLD")` snippets. Move
+   them all to `NEW` so users get the latest release by default.
+4. **`examples/MODULE.bazel`** -- the `bazel_dep(name = "perception", ...)`
+   pin is what the examples CI job (and anyone copying the example) builds
+   against; bump it too.
+
+In practice this is one mechanical substitution. Scope it to tracked files
+and leave `modules/`, `bcr_staging/` (immutable module content) and
+`tools/ci/*_test.py` (fixtures use fixed historical versions on purpose)
+alone. This skill file is deliberately written with placeholders so the
+substitution doesn't rewrite it:
+
+```shell
+OLD=<distro>.<date>.rcr.N      # e.g. the heading currently in README.md
+NEW=<distro>.<date>.rcr.N+1    # the "Rolled up to ros version" output
+git ls-files | grep -v '^modules/\|^bcr_staging/\|_test\.py$' \
+  | xargs grep -l -I "$OLD" | xargs sed -i "s/$OLD/$NEW/g"
+# Nothing outside modules/, bcr_staging/ and tests should still name OLD:
+git ls-files | grep -v '^modules/\|^bcr_staging/\|_test\.py$' | xargs grep -n -I "$OLD"
+```
+
+**Watch out for `rosdistro`.** The `rosdistro` module's own version uses the
+same `<distro>.<date>.rcr.N` shape as the `ros` release but its `N`
+increments independently (it's patched like any other package), so a
+`bazel_dep(name = "rosdistro", version = ...)` pin -- `examples/MODULE.bazel`
+has one -- can coincidentally equal `OLD` and get rewritten to a `rosdistro`
+version that doesn't exist. After the substitution, `git diff` the touched
+files and revert any `rosdistro` pin the `sed` changed (or exclude that line
+up front). A `ros`/variant release pin and a `rosdistro` pin are different
+things even when the strings match.
+
+Then buildifier the tracked Bazel files you touched (`buildifier -mode check
+-r examples`; don't run `-r .` from the repo root, it descends into the
+gitignored `release/` and `workspace/` trees) and commit everything --
+`modules/`, `.github/workflows/`, docs, examples -- together, signed off
+(`setup-pull-request` skill). Note the `weekly_rollup.yml`
+`workflow_dispatch` default is the `<distro>.<date>` row, not a `.rcr.N`, so
+it only needs updating when a new *dated* release is bootstrapped, not after
+a patch rollup.
+
 ## Package scope — upstream `rosdistro` only
 
 This registry only packages what's already present in the upstream
