@@ -853,18 +853,19 @@ def _proto_ros_library(ctx):
         ctx = ctx,
         name = ctx.label.name,
         deps = ctx.attr.deps,
+        go_package = ctx.attr.go_package,
     )
     proto_files = depset(
         transitive = [
-            dep[RosProtoInfo].protos
+            dep[RosProtoInfo].protos if RosProtoInfo in dep else dep[ProtoInfo].transitive_sources
             for dep in ctx.attr.deps
-            if RosProtoInfo in dep
+            if RosProtoInfo in dep or ProtoInfo in dep
         ],
     )
     default_info = DefaultInfo(files = proto_files)
     return [proto_info, default_info]
 
-proto_ros_library = rule(
+_proto_ros_library_rule = rule(
     implementation = _proto_ros_library,
     toolchains = ["@protobuf//bazel/private:proto_toolchain_type"],
     fragments = ["proto"],
@@ -874,12 +875,33 @@ proto_ros_library = rule(
                 rosidl_adapter_aspect,
                 rosidl_adapter_proto_aspect,
             ],
-            providers = [RosInterfaceInfo],
+            providers = [
+                [RosInterfaceInfo],
+                [ProtoInfo],
+            ],
             allow_files = False,
         ),
+        "go_package": attr.string(),
+        "strip_import_prefix": attr.string(),
     },
     provides = [ProtoInfo, DefaultInfo],
 )
+
+def proto_ros_library(name, deps = [], strip_import_prefix = None, go_package = None, **kwargs):
+    pkg_name = native.package_name()
+    pkg_parts = pkg_name.split("/") if pkg_name else []
+    if len(pkg_parts) > 2 and pkg_parts[-1] in ("msg", "srv", "action", "idl"):
+        if strip_import_prefix == None:
+            strip_import_prefix = "/" + "/".join(pkg_parts[:-2])
+        if go_package == None:
+            go_package = "{}/{}_go_proto".format(pkg_name, name.removesuffix("_proto"))
+    _proto_ros_library_rule(
+        name = name,
+        deps = deps,
+        strip_import_prefix = strip_import_prefix,
+        go_package = go_package,
+        **kwargs
+    )
 
 # Python
 

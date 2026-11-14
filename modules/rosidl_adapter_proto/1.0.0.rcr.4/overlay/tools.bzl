@@ -27,7 +27,7 @@ def _strip_virtual_imports(path):
             return "/".join(parts[i + 2:])
     return path
 
-def merge_proto_infos(ctx, name, deps, srcs = []):
+def merge_proto_infos(ctx, name, deps, srcs = [], go_package = ""):
     # Generating a ProtoInfo is not straightforward. There are some important limitations
     # that make it hard for an aspect to produce a ProtoInfo. You can see more info here:
     #
@@ -49,11 +49,28 @@ def merge_proto_infos(ctx, name, deps, srcs = []):
     else:
         # We are in the rule (proto_ros_library)
         direct_protos = []
-        proto_deps = []
+        proto_deps = [
+            dep[ProtoInfo]
+            for dep in deps
+            if ProtoInfo in dep and RosProtoInfo not in dep
+        ]
+        covered_protos = {
+            _strip_virtual_imports(f.short_path): True
+            for p_info in proto_deps
+            for f in p_info.transitive_sources.to_list()
+        }
         for dep in deps:
             if RosProtoInfo in dep:
                 direct_protos.extend(dep[RosProtoInfo].proto_info.direct_sources)
-                proto_deps.extend(dep[RosProtoInfo].proto_deps)
+                for ros_proto_dep in dep[RosProtoInfo].proto_deps:
+                    dep_paths = [
+                        _strip_virtual_imports(f.short_path)
+                        for f in ros_proto_dep.direct_sources
+                    ]
+                    if not all([p in covered_protos for p in dep_paths]):
+                        proto_deps.append(ros_proto_dep)
+                        for p in dep_paths:
+                            covered_protos[p] = True
 
     # We are going to use a target-name prefixed workspace to avoid symlink collisions.
     # The name _virtual_imports/<target> is a specific structure that is supported by
@@ -80,7 +97,16 @@ def merge_proto_infos(ctx, name, deps, srcs = []):
         # Now create a symlink at <proto_path>/sensor_msgs/msg/Image.proto that points
         # to the originally generated proto file from the other module.
         src = ctx.actions.declare_file("{}/{}".format(proto_path, pkg_type_name))
-        ctx.actions.symlink(output = src, target_file = proto)
+        if go_package:
+            ctx.actions.run_shell(
+                inputs = [proto],
+                outputs = [src],
+                command = "cat \"$1\" > \"$2\" && printf '\noption go_package = \"%s\";\n' \"$3\" >> \"$2\"",
+                arguments = [proto.path, src.path, go_package],
+                mnemonic = "ProtoGoPackage",
+            )
+        else:
+            ctx.actions.symlink(output = src, target_file = proto)
         virtual_srcs.append(src)
 
     # Construct the ProtoInfo to be returned. Note that at this point we have no deps. We
