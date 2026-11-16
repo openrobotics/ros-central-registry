@@ -14,7 +14,8 @@
 
 # Triggered on any commit pushed to the main branch. It builds
 # documentation, merges registry modules, and deploys the updated
-# pages. 
+# pages. The same static site is also mirrored to
+# https://storage.googleapis.com/intrinsic-opensource-buildcache/registry.
 
 name: commit
 
@@ -48,10 +49,14 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       contents: write
+      # Job-level permissions replace the workflow-level block, so this has to
+      # be repeated here for the Workload Identity Federation token exchange in
+      # "Authenticate to Google Cloud" below.
+      id-token: write
 
     steps:
     - name: Reset status badge
-      if: (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry'
+      if: always() && github.ref == 'refs/heads/main' && github.repository == 'openrobotics/ros-central-registry'
       uses: Schneegans/dynamic-badges-action@v1.8.0
       with:
         auth: ${{ secrets.STATUS_BADGE_SECRET }}
@@ -86,16 +91,42 @@ jobs:
         cp -R ./bcr_staging/modules/* deploy/modules
         cp -R ./modules/* deploy/modules
 
+    # Push to GitHub pages.
+
     - name: Setup Pages
       uses: actions/configure-pages@v5
-    
+
     - name: Upload site artifact
       uses: actions/upload-pages-artifact@v3
       with:
         path: deploy
 
+    # Mirror the modules to Google Cloud Storage to avoid HTTP 429 response on pages.
+
+    - name: Authenticate to Google Cloud
+      if: github.ref == 'refs/heads/main' && github.repository == 'openrobotics/ros-central-registry'
+      uses: "google-github-actions/auth@v3"
+      with:
+        workload_identity_provider: projects/367706864683/locations/global/workloadIdentityPools/github-automation/providers/build-dev
+        service_account: github-automation-bot@gha-openrobotics-rcr.iam.gserviceaccount.com
+        create_credentials_file: true
+
+    - name: Setup gcloud
+      if: github.ref == 'refs/heads/main' && github.repository == 'openrobotics/ros-central-registry'
+      uses: google-github-actions/setup-gcloud@v3
+
+    - name: Mirror site to GCS
+      if: github.ref == 'refs/heads/main' && github.repository == 'openrobotics/ros-central-registry'
+      run: |
+        gcloud storage rsync deploy gs://intrinsic-opensource-buildcache/registry \
+            --recursive \
+            --delete-unmatched-destination-objects \
+            --cache-control="no-cache"
+
+    # Probe the rcr-frontend repo to rebuild the package index
+
     - name: Notify the rcr-frontend to rebuild
-      if: github.ref == 'refs/heads/main' && (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry'
+      if: github.ref == 'refs/heads/main' && github.repository == 'openrobotics/ros-central-registry'
       uses: peter-evans/repository-dispatch@v4
       with:
         token: ${{ secrets.RCR_UI_PAT_TOKEN }}
@@ -103,6 +134,7 @@ jobs:
         event-type: on-rcr-trigger
 
     - name: Update status badges
+      if: always() && github.ref == 'refs/heads/main' && github.repository == 'openrobotics/ros-central-registry'
       uses: Schneegans/dynamic-badges-action@v1.8.0
       with:
         auth: ${{ secrets.STATUS_BADGE_SECRET }}
@@ -111,7 +143,6 @@ jobs:
         label: deployment
         message: ${{ job.status == 'success' && '✓' || 'x' }}
         color: ${{ job.status == 'success' && 'green' || 'red' }}
-      if: always() && (github.event.pull_request.head.repo.full_name || github.repository) == 'openrobotics/ros-central-registry'
 
   deploy:
     needs: generate
