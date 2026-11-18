@@ -60,7 +60,6 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from tools.chores.fix_interfaces import discover_interfaces
 from tools.chores.vendor_lib import (
-    SEVERITY_MANUAL,
     SEVERITY_WARNING,
     FileCheck,
     Issue,
@@ -472,22 +471,19 @@ class ProtoFieldAuditor(PackageAuditor):
         pkg_dir = self.packages[package]
         discovery = discover_interfaces(pkg_dir)
         files = discovery.files
-        result.interface_count = len(files)
+        templates = discovery.templates
+        result.interface_count = len(files) + len(templates)
         for w in discovery.warnings:
             result.issues.append(Issue(SEVERITY_WARNING, "discovery", package, w))
-        for t in discovery.templates:
-            result.issues.append(
-                Issue(
-                    SEVERITY_MANUAL,
-                    "template",
-                    f"{t.bazel_dir}/{t.path.name}",
-                    f"{t.kind}/{t.name} is a .in template; update by hand if needed",
-                )
-            )
         for f in files:
             where = f"{f.bazel_dir}/{f.src}"
             text = f.path.read_text(encoding="utf-8", errors="replace")
             self._apply(result, f.path, where, check_interface_file(text, f.ext, where))
+        for t in templates:
+            where = f"{t.bazel_dir}/{t.path.name}"
+            inner_ext = t.path.with_suffix("").suffix
+            text = t.path.read_text(encoding="utf-8", errors="replace")
+            self._apply(result, t.path, where, check_interface_file(text, inner_ext, where))
 
 
 class ProtoFieldReporter(Reporter):
