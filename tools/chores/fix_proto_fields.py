@@ -52,13 +52,15 @@ Usage (from the repo root):
     bazel run //tools/chores:fix_proto_fields -- --dry-run sensor_msgs tf2_msgs
 """
 
+import ast
 import collections
 import dataclasses
 import re
 import sys
+from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
-from tools.chores.fix_interfaces import discover_interfaces
+from tools.chores.fix_interfaces import INTERFACE_MACROS, discover_interfaces
 from tools.chores.vendor_lib import (
     SEVERITY_WARNING,
     FileCheck,
@@ -462,6 +464,84 @@ def check_interface_file(text: str, ext: str, where: str) -> FileCheck:
 ### WORKSPACE LAYER
 
 
+def _resolve_local_bazel_path(pkg_dir: Path, build_dir: Path, ref: str) -> Path:
+    if ref.startswith("//"):
+        pkg_part, _, target_part = ref[2:].partition(":")
+        base = pkg_dir / pkg_part if pkg_part else pkg_dir
+        return base / (target_part or pkg_part)
+    if ref.startswith(":"):
+        return build_dir / ref[1:]
+    return build_dir / ref
+
+
+def discover_bazel_interface_files(pkg_dir: Path) -> List[Tuple[Path, str, str]]:
+    """
+    Scan every `BUILD.bazel` in `pkg_dir` for `ros_interface` / `ros_message` /
+    `ros_service` / `ros_action` / `ros_idl` calls (including those fed by
+    `copy_file` or `cmake_configure_file`) and return `[(path, ext, rel_where), ...]`
+    for every local interface source or `.in` template file.
+    """
+    found: List[Tuple[Path, str, str]] = []
+    seen: set = set()
+    for build_file in sorted(pkg_dir.rglob("BUILD.bazel")):
+        try:
+            tree = ast.parse(build_file.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        build_dir = build_file.parent
+        out_to_src: Dict[str, Path] = {}
+        iface_srcs: List[str] = []
+        for stmt in tree.body:
+            if not (
+                isinstance(stmt, ast.Expr)
+                and isinstance(stmt.value, ast.Call)
+                and isinstance(stmt.value.func, ast.Name)
+            ):
+                continue
+            fn = stmt.value.func.id
+            kwargs = {kw.arg: kw.value for kw in stmt.value.keywords if kw.arg}
+            if fn in ("copy_file", "cmake_configure_file"):
+                src_node = kwargs.get("src")
+                out_node = kwargs.get("out")
+                if (
+                    isinstance(src_node, ast.Constant)
+                    and isinstance(src_node.value, str)
+                    and isinstance(out_node, ast.Constant)
+                    and isinstance(out_node.value, str)
+                    and not src_node.value.startswith("@")
+                ):
+                    out_to_src[out_node.value] = _resolve_local_bazel_path(
+                        pkg_dir, build_dir, src_node.value
+                    )
+            elif fn in INTERFACE_MACROS:
+                src_node = kwargs.get("src")
+                if (
+                    isinstance(src_node, ast.Constant)
+                    and isinstance(src_node.value, str)
+                    and not src_node.value.startswith("@")
+                ):
+                    iface_srcs.append(src_node.value)
+
+        for src_val in iface_srcs:
+            candidate = out_to_src.get(src_val) or _resolve_local_bazel_path(
+                pkg_dir, build_dir, src_val
+            )
+            if not candidate.is_file():
+                in_candidate = Path(f"{candidate}.in")
+                if in_candidate.is_file():
+                    candidate = in_candidate
+                else:
+                    continue
+            resolved = candidate.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            ext = candidate.with_suffix("").suffix if candidate.suffix == ".in" else candidate.suffix
+            rel_where = candidate.relative_to(pkg_dir).as_posix()
+            found.append((candidate, ext, rel_where))
+    return found
+
+
 class ProtoFieldAuditor(PackageAuditor):
     """Scans and updates interface files in each vendored package; thread-safe."""
 
@@ -472,18 +552,25 @@ class ProtoFieldAuditor(PackageAuditor):
         discovery = discover_interfaces(pkg_dir)
         files = discovery.files
         templates = discovery.templates
-        result.interface_count = len(files) + len(templates)
         for w in discovery.warnings:
             result.issues.append(Issue(SEVERITY_WARNING, "discovery", package, w))
+        seen_paths = set()
+        targets: List[Tuple[Path, str, str]] = []
         for f in files:
-            where = f"{f.bazel_dir}/{f.src}"
-            text = f.path.read_text(encoding="utf-8", errors="replace")
-            self._apply(result, f.path, where, check_interface_file(text, f.ext, where))
+            seen_paths.add(f.path.resolve())
+            targets.append((f.path, f.ext, f"{f.bazel_dir}/{f.src}"))
         for t in templates:
-            where = f"{t.bazel_dir}/{t.path.name}"
+            seen_paths.add(t.path.resolve())
             inner_ext = t.path.with_suffix("").suffix
-            text = t.path.read_text(encoding="utf-8", errors="replace")
-            self._apply(result, t.path, where, check_interface_file(text, inner_ext, where))
+            targets.append((t.path, inner_ext, f"{t.bazel_dir}/{t.path.name}"))
+        for path, ext, where in discover_bazel_interface_files(pkg_dir):
+            if path.resolve() not in seen_paths:
+                seen_paths.add(path.resolve())
+                targets.append((path, ext, where))
+        result.interface_count = len(targets)
+        for path, ext, where in targets:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            self._apply(result, path, where, check_interface_file(text, ext, where))
 
 
 class ProtoFieldReporter(Reporter):
@@ -524,7 +611,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     def has_interfaces(p: str) -> bool:
         d = discover_interfaces(packages[p])
-        return bool(d.files or d.templates)
+        return bool(d.files or d.templates or discover_bazel_interface_files(packages[p]))
 
     selected = [p for p in candidates if args.packages or has_interfaces(p)]
     mode = "dry-run" if args.dry_run else "updating in place"

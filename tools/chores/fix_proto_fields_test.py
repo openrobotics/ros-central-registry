@@ -212,6 +212,34 @@ class TestEndToEndSweep(unittest.TestCase):
                 srv_file.read_text(),
             )
 
+    def test_main_discovers_bazel_test_and_copy_file_interfaces(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vendor_dir = Path(tmp)
+            pkg_dir = vendor_dir / "sample_pkg+"
+            (pkg_dir / "test" / "msg").mkdir(parents=True)
+            (pkg_dir / "ros2").mkdir(parents=True)
+            (pkg_dir / "msg").mkdir(parents=True)
+            (pkg_dir / "MODULE.bazel").write_text('module(name = "sample_pkg", version = "1.0.0")\n')
+            (pkg_dir / "package.xml").write_text(
+                "<package format='3'><name>sample_pkg</name></package>\n"
+            )
+            test_msg = pkg_dir / "test" / "msg" / "String.msg"
+            test_msg.write_text("string data\n")
+            (pkg_dir / "test" / "msg" / "BUILD.bazel").write_text(
+                'ros_interface(name = "String", src = "String.msg")\n'
+            )
+            copied_msg = pkg_dir / "ros2" / "Color.msg"
+            copied_msg.write_text("float64 r\nfloat64 g\n")
+            (pkg_dir / "msg" / "BUILD.bazel").write_text(
+                'copy_file(name = "_copy", src = "//ros2:Color.msg", out = "Color.msg")\n'
+                'ros_message(name = "Color", src = "Color.msg")\n'
+            )
+
+            rc = fpf.main(["--vendor-dir", str(vendor_dir), "--no-progress"])
+            self.assertEqual(rc, 0)
+            self.assertIn("# [proto]\n#   data = 1\n", test_msg.read_text())
+            self.assertIn("# [proto]\n#   r = 1\n#   g = 2\n", copied_msg.read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

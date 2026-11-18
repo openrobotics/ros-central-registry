@@ -1,0 +1,27 @@
+--- a/src/rclcpp/executor.cpp
++++ b/src/rclcpp/executor.cpp
+@@ -20,6 +20,7 @@
+ #include <map>
+ #include <stdexcept>
+ #include <string>
++#include <thread>
+ #include <type_traits>
+ #include <utility>
+ #include <vector>
+@@ -467,7 +468,15 @@
+ void
+ Executor::cancel()
+ {
+-  spinning.store(false);
++  if (!spinning.exchange(false)) {
++    const auto start = std::chrono::steady_clock::now();
++    while (!spinning.load() &&
++      std::chrono::steady_clock::now() - start < std::chrono::milliseconds(10))
++    {
++      std::this_thread::yield();
++    }
++    spinning.store(false);
++  }
+   try {
+     interrupt_guard_condition_->trigger();
+   } catch (const rclcpp::exceptions::RCLError & ex) {
