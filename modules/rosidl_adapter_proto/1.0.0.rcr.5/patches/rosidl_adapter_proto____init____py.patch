@@ -1,0 +1,102 @@
+--- a/rosidl_adapter_proto/__init__.py
++++ b/rosidl_adapter_proto/__init__.py
+@@ -16,10 +16,15 @@
+ #
+ # ================================= Apache 2.0 =================================
+ 
++import em
++import pathlib
++import re
+ import subprocess
+ import zlib
+ 
+-from rosidl_cmake import generate_files
++import rosidl_pycommon
++from rosidl_pycommon import convert_camel_case_to_lower_case_underscore
++from rosidl_pycommon import generate_files
+ import rosidl_parser.definition as rosidl
+ 
+ # A postfix for the protobuf package name / the c++ namespace
+@@ -58,6 +63,40 @@
+ 
+ field_val = 0
+ 
++_PROTO_SECTION_RE = re.compile(r'^(?:#|//)\s*\[proto(?::([A-Za-z0-9_]+))?\]\s*$')
++_PROTO_ENTRY_RE = re.compile(r'^(?:#|//)\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\d+)\s*$')
++
++
++def parse_proto_field_numbers(source_file):
++    """
++    Scan `source_file` (.msg, .srv, .action, or .idl) for trailing `[proto]` /
++    `[proto:<Section>]` comment blocks and return `(has_proto_block, sections)`
++    where `sections` maps section name (`""`, `"Request"`, `"Response"`,
++    `"Goal"`, `"Result"`, `"Feedback"`, or struct name) to `{field_name: int}`.
++    """
++    sections = {}
++    has_proto_block = False
++    if not source_file:
++        return has_proto_block, sections
++    path = pathlib.Path(source_file)
++    if not path.is_file():
++        return has_proto_block, sections
++
++    current_section = None
++    for raw_line in path.read_text(encoding='utf-8', errors='replace').splitlines():
++        line = raw_line.strip()
++        m_sec = _PROTO_SECTION_RE.match(line)
++        if m_sec:
++            has_proto_block = True
++            current_section = m_sec.group(1) or ''
++            sections.setdefault(current_section, {})
++            continue
++        if current_section is not None:
++            m_entry = _PROTO_ENTRY_RE.match(line)
++            if m_entry:
++                sections[current_section][m_entry.group(1)] = int(m_entry.group(2))
++    return has_proto_block, sections
++
+ 
+ def compute_proto_field_number(variable_name):
+     # Field number rules (https://developers.google.com/protocol-buffers/docs/
+@@ -83,7 +122,8 @@
+ 
+ def to_proto_import(namespaced_type):
+     assert isinstance(namespaced_type, rosidl.NamespacedType)
+-    return '/'.join(namespaced_type.namespaces + [namespaced_type.name]) + '.proto'
++    stem = convert_camel_case_to_lower_case_underscore(namespaced_type.name)
++    return '/'.join(namespaced_type.namespaces + [stem]) + '.proto'
+ 
+ 
+ def collect_proto_imports(rosidl_message):
+@@ -104,11 +144,29 @@
+     return import_set
+ 
+ 
+-def generate_proto(generator_arguments_file):
++def generate_proto(generator_arguments_file, strict=False, source_file=None):
+     mapping = {
+         'idl.proto.em': '%s.proto',
+     }
+-    generate_files(generator_arguments_file, mapping, keep_case=True)
++    additional_context = {
++        'strict_mode': bool(strict),
++        'source_file': source_file,
++    }
++    em.Interpreter._wasProxyInstalled = False
++    try:
++        generate_files(
++            generator_arguments_file,
++            mapping,
++            additional_context=additional_context,
++        )
++    finally:
++        if getattr(rosidl_pycommon, 'interpreter', None) is not None:
++            try:
++                rosidl_pycommon.interpreter.shutdown()
++            except Exception:
++                pass
++            rosidl_pycommon.interpreter = None
++        em.Interpreter._wasProxyInstalled = False
+     return 0
+ 
+ 

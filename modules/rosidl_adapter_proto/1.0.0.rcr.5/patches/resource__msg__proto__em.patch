@@ -1,0 +1,78 @@
+--- a/resource/msg.proto.em
++++ b/resource/msg.proto.em
+@@ -27,6 +27,10 @@
+ import sys
+ import re
+ 
++_scope = {**globals(), **locals()}
++field_numbers = _scope.get('field_numbers', None) or {}
++has_proto_block = bool(_scope.get('has_proto_block', False))
++strict_mode = bool(_scope.get('strict_mode', False))
+ }@
+ @#
+ @# ================ Message definition ================
+@@ -55,6 +59,11 @@
+ str_max_len_type         = 0
+ str_max_len_name         = 0
+ str_max_len_field_number = 0
++
++message_typed_member_names = set()
++for m in message.structure.members:
++    if isinstance(m.type, (rosidl.NamespacedType, rosidl.NamedType)):
++        message_typed_member_names.add(m.name)
+ 
+ for member in message.structure.members:
+ 
+@@ -94,23 +103,42 @@
+         else:
+             proto_type = "repeated " + proto_type
+ 
+-    # Compute a field number of the actual variable name. This will almost always be unique.
+-    member_name_for_field_number = member.name
+-    additional_counter = 0
++    if member.name in field_numbers:
++        field_number = field_numbers[member.name]
++    elif (
++        member.name == rosidl.EMPTY_STRUCTURE_REQUIRED_MEMBER_NAME
++        and len(message.structure.members) == 1
++        and (strict_mode or has_proto_block)
++    ):
++        field_number = 1
++    elif strict_mode:
++        raise RuntimeError(
++            f"Field '{member.name}' in message '{message.structure.namespaced_type.name}' "
++            f"({package_name}:{interface_path}) has no protobuf field number in [proto] comments "
++            "(strict mode)."
++        )
++    else:
++        # Lazy mode fallback: compute a field number from the variable name hash.
++        member_name_for_field_number = member.name
++        additional_counter = 0
+ 
+-    field_number = compute_proto_field_number(member_name_for_field_number)
++        field_number = compute_proto_field_number(member_name_for_field_number)
+ 
+-    while field_number in used_field_numbers:
+-        sys.stderr.write("WARNING: Field " + member.name + " maps to a protobuf field number that is already in use. This will hurt the downward compatibility of this message..\n")
+-        member_name_for_field_number = member.name + str(additional_counter)
+-        field_number = compute_proto_field_number(member_name_for_field_number)
+-        additional_counter += 1
++        while field_number in used_field_numbers:
++            sys.stderr.write("WARNING: Field " + member.name + " maps to a protobuf field number that is already in use. This will hurt the downward compatibility of this message..\n")
++            member_name_for_field_number = member.name + str(additional_counter)
++            field_number = compute_proto_field_number(member_name_for_field_number)
++            additional_counter += 1
+ 
+     used_field_numbers.add(field_number)
+ 
++    proto_member_name = member.name
++    if proto_member_name.startswith("has_") and proto_member_name[4:] in message_typed_member_names:
++        proto_member_name = proto_member_name + "_"
++
+     member_dict = {
+                     "type":         proto_type,
+-                    "name":         member.name,
++                    "name":         proto_member_name,
+                     "field_number": field_number,
+                 }
+ 

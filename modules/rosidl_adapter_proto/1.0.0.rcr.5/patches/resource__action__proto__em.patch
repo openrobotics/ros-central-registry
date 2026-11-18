@@ -1,0 +1,58 @@
+--- a/resource/action.proto.em
++++ b/resource/action.proto.em
+@@ -18,7 +18,7 @@
+ # ================================= Apache 2.0 =================================
+ }@
+ @{
+-from rosidl_cmake import convert_camel_case_to_lower_case_underscore
++from rosidl_pycommon import convert_camel_case_to_lower_case_underscore
+ import rosidl_parser.definition as rosidl
+ 
+ from rosidl_adapter_proto import PROTO_PACKAGE_POSTFIX
+@@ -26,21 +26,27 @@
+ from rosidl_adapter_proto import PROTO_ACTION_SEND_GOAL_CALL_NAME
+ from rosidl_adapter_proto import PROTO_ACTION_GET_RESULT_CALL_NAME
+ 
++_scope = {**globals(), **locals()}
++proto_field_sections = _scope.get('proto_field_sections', None) or {}
++has_proto_block = bool(_scope.get('has_proto_block', False))
++strict_mode = bool(_scope.get('strict_mode', False))
++use_sequential_wrappers = strict_mode or has_proto_block
+ }@
+ option cc_generic_services = true;
+ 
+ @#
+ @# ================ Message definitions ================
+ @#
+-@[for message in [action.goal,
+-                  action.send_goal_service.request_message,
+-                  action.send_goal_service.response_message,
+-                  action.result,
+-                  action.get_result_service.request_message,
+-                  action.get_result_service.response_message,
+-                  action.feedback,
+-                  action.feedback_message,
+-                 ]
++@[for message, sec_fields in [
++    (action.goal, proto_field_sections.get('Goal', {})),
++    (action.send_goal_service.request_message, {'goal_id': 1, 'goal': 2} if use_sequential_wrappers else {}),
++    (action.send_goal_service.response_message, {'accepted': 1, 'stamp': 2} if use_sequential_wrappers else {}),
++    (action.result, proto_field_sections.get('Result', {})),
++    (action.get_result_service.request_message, {'goal_id': 1} if use_sequential_wrappers else {}),
++    (action.get_result_service.response_message, {'status': 1, 'result': 2} if use_sequential_wrappers else {}),
++    (action.feedback, proto_field_sections.get('Feedback', {})),
++    (action.feedback_message, {'goal_id': 1, 'feedback': 2} if use_sequential_wrappers else {}),
++]
+ ]@
+ @{
+ TEMPLATE(
+@@ -48,6 +54,9 @@
+     package_name=package_name,
+     interface_path=interface_path,
+     message=message,
++    field_numbers=sec_fields,
++    has_proto_block=has_proto_block,
++    strict_mode=strict_mode,
+ )
+ }@
+ 

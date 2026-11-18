@@ -1,0 +1,91 @@
+--- a/rosidl_generator_py/generate_py_impl.py
++++ b/rosidl_generator_py/generate_py_impl.py
+@@ -127,14 +127,15 @@
+                 action.namespaced_type.name)
+ 
+     for subfolder in modules.keys():
+-        with open(os.path.join(args['output_dir'], subfolder, '__init__.py'), 'w') as f:
+-            module_names = {}
+-            for idl_stem in modules[subfolder]:
+-                module_names[idl_stem] = '_' + \
+-                    convert_camel_case_to_lower_case_underscore(idl_stem)
+-            # sorting after lower case conversion to get true order
+-            for module_name, idl_stem in \
+-                    sorted((value, key) for (key, value) in module_names.items()):
++        module_names = {}
++        for idl_stem in modules[subfolder]:
++            module_names[idl_stem] = '_' + \
++                convert_camel_case_to_lower_case_underscore(idl_stem)
++        # sorting after lower case conversion to get true order
++        for module_name, idl_stem in sorted((value, key) for (key, value) in module_names.items()):
++            module_init_path = os.path.join(args['output_dir'], subfolder, f'{module_names[idl_stem]}.__init__.py')
++            with open(os.path.join(module_init_path), 'w') as f:
++
+                 f.write(
+                     f'from {package_name}.{subfolder}.{module_name} import '
+                     f'{idl_stem} as {idl_stem}  # noqa: F401\n')
+@@ -174,36 +175,35 @@
+                         f'{idl_stem}_SendGoal_Response as {idl_stem}_SendGoal_Response'
+                         '  # noqa: F401\n')
+ 
+-    # expand templates per available typesupport implementation
+-    template_dir = args['template_dir']
+-    type_support_impl_by_filename = {
+-        '_%s_s.ep.{0}.c'.format(impl): impl for impl in typesupport_impls
+-    }
+-    mapping_msg_pkg_extension = {
+-        os.path.join(template_dir, '_idl_pkg_typesupport_entry_point.c.em'):
+-        type_support_impl_by_filename.keys(),
+-    }
+-
+-    for template_file in mapping_msg_pkg_extension.keys():
+-        assert os.path.exists(template_file), 'Could not find template: ' + template_file
+-
+-    latest_target_timestamp = get_newest_modification_time(args['target_dependencies'])
+-
+-    for template_file, generated_filenames in mapping_msg_pkg_extension.items():
+-        for generated_filename in generated_filenames:
+-            package_name = args['package_name']
+-            data = {
+-                'package_name': args['package_name'],
+-                'content': idl_content,
+-                'typesupport_impl': type_support_impl_by_filename.get(generated_filename, ''),
++            # expand templates per available typesupport implementation
++            template_dir = args['template_dir']
++            type_support_impl_by_filename = {
++                '%s_s.ep.{0}.c'.format(impl): impl for impl in typesupport_impls
+             }
+-            generated_file = os.path.join(
+-                args['output_dir'], generated_filename % package_name
+-            )
+-            expand_template(
+-                template_file, data, generated_file,
+-                minimum_timestamp=latest_target_timestamp)
+-            generated_files.append(generated_file)
++            mapping_msg_pkg_extension = {
++                os.path.join(template_dir, '_idl_pkg_typesupport_entry_point.c.em'):
++                type_support_impl_by_filename.keys(),
++            }
++
++            for template_file in mapping_msg_pkg_extension.keys():
++                assert os.path.exists(template_file), 'Could not find template: ' + template_file
++
++            latest_target_timestamp = get_newest_modification_time(args['target_dependencies'])
++
++            for template_file, generated_filenames in mapping_msg_pkg_extension.items():
++                for generated_filename in generated_filenames:
++                    data = {
++                        'package_name': f"{package_name}__{subfolder}_{module_name}",
++                        'content': idl_content,
++                        'typesupport_impl': type_support_impl_by_filename.get(generated_filename, ''),
++                    }
++                    generated_file = os.path.join(
++                        args['output_dir'], generated_filename % f"{subfolder}/{module_name}"
++                    )
++                    expand_template(
++                        template_file, data, generated_file,
++                        minimum_timestamp=latest_target_timestamp)
++                    generated_files.append(generated_file)
+ 
+     # Generate py.typed to mark the generate files as having type support as according to PEP561.
+     (pathlib.Path(args['output_dir']) / 'py.typed').touch()
