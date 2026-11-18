@@ -1,0 +1,122 @@
+--- a/test/test_adapter_proto_message.py
++++ b/test/test_adapter_proto_message.py
+@@ -24,6 +24,7 @@
+ from rosidl_adapter_proto import compute_proto_field_number
+ from rosidl_adapter_proto import generate_proto
+ from rosidl_adapter_proto import MSG_TYPE_TO_PROTO
++from rosidl_adapter_proto import parse_proto_field_numbers
+ from rosidl_adapter_proto import to_proto_import
+ from rosidl_parser.definition import IdlLocator
+ from rosidl_parser.definition import Message
+@@ -74,9 +75,21 @@
+ 
+ 
+ def test_message_proto_generated(message_idl_file):
++    import json
++    test_dir = pathlib.Path(__file__).parent
+     generate_file_argument = IdlLocator(
+-        pathlib.Path(__file__).parent,
++        test_dir,
+         pathlib.Path('msg') / 'test_rosid_adapter_proto__arguments.json')
++    if not generate_file_argument.get_absolute_path().exists():
++        args_data = {
++            'package_name': 'rosidl_adapter_proto',
++            'output_dir': str(test_dir),
++            'template_dir': str(test_dir.parent / 'resource'),
++            'idl_tuples': [f'{test_dir}:msg/BoolTest.idl'],
++            'target_dependencies': [str(test_dir / 'msg' / 'BoolTest.idl')],
++        }
++        generate_file_argument.get_absolute_path().write_text(
++            json.dumps(args_data), encoding='utf-8')
+     rc = generate_proto(generate_file_argument.get_absolute_path())
+ 
+     assert rc is not None
+@@ -88,7 +101,7 @@
+ 
+     proto_file_name = IdlLocator(
+         pathlib.Path(__file__).parent,
+-        pathlib.Path('msg') / 'BoolTest.proto')
++        pathlib.Path('msg') / 'bool_test.proto')
+ 
+     assert search_word(proto_file_name.get_absolute_path(), member.name) is True
+     assert search_word(proto_file_name.get_absolute_path(), str(field_number)) is True
+@@ -150,7 +163,7 @@
+     messages = message_idl_file.content.get_elements_of_type(Message)
+     namespace_type = messages[0].structure.namespaced_type
+     proto_import = to_proto_import(namespace_type)
+-    assert proto_import == 'rosidl_adapter_proto/Bool.proto'
++    assert proto_import == 'rosidl_adapter_proto/bool.proto'
+ 
+ 
+ def test_to_proto_import_invalid_argument():
+@@ -164,9 +177,69 @@
+     for message in messages:
+         proto_import_set.update(collect_proto_imports(message))
+     for proto_file in proto_import_set:
+-        assert proto_file == 'rosidl_adapter_proto/Bool.proto'
++        assert proto_file == 'rosidl_adapter_proto/bool.proto'
+ 
+ 
+ def test_collect_proto_import_invalid_argument():
+     with pytest.raises(Exception):
+         collect_proto_imports('string value')
++
++
++def test_parse_proto_field_numbers(tmp_path):
++    msg_file = tmp_path / 'Sample.msg'
++    msg_file.write_text(
++        'int32 a\nstring b\n\n'
++        '# [proto]\n'
++        '#   a = 1\n'
++        '#   b = 2\n',
++        encoding='utf-8',
++    )
++    has_block, sections = parse_proto_field_numbers(msg_file)
++    assert has_block is True
++    assert sections == {'': {'a': 1, 'b': 2}}
++
++
++def test_strict_mode_fails_without_proto_block(tmp_path):
++    import json
++    test_dir = pathlib.Path(__file__).parent
++    args_file = tmp_path / 'args.json'
++    args_file.write_text(
++        json.dumps({
++            'package_name': 'rosidl_adapter_proto',
++            'output_dir': str(tmp_path),
++            'template_dir': str(test_dir.parent / 'resource'),
++            'idl_tuples': [f'{test_dir}:msg/BoolTest.idl'],
++            'target_dependencies': [str(test_dir / 'msg' / 'BoolTest.idl')],
++        }),
++        encoding='utf-8',
++    )
++    with pytest.raises(RuntimeError, match='no protobuf field number'):
++        generate_proto(str(args_file), strict=True)
++
++
++def test_strict_mode_succeeds_with_proto_block(tmp_path):
++    import json
++    test_dir = pathlib.Path(__file__).parent
++    src_file = tmp_path / 'BoolTest.msg'
++    src_file.write_text(
++        'bool data\n\n'
++        '# [proto]\n'
++        '#   data = 1\n',
++        encoding='utf-8',
++    )
++    args_file = tmp_path / 'args.json'
++    args_file.write_text(
++        json.dumps({
++            'package_name': 'rosidl_adapter_proto',
++            'output_dir': str(tmp_path),
++            'template_dir': str(test_dir.parent / 'resource'),
++            'idl_tuples': [f'{test_dir}:msg/BoolTest.idl'],
++            'target_dependencies': [str(test_dir / 'msg' / 'BoolTest.idl')],
++        }),
++        encoding='utf-8',
++    )
++    rc = generate_proto(str(args_file), strict=True, source_file=str(src_file))
++    assert rc == 0
++    proto_text = (tmp_path / 'msg' / 'bool_test.proto').read_text(encoding='utf-8')
++    assert 'bool data = 1;' in proto_text
++

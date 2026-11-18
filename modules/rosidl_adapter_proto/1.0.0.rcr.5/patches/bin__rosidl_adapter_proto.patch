@@ -1,0 +1,87 @@
+--- a/bin/rosidl_adapter_proto
++++ b/bin/rosidl_adapter_proto
+@@ -23,9 +23,11 @@
+ import pathlib
+ import os
+ 
+-from rosidl_cmake import read_generator_arguments
++from rosidl_pycommon import convert_camel_case_to_lower_case_underscore
++from rosidl_pycommon import read_generator_arguments
+ from rosidl_adapter_proto import generate_proto
+ from rosidl_adapter_proto import compile_proto
++
+ 
+ def main(argv=sys.argv[1:]):
+     parser = argparse.ArgumentParser(
+@@ -36,16 +38,36 @@
+         required=True,
+         help='The location of the file containing the generator arguments')
+     parser.add_argument(
+-        '--protoc-path',
+-        required=True,
+-        help='Path to the protoc executable')
++        '--strict',
++        action='store_true',
++        default=False,
++        help='Abort if any field is missing a field number in the [proto] comment block')
++    parser.add_argument(
++        '--mode',
++        choices=['lazy', 'strict'],
++        default='lazy',
++        help='Field number resolution mode: lazy falls back to CRC32 hash; strict aborts')
++    parser.add_argument(
++        '--source-file',
++        default=None,
++        help='Original .msg/.srv/.action/.idl source file containing [proto] comments')
++    # parser.add_argument(
++    #     '--protoc-path',
++    #     required=True,
++    #     help='Path to the protoc executable')
+ 
+     args = parser.parse_args(argv)
+ 
+     generator_args = read_generator_arguments(args.generator_arguments_file)
+ 
++    strict = args.strict or (args.mode == 'strict')
++
+     # Generate .proto files
+-    rc = generate_proto(args.generator_arguments_file) 
++    rc = generate_proto(
++        args.generator_arguments_file,
++        strict=strict,
++        source_file=args.source_file,
++    )
+     if rc:
+         return rc
+ 
+@@ -64,21 +86,23 @@
+         idl_parts = idl_tuple.rsplit(':', 1)
+         assert len(idl_parts) == 2
+         idl_rel_path = pathlib.Path(idl_parts[1])
+-        idl_stem = idl_rel_path.stem
++        idl_stem = convert_camel_case_to_lower_case_underscore(idl_rel_path.stem)
+         generated_file = os.path.join(
+                     generator_args['output_dir'],
+                     str(idl_rel_path.parent),
+                     idl_stem + ".proto"
+         )
++        print(str(pathlib.Path(generated_file).resolve()))
+         proto_files.append(str(pathlib.Path(generated_file).resolve()))
+ 
++
+     # compile proto files with protoc
+-    rc = compile_proto(protoc_path     = args.protoc_path,
+-                       proto_path_list = proto_path_list,
+-                       cpp_out_dir     = cpp_out_dir,
+-                       proto_files     = proto_files,
+-                       package_name    = package_name
+-    )
++    # rc = compile_proto(protoc_path     = args.protoc_path,
++    #                    proto_path_list = proto_path_list,
++    #                    cpp_out_dir     = cpp_out_dir,
++    #                    proto_files     = proto_files,
++    #                    package_name    = package_name
++    # )
+     
+     return rc
+ 
