@@ -1,0 +1,19 @@
+--- a/src/functions.cpp
++++ b/src/functions.cpp
+@@ -45,7 +45,15 @@
+ #define STRINGIFY_(s) #s
+ #define STRINGIFY(s) STRINGIFY_(s)
+ 
+-static std::shared_ptr<rcpputils::SharedLibrary> g_rmw_lib = nullptr;
++// Intentionally leaked (never destroyed at exit). Destroying it from a static
++// destructor dlclose()s the RMW implementation while its middleware threads
++// (e.g. Fast DDS receive/event threads of participants that are still alive)
++// may still be running, which crashes the process on exit when the library
++// is actually unmapped (as happens with clang-built libraries, which have no
++// STB_GNU_UNIQUE symbols pinning them in memory). unload_library() still
++// releases it explicitly.
++static std::shared_ptr<rcpputils::SharedLibrary> & g_rmw_lib =
++  *new std::shared_ptr<rcpputils::SharedLibrary>();
+ 
+ static std::shared_ptr<rcpputils::SharedLibrary>
+ attempt_to_load_one_rmw(const std::string & library)
