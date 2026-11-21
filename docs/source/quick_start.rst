@@ -32,6 +32,10 @@ The ``.bazelrc`` file needs to point Bazel at the RCR's hosted registry (in addi
 
    common --registry=https://bazel.ros.org --registry=https://bcr.bazel.build
 
+.. note::
+
+   We are currently seeing HTTP 429 (Too Many Requests) responses from ``https://bazel.ros.org``, because GitHub Pages throttles it. For greater stability, try using ``--registry=https://storage.googleapis.com/intrinsic-opensource-buildcache/registry`` in its place.
+
 Your ``MODULE.bazel`` then declares which packages you want, pinned to a specific version from the release you've chosen. You can depend on an entire pre-built variant (e.g. ``ros_core``, ``ros_base``, ``desktop``, ``desktop_full``, ``perception``, ``simulation``) to pull in everything it needs transitively, or depend on individual packages directly if you'd rather keep your dependency footprint minimal:
 
 .. code-block:: text

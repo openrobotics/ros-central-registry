@@ -136,6 +136,9 @@ When this line is added to a `.bazelrc` file it instructs Bazel to look for modu
 common --registry=https://bazel.ros.org --registry=https://bcr.bazel.build
 ```
 
+> [!NOTE]
+> We are currently seeing HTTP 429 (Too Many Requests) responses from `https://bazel.ros.org`, because GitHub Pages throttles it. For greater stability, try using `--registry=https://storage.googleapis.com/intrinsic-opensource-buildcache/registry` in its place.
+
 When the following lines are added to the `MODULE.bazel` file, Bazel will load the `core` ROS variant, which contains a minimum set of ROS packages required to build any ROS project. The `std_msgs` and `rclcpp` packages are among these.
 
 ```bazel
